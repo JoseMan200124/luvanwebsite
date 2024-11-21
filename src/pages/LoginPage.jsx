@@ -100,8 +100,8 @@ const LoginPage = () => {
         setError('');
         try {
             await login(formData.email, formData.password);
-            // Después del login, podrías redirigir a MFA si es necesario
-            // navigate('/mfa');
+            // Después del login, redirigir al Dashboard
+            navigate('/admin/dashboard');
         } catch (err) {
             setError(err.response?.data?.message || 'Error en el inicio de sesión');
         }
@@ -176,6 +176,7 @@ const LoginPage = () => {
             <ForgotPasswordModal open={isModalOpen} handleClose={handleCloseModal} />
         </LoginContainer>
     );
+
 };
 
 export default LoginPage;

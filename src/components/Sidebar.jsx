@@ -3,7 +3,7 @@
 import React, { useState, useContext } from 'react';
 import styled from 'styled-components';
 import tw from 'twin.macro';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { Avatar, IconButton, Badge, Tooltip } from '@mui/material';
 import {
     Menu as MenuIcon,
@@ -43,9 +43,9 @@ const SidebarContainer = styled.div`
     ${tw`bg-gray-800 text-white h-screen fixed top-0 left-0 z-50`}
     width: ${(props) => (props.isOpen ? '250px' : '60px')};
     transition: width 0.3s ease;
-    overflow: visible; /* Aseguramos que el botón no se corte */
+    overflow: hidden; /* Controlar overflow */
     @media (max-width: 768px) {
-        width: ${(props) => (props.isOpen ? '100%' : '0')};
+        width: ${(props) => (props.isOpen ? '250px' : '0')};
     }
 `;
 
@@ -73,17 +73,17 @@ const SubMenuItem = styled.li`
 `;
 
 const ToggleTab = styled.div`
-    ${tw`absolute right-0 bg-red-500 rounded-r-md cursor-pointer`}
+    ${tw`absolute bg-red-500 rounded-r-md cursor-pointer`}
     width: 40px;
     height: 40px;
-    top: 4%; /* Colocamos el botón a un 4% desde la parte superior */
+    top: 10px; /* Ajustar para estar en la esquina superior derecha */
     display: flex;
     align-items: center;
     justify-content: center;
     box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
     right: -20px; /* Ajusta para que sobresalga */
-    @media (max-width: 768px) {
-        right: -20px;
+    @media (min-width: 769px) {
+        display: none; /* Ocultar en pantallas grandes */
     }
 `;
 
@@ -98,12 +98,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     const { auth, logout } = useContext(AuthContext);
 
     const handleMenuClick = (index) => {
-        if (!isOpen) {
-            toggleSidebar(); // Abrimos el sidebar si está cerrado
-            setOpenMenus({ [index]: true }); // Abrimos el submenú del módulo clicado
-        } else {
-            setOpenMenus({ ...openMenus, [index]: !openMenus[index] });
-        }
+        setOpenMenus((prev) => ({ ...prev, [index]: !prev[index] }));
     };
 
     // Asegurarse de que el usuario está autenticado
@@ -119,6 +114,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
 
     const handleLogout = () => {
         logout();
+        navigate('/login');
     };
 
     return (
@@ -176,15 +172,15 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                             if (!canAccess) return null;
 
                                             return (
-                                                <Link
-                                                    to={submodule.path}
+                                                <RouterLink
+                                                    to={`/admin/${submodule.path}`}
                                                     key={subIndex}
                                                     style={{ textDecoration: 'none', color: 'inherit' }}
                                                 >
                                                     <SubMenuItem>
                                                         <span tw="text-sm">{submodule.name}</span>
                                                     </SubMenuItem>
-                                                </Link>
+                                                </RouterLink>
                                             );
                                         })}
                                     </div>
@@ -196,24 +192,24 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 {/* Enlaces adicionales según el rol */}
                 <SidebarMenu tw="flex flex-col mt-auto">
                     {/* Perfil de Usuario */}
-                    <Link to="/perfil" style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <RouterLink to="/admin/perfil" style={{ textDecoration: 'none', color: 'inherit' }}>
                         <MenuItem>
                             <div tw="flex items-center">
                                 <AccountCircle tw="mr-2" />
                                 {isOpen && <span>Perfil</span>}
                             </div>
                         </MenuItem>
-                    </Link>
+                    </RouterLink>
                     {/* Gestión de Roles y Permisos (solo para Administradores y Gestores) */}
                     {(user.role === 'Administrador' || user.role === 'Gestor') && (
-                        <Link to="/roles-permisos" style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <RouterLink to="/admin/roles-permisos" style={{ textDecoration: 'none', color: 'inherit' }}>
                             <MenuItem>
                                 <div tw="flex items-center">
                                     <Settings tw="mr-2" />
                                     {isOpen && <span>Roles y Permisos</span>}
                                 </div>
                             </MenuItem>
-                        </Link>
+                        </RouterLink>
                     )}
                     {/* Logout */}
                     <LogoutItem onClick={handleLogout}>
@@ -245,6 +241,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             </div>
         </>
     );
+
 };
 
 export default Sidebar;

@@ -7,6 +7,7 @@ import ProtectedLayout from './components/ProtectedLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
+import LandingPage from './pages/LandingPage'; // Importar la Landing Page
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthProvider from './context/AuthProvider';
 import MFAVerify from './components/MFAVerify';
@@ -14,7 +15,7 @@ import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import RoutesManagementPage from './pages/RoutesManagementPage';
 import ProfilePage from './pages/ProfilePage';
 import RolesManagementPage from './pages/RolesManagementPage';
-import MonitorsManagementPage from './pages/MonitorsManagementPage'; // Asegúrate de importar este componente si existe
+import MonitorsManagementPage from './pages/MonitorsManagementPage';
 import ReportsUsagePage from "./pages/ReportsUsagePage";
 import FinancialStatisticsPage from "./pages/FinancialStatisticsPage";
 // Importa otros componentes según sea necesario
@@ -29,11 +30,10 @@ function App() {
                 routes.push(
                     <Route
                         key={submodule.path}
-                        path={submodule.path.replace(/^\/+/, '')} // Remover barras iniciales
+                        path={submodule.path}
                         element={
                             <ProtectedRoute roles={submodule.roles}>
-                                {/* Renderizar componente específico basado en el path */}
-                                {getComponentByPath(submodule.path)}
+                                {submodule.component}
                             </ProtectedRoute>
                         }
                     />
@@ -43,43 +43,21 @@ function App() {
         return routes;
     };
 
-    const getComponentByPath = (path) => {
-        switch (path) {
-            case '/usuarios':
-                return <RolesManagementPage />;
-            case '/colegios':
-                return <SchoolsManagementPage />;
-            case '/rutas':
-                return <RoutesManagementPage />;
-            case '/colegios':
-                return <SchoolsManagementPage />;
-                case '/rutas':
-                return <RoutesManagementPage />;
-            // Añade más casos según los submódulos
-            case '/monitores':
-                return <MonitorsManagementPage />;
-            case '/reportes-uso':
-                return <ReportsUsagePage />;
-            case '/estadisticas-financieras':
-                return <FinancialStatisticsPage />;
-
-            // Agrega más rutas aquí
-            default:
-                return <Dashboard />;
-        }
-    };
-
     return (
         <Router>
             <AuthProvider>
                 <Routes>
+                    {/* Ruta para la Landing Page */}
+                    <Route path="/" element={<LandingPage />} />
+
+                    {/* Rutas de Autenticación */}
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/mfa" element={<MFAVerify />} />
 
                     {/* Ruta protegida principal con layout */}
                     <Route
-                        path="/"
+                        path="/admin/*"
                         element={
                             <ProtectedRoute>
                                 <ProtectedLayout />
@@ -87,7 +65,8 @@ function App() {
                         }
                     >
                         {/* Rutas hijas protegidas */}
-                        <Route index element={<Dashboard />} />
+                        <Route index element={<Navigate to="dashboard" replace />} />
+                        <Route path="dashboard" element={<Dashboard />} />
 
                         {/* Rutas dinámicas desde modules.js */}
                         {renderDynamicRoutes()}
@@ -109,50 +88,14 @@ function App() {
                                 </ProtectedRoute>
                             }
                         />
-                        <Route
-                            path="colegios"
-                            element={
-                                <ProtectedRoute roles={['Gestor', 'Administrador']}>
-                                    <SchoolsManagementPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="rutas"
-                            element={
-                                <ProtectedRoute roles={['Gestor', 'Administrador']}>
-                                    <RoutesManagementPage />
-                                </ProtectedRoute>
-                            }
-                        />
+                        {/* Añade más rutas específicas si es necesario */}
 
-                        <Route
-                            path="monitores"
-                            element={
-                                <ProtectedRoute roles={['Gestor', 'Administrador']}>
-                                    <MonitorsManagementPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="reportes-uso"
-                            element={
-                                <ProtectedRoute roles={['Gestor', 'Administrador']}>
-                                    <ReportsUsagePage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="estadisticas-financieras"
-                            element={
-                                <ProtectedRoute roles={['Gestor', 'Administrador']}>
-                                    <FinancialStatisticsPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                            {/* Ruta por defecto para rutas no encontradas */}
-                        <Route path="*" element={<Navigate to="/" replace />} />
+                        {/* Ruta por defecto para rutas no encontradas dentro de /admin */}
+                        <Route path="*" element={<Navigate to="dashboard" replace />} />
                     </Route>
+
+                    {/* Ruta por defecto para rutas no encontradas */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </AuthProvider>
         </Router>

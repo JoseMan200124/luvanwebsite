@@ -53,10 +53,10 @@ const RolesManagementPage = () => {
         try {
             const response = await axios.get('/api/users', {
                 headers: {
-                    Authorization: `Bearer ${auth.token}`, // Corrección de la cadena de plantilla
+                    Authorization: `Bearer ${auth.token}`,
                 },
             });
-            console.log('Respuesta de la API:', response.data); // Para depuración
+            console.log('Respuesta de la API:', response.data);
             setUsers(Array.isArray(response.data.users) ? response.data.users : []);
             setLoading(false);
         } catch (err) {
@@ -78,9 +78,9 @@ const RolesManagementPage = () => {
     const handleDeleteClick = async (userId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
             try {
-                await axios.delete(`/api/users/${userId}`, { // Corrección de la ruta con comillas invertidas
+                await axios.delete(`/api/users/${userId}`, {
                     headers: {
-                        Authorization: `Bearer ${auth.token}`, // Corrección de la cadena de plantilla
+                        Authorization: `Bearer ${auth.token}`,
                     },
                 });
                 setSnackbar({ open: true, message: 'Usuario eliminado exitosamente', severity: 'success' });
@@ -113,9 +113,9 @@ const RolesManagementPage = () => {
 
     const handleSave = async () => {
         try {
-            await axios.put(`/api/users/${selectedUser.id}`, selectedUser, { // Corrección de la ruta con comillas invertidas
+            await axios.put(`/api/users/${selectedUser.id}`, selectedUser, {
                 headers: {
-                    Authorization: `Bearer ${auth.token}`, // Corrección de la cadena de plantilla
+                    Authorization: `Bearer ${auth.token}`,
                 },
             });
             setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
@@ -141,9 +141,9 @@ const RolesManagementPage = () => {
 
     const handleCreate = async () => {
         try {
-            await axios.post('/api/users', selectedUser, { // Asegurarse de que esta ruta es correcta
+            await axios.post('/api/users', selectedUser, {
                 headers: {
-                    Authorization: `Bearer ${auth.token}`, // Corrección de la cadena de plantilla
+                    Authorization: `Bearer ${auth.token}`,
                 },
             });
             setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
@@ -174,7 +174,7 @@ const RolesManagementPage = () => {
 
     // Filtrar usuarios basados en la consulta de búsqueda
     const filteredUsers = users.filter((user) => {
-        const fullName = `${user.firstName} ${user.lastName}`.toLowerCase(); // Corrección de la cadena de plantilla
+        const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
         return (
             fullName.includes(searchQuery.toLowerCase()) ||
             user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -187,14 +187,14 @@ const RolesManagementPage = () => {
             <Typography variant="h4" gutterBottom>
                 Gestión de Usuarios y Roles
             </Typography>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div tw="flex justify-between mb-4">
                 <TextField
                     label="Buscar usuarios"
                     variant="outlined"
                     size="small"
                     value={searchQuery}
                     onChange={handleSearchChange}
-                    style={{ width: '300px' }}
+                    tw="w-1/3"
                 />
                 <Button
                     variant="contained"
@@ -206,7 +206,7 @@ const RolesManagementPage = () => {
                 </Button>
             </div>
             {loading ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+                <div tw="flex justify-center p-4">
                     <CircularProgress />
                 </div>
             ) : (
@@ -379,6 +379,7 @@ const RolesManagementPage = () => {
             </Snackbar>
         </RolesContainer>
     );
+
 };
 
 export default RolesManagementPage;
