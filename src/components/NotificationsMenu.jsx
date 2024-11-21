@@ -15,9 +15,10 @@ import { Notifications, ClearAll } from '@mui/icons-material';
 import axios from 'axios';
 import styled from 'styled-components';
 import tw from 'twin.macro';
+import PropTypes from 'prop-types';
 
 const NotificationIconButton = styled(IconButton)`
-  ${tw`text-white`}
+    ${tw`text-white`}
 `;
 
 const NotificationsMenu = ({ authToken }) => {
@@ -35,13 +36,17 @@ const NotificationsMenu = ({ authToken }) => {
                         Authorization: `Bearer ${authToken}`,
                     },
                 });
-                setNotifications(response.data.notifications);
+                console.log('API Response:', response.data); // Log para depuración
+                setNotifications(Array.isArray(response.data.notifications) ? response.data.notifications : []);
             } catch (err) {
                 console.error('Error fetching notifications:', err);
+                setNotifications([]); // Opcional: puedes establecer undefined para manejarlo en la UI
             }
         };
 
-        fetchNotifications();
+        if (authToken) { // Asegúrate de que authToken está disponible
+            fetchNotifications();
+        }
     }, [authToken]);
 
     const handleMenuOpen = (event) => {
@@ -62,7 +67,7 @@ const NotificationsMenu = ({ authToken }) => {
     return (
         <>
             <NotificationIconButton onClick={handleMenuOpen} ref={menuRef}>
-                <Badge badgeContent={notifications.length} color="secondary">
+                <Badge badgeContent={Array.isArray(notifications) ? notifications.length : 0} color="secondary">
                     <Notifications />
                 </Badge>
             </NotificationIconButton>
@@ -92,7 +97,13 @@ const NotificationsMenu = ({ authToken }) => {
                     </IconButton>
                 </div>
                 <Divider />
-                {notifications.length === 0 ? (
+                {notifications === undefined ? (
+                    <MenuItem onClick={handleMenuClose}>
+                        <Typography variant="body1" color="error">
+                            Error al cargar las notificaciones.
+                        </Typography>
+                    </MenuItem>
+                ) : notifications.length === 0 ? (
                     <MenuItem onClick={handleMenuClose}>
                         <Typography variant="body1" color="textSecondary">
                             No hay notificaciones.
@@ -119,6 +130,10 @@ const NotificationsMenu = ({ authToken }) => {
             </Menu>
         </>
     );
+};
+
+NotificationsMenu.propTypes = {
+    authToken: PropTypes.string.isRequired,
 };
 
 export default NotificationsMenu;
