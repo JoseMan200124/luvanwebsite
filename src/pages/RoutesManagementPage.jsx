@@ -58,7 +58,9 @@ const RoutesManagementPage = () => {
                     Authorization: `Bearer ${auth.token}`,
                 },
             });
-            setRoutes(response.data.routes);
+            console.log('Respuesta de la API (Rutas):', response.data); // Para depuración
+            // Asegura que 'routes' sea siempre un array
+            setRoutes(Array.isArray(response.data.routes) ? response.data.routes : []);
             setLoading(false);
         } catch (err) {
             console.error('Error fetching routes:', err);
@@ -74,15 +76,19 @@ const RoutesManagementPage = () => {
                     Authorization: `Bearer ${auth.token}`,
                 },
             });
-            setSchools(response.data.schools);
+            console.log('Respuesta de la API (Colegios):', response.data); // Para depuración
+            setSchools(Array.isArray(response.data.schools) ? response.data.schools : []);
         } catch (err) {
             console.error('Error fetching schools:', err);
+            setSnackbar({ open: true, message: 'Error al obtener los colegios', severity: 'error' });
         }
     };
 
     useEffect(() => {
-        fetchRoutes();
-        fetchSchools();
+        if (auth.token) { // Asegúrate de que auth.token esté definido
+            fetchRoutes();
+            fetchSchools();
+        }
     }, [auth.token]);
 
     const handleEditClick = (route) => {
@@ -185,14 +191,14 @@ const RoutesManagementPage = () => {
         setPage(0);
     };
 
-    // Filter routes based on search query
-    const filteredRoutes = routes.filter((route) => {
+    // Filtrar rutas basadas en la consulta de búsqueda
+    const filteredRoutes = Array.isArray(routes) ? routes.filter((route) => {
         const schoolName = route.schoolName || '';
         return (
             route.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             schoolName.toLowerCase().includes(searchQuery.toLowerCase())
         );
-    });
+    }) : [];
 
     return (
         <RoutesContainer>
@@ -284,7 +290,7 @@ const RoutesManagementPage = () => {
                     />
                 </Paper>
             )}
-            {/* Dialog for Adding/Editing Route */}
+            {/* Diálogo para Añadir/Editar Ruta */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
                 <DialogTitle>{selectedRoute && selectedRoute.id ? 'Editar Ruta' : 'Añadir Ruta'}</DialogTitle>
                 <DialogContent>
@@ -311,7 +317,7 @@ const RoutesManagementPage = () => {
                             <MenuItem value="">
                                 <em>Seleccione un colegio</em>
                             </MenuItem>
-                            {schools.map((school) => (
+                            {Array.isArray(schools) && schools.map((school) => (
                                 <MenuItem key={school.id} value={school.id}>
                                     {school.name}
                                 </MenuItem>
@@ -348,7 +354,7 @@ const RoutesManagementPage = () => {
                         value={selectedRoute ? selectedRoute.schedule : ''}
                         onChange={handleInputChange}
                     />
-                    {/* Additional fields for stops, etc. */}
+                    {/* Campos adicionales para paradas, etc. */}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleDialogClose} color="primary">
@@ -363,11 +369,11 @@ const RoutesManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-            {/* Dialog for Viewing Map */}
+            {/* Diálogo para Ver el Mapa */}
             <Dialog open={openMapDialog} onClose={handleMapDialogClose} maxWidth="md" fullWidth>
                 <DialogTitle>Mapa de la Ruta: {selectedRoute?.name}</DialogTitle>
                 <DialogContent>
-                    {/* MapComponent should display the route's stops and path */}
+                    {/* MapComponent debe mostrar las paradas y el recorrido de la ruta */}
                     {selectedRoute && <MapComponent route={selectedRoute} />}
                 </DialogContent>
                 <DialogActions>
@@ -376,7 +382,7 @@ const RoutesManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-            {/* Snackbar for feedback */}
+            {/* Snackbar para retroalimentación */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
@@ -389,6 +395,7 @@ const RoutesManagementPage = () => {
             </Snackbar>
         </RoutesContainer>
     );
+
 };
 
 export default RoutesManagementPage;
