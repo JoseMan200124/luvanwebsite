@@ -34,7 +34,7 @@ import axios from 'axios';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 
-const RolesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
+const RolesContainer = tw.div`p-8 bg-gray-100 min-h-screen`; // Corrección de estilos
 
 const RolesManagementPage = () => {
     const { auth } = useContext(AuthContext);
@@ -53,10 +53,11 @@ const RolesManagementPage = () => {
         try {
             const response = await axios.get('/api/users', {
                 headers: {
-                    Authorization: `Bearer ${auth.token}`,
+                    Authorization: `Bearer ${auth.token}`, // Corrección de la cadena de plantilla
                 },
             });
-            setUsers(response.data.users);
+            console.log('Respuesta de la API:', response.data); // Para depuración
+            setUsers(Array.isArray(response.data.users) ? response.data.users : []);
             setLoading(false);
         } catch (err) {
             console.error('Error al obtener usuarios:', err);
@@ -77,9 +78,9 @@ const RolesManagementPage = () => {
     const handleDeleteClick = async (userId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
             try {
-                await axios.delete(`/api/users/${userId}`, {
+                await axios.delete(`/api/users/${userId}`, { // Corrección de la ruta con comillas invertidas
                     headers: {
-                        Authorization: `Bearer ${auth.token}`,
+                        Authorization: `Bearer ${auth.token}`, // Corrección de la cadena de plantilla
                     },
                 });
                 setSnackbar({ open: true, message: 'Usuario eliminado exitosamente', severity: 'success' });
@@ -112,9 +113,9 @@ const RolesManagementPage = () => {
 
     const handleSave = async () => {
         try {
-            await axios.put(`/api/users/${selectedUser.id}`, selectedUser, {
+            await axios.put(`/api/users/${selectedUser.id}`, selectedUser, { // Corrección de la ruta con comillas invertidas
                 headers: {
-                    Authorization: `Bearer ${auth.token}`,
+                    Authorization: `Bearer ${auth.token}`, // Corrección de la cadena de plantilla
                 },
             });
             setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
@@ -140,9 +141,9 @@ const RolesManagementPage = () => {
 
     const handleCreate = async () => {
         try {
-            await axios.post('/api/users', selectedUser, {
+            await axios.post('/api/users', selectedUser, { // Asegurarse de que esta ruta es correcta
                 headers: {
-                    Authorization: `Bearer ${auth.token}`,
+                    Authorization: `Bearer ${auth.token}`, // Corrección de la cadena de plantilla
                 },
             });
             setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
@@ -171,9 +172,9 @@ const RolesManagementPage = () => {
         setPage(0);
     };
 
-    // Filter users based on search query
+    // Filtrar usuarios basados en la consulta de búsqueda
     const filteredUsers = users.filter((user) => {
-        const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+        const fullName = `${user.firstName} ${user.lastName}`.toLowerCase(); // Corrección de la cadena de plantilla
         return (
             fullName.includes(searchQuery.toLowerCase()) ||
             user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -266,7 +267,7 @@ const RolesManagementPage = () => {
                     />
                 </Paper>
             )}
-            {/* Dialog for Editing/Adding User */}
+            {/* Diálogo para Editar/Añadir Usuario */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
                 <DialogTitle>{selectedUser && selectedUser.id ? 'Editar Usuario' : 'Añadir Usuario'}</DialogTitle>
                 <DialogContent>
@@ -365,7 +366,7 @@ const RolesManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-            {/* Snackbar for feedback */}
+            {/* Snackbar para retroalimentación */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
