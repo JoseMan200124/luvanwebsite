@@ -23,7 +23,7 @@ import {
     Alert,
     CircularProgress,
 } from '@mui/material';
-import { Edit, Delete, Add, LocationOn } from '@mui/icons-material';
+import { Edit, Delete, Add } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import axios from 'axios';
 import styled from 'styled-components';
@@ -47,10 +47,12 @@ const SchoolsManagementPage = () => {
         try {
             const response = await axios.get('/api/schools', {
                 headers: {
-                    Authorization: `Bearer ${auth.token}`,
+                    Authorization: `Bearer ${auth.token}`, // Asegúrate de que auth.token esté definido
                 },
             });
-            setSchools(response.data.schools);
+            console.log('Respuesta de la API:', response.data); // Para depuración
+            // Asegura que 'schools' sea siempre un array
+            setSchools(Array.isArray(response.data.schools) ? response.data.schools : []);
             setLoading(false);
         } catch (err) {
             console.error('Error fetching schools:', err);
@@ -153,7 +155,7 @@ const SchoolsManagementPage = () => {
         setPage(0);
     };
 
-    // Filter schools based on search query
+    // Filtrar colegios basados en la consulta de búsqueda
     const filteredSchools = schools.filter((school) => {
         return (
             school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -248,7 +250,7 @@ const SchoolsManagementPage = () => {
                     />
                 </Paper>
             )}
-            {/* Dialog for Adding/Editing School */}
+            {/* Diálogo para Añadir/Editar Colegio */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
                 <DialogTitle>{selectedSchool && selectedSchool.id ? 'Editar Colegio' : 'Añadir Colegio'}</DialogTitle>
                 <DialogContent>
@@ -330,7 +332,7 @@ const SchoolsManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-            {/* Snackbar for feedback */}
+            {/* Snackbar para retroalimentación */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
@@ -343,6 +345,7 @@ const SchoolsManagementPage = () => {
             </Snackbar>
         </SchoolsContainer>
     );
+
 };
 
 export default SchoolsManagementPage;
