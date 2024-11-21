@@ -57,8 +57,8 @@ const AuthProvider = ({ children }) => {
         // Simular el login para el usuario específico
         return new Promise((resolve, reject) => {
             // Definir las credenciales simuladas
-            const validEmail = 'jmancaste@gmail.com';
-            const validPassword = '24DEjunio@';
+            const validEmail = 'prueba@correo.com';
+            const validPassword = '12345';
 
             if (email === validEmail && password === validPassword) {
                 // Token JWT simulado

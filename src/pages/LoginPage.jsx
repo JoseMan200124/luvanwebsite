@@ -74,8 +74,8 @@ const LoginPage = () => {
     const navigate = useNavigate();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [formData, setFormData] = useState({
-        email: 'jmancaste@gmail.com', // Correo predefinido
-        password: '24DEjunio@',        // Contraseña predefinida
+        email: 'prueba@correo.com', // Correo predefinido
+        password: '12345',        // Contraseña predefinida
     });
     const [error, setError] = useState('');
 
