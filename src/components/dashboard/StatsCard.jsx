@@ -1,56 +1,61 @@
 // src/components/dashboard/StatsCard.jsx
 
 import React from 'react';
-import tw, { styled } from 'twin.macro';
-import {
-    Group,
-    AttachMoney,
-    ReportProblem,
-    School,
-    Notifications,
-} from '@mui/icons-material';
+import tw from 'twin.macro';
+import styled from 'styled-components';
+import { Card, CardContent, Typography } from '@mui/material';
+import { Group, AttachMoney, ReportProblem, School } from '@mui/icons-material';
 
-// Mapeo de iconos
-const iconMap = {
-    Group: <Group fontSize="large" />,
-    AttachMoney: <AttachMoney fontSize="large" />,
-    ReportProblem: <ReportProblem fontSize="large" />,
-    School: <School fontSize="large" />,
-    Notifications: <Notifications fontSize="large" />,
-    // Añade más iconos según tus necesidades
-};
+const CardContainer = styled(Card)`
+  ${tw`shadow-lg`}
+`;
 
-// Mapeo de colores de fondo según el título de la tarjeta
-const bgColorMap = {
-    'Usuarios Activos': tw`bg-blue-500`,
-    'Pagos Completados': tw`bg-green-500`,
-    'Incidentes Reportados': tw`bg-red-500`,
-    'Colegios Registrados': tw`bg-yellow-500`,
-    // Añade más mapeos si es necesario
-};
+const IconWrapper = styled.div`
+  ${tw`flex items-center justify-center h-12 w-12 rounded-full`}
+  background-color: ${({ iconColor }) => iconColor || '#144CCC'};
+`;
 
-// Contenedor de la tarjeta con estilos de Tailwind
-const CardContainer = styled.div(({ bgColor }) => [
-    tw`flex items-center p-6 rounded-lg shadow-md text-white`,
-    bgColor,
-]);
-
-const IconContainer = tw.div`p-3 bg-white bg-opacity-20 rounded-full mr-4 flex items-center justify-center`;
-
-const Content = tw.div`flex flex-col`;
-
-const Title = tw.span`text-lg font-semibold`;
-const Value = tw.span`text-2xl font-bold`;
-
-// Componente StatsCard
 const StatsCard = ({ title, value, icon }) => {
+    let IconComponent;
+    let iconColor;
+
+    switch (icon) {
+        case 'Group':
+            IconComponent = Group;
+            iconColor = '#2D966C';
+            break;
+        case 'AttachMoney':
+            IconComponent = AttachMoney;
+            iconColor = '#144CCC';
+            break;
+        case 'ReportProblem':
+            IconComponent = ReportProblem;
+            iconColor = '#F44336'; // Red color for alerts
+            break;
+        case 'School':
+            IconComponent = School;
+            iconColor = '#FFC107'; // Amber color
+            break;
+        default:
+            IconComponent = Group;
+            iconColor = '#144CCC';
+    }
+
     return (
-        <CardContainer bgColor={bgColorMap[title] || tw`bg-blue-500`}>
-            <IconContainer>{iconMap[icon]}</IconContainer>
-            <Content>
-                <Title>{title}</Title>
-                <Value>{value}</Value>
-            </Content>
+        <CardContainer>
+            <CardContent tw="flex items-center">
+                <IconWrapper iconColor={iconColor}>
+                    <IconComponent style={{ color: '#FFFFFF' }} />
+                </IconWrapper>
+                <div tw="ml-4">
+                    <Typography variant="h6" tw="font-bold">
+                        {title}
+                    </Typography>
+                    <Typography variant="h4" tw="font-bold">
+                        {value}
+                    </Typography>
+                </div>
+            </CardContent>
         </CardContainer>
     );
 };

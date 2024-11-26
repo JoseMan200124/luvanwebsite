@@ -23,7 +23,7 @@ const StatsGrid = tw.div`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb
 const ChartsGrid = tw.div`grid grid-cols-1 lg:grid-cols-2 gap-6`;
 
 const Dashboard = () => {
-    // Estado para manejar los filtros
+    // State to handle filters
     const [filters, setFilters] = useState({
         colegio: '',
         ruta: '',

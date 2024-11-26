@@ -1,17 +1,32 @@
 // src/components/modals/ForgotPasswordModal.jsx
-import React, { useState } from 'react';
-import tw from 'twin.macro';
-import styled from 'styled-components';
-import { Modal, Box, Typography, TextField, Button, Alert } from '@mui/material';
 
+import React, { useState } from 'react';
+import tw, { styled } from 'twin.macro';
+import { Modal, Box, Typography, TextField, Button, Alert } from '@mui/material';
+import { keyframes } from 'styled-components';
+
+// Animación de apertura suave
+const fadeIn = keyframes`
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+`;
+
+// Contenedor del Modal con animación
 const ModalBox = styled(Box)`
     ${tw`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg p-8 w-11/12 max-w-md shadow-lg`}
+    animation: ${fadeIn} 0.3s ease-out;
 `;
 
-const Title = styled(Typography)`
-    ${tw`text-center text-xl font-semibold mb-6`}
-`;
+// Título del Modal
+const Title = tw(Typography)`text-center text-2xl font-semibold mb-6 text-green-600`;
 
+// Campo de texto personalizado
 const StyledTextField = styled(TextField)`
     & .MuiInputBase-root {
         ${tw`bg-gray-100 rounded`}
@@ -24,12 +39,14 @@ const StyledTextField = styled(TextField)`
     }
 `;
 
+// Botón de Envío personalizado
 const SubmitButton = styled(Button)`
-    ${tw`bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 mt-4`}
+    ${tw`bg-green-600 hover:bg-green-700 text-white font-semibold py-2 mt-4 w-full rounded`}
 `;
 
+// Botón de Cancelar personalizado
 const CancelButton = styled(Button)`
-    ${tw`text-gray-600 mt-2`}
+    ${tw`text-gray-600 mt-2 w-full`}
 `;
 
 const ForgotPasswordModal = ({ open, handleClose }) => {
@@ -93,15 +110,15 @@ const ForgotPasswordModal = ({ open, handleClose }) => {
                     <SubmitButton
                         type="submit"
                         variant="contained"
-                        fullWidth
                         disabled={loading}
+                        aria-label="Enviar enlace de restablecimiento"
                     >
                         {loading ? 'Enviando...' : 'Enviar Enlace'}
                     </SubmitButton>
                     <CancelButton
                         variant="text"
-                        fullWidth
                         onClick={handleClose}
+                        aria-label="Cancelar"
                     >
                         Cancelar
                     </CancelButton>
