@@ -6,6 +6,8 @@ import RoutesManagementPage from './pages/RoutesManagementPage';
 import MonitorsManagementPage from './pages/MonitorsManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
+import ContractsManagementPage from './pages/ContractsManagementPage';
+
 // Importa otros componentes según sea necesario
 
 export const modules = [
@@ -61,6 +63,18 @@ export const modules = [
             { name: 'Registro de Actividades', path: 'registro-actividades', roles: ['Administrador'], component: <FinancialStatisticsPage /> }, // Asigna el componente adecuado
             { name: 'Auditoría de Seguridad', path: 'auditoria-seguridad', roles: ['Administrador'], component: <FinancialStatisticsPage /> }, // Asigna el componente adecuado
             // Añade más submódulos según sea necesario
+        ],
+    },
+    {
+        name: 'Contratos',
+        icon: 'Description',
+        submodules: [
+            {
+                name: 'Gestión de Contratos',
+                path: 'contratos',
+                roles: ['Administrador', 'Gestor'],
+                component: <ContractsManagementPage />,
+            },
         ],
     },
     // Continúa añadiendo los demás módulos y submódulos con 'roles'

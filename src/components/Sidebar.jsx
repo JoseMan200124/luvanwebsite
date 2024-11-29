@@ -21,6 +21,7 @@ import {
     Logout as LogoutIcon,
     AccountCircle,
     Settings,
+    Description
 } from '@mui/icons-material';
 import { modules } from '../modules';
 import { AuthContext } from '../context/AuthProvider';
@@ -37,13 +38,14 @@ const iconMap = {
     Security,
     AccountCircle,
     Settings,
+    Description,
 };
 
 const SidebarContainer = styled.div`
-    ${tw`bg-gray-800 text-white h-screen fixed top-0 left-0 z-50`}
+    ${tw`bg-gray-800 text-white h-screen fixed top-0 left-0 z-50 flex flex-col`}
     width: ${(props) => (props.isOpen ? '250px' : '60px')};
     transition: width 0.3s ease;
-    overflow: hidden; /* Controlar overflow */
+    overflow: hidden;
     @media (max-width: 768px) {
         width: ${(props) => (props.isOpen ? '250px' : '0')};
     }
@@ -55,6 +57,10 @@ const SidebarHeader = styled.div`
 
 const ProfileInfo = tw.div`flex items-center`;
 const ProfileDetails = tw.div`ml-4`;
+
+const MainMenu = styled.div`
+    ${tw`flex-1 overflow-y-auto`}
+`;
 
 const SidebarMenu = styled.ul`
     ${tw`mt-4`}
@@ -131,66 +137,68 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         </ProfileInfo>
                     )}
                 </SidebarHeader>
-                <SidebarMenu>
-                    {modules.map((module, index) => {
-                        // Verificar si el usuario tiene acceso a este módulo
-                        const hasAccess = module.submodules.some(sub => {
-                            if (sub.roles && Array.isArray(sub.roles)) {
-                                return sub.roles.includes(user.role);
-                            }
-                            return true;
-                        });
+                <MainMenu>
+                    <SidebarMenu>
+                        {modules.map((module, index) => {
+                            // Verificar si el usuario tiene acceso a este módulo
+                            const hasAccess = module.submodules.some(sub => {
+                                if (sub.roles && Array.isArray(sub.roles)) {
+                                    return sub.roles.includes(user.role);
+                                }
+                                return true;
+                            });
 
-                        if (!hasAccess) return null;
+                            if (!hasAccess) return null;
 
-                        const ModuleIcon = iconMap[module.icon] || Group;
-                        return (
-                            <div key={index}>
-                                <MenuItem onClick={() => handleMenuClick(index)}>
-                                    <div tw="flex items-center">
-                                        {ModuleIcon && <ModuleIcon tw="mr-2" />}
-                                        {isOpen && <span>{module.name}</span>}
-                                    </div>
-                                    {isOpen && (
-                                        <>
-                                            {openMenus[index] ? (
-                                                <ExpandLess tw="text-gray-400" />
-                                            ) : (
-                                                <ExpandMore tw="text-gray-400" />
-                                            )}
-                                        </>
+                            const ModuleIcon = iconMap[module.icon] || Group;
+                            return (
+                                <div key={index}>
+                                    <MenuItem onClick={() => handleMenuClick(index)}>
+                                        <div tw="flex items-center">
+                                            {ModuleIcon && <ModuleIcon tw="mr-2" />}
+                                            {isOpen && <span>{module.name}</span>}
+                                        </div>
+                                        {isOpen && (
+                                            <>
+                                                {openMenus[index] ? (
+                                                    <ExpandLess tw="text-gray-400" />
+                                                ) : (
+                                                    <ExpandMore tw="text-gray-400" />
+                                                )}
+                                            </>
+                                        )}
+                                    </MenuItem>
+                                    {isOpen && module.submodules && openMenus[index] && (
+                                        <div>
+                                            {module.submodules.map((submodule, subIndex) => {
+                                                // Verificar si 'roles' está definido y si el usuario tiene acceso
+                                                const canAccess = submodule.roles && Array.isArray(submodule.roles)
+                                                    ? submodule.roles.includes(user.role)
+                                                    : true; // Si 'roles' no está definido, permitir acceso
+
+                                                if (!canAccess) return null;
+
+                                                return (
+                                                    <RouterLink
+                                                        to={`/admin/${submodule.path}`}
+                                                        key={subIndex}
+                                                        style={{ textDecoration: 'none', color: 'inherit' }}
+                                                    >
+                                                        <SubMenuItem>
+                                                            <span tw="text-sm">{submodule.name}</span>
+                                                        </SubMenuItem>
+                                                    </RouterLink>
+                                                );
+                                            })}
+                                        </div>
                                     )}
-                                </MenuItem>
-                                {isOpen && module.submodules && openMenus[index] && (
-                                    <div>
-                                        {module.submodules.map((submodule, subIndex) => {
-                                            // Verificar si 'roles' está definido y si el usuario tiene acceso
-                                            const canAccess = submodule.roles && Array.isArray(submodule.roles)
-                                                ? submodule.roles.includes(user.role)
-                                                : true; // Si 'roles' no está definido, permitir acceso
-
-                                            if (!canAccess) return null;
-
-                                            return (
-                                                <RouterLink
-                                                    to={`/admin/${submodule.path}`}
-                                                    key={subIndex}
-                                                    style={{ textDecoration: 'none', color: 'inherit' }}
-                                                >
-                                                    <SubMenuItem>
-                                                        <span tw="text-sm">{submodule.name}</span>
-                                                    </SubMenuItem>
-                                                </RouterLink>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </SidebarMenu>
+                                </div>
+                            );
+                        })}
+                    </SidebarMenu>
+                </MainMenu>
                 {/* Enlaces adicionales según el rol */}
-                <SidebarMenu tw="flex flex-col mt-auto">
+                <SidebarMenu tw="flex flex-col">
                     {/* Perfil de Usuario */}
                     <RouterLink to="/admin/perfil" style={{ textDecoration: 'none', color: 'inherit' }}>
                         <MenuItem>
