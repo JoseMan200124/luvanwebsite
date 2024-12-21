@@ -14,7 +14,7 @@ import {
     Legend,
     ResponsiveContainer,
 } from 'recharts';
-import axios from 'axios';
+import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -56,9 +56,9 @@ const FinancialStatisticsPage = () => {
         const fetchData = async () => {
             try {
                 const [revenueRes, outstandingRes, lateRes] = await Promise.all([
-                    axios.get('/api/reports/revenue'),
-                    axios.get('/api/reports/outstanding-payments'),
-                    axios.get('/api/reports/late-payments'),
+                    api.get('/reports/revenue'),
+                    api.get('/reports/outstanding-payments'),
+                    api.get('/reports/late-payments'),
                 ]);
 
                 setData({

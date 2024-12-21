@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import { PhotoCamera } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
-import axios from 'axios';
+import api from '../utils/axiosConfig';
 
 const ProfileContainer = tw.div`flex flex-col items-center justify-center p-8 bg-gray-100 min-h-screen`;
 
@@ -82,7 +82,7 @@ const ProfilePage = () => {
                 data.append('avatar', selectedFile);
             }
 
-            const response = await axios.put('/api/users/profile', data, {
+            const response = await api.put('/users/profile', data, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                     'Content-Type': 'multipart/form-data',

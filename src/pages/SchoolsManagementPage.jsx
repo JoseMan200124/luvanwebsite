@@ -1,5 +1,3 @@
-// src/pages/SchoolsManagementPage.jsx
-
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -25,8 +23,7 @@ import {
 } from '@mui/material';
 import { Edit, Delete, Add } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
-import axios from 'axios';
-import styled from 'styled-components';
+import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 
 const SchoolsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
@@ -45,13 +42,12 @@ const SchoolsManagementPage = () => {
     const fetchSchools = async () => {
         setLoading(true);
         try {
-            const response = await axios.get('/api/schools', {
+            const response = await api.get('/schools', {
                 headers: {
-                    Authorization: `Bearer ${auth.token}`, // Asegúrate de que auth.token esté definido
+                    Authorization: `Bearer ${auth.token}`,
                 },
             });
-            console.log('Respuesta de la API:', response.data); // Para depuración
-            // Asegura que 'schools' sea siempre un array
+            console.log('Respuesta de la API:', response.data);
             setSchools(Array.isArray(response.data.schools) ? response.data.schools : []);
             setLoading(false);
         } catch (err) {
@@ -73,7 +69,7 @@ const SchoolsManagementPage = () => {
     const handleDeleteClick = async (schoolId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este colegio?')) {
             try {
-                await axios.delete(`/api/schools/${schoolId}`, {
+                await api.delete(`/schools/${schoolId}`, {
                     headers: {
                         Authorization: `Bearer ${auth.token}`,
                     },
@@ -102,16 +98,14 @@ const SchoolsManagementPage = () => {
     const handleSave = async () => {
         try {
             if (selectedSchool.id) {
-                // Update existing school
-                await axios.put(`/api/schools/${selectedSchool.id}`, selectedSchool, {
+                await api.put(`/schools/${selectedSchool.id}`, selectedSchool, {
                     headers: {
                         Authorization: `Bearer ${auth.token}`,
                     },
                 });
                 setSnackbar({ open: true, message: 'Colegio actualizado exitosamente', severity: 'success' });
             } else {
-                // Create new school
-                await axios.post('/api/schools', selectedSchool, {
+                await api.post('/schools', selectedSchool, {
                     headers: {
                         Authorization: `Bearer ${auth.token}`,
                     },
@@ -155,7 +149,6 @@ const SchoolsManagementPage = () => {
         setPage(0);
     };
 
-    // Filtrar colegios basados en la consulta de búsqueda
     const filteredSchools = schools.filter((school) => {
         return (
             school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -250,7 +243,6 @@ const SchoolsManagementPage = () => {
                     />
                 </Paper>
             )}
-            {/* Diálogo para Añadir/Editar Colegio */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
                 <DialogTitle>{selectedSchool && selectedSchool.id ? 'Editar Colegio' : 'Añadir Colegio'}</DialogTitle>
                 <DialogContent>
@@ -332,7 +324,6 @@ const SchoolsManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-            {/* Snackbar para retroalimentación */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
@@ -345,7 +336,6 @@ const SchoolsManagementPage = () => {
             </Snackbar>
         </SchoolsContainer>
     );
-
 };
 
 export default SchoolsManagementPage;

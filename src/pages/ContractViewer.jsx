@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/axiosConfig';
 import { Button, TextField, Typography, CircularProgress, Grid, Divider } from '@mui/material';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -21,7 +21,7 @@ const ContractViewer = () => {
     useEffect(() => {
         const fetchContract = async () => {
             try {
-                const response = await axios.get(`http://localhost:5000/api/contracts/${uuid}`);
+                const response = await api.get(`/contracts/${uuid}`);
                 setContract(response.data);
                 setLoading(false);
             } catch (error) {

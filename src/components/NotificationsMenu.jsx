@@ -12,11 +12,10 @@ import {
     Divider,
 } from '@mui/material';
 import { Notifications, ClearAll } from '@mui/icons-material';
-import axios from 'axios';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import PropTypes from 'prop-types';
-
+import api from '../utils/axiosConfig';
 const NotificationIconButton = styled(IconButton)`
     ${tw`text-white`}
 `;
@@ -31,7 +30,7 @@ const NotificationsMenu = ({ authToken }) => {
         // Fetch notifications from API
         const fetchNotifications = async () => {
             try {
-                const response = await axios.get('/api/notifications', {
+                const response = await api.get('/notifications', {
                     headers: {
                         Authorization: `Bearer ${authToken}`,
                     },

@@ -30,7 +30,7 @@ import {
 } from '@mui/material';
 import { Edit, Delete, Add } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
-import axios from 'axios';
+import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 
@@ -48,10 +48,13 @@ const RolesManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
+    // NUEVO: Estado para almacenar la lista de colegios
+    const [schools, setSchools] = useState([]);
+
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const response = await axios.get('/api/users', {
+            const response = await api.get('/users', {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
@@ -66,8 +69,30 @@ const RolesManagementPage = () => {
         }
     };
 
+    // NUEVO: Función para obtener la lista de colegios
+    const fetchSchools = async () => {
+        try {
+            const response = await api.get('/schools', {
+                headers: {
+                    Authorization: `Bearer ${auth.token}`,
+                },
+            });
+            // Asumiendo que la respuesta es algo como { schools: [...] }
+            setSchools(Array.isArray(response.data.schools) ? response.data.schools : []);
+        } catch (err) {
+            console.error('Error al obtener colegios:', err);
+            setSnackbar({ open: true, message: 'Error al obtener colegios', severity: 'error' });
+        }
+    };
+
     useEffect(() => {
+        // Primero obtenemos los usuarios
         fetchUsers();
+    }, [auth.token]);
+
+    // NUEVO: Una vez que tenemos usuarios o al montar, también obtenemos colegios
+    useEffect(() => {
+        fetchSchools();
     }, [auth.token]);
 
     const handleEditClick = (user) => {
@@ -78,7 +103,7 @@ const RolesManagementPage = () => {
     const handleDeleteClick = async (userId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
             try {
-                await axios.delete(`/api/users/${userId}`, {
+                await api.delete(`/users/${userId}`, {
                     headers: {
                         Authorization: `Bearer ${auth.token}`,
                     },
@@ -113,7 +138,7 @@ const RolesManagementPage = () => {
 
     const handleSave = async () => {
         try {
-            await axios.put(`/api/users/${selectedUser.id}`, selectedUser, {
+            await api.put(`/users/${selectedUser.id}`, selectedUser, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
@@ -141,7 +166,7 @@ const RolesManagementPage = () => {
 
     const handleCreate = async () => {
         try {
-            await axios.post('/api/users', selectedUser, {
+            await api.post('/users', selectedUser, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
@@ -342,16 +367,25 @@ const RolesManagementPage = () => {
                             ))}
                         </Select>
                     </FormControl>
-                    <TextField
-                        margin="dense"
-                        name="school"
-                        label="Colegio"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={selectedUser ? selectedUser.school : ''}
-                        onChange={handleInputChange}
-                    />
+                    {/* Cambiamos el campo de texto por un SELECT con todos los colegios */}
+                    <FormControl variant="outlined" fullWidth margin="dense">
+                        <InputLabel>Colegio</InputLabel>
+                        <Select
+                            name="school"
+                            value={selectedUser ? selectedUser.school : ''}
+                            onChange={handleInputChange}
+                            label="Colegio"
+                        >
+                            <MenuItem value="">
+                                <em>Seleccione un colegio</em>
+                            </MenuItem>
+                            {schools.map((school) => (
+                                <MenuItem key={school.id} value={school.id}>
+                                    {school.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleDialogClose} color="primary">

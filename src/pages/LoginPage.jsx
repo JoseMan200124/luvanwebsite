@@ -1,5 +1,3 @@
-// src/pages/LoginPage.jsx
-
 import React, { useState, useContext } from 'react';
 import tw, { styled } from 'twin.macro';
 import {
@@ -18,10 +16,9 @@ import { Google as GoogleIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { keyframes } from 'styled-components';
 import Navbar from '../components/Navbar';
-import Footer from '../components/Footer'; // Importar el Footer
-import logoLuvan from '../assets/img/logo-luvan.jpg'; // Asegúrate de tener el logo en esta ruta
+import Footer from '../components/Footer';
+import logoLuvan from '../assets/img/logo-luvan.jpg';
 
-// Animación para el fondo de la sección izquierda
 const moveUp = keyframes`
     0% {
         background-position: center bottom;
@@ -31,10 +28,8 @@ const moveUp = keyframes`
     }
 `;
 
-// Contenedor principal del login
 const LoginContainer = tw.div`flex flex-col md:flex-row flex-grow min-h-screen`;
 
-// Sección izquierda con fondo y contenido
 const LeftSection = styled.div`
     ${tw`flex flex-col items-center justify-center bg-gray-900 text-white md:w-1/2 p-8 relative overflow-hidden`}
     &::before {
@@ -47,31 +42,24 @@ const LeftSection = styled.div`
     }
 `;
 
-// Logo en la sección izquierda
 const Logo = styled.img`
     ${tw`h-20 mb-4`}
 `;
 
-// Eslogan en la sección izquierda
 const Slogan = tw(Typography)`text-center text-lg mt-2`;
 
-// Sección derecha con formulario de login
 const RightSection = tw.div`flex flex-col items-center justify-center bg-white md:w-1/2 p-8`;
 
-// Contenedor del formulario de login
 const LoginFormContainer = styled.div`
     ${tw`bg-gray-50 rounded-lg p-8 shadow-lg relative w-full max-w-md`}
 `;
 
-// Pestaña de título del formulario
 const FormTitleTab = styled.div`
     ${tw`absolute -top-6 left-1/2 transform -translate-x-1/2 px-6 py-2 bg-green-600 rounded-t-md`}
 `;
 
-// Texto de la pestaña
 const FormTitle = tw(Typography)`text-white font-semibold`;
 
-// Campo de texto personalizado
 const StyledTextField = styled(TextField)`
     & .MuiInputBase-root {
         ${tw`bg-white rounded`}
@@ -84,27 +72,22 @@ const StyledTextField = styled(TextField)`
     }
 `;
 
-// Enlace de "Olvidé mi contraseña"
 const ForgotPasswordLink = styled(Link)`
     ${tw`text-green-600 mt-4 mb-6 text-right underline cursor-pointer`}
 `;
 
-// Botón de login personalizado
 const LoginButton = styled(Button)`
     ${tw`bg-green-600 hover:bg-green-700 text-white font-semibold py-2 mt-4 rounded`}
 `;
 
-// Botón de OAuth (Google) personalizado
 const OAuthButton = styled(Button)`
     ${tw`bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 mt-4 flex items-center justify-center rounded shadow`}
 `;
 
-// Mensaje de error centrado
 const ErrorMessage = styled(Typography)`
     ${tw`mb-4 text-center text-red-600`}
 `;
 
-// Animación de FadeIn para Snackbar
 const fadeIn = keyframes`
     from {
         opacity: 0;
@@ -114,7 +97,6 @@ const fadeIn = keyframes`
     }
 `;
 
-// Contenedor para Snackbar con animación
 const AnimatedSnackbar = styled(Snackbar)`
     & .MuiAlert-root {
         animation: ${fadeIn} 0.5s ease-out;
@@ -122,30 +104,27 @@ const AnimatedSnackbar = styled(Snackbar)`
 `;
 
 const LoginPage = () => {
-    const { login } = useContext(AuthContext); // Obtener la función de login del contexto
-    const navigate = useNavigate(); // Hook para navegación programática
-    const [isModalOpen, setIsModalOpen] = useState(false); // Estado para el modal de "Olvidé mi contraseña"
+    const { login } = useContext(AuthContext);
+    const navigate = useNavigate();
+    const [isModalOpen, setIsModalOpen] = useState(false);
     const [formData, setFormData] = useState({
-        email: '', // Correo vacío
-        password: '', // Contraseña vacía
-    }); // Estado para los datos del formulario
-    const [error, setError] = useState(''); // Estado para mensajes de error
-    const [openSnackbar, setOpenSnackbar] = useState(false); // Estado para Snackbar
-    const [snackbarMessage, setSnackbarMessage] = useState(''); // Mensaje de Snackbar
-    const [snackbarSeverity, setSnackbarSeverity] = useState('success'); // Severidad de Snackbar
+        email: '',
+        password: '',
+    });
+    const [error, setError] = useState('');
+    const [openSnackbar, setOpenSnackbar] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-    // Manejar la apertura del modal
     const handleOpenModal = (e) => {
         e.preventDefault();
         setIsModalOpen(true);
     };
 
-    // Manejar el cierre del modal
     const handleCloseModal = () => {
         setIsModalOpen(false);
     };
 
-    // Manejar cambios en los campos del formulario
     const handleChange = (e) => {
         setFormData({
             ...formData,
@@ -153,35 +132,31 @@ const LoginPage = () => {
         });
     };
 
-    // Manejar el envío del formulario
     const handleSubmit = async (e) => {
-        e.preventDefault(); // Evita la recarga de la página
+        e.preventDefault();
         setError('');
         setSnackbarMessage('');
         setSnackbarSeverity('success');
 
-        // Validación básica de los campos
         if (!formData.email || !formData.password) {
             setError('Por favor, completa todos los campos.');
             return;
         }
 
         try {
-            await login(formData.email, formData.password); // Llamar a la función de login
+            await login(formData.email, formData.password);
             setSnackbarMessage('¡Inicio de sesión exitoso!');
             setSnackbarSeverity('success');
             setOpenSnackbar(true);
-            navigate('/admin/dashboard'); // Redirigir al dashboard tras un login exitoso
+            navigate('/admin/dashboard');
         } catch (err) {
-            // Manejar errores de autenticación
             setError(err.response?.data?.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.');
-            setSnackbarMessage(err.response?.data?.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.');
+            setSnackbarMessage(err.response?.data?.message || 'Error en el inicio de sesión.');
             setSnackbarSeverity('error');
             setOpenSnackbar(true);
         }
     };
 
-    // Manejar el cierre de Snackbar
     const handleSnackbarClose = (event, reason) => {
         if (reason === 'clickaway') {
             return;
@@ -189,20 +164,14 @@ const LoginPage = () => {
         setOpenSnackbar(false);
     };
 
-    // Manejar el inicio de sesión con Google
     const handleGoogleLogin = () => {
-        // Redirigir al backend para iniciar OAuth con Google
-        window.location.href = '/api/auth/google';
+        window.location.href = '/auth/google';
     };
 
     return (
         <Box tw="flex flex-col min-h-screen">
-            {/* Navbar */}
             <Navbar />
-
-            {/* Main Content */}
             <LoginContainer>
-                {/* Sección Izquierda */}
                 <LeftSection>
                     <Logo src={logoLuvan} alt="Transportes Luvan" />
                     <Typography variant="h4" tw="text-center font-bold mb-4">
@@ -213,7 +182,6 @@ const LoginPage = () => {
                     </Slogan>
                 </LeftSection>
 
-                {/* Sección Derecha */}
                 <RightSection>
                     <LoginFormContainer>
                         <FormTitleTab>
@@ -225,7 +193,6 @@ const LoginPage = () => {
                             </ErrorMessage>
                         )}
                         <form tw="mt-8" onSubmit={handleSubmit}>
-                            {/* Campo de Correo Electrónico */}
                             <StyledTextField
                                 label="Correo Electrónico"
                                 variant="outlined"
@@ -238,7 +205,6 @@ const LoginPage = () => {
                                 required
                                 aria-label="Correo Electrónico"
                             />
-                            {/* Campo de Contraseña */}
                             <StyledTextField
                                 label="Contraseña"
                                 type="password"
@@ -252,17 +218,13 @@ const LoginPage = () => {
                                 required
                                 aria-label="Contraseña"
                             />
-                            {/* Enlace para "Olvidé mi contraseña" */}
                             <ForgotPasswordLink href="#" variant="body2" onClick={handleOpenModal}>
                                 ¿Olvidaste tu contraseña?
                             </ForgotPasswordLink>
-                            {/* Botón de Ingreso */}
                             <LoginButton type="submit" variant="contained" fullWidth size="large">
                                 Ingresar
                             </LoginButton>
-                            {/* Divider */}
                             <Divider tw="my-4" />
-                            {/* Botón de OAuth con Google */}
                             <OAuthButton onClick={handleGoogleLogin}>
                                 <GoogleIcon tw="mr-2" /> Iniciar Sesión con Google
                             </OAuthButton>
@@ -270,14 +232,10 @@ const LoginPage = () => {
                     </LoginFormContainer>
                 </RightSection>
             </LoginContainer>
-
-            {/* Footer */}
             <Footer />
 
-            {/* Modal de Olvidé mi Contraseña */}
             <ForgotPasswordModal open={isModalOpen} handleClose={handleCloseModal} />
 
-            {/* Snackbar para retroalimentación */}
             <AnimatedSnackbar
                 open={openSnackbar}
                 autoHideDuration={6000}
@@ -290,7 +248,6 @@ const LoginPage = () => {
             </AnimatedSnackbar>
         </Box>
     );
-
 };
 
 export default LoginPage;

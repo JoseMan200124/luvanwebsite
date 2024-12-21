@@ -1,5 +1,3 @@
-// src/components/modals/ForgotPasswordModal.jsx
-
 import React, { useState } from 'react';
 import {
     Modal,
@@ -11,7 +9,7 @@ import {
     Alert
 } from '@mui/material';
 import tw, { styled } from 'twin.macro';
-
+import api from '../../utils/axiosConfig';
 const ModalBox = styled(Box)`
     ${tw`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-8 rounded-lg shadow-lg w-11/12 max-w-md`}
 `;
@@ -26,32 +24,23 @@ const ForgotPasswordModal = ({ open, handleClose }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Aquí deberías implementar la lógica para enviar el email al backend
-        // Por ejemplo:
-        /*
         try {
-            await sendForgotPasswordEmail(email);
+            const response = await api.post('/mail/forgot-password', { email });
             setSnackbar({
                 open: true,
-                message: 'Se ha enviado un correo para restablecer la contraseña.',
+                message: response.data.message || 'Se ha enviado un correo para restablecer la contraseña.',
                 severity: 'success',
             });
             setEmail('');
             handleClose();
         } catch (error) {
+            console.error('Error al enviar el correo:', error);
             setSnackbar({
                 open: true,
-                message: 'Error al enviar el correo. Por favor, intenta nuevamente.',
+                message: error.response?.data?.message || 'Error al enviar el correo. Por favor, intenta nuevamente.',
                 severity: 'error',
             });
         }
-        */
-        // Simulación:
-        setSnackbar({
-            open: true,
-            message: 'Funcionalidad de recuperación de contraseña no implementada.',
-            severity: 'info',
-        });
     };
 
     const handleSnackbarClose = () => {

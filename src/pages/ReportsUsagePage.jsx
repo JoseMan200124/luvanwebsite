@@ -16,7 +16,7 @@ import {
     Legend,
     ResponsiveContainer,
 } from 'recharts';
-import axios from 'axios';
+import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -54,9 +54,9 @@ const ReportsUsagePage = () => {
         const fetchData = async () => {
             try {
                 const [routesRes, schoolsRes, incidentsRes] = await Promise.all([
-                    axios.get('/api/reports/routes-usage'),
-                    axios.get('/api/reports/schools-usage'),
-                    axios.get('/api/reports/incidents'),
+                    api.get('/reports/routes-usage'),
+                    api.get('/reports/schools-usage'),
+                    api.get('/reports/incidents'),
                 ]);
 
                 setData({

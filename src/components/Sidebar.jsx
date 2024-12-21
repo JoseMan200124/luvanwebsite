@@ -1,46 +1,27 @@
 // src/components/Sidebar.jsx
 
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { Avatar, IconButton, Badge, Tooltip } from '@mui/material';
+import { Avatar } from '@mui/material';
 import {
     Menu as MenuIcon,
     Close as CloseIcon,
     ExpandLess,
     ExpandMore,
-    Notifications,
-    Group,
-    School,
-    BarChart,
-    AttachMoney,
-    People,
-    ReportProblem,
-    Security,
     Logout as LogoutIcon,
     AccountCircle,
     Settings,
-    Description
 } from '@mui/icons-material';
-import { modules } from '../modules';
 import { AuthContext } from '../context/AuthProvider';
-import NotificationsMenu from './NotificationsMenu'; // Asegúrate de importar correctamente
+import NotificationsMenu from './NotificationsMenu';
+import api from '../utils/axiosConfig';
 
-const iconMap = {
-    Group,
-    School,
-    BarChart,
-    AttachMoney,
-    Notifications,
-    People,
-    ReportProblem,
-    Security,
-    AccountCircle,
-    Settings,
-    Description,
-};
+// Importamos la definición de módulos desde modules.js
+import { modules } from '../modules';
 
+// =============== Estilos con styled-components y twin.macro ===============
 const SidebarContainer = styled.div`
     ${tw`bg-gray-800 text-white h-screen fixed top-0 left-0 z-50 flex flex-col`}
     width: ${(props) => (props.isOpen ? '250px' : '60px')};
@@ -82,50 +63,72 @@ const ToggleTab = styled.div`
     ${tw`absolute bg-red-500 rounded-r-md cursor-pointer`}
     width: 40px;
     height: 40px;
-    top: 10px; /* Ajustar para estar en la esquina superior derecha */
+    top: 10px;
+    right: -20px;
     display: flex;
     align-items: center;
     justify-content: center;
     box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
-    right: -20px; /* Ajusta para que sobresalga */
     @media (min-width: 769px) {
-        display: none; /* Ocultar en pantallas grandes */
+        display: none;
     }
 `;
 
 const LogoutItem = styled.li`
-    ${tw`px-4 py-2 mt-auto hover:bg-gray-700 cursor-pointer flex items-center`}
-    transition: background-color 0.2s ease;
+  ${tw`px-4 py-2 mt-auto hover:bg-gray-700 cursor-pointer flex items-center`}
+  transition: background-color 0.2s ease;
 `;
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
     const [openMenus, setOpenMenus] = useState({});
+    const [permissions, setPermissions] = useState({});
     const navigate = useNavigate();
     const { auth, logout } = useContext(AuthContext);
 
+    // 1) Cargar permisos del usuario logueado
+    useEffect(() => {
+        if (auth?.token && auth?.user?.roleId) {
+            fetchUserPermissions(auth.user.roleId);
+        }
+    }, [auth?.token, auth?.user?.roleId]);
+
+    const fetchUserPermissions = async (roleId) => {
+        try {
+            const res = await api.get(`/permissions/role/${roleId}`, {
+                headers: { Authorization: `Bearer ${auth.token}` },
+            });
+            setPermissions(res.data.permissions || {});
+        } catch (err) {
+            console.error('Error obteniendo permisos de usuario:', err);
+        }
+    };
+
+    // 2) Manejo de apertura/cierre de submenús
     const handleMenuClick = (index) => {
         setOpenMenus((prev) => ({ ...prev, [index]: !prev[index] }));
     };
 
-    // Asegurarse de que el usuario está autenticado
-    if (!auth.user) {
-        return null; // O muestra un spinner de carga
-    }
-
-    const user = {
-        name: auth.user.name,
-        role: auth.user.role,
-        avatar: 'https://i.pravatar.cc/150?img=3', // Puedes obtener la foto real del usuario
-    };
-
+    // 3) Logout
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
+    // Si no hay usuario autenticado, no renderizamos nada
+    if (!auth.user) {
+        return null;
+    }
+
+    const user = {
+        name: auth.user.name,
+        role: auth.user.role,
+        avatar: 'https://i.pravatar.cc/150?img=3', // Ajusta según tu lógica
+    };
+
     return (
         <>
             <SidebarContainer isOpen={isOpen}>
+                {/* Encabezado con perfil de usuario */}
                 <SidebarHeader>
                     {isOpen && (
                         <ProfileInfo>
@@ -137,55 +140,48 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         </ProfileInfo>
                     )}
                 </SidebarHeader>
+
+                {/* Menú principal */}
                 <MainMenu>
                     <SidebarMenu>
                         {modules.map((module, index) => {
-                            // Verificar si el usuario tiene acceso a este módulo
-                            const hasAccess = module.submodules.some(sub => {
-                                if (sub.roles && Array.isArray(sub.roles)) {
-                                    return sub.roles.includes(user.role);
-                                }
-                                return true;
-                            });
+                            // 4) Verificar si el usuario tiene acceso al módulo padre
+                            //    Usamos 'module.key' que definiremos en 'modules.js'
+                            const { key, name, icon: ModuleIcon, submodules } = module;
 
-                            if (!hasAccess) return null;
+                            // El usuario tiene permiso si permissions[key] === true
+                            const canAccessModule = !!permissions[key];
+                            if (!canAccessModule) return null;
 
-                            const ModuleIcon = iconMap[module.icon] || Group;
                             return (
-                                <div key={index}>
+                                <div key={key}>
                                     <MenuItem onClick={() => handleMenuClick(index)}>
                                         <div tw="flex items-center">
+                                            {/* Icono dinámico (ModuleIcon) si existe; sino muestra algo por defecto */}
                                             {ModuleIcon && <ModuleIcon tw="mr-2" />}
-                                            {isOpen && <span>{module.name}</span>}
+                                            {isOpen && <span>{name}</span>}
                                         </div>
                                         {isOpen && (
-                                            <>
-                                                {openMenus[index] ? (
-                                                    <ExpandLess tw="text-gray-400" />
-                                                ) : (
-                                                    <ExpandMore tw="text-gray-400" />
-                                                )}
-                                            </>
+                                            openMenus[index] ? <ExpandLess /> : <ExpandMore />
                                         )}
                                     </MenuItem>
-                                    {isOpen && module.submodules && openMenus[index] && (
-                                        <div>
-                                            {module.submodules.map((submodule, subIndex) => {
-                                                // Verificar si 'roles' está definido y si el usuario tiene acceso
-                                                const canAccess = submodule.roles && Array.isArray(submodule.roles)
-                                                    ? submodule.roles.includes(user.role)
-                                                    : true; // Si 'roles' no está definido, permitir acceso
 
-                                                if (!canAccess) return null;
+                                    {/* Submódulos */}
+                                    {isOpen && submodules && openMenus[index] && (
+                                        <div>
+                                            {submodules.map((submodule) => {
+                                                const { key: subKey, name: subName, path } = submodule;
+                                                const canAccessSub = !!permissions[subKey];
+                                                if (!canAccessSub) return null;
 
                                                 return (
                                                     <RouterLink
-                                                        to={`/admin/${submodule.path}`}
-                                                        key={subIndex}
+                                                        to={`/admin/${path}`}
+                                                        key={subKey}
                                                         style={{ textDecoration: 'none', color: 'inherit' }}
                                                     >
                                                         <SubMenuItem>
-                                                            <span tw="text-sm">{submodule.name}</span>
+                                                            <span tw="text-sm">{subName}</span>
                                                         </SubMenuItem>
                                                     </RouterLink>
                                                 );
@@ -197,7 +193,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         })}
                     </SidebarMenu>
                 </MainMenu>
-                {/* Enlaces adicionales según el rol */}
+
+                {/* Secciones adicionales (Perfil, Roles/Permisos, Logout) */}
                 <SidebarMenu tw="flex flex-col">
                     {/* Perfil de Usuario */}
                     <RouterLink to="/admin/perfil" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -208,7 +205,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                             </div>
                         </MenuItem>
                     </RouterLink>
-                    {/* Gestión de Roles y Permisos (solo para Administradores y Gestores) */}
+
+                    {/* Roles y Permisos (ejemplo para Administrador o Gestor) */}
                     {(user.role === 'Administrador' || user.role === 'Gestor') && (
                         <RouterLink to="/admin/roles-permisos" style={{ textDecoration: 'none', color: 'inherit' }}>
                             <MenuItem>
@@ -219,6 +217,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                             </MenuItem>
                         </RouterLink>
                     )}
+
                     {/* Logout */}
                     <LogoutItem onClick={handleLogout}>
                         <div tw="flex items-center">
@@ -227,7 +226,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         </div>
                     </LogoutItem>
                 </SidebarMenu>
-                {/* Toggle Button */}
+
+                {/* Botón toggle lateral (solo se muestra en móvil) */}
                 <ToggleTab onClick={toggleSidebar}>
                     {isOpen ? (
                         <CloseIcon style={{ color: 'white' }} />
@@ -236,7 +236,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     )}
                 </ToggleTab>
             </SidebarContainer>
-            {/* Campana de Notificaciones */}
+
+            {/* Campana de Notificaciones (flotante) */}
             <div
                 style={{
                     position: 'fixed',
@@ -249,7 +250,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             </div>
         </>
     );
-
 };
 
 export default Sidebar;

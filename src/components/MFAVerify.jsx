@@ -26,7 +26,7 @@ const MFAVerify = () => {
         setError('');
         try {
             // Enviar el código MFA al backend para verificar
-            const response = await axios.post('/api/auth/mfa/verify', { code }, {
+            const response = await axios.post('/auth/mfa/verify', { code }, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },

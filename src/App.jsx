@@ -1,4 +1,4 @@
-// src/App.jsx
+// src/App.js
 
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
@@ -7,22 +7,19 @@ import ProtectedLayout from './components/ProtectedLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
-import LandingPage from './pages/LandingPage'; // Importar la Landing Page
+import LandingPage from './pages/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthProvider from './context/AuthProvider';
 import MFAVerify from './components/MFAVerify';
-import SchoolsManagementPage from './pages/SchoolsManagementPage';
-import RoutesManagementPage from './pages/RoutesManagementPage';
+import PermissionsManagementPage from "./pages/PermissionsManagmentPage";
 import ProfilePage from './pages/ProfilePage';
-import RolesManagementPage from './pages/RolesManagementPage';
-import MonitorsManagementPage from './pages/MonitorsManagementPage';
-import ReportsUsagePage from "./pages/ReportsUsagePage";
-import FinancialStatisticsPage from "./pages/FinancialStatisticsPage";
-// Importa otros componentes según sea necesario
 
+// Importas tu "modules" que definimos arriba
 import { modules } from './modules';
 
 function App() {
+
+    // Este método crea <Route> dinámicos para cada submódulo
     const renderDynamicRoutes = () => {
         let routes = [];
         modules.forEach((module) => {
@@ -33,7 +30,8 @@ function App() {
                         path={submodule.path}
                         element={
                             <ProtectedRoute roles={submodule.roles}>
-                                {submodule.component}
+                                {/* AQUÍ la corrección: Invocamos al componente con <submodule.component /> */}
+                                <submodule.component />
                             </ProtectedRoute>
                         }
                     />
@@ -47,15 +45,13 @@ function App() {
         <Router>
             <AuthProvider>
                 <Routes>
-                    {/* Ruta para la Landing Page */}
+                    {/* Rutas públicas */}
                     <Route path="/" element={<LandingPage />} />
-
-                    {/* Rutas de Autenticación */}
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/mfa" element={<MFAVerify />} />
 
-                    {/* Ruta protegida principal con layout */}
+                    {/* Rutas protegidas con layout */}
                     <Route
                         path="/admin/*"
                         element={
@@ -64,14 +60,14 @@ function App() {
                             </ProtectedRoute>
                         }
                     >
-                        {/* Rutas hijas protegidas */}
+                        {/* Ruta por defecto al dashboard */}
                         <Route index element={<Navigate to="dashboard" replace />} />
                         <Route path="dashboard" element={<Dashboard />} />
 
-                        {/* Rutas dinámicas desde modules.js */}
+                        {/* Rutas dinámicas generadas a partir de "modules.js" */}
                         {renderDynamicRoutes()}
 
-                        {/* Rutas específicas */}
+                        {/* Perfil del usuario */}
                         <Route
                             path="perfil"
                             element={
@@ -80,21 +76,25 @@ function App() {
                                 </ProtectedRoute>
                             }
                         />
+
+                        {/* Roles y Permisos */}
                         <Route
                             path="roles-permisos"
                             element={
                                 <ProtectedRoute roles={['Gestor', 'Administrador']}>
-                                    <RolesManagementPage />
+                                    <PermissionsManagementPage />
                                 </ProtectedRoute>
                             }
                         />
-                        {/* Añade más rutas específicas si es necesario */}
 
-                        {/* Ruta por defecto para rutas no encontradas dentro de /admin */}
-                        <Route path="*" element={<Navigate to="dashboard" replace />} />
+                        {/* Cualquier otra ruta dentro de /admin que no coincida */}
+                        <Route
+                            path="*"
+                            element={<Navigate to="dashboard" replace />}
+                        />
                     </Route>
 
-                    {/* Ruta por defecto para rutas no encontradas */}
+                    {/* Resto de rutas que no coincidan */}
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </AuthProvider>

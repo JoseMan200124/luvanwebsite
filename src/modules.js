@@ -1,4 +1,12 @@
-// src/modules.js
+import {
+    Group,
+    School,
+    BarChart,
+    AttachMoney,
+    People,
+    Security,
+    Description
+} from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
 import SchoolsManagementPage from './pages/SchoolsManagementPage';
@@ -7,75 +15,160 @@ import MonitorsManagementPage from './pages/MonitorsManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import ContractsManagementPage from './pages/ContractsManagementPage';
+import BusesManagementPage from './pages/BusesManagementPage';
+// Agrega más imports de páginas según necesites
 
-// Importa otros componentes según sea necesario
-
+/**
+ * Cada "module" debe tener una key y un icon (opcional),
+ * y cada "submodule" debe tener:
+ *   key, name, path, component, roles (opcional).
+ */
 export const modules = [
     {
+        key: 'gestion-usuarios-roles',
         name: 'Gestión de Usuarios y Roles',
-        icon: 'Group',
-        submodules: [
-            { name: 'Usuarios', path: 'usuarios', roles: ['Gestor', 'Administrador'], component: <RolesManagementPage /> },
-            // Añade más submódulos según sea necesario
-        ],
-    },
-    {
-        name: 'Gestión de Colegios y Rutas',
-        icon: 'School',
-        submodules: [
-            { name: 'Colegios', path: 'colegios', roles: ['Gestor', 'Administrador'], component: <SchoolsManagementPage /> },
-            { name: 'Rutas', path: 'rutas', roles: ['Gestor', 'Administrador'], component: <RoutesManagementPage /> },
-            // Añade más submódulos según sea necesario
-        ],
-    },
-    {
-        name: 'Reportes y Estadísticas',
-        icon: 'BarChart',
-        submodules: [
-            { name: 'Reportes de Uso', path: 'reportes-uso', roles: ['Gestor', 'Administrador'], component: <ReportsUsagePage /> },
-            { name: 'Estadísticas Financieras', path: 'estadisticas-financieras', roles: ['Gestor', 'Administrador'], component: <FinancialStatisticsPage /> },
-            // Asegúrate de que cada submódulo tenga 'roles'
-        ],
-    },
-    {
-        name: 'Gestión Financiera',
-        icon: 'AttachMoney',
-        submodules: [
-            { name: 'Facturación', path: 'facturacion', roles: ['Administrador'], component: <FinancialStatisticsPage /> }, // Asigna el componente adecuado
-            { name: 'Pagos y Cobros', path: 'pagos-cobros', roles: ['Administrador'], component: <FinancialStatisticsPage /> }, // Asigna el componente adecuado
-            // Añade más submódulos según sea necesario
-        ],
-    },
-    {
-        name: 'Gestión de Personal',
-        icon: 'People',
-        submodules: [
-            { name: 'Monitores', path: 'monitores', roles: ['Gestor', 'Administrador'], component: <MonitorsManagementPage /> },
-            { name: 'Pilotos', path: 'pilotos', roles: ['Gestor', 'Administrador'], component: <MonitorsManagementPage /> }, // Asigna el componente adecuado
-            { name: 'Supervisores', path: 'supervisores', roles: ['Administrador'], component: <MonitorsManagementPage /> }, // Asigna el componente adecuado
-            // Añade más submódulos según sea necesario
-        ],
-    },
-    {
-        name: 'Seguridad y Auditoría',
-        icon: 'Security',
-        submodules: [
-            { name: 'Registro de Actividades', path: 'registro-actividades', roles: ['Administrador'], component: <FinancialStatisticsPage /> }, // Asigna el componente adecuado
-            { name: 'Auditoría de Seguridad', path: 'auditoria-seguridad', roles: ['Administrador'], component: <FinancialStatisticsPage /> }, // Asigna el componente adecuado
-            // Añade más submódulos según sea necesario
-        ],
-    },
-    {
-        name: 'Contratos',
-        icon: 'Description',
+        icon: Group,
         submodules: [
             {
-                name: 'Gestión de Contratos',
-                path: 'contratos',
-                roles: ['Administrador', 'Gestor'],
-                component: <ContractsManagementPage />,
+                key: 'usuarios',
+                name: 'Usuarios',
+                path: 'usuarios',
+                component: RolesManagementPage, // Importado arriba
+                roles: ['Administrador', 'Gestor'], // Ejemplo
             },
         ],
     },
-    // Continúa añadiendo los demás módulos y submódulos con 'roles'
+    {
+        key: 'gestion-colegios-rutas',
+        name: 'Gestión de Colegios y Rutas',
+        icon: School,
+        submodules: [
+            {
+                key: 'colegios',
+                name: 'Colegios',
+                path: 'colegios',
+                component: SchoolsManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'rutas',
+                name: 'Rutas',
+                path: 'rutas',
+                component: RoutesManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'buses',
+                name: 'Buses',
+                path: 'buses',
+                component: BusesManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+        ],
+    },
+    {
+        key: 'reportes-estadisticas',
+        name: 'Reportes y Estadísticas',
+        icon: BarChart,
+        submodules: [
+            {
+                key: 'reportes-uso',
+                name: 'Reportes de Uso',
+                path: 'reportes-uso',
+                component: ReportsUsagePage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'estadisticas-financieras',
+                name: 'Estadísticas Financieras',
+                path: 'estadisticas-financieras',
+                component: FinancialStatisticsPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+        ],
+    },
+    {
+        key: 'gestion-financiera',
+        name: 'Gestión Financiera',
+        icon: AttachMoney,
+        submodules: [
+            {
+                key: 'facturacion',
+                name: 'Facturación',
+                path: 'facturacion',
+                component: FinancialStatisticsPage,
+                roles: ['Administrador'],
+            },
+            {
+                key: 'pagos-cobros',
+                name: 'Pagos y Cobros',
+                path: 'pagos-cobros',
+                component: FinancialStatisticsPage,
+                roles: ['Administrador'],
+            },
+        ],
+    },
+    {
+        key: 'gestion-personal',
+        name: 'Gestión de Personal',
+        icon: People,
+        submodules: [
+            {
+                key: 'monitores',
+                name: 'Monitores',
+                path: 'monitores',
+                component: MonitorsManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'pilotos',
+                name: 'Pilotos',
+                path: 'pilotos',
+                component: MonitorsManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'supervisores',
+                name: 'Supervisores',
+                path: 'supervisores',
+                component: MonitorsManagementPage,
+                roles: ['Administrador'],
+            },
+        ],
+    },
+    {
+        key: 'seguridad-auditoria',
+        name: 'Seguridad y Auditoría',
+        icon: Security,
+        submodules: [
+            {
+                key: 'registro-actividades',
+                name: 'Registro de Actividades',
+                path: 'registro-actividades',
+                component: FinancialStatisticsPage,
+                roles: ['Administrador'],
+            },
+            {
+                key: 'auditoria-seguridad',
+                name: 'Auditoría de Seguridad',
+                path: 'auditoria-seguridad',
+                component: FinancialStatisticsPage,
+                roles: ['Administrador'],
+            },
+        ],
+    },
+    {
+        key: 'contratos',
+        name: 'Contratos',
+        icon: Description,
+        submodules: [
+            {
+                key: 'gestion-contratos',
+                name: 'Gestión de Contratos',
+                path: 'contratos',
+                component: ContractsManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+        ],
+    },
 ];

@@ -1,8 +1,8 @@
 // src/components/ProtectedLayout.jsx
 
 import React, { useState, useContext } from 'react';
-import Sidebar from './Sidebar';
 import { Outlet } from 'react-router-dom';
+import Sidebar from './Sidebar';
 import NotificationsMenu from './NotificationsMenu';
 import { AuthContext } from '../context/AuthProvider';
 

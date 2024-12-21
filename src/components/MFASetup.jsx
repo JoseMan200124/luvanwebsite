@@ -6,7 +6,7 @@ import styled from 'styled-components';
 import { TextField, Button, Typography } from '@mui/material';
 import { AuthContext } from '../context/AuthProvider';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode'; // Import nombrado
+import { jwtDecode } from 'jwt-decode';
 
 const SetupContainer = tw.div`flex flex-col items-center justify-center bg-gray-100 p-8 rounded-lg shadow-md`;
 
@@ -26,7 +26,7 @@ const MFASetup = () => {
         setSuccess('');
         try {
             // Solicitar al backend la generación de un código QR o enlace para configurar MFA
-            const response = await axios.post('/api/auth/mfa/setup', {}, {
+            const response = await axios.post('/auth/mfa/setup', {}, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },

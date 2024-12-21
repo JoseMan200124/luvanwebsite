@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import ReactQuill from 'react-quill';
 import EditorToolbar, { modules, formats } from '../components/EditorToolbar';
 import 'react-quill/dist/quill.snow.css';
+
 import {
     Dialog,
     DialogTitle,
@@ -25,12 +26,15 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
     const [placeholderName, setPlaceholderName] = useState('');
     const [placeholderType, setPlaceholderType] = useState('text');
 
+    // Referencia al editor Quill
     const quillRef = useRef(null);
 
+    // Control de cambios en el editor
     const handleEditorChange = (content, delta, source, editor) => {
         setEditorData(content);
     };
 
+    // Insertar el placeholder en la posición actual del cursor
     const handleInsertPlaceholder = () => {
         if (!placeholderName.trim()) {
             alert('Por favor, ingrese un nombre para el campo.');
@@ -43,6 +47,7 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
         quill.insertText(range.index, placeholderText, 'user');
         quill.setSelection(range.index + placeholderText.length, 'silent');
 
+        // Reset
         setPlaceholderName('');
         setPlaceholderType('text');
         setOpenPlaceholderDialog(false);
@@ -59,6 +64,7 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
                 placeholder="Escribe tu contenido aquí..."
                 modules={modules}
                 formats={formats}
+                style={{ minHeight: '300px' }}
             />
 
             {/* Botón Flotante para Insertar Placeholder */}
@@ -66,9 +72,10 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
                 color="primary"
                 aria-label="add"
                 style={{
-                    position: 'absolute',
+                    position: 'fixed',
                     bottom: '20px',
                     right: '20px',
+                    zIndex: 9999
                 }}
                 onClick={() => setOpenPlaceholderDialog(true)}
             >
@@ -76,7 +83,10 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
             </Fab>
 
             {/* Diálogo para insertar placeholder */}
-            <Dialog open={openPlaceholderDialog} onClose={() => setOpenPlaceholderDialog(false)}>
+            <Dialog
+                open={openPlaceholderDialog}
+                onClose={() => setOpenPlaceholderDialog(false)}
+            >
                 <DialogTitle>Insertar Campo</DialogTitle>
                 <DialogContent>
                     <TextField
@@ -99,13 +109,18 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
                             <MenuItem value="number">Número</MenuItem>
                             <MenuItem value="date">Fecha</MenuItem>
                             <MenuItem value="signature">Firma</MenuItem>
-                            {/* Agrega más tipos si es necesario */}
                         </Select>
                     </FormControl>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setOpenPlaceholderDialog(false)}>Cancelar</Button>
-                    <Button onClick={handleInsertPlaceholder} variant="contained" color="primary">
+                    <Button onClick={() => setOpenPlaceholderDialog(false)}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        onClick={handleInsertPlaceholder}
+                        variant="contained"
+                        color="primary"
+                    >
                         Insertar
                     </Button>
                 </DialogActions>
