@@ -15,13 +15,18 @@ import {
     Alert,
     Divider,
     TextField,
-    Grid
+    Grid,
+    Pagination,
+    CircularProgress,
+    Box,
+    DialogActions
 } from '@mui/material';
 import {
     Delete as DeleteIcon,
     Edit as EditIcon,
     CloudUpload as CloudUploadIcon,
-    Link as LinkIcon
+    ContentCopy as ContentCopyIcon,
+    Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -38,9 +43,7 @@ const ContractsManagementPage = () => {
     const [contracts, setContracts] = useState([]);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-    // ---------------------------
     // Estados para CREAR/EDITAR
-    // ---------------------------
     const [openEditor, setOpenEditor] = useState(false);
     const [currentContract, setCurrentContract] = useState(null);
     const [contractTitle, setContractTitle] = useState('');
@@ -50,21 +53,21 @@ const ContractsManagementPage = () => {
     const signatureRefs = useRef({});
     const [formValues, setFormValues] = useState({});
 
-    // ---------------------------
-    // Estados para COMPARTIR
-    // ---------------------------
-    const [openShareDialog, setOpenShareDialog] = useState(false);
-    const [sharedContractTitle, setSharedContractTitle] = useState('');
-    const [sharedContractContent, setSharedContractContent] = useState('');
-    const signatureRefsShare = useRef({});
-    const [shareFormValues, setShareFormValues] = useState({});
-    const [sharingContractUuid, setSharingContractUuid] = useState(null);
-
     const navigate = useNavigate();
 
-    // =========================================================================
-    //                  OBTENER CONTRATOS AL MONTAR
-    // =========================================================================
+    // ============================
+    // Estados y Variables para filledContracts
+    // ============================
+    const [filledContracts, setFilledContracts] = useState([]);
+    const [filledContractsLoading, setFilledContractsLoading] = useState(false);
+    const [filledContractsPage, setFilledContractsPage] = useState(1);
+    const [filledContractsLimit] = useState(10); // Puedes ajustar el límite por página
+    const [filledContractsTotalPages, setFilledContractsTotalPages] = useState(1);
+    const [filledContractsSearch, setFilledContractsSearch] = useState('');
+
+    // ============================
+    // OBTENER CONTRATOS AL MONTAR
+    // ============================
     useEffect(() => {
         const fetchContracts = async () => {
             try {
@@ -78,9 +81,34 @@ const ContractsManagementPage = () => {
         fetchContracts();
     }, []);
 
-    // =========================================================================
-    //                      SUBIR ARCHIVO WORD
-    // =========================================================================
+    // ============================
+    // OBTENER CONTRATOS LLENADOS (Paginación)
+    // ============================
+    useEffect(() => {
+        const fetchFilledContracts = async () => {
+            setFilledContractsLoading(true);
+            try {
+                const response = await api.get('/contracts/filled', {
+                    params: {
+                        page: filledContractsPage,
+                        limit: filledContractsLimit
+                    }
+                });
+                setFilledContracts(response.data.data);
+                setFilledContractsTotalPages(response.data.meta.totalPages);
+            } catch (error) {
+                console.error('Error al obtener los contratos llenados:', error);
+                setSnackbar({ open: true, message: 'Error al obtener los contratos llenados.', severity: 'error' });
+            } finally {
+                setFilledContractsLoading(false);
+            }
+        };
+        fetchFilledContracts();
+    }, [filledContractsPage, filledContractsLimit]);
+
+    // ============================
+    // SUBIR ARCHIVO WORD
+    // ============================
     const handleWordUpload = async (event) => {
         const file = event.target.files[0];
         if (file && file.name.endsWith('.docx')) {
@@ -107,9 +135,9 @@ const ContractsManagementPage = () => {
         event.target.value = null;
     };
 
-    // =========================================================================
-    //                CREAR O ACTUALIZAR CONTRATO (ADMIN)
-    // =========================================================================
+    // ============================
+    // CREAR O ACTUALIZAR CONTRATO (ADMIN)
+    // ============================
     const handleSaveOrUpdate = async () => {
         if (!contractTitle.trim()) {
             setSnackbar({
@@ -165,9 +193,9 @@ const ContractsManagementPage = () => {
         }
     };
 
-    // =========================================================================
-    //                  EDITAR CONTRATO (ADMIN)
-    // =========================================================================
+    // ============================
+    // EDITAR CONTRATO (ADMIN)
+    // ============================
     const handleEdit = (contract) => {
         setCurrentContract(contract);
         setContractTitle(contract.title);
@@ -175,9 +203,9 @@ const ContractsManagementPage = () => {
         setOpenEditor(true);
     };
 
-    // =========================================================================
-    //                 ELIMINAR CONTRATO (ADMIN)
-    // =========================================================================
+    // ============================
+    // ELIMINAR CONTRATO (ADMIN)
+    // ============================
     const handleDelete = async (contractUuid) => {
         if (window.confirm('¿Está seguro de que desea eliminar este contrato?')) {
             try {
@@ -195,9 +223,9 @@ const ContractsManagementPage = () => {
         }
     };
 
-    // =========================================================================
-    //                  CERRAR EDITOR DE CONTRATO
-    // =========================================================================
+    // ============================
+    // CERRAR EDITOR DE CONTRATO
+    // ============================
     const handleCloseEditor = () => {
         setOpenEditor(false);
         setCurrentContract(null);
@@ -207,81 +235,24 @@ const ContractsManagementPage = () => {
         setFormValues({});
     };
 
-    // =========================================================================
-    //              CERRAR SNACKBAR DE NOTIFICACIONES
-    // =========================================================================
-    const handleCloseSnackbar = () => {
-        setSnackbar({ ...snackbar, open: false });
-    };
-
-    // =========================================================================
-    //         VER CONTRATO (ADMIN) - EJEMPLO DE VISTA PREVIA
-    // =========================================================================
-    const handleViewContract = (contract) => {
-        navigate(`/admin/contratos/${contract.uuid}`);
-    };
-
-    // =========================================================================
-    //    GENERAR PDF (ADMIN) DE LA VISTA PREVIA
-    // =========================================================================
-    const handleGeneratePDF = async () => {
-        // 1) contenedor temporal
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = editorData;
-        tempDiv.style.width = '210mm';
-        tempDiv.style.padding = '20mm';
-        tempDiv.style.boxSizing = 'border-box';
-        tempDiv.style.fontFamily = 'Arial, sans-serif';
-        tempDiv.style.backgroundColor = '#fff';
-        document.body.appendChild(tempDiv);
-
-        // 2) Reemplazar firmas
-        let filledContent = editorData;
-        const signatureNames = Object.keys(signatureRefs.current);
-        for (const name of signatureNames) {
-            const pad = signatureRefs.current[name];
-            if (pad && !pad.isEmpty()) {
-                const dataUrl = pad.getTrimmedCanvas().toDataURL('image/png');
-                filledContent = filledContent.replace(
-                    new RegExp(`{{${name}:signature}}`, 'g'),
-                    `<img src="${dataUrl}" alt="Firma" style="width:200px; height:100px;" />`
-                );
-            } else {
-                filledContent = filledContent.replace(new RegExp(`{{${name}:signature}}`, 'g'), '');
-            }
-        }
-
-        // 3) Reemplazar placeholders de texto
-        const placeholderRegex = /{{(.*?):(.*?)}}/g;
-        filledContent = filledContent.replace(placeholderRegex, (match, name) => {
-            return formValues[name] || '';
-        });
-
-        tempDiv.innerHTML = filledContent;
-
-        // 4) Generar PDF
+    // ============================
+    // COPIAR ENLACE AL PORTAPAPELES
+    // ============================
+    const handleCopyLink = async (url) => {
         try {
-            const canvas = await html2canvas(tempDiv, { scale: 2 });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`${contractTitle}.pdf`);
+            await navigator.clipboard.writeText(url);
+            setSnackbar({ open: true, message: 'Enlace copiado al portapapeles.', severity: 'success' });
         } catch (error) {
-            console.error('Error generando el PDF:', error);
-            setSnackbar({ open: true, message: 'Hubo un error al generar el PDF.', severity: 'error' });
+            console.error('Error al copiar el enlace:', error);
+            setSnackbar({ open: true, message: 'Error al copiar el enlace.', severity: 'error' });
         }
-
-        document.body.removeChild(tempDiv);
     };
 
-    // =========================================================================
-    //    EXTRAER PLACEHOLDERS ({{nombre:tipo}})
-    // =========================================================================
+    // ============================
+    // EXTRAER PLACEHOLDERS ({{nombre:tipo}})
+    // ============================
     const extractPlaceholders = (content) => {
-        const regex = /{{(.*?):(.*?)}}/g;
+        const regex = /{{\s*([^:{}\s]+)\s*:\s*(text|signature|date)\s*}}/g;
         const matches = [];
         let match;
         while ((match = regex.exec(content)) !== null) {
@@ -291,9 +262,9 @@ const ContractsManagementPage = () => {
         return Array.from(new Set(matches.map(JSON.stringify))).map(JSON.parse);
     };
 
-    // =========================================================================
-    //     MANEJADORES DE INPUTS (ADMIN - VISTA PREVIA)
-    // =========================================================================
+    // ============================
+    // MANEJADORES DE INPUTS (ADMIN - VISTA PREVIA)
+    // ============================
     const handleChange = (name, value) => {
         setFormValues((prev) => ({
             ...prev,
@@ -301,11 +272,26 @@ const ContractsManagementPage = () => {
         }));
     };
 
-    // =========================================================================
-    //     PARSEAR CONTENIDO -> INPUTS (ADMIN - VISTA PREVIA)
-    // =========================================================================
+    // ============================
+    // MANEJADOR DE FIRMA
+    // ============================
+    const handleSignature = (name, ref) => {
+        signatureRefs.current[name] = ref;
+    };
+
+    // ============================
+    // VISTA PREVIA DE CONTRATO
+    // ============================
+    const handleViewContract = (contract) => {
+
+        navigate(`/admin/contratos/${contract.uuid}`);
+    };
+
+    // ============================
+    // PARSEAR CONTENIDO -> INPUTS (ADMIN - VISTA PREVIA)
+    // ============================
     const renderContent = (html) => {
-        const placeholderRegex = /{{(.*?):(.*?)}}/g;
+        const placeholderRegex = /{{\s*([^:{}\s]+)\s*:\s*(text|signature|date)\s*}}/g;
         return parse(html, {
             replace: (domNode) => {
                 if (domNode.type === 'text') {
@@ -331,30 +317,16 @@ const ContractsManagementPage = () => {
 
                         if (type === 'signature') {
                             segments.push(
-                                <span
-                                    key={`sig-${name}-${match.index}`}
-                                    style={{
-                                        display: 'inline-block',
-                                        verticalAlign: 'middle',
-                                        margin: '0 5px',
-                                        border: '1px dashed #888',
-                                        width: '300px',
-                                        height: '100px',
-                                        position: 'relative'
-                                    }}
-                                >
+                                <div key={`sig-${name}-${match.index}`} style={{ margin: '10px 0' }}>
+                                    <Typography variant="subtitle1" gutterBottom>{name}</Typography>
                                     <SignatureCanvas
                                         penColor="black"
                                         canvasProps={{
                                             width: 300,
-                                            height: 100,
-                                            style: { display: 'block' }
+                                            height: 150,
+                                            style: { border: '1px solid #000' }
                                         }}
-                                        ref={(canvasRef) => {
-                                            if (canvasRef && !signatureRefs.current[name]) {
-                                                signatureRefs.current[name] = canvasRef;
-                                            }
-                                        }}
+                                        ref={(ref) => handleSignature(name, ref)}
                                     />
                                     <Button
                                         variant="outlined"
@@ -364,30 +336,23 @@ const ContractsManagementPage = () => {
                                                 signatureRefs.current[name].clear();
                                             }
                                         }}
-                                        style={{
-                                            position: 'absolute',
-                                            top: '5px',
-                                            right: '5px'
-                                        }}
+                                        style={{ marginTop: '5px' }}
                                     >
-                                        Limpiar
+                                        Limpiar Firma
                                     </Button>
-                                </span>
+                                </div>
                             );
-                        } else {
+                        } else if (type === 'text' || type === 'date') {
                             segments.push(
                                 <TextField
                                     key={`field-${name}-${match.index}`}
-                                    type={type}
-                                    placeholder={name}
+                                    label={name}
+                                    type={type === 'date' ? 'date' : 'text'}
+                                    InputLabelProps={type === 'date' ? { shrink: true } : {}}
                                     value={formValues[name] || ''}
                                     onChange={(e) => handleChange(name, e.target.value)}
-                                    style={{
-                                        display: 'inline-block',
-                                        verticalAlign: 'middle',
-                                        margin: '0 5px',
-                                        width: 'auto'
-                                    }}
+                                    style={{ margin: '10px 0', width: '100%' }}
+                                    variant="outlined"
                                 />
                             );
                         }
@@ -400,192 +365,93 @@ const ContractsManagementPage = () => {
                         segments.push(remainingText);
                     }
 
-                    return <React.Fragment>{segments}</React.Fragment>;
+                    return <React.Fragment key={`fragment-${domNode.key}`}>{segments.map((segment, index) =>
+                        typeof segment === 'string' ? <span key={index}>{segment}</span> : segment
+                    )}</React.Fragment>;
                 }
             },
         });
     };
 
-    // =========================================================================
-    //    AL CAMBIAR EDITOR, INICIALIZAR FORM (ADMIN)
-    // =========================================================================
-    useEffect(() => {
-        if (currentContract) {
-            const placeholders = extractPlaceholders(editorData);
-            const initialValues = {};
-            placeholders.forEach((ph) => {
-                if (ph.type !== 'signature') {
-                    initialValues[ph.name] = '';
-                }
-            });
-            setFormValues(initialValues);
-        }
-    }, [editorData, currentContract]);
+    // ============================
+    // ELIMINAR CONTRATO LLENADO (ADMIN)
+    // ============================
 
-    // =========================================================================
-    //                COMPARTIR CONTRATO - ABRIR DIALOG
-    // =========================================================================
-    const handleShare = async (contract) => {
+    // Estado para controlar el diálogo de confirmación de eliminación
+    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+    const [filledContractToDelete, setFilledContractToDelete] = useState(null);
+
+    const handleOpenDeleteDialog = (filledContract) => {
+        setFilledContractToDelete(filledContract);
+        setOpenDeleteDialog(true);
+    };
+
+    const handleCloseDeleteDialog = () => {
+        setFilledContractToDelete(null);
+        setOpenDeleteDialog(false);
+    };
+
+    const confirmDeleteFilledContract = async () => {
+        if (!filledContractToDelete) return;
         try {
-            const res = await api.get(`/contracts/share/${contract.uuid}`);
-            setSharedContractTitle(res.data.title);
-            setSharedContractContent(res.data.content);
-            setSharingContractUuid(contract.uuid);
-            initShareFormValues(res.data.content);
-
-            setOpenShareDialog(true);
+            await api.delete(`/contracts/filled/${filledContractToDelete.id}`);
+            setFilledContracts((prev) => prev.filter((fc) => fc.id !== filledContractToDelete.id));
+            setSnackbar({ open: true, message: 'Contrato llenado eliminado exitosamente.', severity: 'info' });
         } catch (error) {
-            console.error('Error cargando contrato compartido:', error);
+            console.error('Error al eliminar el contrato llenado:', error);
             setSnackbar({
                 open: true,
-                message: 'No se pudo cargar el contrato para compartir.',
+                message: 'Error al eliminar el contrato llenado.',
                 severity: 'error'
             });
+        } finally {
+            handleCloseDeleteDialog();
         }
     };
 
-    // Inicializa placeholders del modo "compartir"
-    const initShareFormValues = (html) => {
-        const placeholders = extractPlaceholders(html);
-        const initialValues = {};
+    // ============================
+    // GENERAR PDF DE CONTRATO (ADMIN)
+    // ============================
+    const handleGeneratePDF = async () => {
+        if (!editorData) {
+            setSnackbar({
+                open: true,
+                message: 'No hay contenido para generar el PDF.',
+                severity: 'warning'
+            });
+            return;
+        }
+
+        // Reemplazar placeholders con valores actuales
+        let filledContent = editorData;
+
+        const placeholders = extractPlaceholders(editorData);
         placeholders.forEach((ph) => {
-            if (ph.type !== 'signature') {
-                initialValues[ph.name] = '';
+            if (ph.type === 'text' || ph.type === 'date') {
+                filledContent = filledContent.replace(
+                    new RegExp(`{{\\s*${ph.name}\\s*:\\s*${ph.type}\\s*}}`, 'g'),
+                    formValues[ph.name] || ''
+                );
+            } else if (ph.type === 'signature') {
+                const sigPad = signatureRefs.current[ph.name];
+                if (sigPad && !sigPad.isEmpty()) {
+                    const dataUrl = sigPad.getTrimmedCanvas().toDataURL('image/png');
+                    filledContent = filledContent.replace(
+                        new RegExp(`{{\\s*${ph.name}\\s*:\\s*signature\\s*}}`, 'g'),
+                        `<img src="${dataUrl}" alt="Firma" style="width:200px; height:100px;" />`
+                    );
+                } else {
+                    filledContent = filledContent.replace(
+                        new RegExp(`{{\\s*${ph.name}\\s*:\\s*signature\\s*}}`, 'g'),
+                        ''
+                    );
+                }
             }
         });
-        setShareFormValues(initialValues);
-        signatureRefsShare.current = {};
-    };
 
-    // =========================================================================
-    //   CERRAR DIALOG DE COMPARTIR
-    // =========================================================================
-    const handleCloseShareDialog = () => {
-        setOpenShareDialog(false);
-        setSharedContractTitle('');
-        setSharedContractContent('');
-        setSharingContractUuid(null);
-        signatureRefsShare.current = {};
-        setShareFormValues({});
-    };
-
-    // =========================================================================
-    //   PARSEAR CONTENIDO -> INPUTS (MODO COMPARTIR)
-    // =========================================================================
-    const renderSharedContent = (html) => {
-        const placeholderRegex = /{{(.*?):(.*?)}}/g;
-        return parse(html, {
-            replace: (domNode) => {
-                if (domNode.type === 'text') {
-                    const originalText = domNode.data;
-                    if (!originalText) return domNode;
-
-                    if (!placeholderRegex.test(originalText)) {
-                        return domNode;
-                    }
-                    placeholderRegex.lastIndex = 0;
-
-                    const segments = [];
-                    let lastIndex = 0;
-                    let match;
-
-                    while ((match = placeholderRegex.exec(originalText)) !== null) {
-                        const [fullMatch, name, type] = match;
-                        const beforeText = originalText.slice(lastIndex, match.index);
-
-                        if (beforeText) {
-                            segments.push(beforeText);
-                        }
-
-                        if (type === 'signature') {
-                            segments.push(
-                                <span
-                                    key={`sig-share-${name}-${match.index}`}
-                                    style={{
-                                        display: 'inline-block',
-                                        verticalAlign: 'middle',
-                                        margin: '0 5px',
-                                        border: '1px dashed #888',
-                                        width: '300px',
-                                        height: '100px',
-                                        position: 'relative'
-                                    }}
-                                >
-                                    <SignatureCanvas
-                                        penColor="black"
-                                        canvasProps={{
-                                            width: 300,
-                                            height: 100,
-                                            style: { display: 'block' }
-                                        }}
-                                        ref={(canvasRef) => {
-                                            if (canvasRef && !signatureRefsShare.current[name]) {
-                                                signatureRefsShare.current[name] = canvasRef;
-                                            }
-                                        }}
-                                    />
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        onClick={() => {
-                                            if (signatureRefsShare.current[name]) {
-                                                signatureRefsShare.current[name].clear();
-                                            }
-                                        }}
-                                        style={{
-                                            position: 'absolute',
-                                            top: '5px',
-                                            right: '5px'
-                                        }}
-                                    >
-                                        Limpiar
-                                    </Button>
-                                </span>
-                            );
-                        } else {
-                            segments.push(
-                                <input
-                                    key={`field-share-${name}-${match.index}`}
-                                    type={type}
-                                    placeholder={name}
-                                    value={shareFormValues[name] || ''}
-                                    onChange={(e) =>
-                                        setShareFormValues((prev) => ({
-                                            ...prev,
-                                            [name]: e.target.value
-                                        }))
-                                    }
-                                    style={{
-                                        display: 'inline-block',
-                                        verticalAlign: 'middle',
-                                        margin: '0 5px',
-                                        width: 'auto'
-                                    }}
-                                />
-                            );
-                        }
-
-                        lastIndex = match.index + fullMatch.length;
-                    }
-
-                    const remainingText = originalText.slice(lastIndex);
-                    if (remainingText) {
-                        segments.push(remainingText);
-                    }
-
-                    return <React.Fragment>{segments}</React.Fragment>;
-                }
-            },
-        });
-    };
-
-    // =========================================================================
-    //    ACEPTAR CONTRATO (MODO COMPARTIR) => GENERA PDF Y ENVÍA AL BACKEND
-    // =========================================================================
-    const handleAcceptShared = async () => {
-        // 1) Generar PDF local
+        // Crear un div temporal para renderizar el contenido
         const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = sharedContractContent;
+        tempDiv.innerHTML = filledContent;
         tempDiv.style.width = '210mm';
         tempDiv.style.padding = '20mm';
         tempDiv.style.boxSizing = 'border-box';
@@ -593,74 +459,38 @@ const ContractsManagementPage = () => {
         tempDiv.style.backgroundColor = '#fff';
         document.body.appendChild(tempDiv);
 
-        // Reemplazar firmas
-        let filledContent = sharedContractContent;
-        for (const name of Object.keys(signatureRefsShare.current)) {
-            const pad = signatureRefsShare.current[name];
-            if (pad && !pad.isEmpty()) {
-                const dataUrl = pad.getTrimmedCanvas().toDataURL('image/png');
-                filledContent = filledContent.replace(
-                    new RegExp(`{{${name}:signature}}`, 'g'),
-                    `<img src="${dataUrl}" alt="Firma" style="width:200px; height:100px;" />`
-                );
-            } else {
-                filledContent = filledContent.replace(new RegExp(`{{${name}:signature}}`, 'g'), '');
-            }
-        }
-
-        // Reemplazar campos de texto
-        const placeholderRegex = /{{(.*?):(.*?)}}/g;
-        filledContent = filledContent.replace(placeholderRegex, (match, fieldName, fieldType) => {
-            return shareFormValues[fieldName] || '';
-        });
-        tempDiv.innerHTML = filledContent;
-
-        let pdfBase64 = '';
+        // Generar PDF usando html2canvas y jsPDF
         try {
             const canvas = await html2canvas(tempDiv, { scale: 2 });
             const imgData = canvas.toDataURL('image/png');
+
             const pdf = new jsPDF('p', 'mm', 'a4');
             const imgProps = pdf.getImageProperties(imgData);
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
             pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-            // Obtenemos PDF en Base64
-            pdfBase64 = pdf.output('datauristring');
-        } catch (error) {
-            console.error('Error generando PDF:', error);
+            pdf.save(`${contractTitle || 'Contrato'}.pdf`);
             setSnackbar({
                 open: true,
-                message: 'No se pudo generar el PDF.',
-                severity: 'error'
-            });
-        }
-        document.body.removeChild(tempDiv);
-
-        if (!pdfBase64) return;
-
-        // 2) Enviar PDF a /contracts/share/:uuid/finalize
-        try {
-            await api.post(`/contracts/share/${sharingContractUuid}/finalize`, { pdfBase64 });
-            setSnackbar({
-                open: true,
-                message: 'Contrato compartido llenado, PDF enviado (placeholder GCS).',
+                message: 'PDF generado exitosamente.',
                 severity: 'success'
             });
-            handleCloseShareDialog();
         } catch (error) {
-            console.error('Error finalizando contrato:', error);
+            console.error('Error generando el PDF:', error);
             setSnackbar({
                 open: true,
-                message: 'Ocurrió un error al enviar el PDF.',
+                message: 'Hubo un error al generar el PDF.',
                 severity: 'error'
             });
         }
+
+        // Limpiar el div temporal
+        document.body.removeChild(tempDiv);
     };
 
-    // =========================================================================
-    //                            RENDER
-    // =========================================================================
+    // ============================
+    // RENDER
+    // ============================
     return (
         <div style={{ padding: '20px' }}>
             <Typography variant="h4" gutterBottom>
@@ -683,7 +513,16 @@ const ContractsManagementPage = () => {
                     <ListItem key={contract.id} divider>
                         <ListItemText
                             primary={contract.title}
-                            secondary={`Link para compartir: ${contract.url}`}
+                            secondary={
+                                <>
+                                    <Typography variant="body2" color="textSecondary">
+                                        Link para compartir:
+                                    </Typography>
+                                    <Typography variant="body2" color="textPrimary">
+                                        {contract.url}
+                                    </Typography>
+                                </>
+                            }
                         />
                         <IconButton edge="end" aria-label="edit" onClick={() => handleEdit(contract)}>
                             <EditIcon />
@@ -699,22 +538,117 @@ const ContractsManagementPage = () => {
                             variant="outlined"
                             color="secondary"
                             onClick={() => handleViewContract(contract)}
-                            startIcon={<LinkIcon />}
+                            startIcon={<VisibilityIcon />}
                             style={{ marginLeft: '10px' }}
                         >
                             Vista Previa
                         </Button>
-                        <Button
-                            variant="contained"
-                            color="success"
-                            onClick={() => handleShare(contract)}
+                        <IconButton
+                            edge="end"
+                            aria-label="copy-link"
+                            onClick={() => handleCopyLink(contract.url)}
                             style={{ marginLeft: '10px' }}
                         >
-                            Compartir Contrato
-                        </Button>
+                            <ContentCopyIcon />
+                        </IconButton>
                     </ListItem>
                 ))}
             </List>
+
+            {/* SECCIÓN DE CONTRATOS LLENADOS */}
+            <Divider style={{ margin: '40px 0' }} />
+            <Typography variant="h5" gutterBottom>
+                Contratos Llenos
+            </Typography>
+
+            {/* Barra de Búsqueda */}
+            <Box display="flex" justifyContent="flex-end" mb={2}>
+                <TextField
+                    label="Buscar Contratos Llenados"
+                    variant="outlined"
+                    size="small"
+                    value={filledContractsSearch}
+                    onChange={(e) => setFilledContractsSearch(e.target.value)}
+                    style={{ width: '300px' }}
+                />
+            </Box>
+
+            {/* Lista de Contratos Llenados */}
+            {filledContractsLoading ? (
+                <div style={{ textAlign: 'center', marginTop: '20px' }}>
+                    <CircularProgress />
+                </div>
+            ) : (
+                <List>
+                    {filledContracts.length === 0 ? (
+                        <Typography variant="body1">No se encontraron contratos llenados.</Typography>
+                    ) : (
+                        filledContracts
+                            .filter(fc => {
+                                // Filtrado en el frontend basado en la búsqueda
+                                const searchLower = filledContractsSearch.toLowerCase();
+                                return (
+                                    fc.title.toLowerCase().includes(searchLower) ||
+                                    fc.contract.title.toLowerCase().includes(searchLower)
+                                );
+                            })
+                            .map((filledContract) => (
+                                <ListItem key={filledContract.id} divider>
+                                    <ListItemText
+                                        primary={filledContract.title}
+                                        secondary={
+                                            <>
+                                                <Typography variant="body2" color="textSecondary">
+                                                    Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                                                </Typography>
+                                                <Typography variant="body2" color="textSecondary">
+                                                    Contrato Original: {filledContract.contract.title}
+                                                </Typography>
+                                            </>
+                                        }
+                                    />
+                                    <Button
+                                        variant="outlined"
+                                        color="primary"
+                                        onClick={() => navigate(`/admin/contratos-llenados/${filledContract.uuid}`)}
+                                        startIcon={<VisibilityIcon />}
+                                        style={{ marginRight: '10px' }}
+                                    >
+                                        Ver Detalles
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        color="secondary"
+                                        onClick={() => window.open(filledContract.pdfUrl, '_blank')}
+                                        startIcon={<VisibilityIcon />}
+                                        style={{ marginRight: '10px' }}
+                                    >
+                                        Descargar PDF
+                                    </Button>
+                                    <IconButton
+                                        edge="end"
+                                        aria-label="delete-filled-contract"
+                                        onClick={() => handleOpenDeleteDialog(filledContract)}
+                                    >
+                                        <DeleteIcon />
+                                    </IconButton>
+                                </ListItem>
+                            ))
+                    )}
+                </List>
+            )}
+
+            {/* Controles de Paginación */}
+            {filledContractsTotalPages > 1 && (
+                <Box display="flex" justifyContent="center" mt={2}>
+                    <Pagination
+                        count={filledContractsTotalPages}
+                        page={filledContractsPage}
+                        onChange={(event, value) => setFilledContractsPage(value)}
+                        color="primary"
+                    />
+                </Box>
+            )}
 
             {/* DIALOGO: CREAR/EDITAR CONTRATO (ADMIN) */}
             <Dialog open={openEditor} onClose={handleCloseEditor} maxWidth="lg" fullWidth>
@@ -804,53 +738,45 @@ const ContractsManagementPage = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* DIALOGO: COMPARTIR CONTRATO (HTML RELLENABLE) */}
-            <Dialog open={openShareDialog} onClose={handleCloseShareDialog} maxWidth="md" fullWidth>
-                <DialogTitle>Contrato Compartido</DialogTitle>
+            {/* DIALOGO: CONFIRMACIÓN DE ELIMINACIÓN */}
+            <Dialog
+                open={openDeleteDialog}
+                onClose={handleCloseDeleteDialog}
+            >
+                <DialogTitle>Confirmar Eliminación</DialogTitle>
                 <DialogContent>
-                    <Typography variant="h6" gutterBottom>
-                        {sharedContractTitle}
-                    </Typography>
-                    <Divider style={{ marginBottom: '10px' }} />
-                    <div
-                        style={{
-                            border: '1px solid #ccc',
-                            padding: '10px',
-                            borderRadius: '4px',
-                            minHeight: '300px',
-                            backgroundColor: '#f9f9f9',
-                            marginBottom: '20px'
-                        }}
-                    >
-                        {renderSharedContent(sharedContractContent)}
-                    </div>
-                    <Typography variant="body2" color="textSecondary">
-                        *Rellene los campos y firme en los espacios indicados.
+                    <Typography>
+                        ¿Está seguro de que desea eliminar este contrato llenado?
                     </Typography>
                 </DialogContent>
-                <div style={{ margin: '20px', textAlign: 'right' }}>
-                    <Button variant="contained" onClick={handleAcceptShared}>
-                        Aceptar
-                    </Button>
-                    <Button variant="outlined" style={{ marginLeft: '10px' }} onClick={handleCloseShareDialog}>
+                <DialogActions>
+                    <Button onClick={handleCloseDeleteDialog} color="primary">
                         Cancelar
                     </Button>
-                </div>
+                    <Button onClick={confirmDeleteFilledContract} color="secondary">
+                        Eliminar
+                    </Button>
+                </DialogActions>
             </Dialog>
 
             {/* Snackbar para notificaciones */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
-                onClose={handleCloseSnackbar}
+                onClose={() => setSnackbar({ ...snackbar, open: false })}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+                <Alert
+                    onClose={() => setSnackbar({ ...snackbar, open: false })}
+                    severity={snackbar.severity}
+                    sx={{ width: '100%' }}
+                >
                     {snackbar.message}
                 </Alert>
             </Snackbar>
         </div>
     );
+
 };
 
 export default ContractsManagementPage;

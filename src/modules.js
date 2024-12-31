@@ -2,7 +2,7 @@ import {
     Group,
     School,
     BarChart,
-    AttachMoney,
+    Payments,
     People,
     Security,
     Description
@@ -10,13 +10,12 @@ import {
 
 import RolesManagementPage from './pages/RolesManagementPage';
 import SchoolsManagementPage from './pages/SchoolsManagementPage';
-import RoutesManagementPage from './pages/RoutesManagementPage';
 import MonitorsManagementPage from './pages/MonitorsManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import ContractsManagementPage from './pages/ContractsManagementPage';
 import BusesManagementPage from './pages/BusesManagementPage';
-// Agrega más imports de páginas según necesites
+import PaymentsManagementPage from './pages/PaymentsManagementPage';
 
 /**
  * Cada "module" debe tener una key y un icon (opcional),
@@ -50,13 +49,7 @@ export const modules = [
                 component: SchoolsManagementPage,
                 roles: ['Administrador', 'Gestor'],
             },
-            {
-                key: 'rutas',
-                name: 'Rutas',
-                path: 'rutas',
-                component: RoutesManagementPage,
-                roles: ['Administrador', 'Gestor'],
-            },
+
             {
                 key: 'buses',
                 name: 'Buses',
@@ -88,25 +81,18 @@ export const modules = [
         ],
     },
     {
-        key: 'gestion-financiera',
-        name: 'Gestión Financiera',
-        icon: AttachMoney,
+        key: 'pagos',
+        name: 'Pagos y Cobros',
+        icon: Payments,
         submodules: [
             {
-                key: 'facturacion',
-                name: 'Facturación',
-                path: 'facturacion',
-                component: FinancialStatisticsPage,
-                roles: ['Administrador'],
-            },
-            {
-                key: 'pagos-cobros',
-                name: 'Pagos y Cobros',
-                path: 'pagos-cobros',
-                component: FinancialStatisticsPage,
-                roles: ['Administrador'],
-            },
-        ],
+                key: 'pagosIndex',
+                name: 'Gestión de Pagos',
+                path: 'pagos',
+                roles: ['Administrador', 'Gestor'],
+                component: PaymentsManagementPage
+            }
+        ]
     },
     {
         key: 'gestion-personal',

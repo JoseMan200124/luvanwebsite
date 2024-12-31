@@ -17,8 +17,7 @@ import {
 import { AuthContext } from '../context/AuthProvider';
 import NotificationsMenu from './NotificationsMenu';
 import api from '../utils/axiosConfig';
-
-// Importamos la definición de módulos desde modules.js
+import userImage from '../assets/img/user.png';
 import { modules } from '../modules';
 
 // =============== Estilos con styled-components y twin.macro ===============
@@ -122,7 +121,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     const user = {
         name: auth.user.name,
         role: auth.user.role,
-        avatar: 'https://i.pravatar.cc/150?img=3', // Ajusta según tu lógica
+        avatar: userImage,
     };
 
     return (
@@ -194,19 +193,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     </SidebarMenu>
                 </MainMenu>
 
-                {/* Secciones adicionales (Perfil, Roles/Permisos, Logout) */}
                 <SidebarMenu tw="flex flex-col">
-                    {/* Perfil de Usuario */}
-                    <RouterLink to="/admin/perfil" style={{ textDecoration: 'none', color: 'inherit' }}>
-                        <MenuItem>
-                            <div tw="flex items-center">
-                                <AccountCircle tw="mr-2" />
-                                {isOpen && <span>Perfil</span>}
-                            </div>
-                        </MenuItem>
-                    </RouterLink>
 
-                    {/* Roles y Permisos (ejemplo para Administrador o Gestor) */}
                     {(user.role === 'Administrador' || user.role === 'Gestor') && (
                         <RouterLink to="/admin/roles-permisos" style={{ textDecoration: 'none', color: 'inherit' }}>
                             <MenuItem>
@@ -227,7 +215,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     </LogoutItem>
                 </SidebarMenu>
 
-                {/* Botón toggle lateral (solo se muestra en móvil) */}
                 <ToggleTab onClick={toggleSidebar}>
                     {isOpen ? (
                         <CloseIcon style={{ color: 'white' }} />
@@ -237,7 +224,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 </ToggleTab>
             </SidebarContainer>
 
-            {/* Campana de Notificaciones (flotante) */}
             <div
                 style={{
                     position: 'fixed',

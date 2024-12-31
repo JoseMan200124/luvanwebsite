@@ -1,5 +1,4 @@
 // src/App.js
-
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
@@ -12,13 +11,15 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AuthProvider from './context/AuthProvider';
 import MFAVerify from './components/MFAVerify';
 import PermissionsManagementPage from "./pages/PermissionsManagmentPage";
-import ProfilePage from './pages/ProfilePage';
+import ContractsManagementPage from './pages/ContractsManagementPage';
+import ContractFillPage from './pages/ContractFillPage';
+import ContractViewer from './pages/ContractViewer';
+import FilledContractViewer from './pages/FilledContractViewer';
 
-// Importas tu "modules" que definimos arriba
+// Importas tus "modules"
 import { modules } from './modules';
 
 function App() {
-
     // Este método crea <Route> dinámicos para cada submódulo
     const renderDynamicRoutes = () => {
         let routes = [];
@@ -30,7 +31,6 @@ function App() {
                         path={submodule.path}
                         element={
                             <ProtectedRoute roles={submodule.roles}>
-                                {/* AQUÍ la corrección: Invocamos al componente con <submodule.component /> */}
                                 <submodule.component />
                             </ProtectedRoute>
                         }
@@ -51,6 +51,30 @@ function App() {
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/mfa" element={<MFAVerify />} />
 
+                    {/* Ruta pública para llenar contratos compartidos */}
+                    <Route path="/contracts" element={<ContractsManagementPage />} />
+                    <Route path="/contracts/share/:uuid" element={<ContractFillPage />} />
+
+                    {/* Nueva Ruta para ver detalles de contratos llenados */}
+                    <Route
+                        path="/admin/contratos-llenados/:uuid"
+                        element={
+                            <ProtectedRoute roles={['Administrador', 'Supervisor', 'Gestor']}>
+                                <FilledContractViewer />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* Ruta para ver detalles de contratos originales */}
+                    <Route
+                        path="/admin/contratos/:uuid"
+                        element={
+                            <ProtectedRoute roles={['Administrador', 'Supervisor', 'Gestor']}>
+                                <ContractViewer />
+                            </ProtectedRoute>
+                        }
+                    />
+
                     {/* Rutas protegidas con layout */}
                     <Route
                         path="/admin/*"
@@ -67,15 +91,6 @@ function App() {
                         {/* Rutas dinámicas generadas a partir de "modules.js" */}
                         {renderDynamicRoutes()}
 
-                        {/* Perfil del usuario */}
-                        <Route
-                            path="perfil"
-                            element={
-                                <ProtectedRoute roles={['Padre', 'Monitora', 'Piloto', 'Supervisor', 'Administrador']}>
-                                    <ProfilePage />
-                                </ProtectedRoute>
-                            }
-                        />
 
                         {/* Roles y Permisos */}
                         <Route

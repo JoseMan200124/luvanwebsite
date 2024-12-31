@@ -225,9 +225,6 @@ const LoginPage = () => {
                                 Ingresar
                             </LoginButton>
                             <Divider tw="my-4" />
-                            <OAuthButton onClick={handleGoogleLogin}>
-                                <GoogleIcon tw="mr-2" /> Iniciar Sesión con Google
-                            </OAuthButton>
                         </form>
                     </LoginFormContainer>
                 </RightSection>
