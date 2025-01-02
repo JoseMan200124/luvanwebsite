@@ -1,7 +1,7 @@
 // axiosConfig.js
 import axios from 'axios';
 
-const API_URL = 'http://34.56.161.166/api';
+const API_URL = 'https://34.56.161.166/api';
 
 // Crear una instancia de Axios con la configuración base
 const api = axios.create({
