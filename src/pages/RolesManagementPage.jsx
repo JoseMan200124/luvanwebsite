@@ -37,7 +37,7 @@ import tw from 'twin.macro';
 
 const RolesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
-// Roles con sus IDs reales
+// Opciones de roles (Podrían venir de la BD, pero las tenemos fijas)
 const roleOptions = [
     { id: 1, name: 'Gestor' },
     { id: 2, name: 'Administrador' },
@@ -51,11 +51,11 @@ const RolesManagementPage = () => {
     const { auth } = useContext(AuthContext);
 
     const [users, setUsers] = useState([]);
-    const [schools, setSchools] = useState([]);
-
+    const [schools, setSchools] = useState([]); // Se obtienen del backend
     const [selectedUser, setSelectedUser] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
+    // FamilyDetail
     const [familyDetail, setFamilyDetail] = useState({
         motherName: '',
         motherCellphone: '',
@@ -71,18 +71,18 @@ const RolesManagementPage = () => {
         scheduleSlots: []
     });
 
-    // Para añadir un Student (alumno) o un Slot (horario) temporal
+    // Manejo de alumnos y horarios temporalmente
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
     const [newSlot, setNewSlot] = useState({ time: '', note: '' });
 
-    // Manejo de notificaciones
+    // Snackbar
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
         severity: 'success'
     });
 
-    // Búsqueda y paginación
+    // Búsqueda y Paginación
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -90,14 +90,12 @@ const RolesManagementPage = () => {
     // Loading
     const [loading, setLoading] = useState(false);
 
-    // 1) Obtener usuarios
     const fetchUsers = async () => {
         setLoading(true);
         try {
             const response = await api.get('/users', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            console.log("ESTE ES EL RESPONSE: ", response);
             setUsers(Array.isArray(response.data.users) ? response.data.users : []);
             setLoading(false);
         } catch (err) {
@@ -127,6 +125,7 @@ const RolesManagementPage = () => {
     const handleEditClick = (user) => {
         setSelectedUser(user);
 
+        // Si es "Padre" y tiene FamilyDetail, llenamos
         if (user.roleId === 3 && user.FamilyDetail) {
             setFamilyDetail({
                 motherName: user.FamilyDetail.motherName || '',
@@ -143,7 +142,7 @@ const RolesManagementPage = () => {
                 scheduleSlots: user.FamilyDetail.ScheduleSlots || []
             });
         } else {
-            // De lo contrario limpiamos
+            // Si no es "Padre", limpiamos
             setFamilyDetail({
                 motherName: '',
                 motherCellphone: '',
@@ -162,9 +161,8 @@ const RolesManagementPage = () => {
         setOpenDialog(true);
     };
 
-    // 4) Abrir para crear
+    // Crear usuario (limpiamos todo)
     const handleAddUser = () => {
-        // Se define un usuario "nuevo"
         setSelectedUser({
             id: null,
             name: '',
@@ -173,7 +171,6 @@ const RolesManagementPage = () => {
             roleId: '',
             school: ''
         });
-        // Se limpia el familyDetail
         setFamilyDetail({
             motherName: '',
             motherCellphone: '',
@@ -191,13 +188,11 @@ const RolesManagementPage = () => {
         setOpenDialog(true);
     };
 
-    // 5) Cerrar diálogo
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedUser(null);
     };
 
-    // 6) Eliminar usuario
     const handleDeleteClick = async (userId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
             try {
@@ -213,7 +208,7 @@ const RolesManagementPage = () => {
         }
     };
 
-    // 7) Manejo de inputs en el user
+    // Manejo de inputs del user
     const handleUserChange = (e) => {
         setSelectedUser({
             ...selectedUser,
@@ -221,7 +216,7 @@ const RolesManagementPage = () => {
         });
     };
 
-    // 8) Cambiar rol
+    // Manejo de cambio de Rol
     const handleRoleIdChange = (e) => {
         const newRoleId = parseInt(e.target.value, 10);
         setSelectedUser((prev) => ({
@@ -230,7 +225,7 @@ const RolesManagementPage = () => {
         }));
     };
 
-    // 9) Manejo de familyDetail
+    // FamilyDetail
     const handleFamilyDetailChange = (e) => {
         setFamilyDetail({
             ...familyDetail,
@@ -238,7 +233,6 @@ const RolesManagementPage = () => {
         });
     };
 
-    // 10) Agregar un Student
     const handleAddStudent = () => {
         if (!newStudent.fullName) return;
         setFamilyDetail((prev) => ({
@@ -248,7 +242,6 @@ const RolesManagementPage = () => {
         setNewStudent({ fullName: '', grade: '' });
     };
 
-    // 11) Agregar un horario
     const handleAddSlot = () => {
         if (!newSlot.time) return;
         setFamilyDetail((prev) => ({
@@ -258,10 +251,9 @@ const RolesManagementPage = () => {
         setNewSlot({ time: '', note: '' });
     };
 
-    // 12) Guardar usuario
+    // Guardar
     const handleSaveUser = async () => {
         try {
-            // Creamos un payload partiendo solo de los campos que SÍ queremos enviar
             let payload = {
                 id: selectedUser.id,
                 name: selectedUser.name,
@@ -271,13 +263,10 @@ const RolesManagementPage = () => {
                 school: selectedUser.school
             };
 
-            // Si "Padre" => añadir familyDetail
+            // Si es Padre => familyDetail
             if (payload.roleId === 3) {
                 payload.familyDetail = familyDetail;
             }
-
-            // Log para verificar
-            console.log('Payload final que se envía al backend:', payload);
 
             if (selectedUser.id) {
                 // UPDATE
@@ -301,12 +290,12 @@ const RolesManagementPage = () => {
         }
     };
 
-    // 13) Búsqueda
+    // Búsqueda
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
     };
 
-    // 14) Paginación
+    // Paginación
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
     };
@@ -315,7 +304,6 @@ const RolesManagementPage = () => {
         setPage(0);
     };
 
-    // 15) Filtrar usuarios
     const filteredUsers = users.filter((u) =>
         (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (u.email || '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -326,6 +314,7 @@ const RolesManagementPage = () => {
             <Typography variant="h4" gutterBottom>
                 Gestión de Usuarios y Roles
             </Typography>
+
             <div tw="flex justify-between mb-4">
                 <TextField
                     label="Buscar usuarios"
@@ -357,7 +346,9 @@ const RolesManagementPage = () => {
                                 <TableRow>
                                     <TableCell>Nombre</TableCell>
                                     <TableCell>Email</TableCell>
-                                    <TableCell>RolId</TableCell>
+                                    {/* Antes: <TableCell>RolId</TableCell> */}
+                                    <TableCell>Rol</TableCell>
+                                    {/* Antes: <TableCell>Colegio</TableCell> */}
                                     <TableCell>Colegio</TableCell>
                                     <TableCell align="center">Acciones</TableCell>
                                 </TableRow>
@@ -369,8 +360,14 @@ const RolesManagementPage = () => {
                                         <TableRow key={user.id}>
                                             <TableCell>{user.name}</TableCell>
                                             <TableCell>{user.email}</TableCell>
-                                            <TableCell>{user.roleId}</TableCell>
-                                            <TableCell>{user.school}</TableCell>
+                                            {/* Mostrar Role.name en lugar de roleId */}
+                                            <TableCell>
+                                                {user.Role ? user.Role.name : '—'}
+                                            </TableCell>
+                                            {/* Mostrar School.name en lugar de user.school (id) */}
+                                            <TableCell>
+                                                {user.School ? user.School.name : '—'}
+                                            </TableCell>
                                             <TableCell align="center">
                                                 <Tooltip title="Editar">
                                                     <IconButton onClick={() => handleEditClick(user)}>
@@ -384,8 +381,7 @@ const RolesManagementPage = () => {
                                                 </Tooltip>
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                }
+                                    ))}
                                 {filteredUsers.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={5} align="center">
@@ -421,7 +417,6 @@ const RolesManagementPage = () => {
                             : 'Completa la información para crear un nuevo usuario.'}
                     </DialogContentText>
 
-                    {/* Datos principales del usuario */}
                     <Grid container spacing={2} sx={{ mt: 1 }}>
                         <Grid item xs={12} md={6}>
                             <TextField
@@ -483,6 +478,7 @@ const RolesManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
+
                         {/* Colegio */}
                         <Grid item xs={12} md={6}>
                             <FormControl variant="outlined" fullWidth>
@@ -580,7 +576,7 @@ const RolesManagementPage = () => {
                                         onChange={handleFamilyDetailChange}
                                     />
                                 </Grid>
-                                {/* RAZON SOCIAL / NIT */}
+                                {/* RAZON / NIT */}
                                 <Grid item xs={12} md={6}>
                                     <TextField
                                         name="razonSocial"
@@ -648,10 +644,12 @@ const RolesManagementPage = () => {
                                         fullWidth
                                         variant="outlined"
                                         value={newStudent.fullName}
-                                        onChange={(e) => setNewStudent({
-                                            ...newStudent,
-                                            fullName: e.target.value
-                                        })}
+                                        onChange={(e) =>
+                                            setNewStudent({
+                                                ...newStudent,
+                                                fullName: e.target.value
+                                            })
+                                        }
                                     />
                                 </Grid>
                                 <Grid item xs={12} md={4}>
@@ -662,10 +660,12 @@ const RolesManagementPage = () => {
                                         fullWidth
                                         variant="outlined"
                                         value={newStudent.grade}
-                                        onChange={(e) => setNewStudent({
-                                            ...newStudent,
-                                            grade: e.target.value
-                                        })}
+                                        onChange={(e) =>
+                                            setNewStudent({
+                                                ...newStudent,
+                                                grade: e.target.value
+                                            })
+                                        }
                                     />
                                 </Grid>
                                 <Grid item xs={12} md={2} display="flex" alignItems="center">
@@ -699,12 +699,14 @@ const RolesManagementPage = () => {
                                         fullWidth
                                         variant="outlined"
                                         value={newSlot.time}
-                                        onChange={(e) => setNewSlot({
-                                            ...newSlot,
-                                            time: e.target.value
-                                        })}
+                                        onChange={(e) =>
+                                            setNewSlot({
+                                                ...newSlot,
+                                                time: e.target.value
+                                            })
+                                        }
                                         InputLabelProps={{
-                                            shrink: true,
+                                            shrink: true
                                         }}
                                     />
                                 </Grid>
@@ -716,10 +718,12 @@ const RolesManagementPage = () => {
                                         fullWidth
                                         variant="outlined"
                                         value={newSlot.note}
-                                        onChange={(e) => setNewSlot({
-                                            ...newSlot,
-                                            note: e.target.value
-                                        })}
+                                        onChange={(e) =>
+                                            setNewSlot({
+                                                ...newSlot,
+                                                note: e.target.value
+                                            })
+                                        }
                                     />
                                 </Grid>
                                 <Grid item xs={12} md={2} display="flex" alignItems="center">

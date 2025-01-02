@@ -1,6 +1,8 @@
-// src/pages/PaymentsManagementPage.jsx
+// Comando para instalar moment.js
+// npm install moment
 
 import React, { useEffect, useState, useContext } from 'react';
+import moment from 'moment';
 import {
     Typography,
     Table,
@@ -26,7 +28,7 @@ import {
     FormControl
 } from '@mui/material';
 
-import { Send as SendIcon } from '@mui/icons-material';
+import { Send as SendIcon, Edit as EditIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
@@ -36,7 +38,7 @@ const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 const PaymentsManagementPage = () => {
     const { auth } = useContext(AuthContext);
 
-    // Listado de pagos
+    // Listado completo
     const [payments, setPayments] = useState([]);
     const [filteredPayments, setFilteredPayments] = useState([]);
 
@@ -48,29 +50,87 @@ const PaymentsManagementPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
-    // Para enviar correo
+    // Dialog de enviar correo
     const [openEmailDialog, setOpenEmailDialog] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [emailSubject, setEmailSubject] = useState('');
     const [emailMessage, setEmailMessage] = useState('');
-    // const [file, setFile] = useState(null); // si deseas enviar adjunto
+    const [attachments, setAttachments] = useState([]); // Para adjuntar archivos
+
+    // Dialog de editar Payment
+    const [openEditDialog, setOpenEditDialog] = useState(false);
+    const [editPayment, setEditPayment] = useState({
+        id: null,
+        status: '',
+        amount: '',
+        nextPaymentDate: '',
+        lastPaymentDate: ''
+    });
 
     // Notificaciones
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const [snackbar, setSnackbar] = useState({
+        open: false,
+        message: '',
+        severity: 'success'
+    });
 
     // ============================
-    // 1) Cargar Pagos
+    // 1) Cargar Pagos y actualizar estados vencidos
     // ============================
     const fetchPayments = async () => {
         try {
             const res = await api.get('/payments', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            setPayments(res.data.payments || []);
-            setFilteredPayments(res.data.payments || []);
+            let fetchedPayments = res.data.payments || [];
+
+            // Obtener la fecha actual (sin hora)
+            const today = moment().startOf('day');
+
+            // Array para almacenar las promesas de actualización
+            const updatePromises = [];
+
+            // Iterar sobre los pagos para actualizar el estado si es necesario
+            fetchedPayments.forEach((payment) => {
+                const nextPaymentDate = payment.nextPaymentDate
+                    ? moment(payment.nextPaymentDate, 'YYYY-MM-DD').startOf('day')
+                    : null;
+
+                if (
+                    nextPaymentDate &&
+                    nextPaymentDate.isBefore(today) &&
+                    payment.status !== 'VENCIDO'
+                ) {
+                    // Actualizar el estado a 'VENCIDO'
+                    const updatePromise = api
+                        .put(
+                            `/payments/${payment.id}`,
+                            { status: 'VENCIDO' },
+                            { headers: { Authorization: `Bearer ${auth.token}` } }
+                        )
+                        .then(() => {
+                            payment.status = 'VENCIDO';
+                        })
+                        .catch((error) => {
+                            console.error(`Error al actualizar el pago ID ${payment.id}:`, error);
+                        });
+
+                    updatePromises.push(updatePromise);
+                }
+            });
+
+            // Esperar a que todas las actualizaciones se completen
+            await Promise.all(updatePromises);
+
+            setPayments(fetchedPayments);
+            setFilteredPayments(fetchedPayments);
         } catch (error) {
             console.error('Error al obtener pagos:', error);
-            setSnackbar({ open: true, message: 'Error al obtener pagos', severity: 'error' });
+            setSnackbar({
+                open: true,
+                message: 'Error al obtener pagos',
+                severity: 'error'
+            });
         }
     };
 
@@ -80,124 +140,156 @@ const PaymentsManagementPage = () => {
     }, []);
 
     // ============================
-    // 2) Filtros (búsqueda / status)
+    // 2) Filtros
     // ============================
     useEffect(() => {
         let temp = [...payments];
-
-        // Filtro por búsqueda (nombre del padre, email)
         if (searchQuery.trim() !== '') {
             const query = searchQuery.toLowerCase();
-            temp = temp.filter((pay) => {
-                const userName = pay.User?.name?.toLowerCase() || '';
-                const userEmail = pay.User?.email?.toLowerCase() || '';
+            temp = temp.filter((p) => {
+                const userName = p.User?.name?.toLowerCase() || '';
+                const userEmail = p.User?.email?.toLowerCase() || '';
                 return userName.includes(query) || userEmail.includes(query);
             });
         }
-
-        // Filtro por status
         if (statusFilter !== '') {
-            temp = temp.filter((pay) => pay.status === statusFilter);
+            temp = temp.filter((p) => p.status === statusFilter);
         }
-
         setFilteredPayments(temp);
     }, [payments, searchQuery, statusFilter]);
 
-    const handleSearchChange = (e) => {
-        setSearchQuery(e.target.value);
-    };
-
-    const handleStatusFilterChange = (e) => {
-        setStatusFilter(e.target.value);
-    };
+    const handleSearchChange = (e) => setSearchQuery(e.target.value);
+    const handleStatusFilterChange = (e) => setStatusFilter(e.target.value);
 
     // ============================
     // 3) Paginación
     // ============================
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
+    const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => {
         setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
     };
 
     // ============================
-    // 4) Dialog Enviar Correo
+    // 4) Enviar Correo
     // ============================
     const handleOpenEmailDialog = (payment) => {
         setSelectedPayment(payment);
         setEmailSubject('');
         setEmailMessage('');
-        // setFile(null);
+        setAttachments([]);
         setOpenEmailDialog(true);
     };
 
     const handleCloseEmailDialog = () => {
         setOpenEmailDialog(false);
         setSelectedPayment(null);
+        setAttachments([]);
     };
 
     const handleSendEmail = async () => {
         if (!selectedPayment) return;
         try {
-            // Ejemplo sin adjunto:
+            // Usamos FormData para adjuntar archivos
+            const formData = new FormData();
+            formData.append('subject', emailSubject);
+            formData.append('message', emailMessage);
+
+            if (attachments && attachments.length > 0) {
+                for (let i = 0; i < attachments.length; i++) {
+                    formData.append('attachments', attachments[i]);
+                }
+            }
+
             await api.post(
                 `/payments/${selectedPayment.id}/sendEmail`,
+                formData,
                 {
-                    subject: emailSubject,
-                    message: emailMessage
+                    headers: {
+                        Authorization: `Bearer ${auth.token}`,
+                        'Content-Type': 'multipart/form-data'
+                    }
+                }
+            );
+
+            setSnackbar({
+                open: true,
+                message: 'Correo enviado exitosamente',
+                severity: 'success'
+            });
+            handleCloseEmailDialog();
+        } catch (error) {
+            console.error('Error al enviar correo:', error);
+            setSnackbar({
+                open: true,
+                message: 'Error al enviar correo',
+                severity: 'error'
+            });
+        }
+    };
+
+    // ============================
+    // 5) Editar Payment
+    // ============================
+    const handleOpenEditDialog = (payment) => {
+        setEditPayment({
+            id: payment.id,
+            status: payment.status,
+            amount: payment.amount,
+            // Al abrir el diálogo, mostramos la fecha sin conversión que cause shift
+            nextPaymentDate: payment.nextPaymentDate || '',
+            lastPaymentDate: payment.lastPaymentDate || ''
+        });
+        setOpenEditDialog(true);
+    };
+
+    const handleCloseEditDialog = () => {
+        setOpenEditDialog(false);
+        setEditPayment({
+            id: null,
+            status: '',
+            amount: '',
+            nextPaymentDate: '',
+            lastPaymentDate: ''
+        });
+    };
+
+    const handleSaveEdit = async () => {
+        try {
+            // Enviamos las fechas tal cual en formato YYYY-MM-DD
+            // (sin convertir a Date para evitar cambios de día por zonas horarias)
+            await api.put(
+                `/payments/${editPayment.id}`,
+                {
+                    status: editPayment.status,
+                    amount: editPayment.amount,
+                    nextPaymentDate: editPayment.nextPaymentDate || null,
+                    lastPaymentDate: editPayment.lastPaymentDate || null
                 },
                 { headers: { Authorization: `Bearer ${auth.token}` } }
             );
 
-            // Si quisieras mandar adjunto con form-data y multer:
-            // const formData = new FormData();
-            // formData.append('subject', emailSubject);
-            // formData.append('message', emailMessage);
-            // if (file) formData.append('file', file);
-            // await api.post(`/payments/${selectedPayment.id}/sendEmail`, formData, {
-            //   headers: {
-            //     Authorization: `Bearer ${auth.token}`,
-            //     'Content-Type': 'multipart/form-data'
-            //   }
-            // });
-
-            setSnackbar({ open: true, message: 'Correo enviado exitosamente', severity: 'success' });
-            handleCloseEmailDialog();
+            setSnackbar({
+                open: true,
+                message: 'Pago actualizado exitosamente',
+                severity: 'success'
+            });
+            handleCloseEditDialog();
+            fetchPayments();
         } catch (error) {
-            console.error('Error al enviar correo:', error);
-            setSnackbar({ open: true, message: 'Error al enviar correo', severity: 'error' });
+            console.error('Error al actualizar pago:', error);
+            setSnackbar({
+                open: true,
+                message: 'Error al actualizar pago',
+                severity: 'error'
+            });
         }
     };
 
     // ============================
-    // 5) Actualizar estado (confirmar pago, etc.)
-    // ============================
-    const handleUpdateStatus = async (payment, newStatus) => {
-        try {
-            await api.put(
-                `/payments/${payment.id}`,
-                { status: newStatus, lastPaymentDate: new Date() },
-                { headers: { Authorization: `Bearer ${auth.token}` } }
-            );
-            setSnackbar({ open: true, message: 'Estado actualizado', severity: 'success' });
-            fetchPayments(); // recargar la tabla
-        } catch (error) {
-            console.error('Error al actualizar estado:', error);
-            setSnackbar({ open: true, message: 'Error al actualizar estado', severity: 'error' });
-        }
-    };
-
-    // ============================
-    // Helper para color de fila
+    // 6) Helper para color de fila (Tabla)
     // ============================
     const getRowColor = (payment) => {
-        // Lógica de color:
-        // - "VENCIDO": fondo rojo
-        // - "EN_PROCESO" o "PENDIENTE": amarillo
-        // - "CONFIRMADO": verde
         switch (payment.status) {
             case 'VENCIDO':
                 return '#fca5a5'; // rojo claro
@@ -211,12 +303,84 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // Render
+    // ============================
+    // Render principal
+    // ============================
     return (
         <Container>
-            <Typography variant="h4" gutterBottom>
-                Gestión de Pagos
-            </Typography>
+            {/* Encabezado y leyenda en la misma fila, con la leyenda a la derecha */}
+            <div
+                style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '16px'
+                }}
+            >
+                <Typography variant="h4" gutterBottom>
+                    Gestión de Pagos
+                </Typography>
+
+                {/* LEYENDA DE COLORES a la derecha */}
+                <div
+                    style={{
+                        background: '#fff',
+                        padding: '16px',
+                        borderRadius: '8px',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                        maxWidth: '300px'
+                    }}
+                >
+                    <Typography variant="h6" gutterBottom>
+                        Leyenda de Colores
+                    </Typography>
+
+                    {/* Cada estado con un círculo y texto */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div
+                                style={{
+                                    width: '14px',
+                                    height: '14px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#bbf7d0'
+                                }}
+                            />
+                            <Typography variant="body2" style={{ fontWeight: 'bold' }}>
+                                Confirmado
+                            </Typography>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div
+                                style={{
+                                    width: '14px',
+                                    height: '14px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#fde68a'
+                                }}
+                            />
+                            <Typography variant="body2" style={{ fontWeight: 'bold' }}>
+                                Pendiente / En Proceso
+                            </Typography>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div
+                                style={{
+                                    width: '14px',
+                                    height: '14px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#fca5a5'
+                                }}
+                            />
+                            <Typography variant="body2" style={{ fontWeight: 'bold' }}>
+                                Vencido
+                            </Typography>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* Filtros */}
             <div tw="flex gap-4 mb-4">
@@ -275,12 +439,16 @@ const PaymentsManagementPage = () => {
                                         <TableCell>{payment.status}</TableCell>
                                         <TableCell>
                                             {payment.nextPaymentDate
-                                                ? new Date(payment.nextPaymentDate).toLocaleDateString()
+                                                ? moment(payment.nextPaymentDate, 'YYYY-MM-DD').format(
+                                                    'DD/MM/YYYY'
+                                                )
                                                 : '—'}
                                         </TableCell>
                                         <TableCell>
                                             {payment.lastPaymentDate
-                                                ? new Date(payment.lastPaymentDate).toLocaleDateString()
+                                                ? moment(payment.lastPaymentDate, 'YYYY-MM-DD').format(
+                                                    'DD/MM/YYYY'
+                                                )
                                                 : '—'}
                                         </TableCell>
                                         <TableCell>Q {payment.amount}</TableCell>
@@ -293,31 +461,18 @@ const PaymentsManagementPage = () => {
                                             >
                                                 <SendIcon />
                                             </IconButton>
-                                            {/* Ejemplo de cambio rápido de estado */}
-                                            {payment.status !== 'CONFIRMADO' && (
-                                                <Button
-                                                    variant="outlined"
-                                                    color="success"
-                                                    onClick={() => handleUpdateStatus(payment, 'CONFIRMADO')}
-                                                    style={{ marginLeft: '10px' }}
-                                                >
-                                                    Confirmar
-                                                </Button>
-                                            )}
-                                            {payment.status !== 'VENCIDO' && (
-                                                <Button
-                                                    variant="outlined"
-                                                    color="error"
-                                                    onClick={() => handleUpdateStatus(payment, 'VENCIDO')}
-                                                    style={{ marginLeft: '10px' }}
-                                                >
-                                                    Marcar Vencido
-                                                </Button>
-                                            )}
+
+                                            {/* Botón para editar */}
+                                            <IconButton
+                                                onClick={() => handleOpenEditDialog(payment)}
+                                                title="Editar"
+                                                color="secondary"
+                                            >
+                                                <EditIcon />
+                                            </IconButton>
                                         </TableCell>
                                     </TableRow>
-                                ))
-                            }
+                                ))}
                             {filteredPayments.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={7} align="center">
@@ -341,7 +496,12 @@ const PaymentsManagementPage = () => {
             </Paper>
 
             {/* Dialog para enviar correo */}
-            <Dialog open={openEmailDialog} onClose={handleCloseEmailDialog} maxWidth="sm" fullWidth>
+            <Dialog
+                open={openEmailDialog}
+                onClose={handleCloseEmailDialog}
+                maxWidth="sm"
+                fullWidth
+            >
                 <DialogTitle>Enviar Correo al Padre</DialogTitle>
                 <DialogContent>
                     <TextField
@@ -364,18 +524,100 @@ const PaymentsManagementPage = () => {
                         value={emailMessage}
                         onChange={(e) => setEmailMessage(e.target.value)}
                     />
-                    {/* Si deseas adjunto:
-          <input
-            type="file"
-            onChange={(e) => setFile(e.target.files[0])}
-            style={{ marginTop: '10px' }}
-          />
-          */}
+
+                    <Button variant="outlined" component="label" sx={{ mt: 2 }}>
+                        Adjuntar Archivos
+                        <input
+                            type="file"
+                            multiple
+                            hidden
+                            onChange={(e) => setAttachments(e.target.files)}
+                        />
+                    </Button>
+                    {attachments && attachments.length > 0 && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            {Array.from(attachments).map((file) => file.name).join(', ')}
+                        </Typography>
+                    )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseEmailDialog}>Cancelar</Button>
                     <Button variant="contained" onClick={handleSendEmail}>
                         Enviar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog para editar Payment */}
+            <Dialog
+                open={openEditDialog}
+                onClose={handleCloseEditDialog}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Editar Pago</DialogTitle>
+                <DialogContent>
+                    <FormControl fullWidth margin="dense">
+                        <InputLabel>Estado</InputLabel>
+                        <Select
+                            value={editPayment.status}
+                            onChange={(e) =>
+                                setEditPayment({ ...editPayment, status: e.target.value })
+                            }
+                            label="Estado"
+                        >
+                            <MenuItem value="PENDIENTE">Pendiente</MenuItem>
+                            <MenuItem value="EN_PROCESO">En Proceso</MenuItem>
+                            <MenuItem value="CONFIRMADO">Confirmado</MenuItem>
+                            <MenuItem value="VENCIDO">Vencido</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <TextField
+                        margin="dense"
+                        label="Monto"
+                        type="number"
+                        fullWidth
+                        variant="outlined"
+                        value={editPayment.amount}
+                        onChange={(e) =>
+                            setEditPayment({ ...editPayment, amount: e.target.value })
+                        }
+                        // Un poco de padding lateral
+                        style={{ paddingLeft: '8px', paddingRight: '8px' }}
+                    />
+                    <TextField
+                        margin="dense"
+                        label="Próximo Pago"
+                        type="date"
+                        fullWidth
+                        variant="outlined"
+                        InputLabelProps={{ shrink: true }}
+                        value={editPayment.nextPaymentDate}
+                        onChange={(e) =>
+                            setEditPayment({ ...editPayment, nextPaymentDate: e.target.value })
+                        }
+                        // Un poco de padding lateral
+                        style={{ paddingLeft: '8px', paddingRight: '8px' }}
+                    />
+                    <TextField
+                        margin="dense"
+                        label="Último Pago"
+                        type="date"
+                        fullWidth
+                        variant="outlined"
+                        InputLabelProps={{ shrink: true }}
+                        value={editPayment.lastPaymentDate}
+                        onChange={(e) =>
+                            setEditPayment({ ...editPayment, lastPaymentDate: e.target.value })
+                        }
+                        // Un poco de padding lateral
+                        style={{ paddingLeft: '8px', paddingRight: '8px' }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseEditDialog}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleSaveEdit}>
+                        Guardar
                     </Button>
                 </DialogActions>
             </Dialog>

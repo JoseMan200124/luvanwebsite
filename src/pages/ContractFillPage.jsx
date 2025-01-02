@@ -1,5 +1,3 @@
-// src/pages/ContractFillPage.jsx
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -8,8 +6,7 @@ import {
     CircularProgress,
     Divider,
     Snackbar,
-    Alert,
-    TextField
+    Alert
 } from '@mui/material';
 import api from '../utils/axiosConfig';
 import parse from 'html-react-parser';
@@ -22,7 +19,11 @@ const ContractFillPage = () => {
     const [filledData, setFilledData] = useState({});
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const [snackbar, setSnackbar] = useState({
+        open: false,
+        message: '',
+        severity: 'success'
+    });
     const signaturePads = useRef({});
 
     useEffect(() => {
@@ -35,55 +36,53 @@ const ContractFillPage = () => {
                 console.error('Error al obtener el contrato:', error);
                 setSnackbar({
                     open: true,
-                    message: 'No se pudo cargar el contrato. Por favor, verifica el enlace.',
+                    message: 'No se pudo cargar el contrato. Verifica el enlace.',
                     severity: 'error'
                 });
                 setLoading(false);
             }
         };
-
         fetchContract();
     }, [uuid]);
 
-    // Extraer placeholders
+    // Soportar text|signature|date|number
     const extractPlaceholders = (content) => {
-        const regex = /{{\s*([^:{}\s]+)\s*:\s*(text|signature|date)\s*}}/g;
-        const matches = [];
+        const regex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
+        const placeholders = [];
         let match;
         while ((match = regex.exec(content)) !== null) {
-            matches.push({ name: match[1], type: match[2] });
+            const nameTrim = match[1].trim();
+            placeholders.push({ name: nameTrim, type: match[2] });
         }
-        // Eliminar duplicados
-        return Array.from(new Set(matches.map(JSON.stringify))).map(JSON.parse);
+        return Array.from(new Set(placeholders.map(JSON.stringify))).map(JSON.parse);
     };
 
-    // Manejar cambios en inputs
     const handleChange = (name, value) => {
-        setFilledData((prev) => ({
-            ...prev,
-            [name]: value,
-        }));
+        setFilledData((prev) => ({ ...prev, [name]: value }));
     };
 
-    // Manejar firma
     const handleSignature = (name, sigPad) => {
         if (sigPad && !signaturePads.current[name]) {
             signaturePads.current[name] = sigPad;
         }
     };
 
-    // Manejar generación y envío de PDF
     const handleGeneratePDF = async () => {
-        // Validar campos requeridos
+        if (!contract) return;
+
+        // Validar “text”
         const placeholders = extractPlaceholders(contract.content);
-        for (let ph of placeholders) {
-            if (ph.type === 'text' && !filledData[ph.name]) {
-                setSnackbar({
-                    open: true,
-                    message: `Por favor, completa el campo "${ph.name}".`,
-                    severity: 'warning'
-                });
-                return;
+        for (const ph of placeholders) {
+            if (ph.type === 'text') {
+                // Si es text y no está lleno
+                if (!filledData[ph.name]) {
+                    setSnackbar({
+                        open: true,
+                        message: `Por favor, completa el campo "${ph.name}".`,
+                        severity: 'warning'
+                    });
+                    return;
+                }
             }
         }
 
@@ -99,18 +98,18 @@ const ContractFillPage = () => {
         }
 
         const payload = {
-            filledData: { ...filledData, ...signatures },
+            filledData: { ...filledData, ...signatures }
         };
 
         setSubmitting(true);
         try {
-            const response = await api.post(`/contracts/share/${uuid}`, payload);
+            // Guardar en el backend
+            await api.post(`/contracts/share/${uuid}`, payload);
             setSnackbar({
                 open: true,
                 message: 'Contrato generado y almacenado exitosamente.',
                 severity: 'success'
             });
-            // Opcional: redirigir o realizar alguna acción adicional
         } catch (error) {
             console.error('Error al generar el contrato:', error);
             setSnackbar({
@@ -123,36 +122,35 @@ const ContractFillPage = () => {
         }
     };
 
-    // Renderizar contenido del contrato con campos llenables y firmas
     const renderContent = (html) => {
-        const placeholderRegex = /{{\s*([^:{}\s]+)\s*:\s*(text|signature|date)\s*}}/g;
+        const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
+
         return parse(html, {
             replace: (domNode) => {
                 if (domNode.type === 'text') {
-                    const originalText = domNode.data;
-                    if (!originalText) return domNode;
-
-                    if (!placeholderRegex.test(originalText)) {
-                        return domNode;
-                    }
-                    placeholderRegex.lastIndex = 0;
-
+                    const text = domNode.data;
                     const segments = [];
                     let lastIndex = 0;
                     let match;
 
-                    while ((match = placeholderRegex.exec(originalText)) !== null) {
-                        const [fullMatch, name, type] = match;
-                        const beforeText = originalText.slice(lastIndex, match.index);
+                    while ((match = placeholderRegex.exec(text)) !== null) {
+                        const [fullMatch, rawName, type] = match;
+                        const nameTrim = rawName.trim();
 
+                        const beforeText = text.substring(lastIndex, match.index);
                         if (beforeText) {
                             segments.push(beforeText);
                         }
 
                         if (type === 'signature') {
                             segments.push(
-                                <div key={`sig-${name}-${match.index}`} style={{ margin: '10px 0' }}>
-                                    <Typography variant="subtitle1" gutterBottom>{name}</Typography>
+                                <div
+                                    key={`sig-${nameTrim}-${match.index}`}
+                                    style={{ margin: '10px 0' }}
+                                >
+                                    <Typography variant="subtitle1" gutterBottom>
+                                        {nameTrim}
+                                    </Typography>
                                     <SignatureCanvas
                                         penColor="black"
                                         canvasProps={{
@@ -160,14 +158,14 @@ const ContractFillPage = () => {
                                             height: 150,
                                             style: { border: '1px solid #000' }
                                         }}
-                                        ref={(ref) => handleSignature(name, ref)}
+                                        ref={(ref) => handleSignature(nameTrim, ref)}
                                     />
                                     <Button
                                         variant="outlined"
                                         size="small"
                                         onClick={() => {
-                                            if (signaturePads.current[name]) {
-                                                signaturePads.current[name].clear();
+                                            if (signaturePads.current[nameTrim]) {
+                                                signaturePads.current[nameTrim].clear();
                                             }
                                         }}
                                         style={{ marginTop: '5px' }}
@@ -176,17 +174,31 @@ const ContractFillPage = () => {
                                     </Button>
                                 </div>
                             );
-                        } else if (type === 'text' || type === 'date') {
+                        } else if (type === 'date' || type === 'text' || type === 'number') {
                             segments.push(
-                                <TextField
-                                    key={`field-${name}-${match.index}`}
-                                    label={name}
-                                    type={type === 'date' ? 'date' : 'text'}
-                                    InputLabelProps={type === 'date' ? { shrink: true } : {}}
-                                    value={filledData[name] || ''}
-                                    onChange={(e) => handleChange(name, e.target.value)}
-                                    style={{ margin: '10px 0', width: '100%' }}
-                                    variant="outlined"
+                                <input
+                                    key={`field-${nameTrim}-${match.index}`}
+                                    placeholder={nameTrim}
+                                    type={
+                                        type === 'date'
+                                            ? 'date'
+                                            : type === 'number'
+                                                ? 'number'
+                                                : 'text'
+                                    }
+                                    value={filledData[nameTrim] || ''}
+                                    onChange={(e) => handleChange(nameTrim, e.target.value)}
+                                    style={{
+                                        display: 'inline-block',
+                                        margin: '0 5px',
+                                        minWidth: '120px',
+                                        border: 'none',
+                                        borderBottom: '1px solid #000',
+                                        fontSize: '1rem',
+                                        fontFamily: 'inherit',
+                                        background: 'transparent',
+                                        verticalAlign: 'baseline'
+                                    }}
                                 />
                             );
                         }
@@ -194,14 +206,18 @@ const ContractFillPage = () => {
                         lastIndex = match.index + fullMatch.length;
                     }
 
-                    const remainingText = originalText.slice(lastIndex);
-                    if (remainingText) {
-                        segments.push(remainingText);
+                    const remaining = text.substring(lastIndex);
+                    if (remaining) {
+                        segments.push(remaining);
                     }
 
-                    return <React.Fragment key={`fragment-${domNode.key}`}>{segments}</React.Fragment>;
+                    return (
+                        <React.Fragment key={`fragment-${domNode.key}`}>
+                            {segments}
+                        </React.Fragment>
+                    );
                 }
-            },
+            }
         });
     };
 
@@ -216,7 +232,9 @@ const ContractFillPage = () => {
     if (!contract) {
         return (
             <div style={{ textAlign: 'center', marginTop: '50px' }}>
-                <Typography variant="h6">Contrato no encontrado.</Typography>
+                <Typography variant="h6">
+                    Contrato no encontrado.
+                </Typography>
             </div>
         );
     }
@@ -228,9 +246,18 @@ const ContractFillPage = () => {
             </Typography>
             <Divider style={{ marginBottom: '20px' }} />
             <ErrorBoundary>
-                <form noValidate autoComplete="off">
+                <div
+                    style={{
+                        fontFamily: "'Times New Roman', serif",
+                        lineHeight: '1.5',
+                        textAlign: 'justify',
+                        border: '1px solid #ccc',
+                        padding: '20px',
+                        borderRadius: '4px'
+                    }}
+                >
                     {renderContent(contract.content)}
-                </form>
+                </div>
                 <Button
                     variant="contained"
                     color="primary"
@@ -247,7 +274,11 @@ const ContractFillPage = () => {
                 onClose={() => setSnackbar({ ...snackbar, open: false })}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+                <Alert
+                    onClose={() => setSnackbar({ ...snackbar, open: false })}
+                    severity={snackbar.severity}
+                    sx={{ width: '100%' }}
+                >
                     {snackbar.message}
                 </Alert>
             </Snackbar>
