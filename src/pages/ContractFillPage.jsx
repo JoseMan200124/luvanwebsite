@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom'; // <== Se importó useLocation
 import {
     Button,
     Typography,
@@ -15,6 +15,13 @@ import ErrorBoundary from '../components/ErrorBoundary';
 
 const ContractFillPage = () => {
     const { uuid } = useParams();
+
+    // =============================================
+    // Obtenemos parentId del query param "?parentId="
+    // =============================================
+    const location = useLocation();
+    const parentId = new URLSearchParams(location.search).get('parentId') || null;
+
     const [contract, setContract] = useState(null);
     const [filledData, setFilledData] = useState({});
     const [loading, setLoading] = useState(true);
@@ -45,7 +52,7 @@ const ContractFillPage = () => {
         fetchContract();
     }, [uuid]);
 
-    // Soportar text|signature|date|number
+    // Extraer placeholders
     const extractPlaceholders = (content) => {
         const regex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
         const placeholders = [];
@@ -57,24 +64,26 @@ const ContractFillPage = () => {
         return Array.from(new Set(placeholders.map(JSON.stringify))).map(JSON.parse);
     };
 
+    // Manejo de inputs
     const handleChange = (name, value) => {
         setFilledData((prev) => ({ ...prev, [name]: value }));
     };
 
+    // Manejo de firmas
     const handleSignature = (name, sigPad) => {
         if (sigPad && !signaturePads.current[name]) {
             signaturePads.current[name] = sigPad;
         }
     };
 
+    // Generar/Guardar PDF (en backend)
     const handleGeneratePDF = async () => {
         if (!contract) return;
 
-        // Validar “text”
+        // Validamos campos text obligatorios
         const placeholders = extractPlaceholders(contract.content);
         for (const ph of placeholders) {
             if (ph.type === 'text') {
-                // Si es text y no está lleno
                 if (!filledData[ph.name]) {
                     setSnackbar({
                         open: true,
@@ -98,12 +107,16 @@ const ContractFillPage = () => {
         }
 
         const payload = {
-            filledData: { ...filledData, ...signatures }
+            filledData: { ...filledData, ...signatures },
+            // ========================================
+            // Mandar parentId si existe
+            // ========================================
+            parentId: parentId ? parseInt(parentId, 10) : undefined
         };
 
         setSubmitting(true);
         try {
-            // Guardar en el backend
+            // Se lo mandamos al backend
             await api.post(`/contracts/share/${uuid}`, payload);
             setSnackbar({
                 open: true,
@@ -122,6 +135,7 @@ const ContractFillPage = () => {
         }
     };
 
+    // Renderizar contenido
     const renderContent = (html) => {
         const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
 
@@ -137,16 +151,22 @@ const ContractFillPage = () => {
                         const [fullMatch, rawName, type] = match;
                         const nameTrim = rawName.trim();
 
+                        // Texto previo al placeholder
                         const beforeText = text.substring(lastIndex, match.index);
                         if (beforeText) {
                             segments.push(beforeText);
                         }
 
+                        // Si es firma => mostramos canvas
                         if (type === 'signature') {
                             segments.push(
                                 <div
                                     key={`sig-${nameTrim}-${match.index}`}
-                                    style={{ margin: '10px 0' }}
+                                    style={{
+                                        display: 'block',
+                                        margin: '20px 0',
+                                        clear: 'both'
+                                    }}
                                 >
                                     <Typography variant="subtitle1" gutterBottom>
                                         {nameTrim}
@@ -175,6 +195,7 @@ const ContractFillPage = () => {
                                 </div>
                             );
                         } else if (type === 'date' || type === 'text' || type === 'number') {
+                            // Si es date, text o number => input
                             segments.push(
                                 <input
                                     key={`field-${nameTrim}-${match.index}`}
@@ -196,8 +217,7 @@ const ContractFillPage = () => {
                                         borderBottom: '1px solid #000',
                                         fontSize: '1rem',
                                         fontFamily: 'inherit',
-                                        background: 'transparent',
-                                        verticalAlign: 'baseline'
+                                        background: 'transparent'
                                     }}
                                 />
                             );
@@ -206,6 +226,7 @@ const ContractFillPage = () => {
                         lastIndex = match.index + fullMatch.length;
                     }
 
+                    // Resto del texto
                     const remaining = text.substring(lastIndex);
                     if (remaining) {
                         segments.push(remaining);

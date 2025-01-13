@@ -7,7 +7,7 @@ import { Phone, Email, AccessTime, LocationOn, Facebook, Twitter, Instagram, Gro
 import Navbar from '../components/Navbar';
 import ServiceCard from '../components/ServiceCard'; // Importar el nuevo ServiceCard
 import Footer from '../components/Footer'; // Importar el nuevo Footer
-import landingBg from '../assets/img/landing-bg.jpg';
+import landingBg from '../assets/img/school-bus.jpg';
 import logoLuvan from '../assets/img/logo-luvan.jpg';
 
 // Sección Hero con fondo de imagen y contenido centrado

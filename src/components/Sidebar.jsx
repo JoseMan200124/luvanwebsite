@@ -74,8 +74,8 @@ const ToggleTab = styled.div`
 `;
 
 const LogoutItem = styled.li`
-  ${tw`px-4 py-2 mt-auto hover:bg-gray-700 cursor-pointer flex items-center`}
-  transition: background-color 0.2s ease;
+    ${tw`px-4 py-2 mt-auto hover:bg-gray-700 cursor-pointer flex items-center`}
+    transition: background-color 0.2s ease;
 `;
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
@@ -144,11 +144,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 <MainMenu>
                     <SidebarMenu>
                         {modules.map((module, index) => {
-                            // 4) Verificar si el usuario tiene acceso al módulo padre
-                            //    Usamos 'module.key' que definiremos en 'modules.js'
                             const { key, name, icon: ModuleIcon, submodules } = module;
 
-                            // El usuario tiene permiso si permissions[key] === true
                             const canAccessModule = !!permissions[key];
                             if (!canAccessModule) return null;
 

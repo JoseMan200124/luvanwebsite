@@ -7,8 +7,6 @@ import {
     Menu,
     MenuItem,
     Typography,
-    ListItemText,
-    ListItemSecondaryAction,
     Divider,
 } from '@mui/material';
 import { Notifications, ClearAll } from '@mui/icons-material';
@@ -16,6 +14,8 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 import PropTypes from 'prop-types';
 import api from '../utils/axiosConfig';
+import { getSocket } from '../services/socketService';
+
 const NotificationIconButton = styled(IconButton)`
     ${tw`text-white`}
 `;
@@ -26,31 +26,56 @@ const NotificationsMenu = ({ authToken }) => {
     const menuOpen = Boolean(anchorEl);
     const menuRef = useRef();
 
+    // Cargar notificaciones
+    const fetchNotificationsFromAPI = async () => {
+        try {
+            const response = await api.get('/notifications', {
+                headers: {
+                    Authorization: `Bearer ${authToken}`,
+                },
+                params: {
+                    limit: 50,
+                    offset: 0,
+                },
+            });
+            const fetched = Array.isArray(response.data.notifications)
+                ? response.data.notifications
+                : [];
+            setNotifications(fetched);
+        } catch (err) {
+            console.error('Error fetching notifications:', err);
+            setNotifications([]);
+        }
+    };
+
     useEffect(() => {
-        // Fetch notifications from API
-        const fetchNotifications = async () => {
-            try {
-                const response = await api.get('/notifications', {
-                    headers: {
-                        Authorization: `Bearer ${authToken}`,
-                    },
-                });
-                console.log('API Response:', response.data); // Log para depuración
-                setNotifications(Array.isArray(response.data.notifications) ? response.data.notifications : []);
-            } catch (err) {
-                console.error('Error fetching notifications:', err);
-                setNotifications([]); // Opcional: puedes establecer undefined para manejarlo en la UI
+        if (authToken) {
+            fetchNotificationsFromAPI();
+        }
+
+        // Escuchar notificaciones via socket
+        const socket = getSocket();
+        if (socket) {
+            socket.on('new_notification', (newNoti) => {
+                console.log('Recibida notificación via socket:', newNoti);
+                // Insertar al comienzo
+                setNotifications((prev) => [newNoti, ...prev]);
+            });
+        }
+
+        return () => {
+            if (socket) {
+                socket.off('new_notification');
             }
         };
-
-        if (authToken) { // Asegúrate de que authToken está disponible
-            fetchNotifications();
-        }
     }, [authToken]);
 
-    const handleMenuOpen = (event) => {
+    // Manejo de apertura/cierre del menú
+    const handleMenuOpen = async (event) => {
         setAnchorEl(event.currentTarget);
-        // Optionally mark notifications as read
+        if (authToken) {
+            await fetchNotificationsFromAPI();
+        }
     };
 
     const handleMenuClose = () => {
@@ -58,7 +83,7 @@ const NotificationsMenu = ({ authToken }) => {
     };
 
     const handleClearNotifications = () => {
-        // Clear notifications logic here
+        // Esto limpia solo en frontend
         setNotifications([]);
         handleMenuClose();
     };
@@ -66,25 +91,18 @@ const NotificationsMenu = ({ authToken }) => {
     return (
         <>
             <NotificationIconButton onClick={handleMenuOpen} ref={menuRef}>
-                <Badge badgeContent={Array.isArray(notifications) ? notifications.length : 0} color="secondary">
+                <Badge badgeContent={notifications.length} color="secondary">
                     <Notifications />
                 </Badge>
             </NotificationIconButton>
+
             <Menu
                 anchorEl={anchorEl}
                 open={menuOpen}
                 onClose={handleMenuClose}
-                PaperProps={{
-                    style: { width: 350 },
-                }}
-                anchorOrigin={{
-                    vertical: 'bottom',
-                    horizontal: 'right',
-                }}
-                transformOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
-                }}
+                PaperProps={{ style: { width: 350 } }}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 getContentAnchorEl={null}
             >
                 <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px' }}>
@@ -96,13 +114,8 @@ const NotificationsMenu = ({ authToken }) => {
                     </IconButton>
                 </div>
                 <Divider />
-                {notifications === undefined ? (
-                    <MenuItem onClick={handleMenuClose}>
-                        <Typography variant="body1" color="error">
-                            Error al cargar las notificaciones.
-                        </Typography>
-                    </MenuItem>
-                ) : notifications.length === 0 ? (
+
+                {notifications.length === 0 ? (
                     <MenuItem onClick={handleMenuClose}>
                         <Typography variant="body1" color="textSecondary">
                             No hay notificaciones.
@@ -110,17 +123,62 @@ const NotificationsMenu = ({ authToken }) => {
                     </MenuItem>
                 ) : (
                     notifications.map((notification, index) => (
-                        <div key={index}>
-                            <MenuItem onClick={handleMenuClose}>
-                                <ListItemText
-                                    primary={notification.title}
-                                    secondary={notification.message}
-                                />
-                                <ListItemSecondaryAction>
-                                    <Typography variant="caption" color="textSecondary">
-                                        {new Date(notification.date).toLocaleString()}
+                        <div key={notification.id || index}>
+                            <MenuItem
+                                onClick={handleMenuClose}
+                                // Forzamos altura y alineamos arriba
+                                style={{
+                                    position: 'relative',
+                                    minHeight: '100px', // más alto para no tapar la fecha
+                                    alignItems: 'flex-start',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        position: 'relative',
+                                        width: '100%',
+                                        paddingRight: '60px', // espacio lateral
+                                        paddingBottom: '28px', // espacio inferior para la fecha
+                                    }}
+                                >
+                                    {/* Título */}
+                                    <Typography
+                                        variant="body1"
+                                        style={{
+                                            whiteSpace: 'pre-wrap',
+                                            overflowWrap: 'anywhere',
+                                            marginBottom: '4px',
+                                        }}
+                                    >
+                                        {notification.title}
                                     </Typography>
-                                </ListItemSecondaryAction>
+
+                                    {/* Mensaje */}
+                                    <Typography
+                                        variant="body2"
+                                        style={{
+                                            whiteSpace: 'pre-wrap',
+                                            overflowWrap: 'anywhere',
+                                        }}
+                                    >
+                                        {notification.message}
+                                    </Typography>
+
+                                    {/* Fecha/hora en esquina inferior derecha */}
+                                    <Typography
+                                        variant="caption"
+                                        color="textSecondary"
+                                        style={{
+                                            position: 'absolute',
+                                            right: '8px',
+                                            bottom: '8px',
+                                        }}
+                                    >
+                                        {new Date(notification.createdAt).toLocaleString()}
+                                    </Typography>
+                                </div>
                             </MenuItem>
                             {index < notifications.length - 1 && <Divider />}
                         </div>

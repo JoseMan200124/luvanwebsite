@@ -46,7 +46,9 @@ const SchoolsManagementPage = () => {
     // Ej: [ { day: "Lunes", times: ["06:30", "12:00"] } ]
     const [schoolSchedules, setSchoolSchedules] = useState([]);
 
+    // ============================
     // 1) Cargar lista de colegios
+    // ============================
     const fetchSchools = async () => {
         setLoading(true);
         try {
@@ -69,7 +71,9 @@ const SchoolsManagementPage = () => {
         fetchSchools();
     }, [auth.token]);
 
+    // ============================
     // 2) Crear un colegio (modal vacío)
+    // ============================
     const handleAddSchool = () => {
         setSelectedSchool({
             id: null,
@@ -78,16 +82,36 @@ const SchoolsManagementPage = () => {
             city: '',
             contactPerson: '',
             contactEmail: '',
-            contactPhone: ''
+            contactPhone: '',
+            // Campos nuevos:
+            transportFee: '',
+            duePaymentDay: ''
         });
         // Schedules vacío
         setSchoolSchedules([]);
         setOpenDialog(true);
     };
 
-    // 3) Editar un colegio: parsear "schedules" si viene como JSON string
+    // ============================
+    // 3) Editar un colegio
+    // ============================
     const handleEditClick = (school) => {
-        setSelectedSchool(school);
+        // Si el back ya retorna transportFee y duePaymentDay, los guardamos.
+        // En caso de que no vengan, los inicializamos para evitar "undefined".
+        const transportFeeValue =
+            school.transportFee !== undefined && school.transportFee !== null
+                ? school.transportFee
+                : '';
+        const duePaymentDayValue =
+            school.duePaymentDay !== undefined && school.duePaymentDay !== null
+                ? school.duePaymentDay
+                : '';
+
+        setSelectedSchool({
+            ...school,
+            transportFee: transportFeeValue,
+            duePaymentDay: duePaymentDayValue
+        });
 
         // Checamos si el campo "schedules" es un string JSON
         if (typeof school.schedules === 'string' && school.schedules.trim()) {
@@ -113,7 +137,9 @@ const SchoolsManagementPage = () => {
         setOpenDialog(true);
     };
 
+    // ============================
     // 4) Eliminar colegio
+    // ============================
     const handleDeleteClick = async (schoolId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este colegio?')) {
             try {
@@ -129,14 +155,18 @@ const SchoolsManagementPage = () => {
         }
     };
 
+    // ============================
     // 5) Cerrar el modal
+    // ============================
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedSchool(null);
         setSchoolSchedules([]);
     };
 
+    // ============================
     // 6) Manejadores de input simple (para name, address, city, etc.)
+    // ============================
     const handleInputChange = (e) => {
         setSelectedSchool((prev) => ({
             ...prev,
@@ -169,7 +199,6 @@ const SchoolsManagementPage = () => {
         });
     };
 
-    // Manejo de las "times" (horas) en cada day
     const handleAddTime = (dayIndex) => {
         setSchoolSchedules((prev) => {
             const clone = [...prev];
@@ -195,10 +224,35 @@ const SchoolsManagementPage = () => {
         });
     };
 
+    // ============================
     // 7) Guardar (crear o actualizar)
+    // ============================
     const handleSave = async () => {
+        if (!selectedSchool) return;
+
+        // Validaciones específicas para transportFee y duePaymentDay
+        if (Number(selectedSchool.transportFee) < 0) {
+            setSnackbar({
+                open: true,
+                message: 'La cuota de transporte no puede ser negativa.',
+                severity: 'error'
+            });
+            return;
+        }
+        if (
+            Number(selectedSchool.duePaymentDay) < 1 ||
+            Number(selectedSchool.duePaymentDay) > 31
+        ) {
+            setSnackbar({
+                open: true,
+                message: 'El día de pago debe estar entre 1 y 31.',
+                severity: 'error'
+            });
+            return;
+        }
+
         try {
-            // Armamos el payload
+            // Armamos el payload, incluyendo transportFee y duePaymentDay
             const payload = {
                 name: selectedSchool.name,
                 address: selectedSchool.address,
@@ -206,7 +260,9 @@ const SchoolsManagementPage = () => {
                 contactPerson: selectedSchool.contactPerson,
                 contactEmail: selectedSchool.contactEmail,
                 contactPhone: selectedSchool.contactPhone,
-                schedules: schoolSchedules // array => se guardará como JSON en el backend
+                schedules: schoolSchedules, // array => se guardará como JSON en el backend
+                transportFee: selectedSchool.transportFee || 0,
+                duePaymentDay: selectedSchool.duePaymentDay || 1
             };
 
             if (selectedSchool.id) {
@@ -231,7 +287,9 @@ const SchoolsManagementPage = () => {
         }
     };
 
+    // ============================
     // 8) Búsqueda, paginación, etc.
+    // ============================
     const handleSnackbarClose = () => {
         setSnackbar({ ...snackbar, open: false });
     };
@@ -346,6 +404,7 @@ const SchoolsManagementPage = () => {
                 </Paper>
             )}
 
+            {/* Diálogo para Crear/Editar Colegio */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
                 <DialogTitle>
                     {selectedSchool?.id ? 'Editar Colegio' : 'Añadir Colegio'}
@@ -414,6 +473,30 @@ const SchoolsManagementPage = () => {
                         variant="outlined"
                         value={selectedSchool ? selectedSchool.contactEmail : ''}
                         onChange={handleInputChange}
+                    />
+
+                    {/* Campos NUEVOS: transportFee y duePaymentDay */}
+                    <TextField
+                        margin="dense"
+                        name="transportFee"
+                        label="Cuota de Transporte (Q)"
+                        type="number"
+                        fullWidth
+                        variant="outlined"
+                        value={selectedSchool ? selectedSchool.transportFee : ''}
+                        onChange={handleInputChange}
+                        required
+                    />
+                    <TextField
+                        margin="dense"
+                        name="duePaymentDay"
+                        label="Día de Pago (1-31)"
+                        type="number"
+                        fullWidth
+                        variant="outlined"
+                        value={selectedSchool ? selectedSchool.duePaymentDay : ''}
+                        onChange={handleInputChange}
+                        required
                     />
 
                     {/* Horarios con UI/UX */}

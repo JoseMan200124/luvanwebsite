@@ -2,7 +2,7 @@
 
 import React from 'react';
 import tw, { styled } from 'twin.macro';
-import { Typography, Container, Grid, IconButton } from '@mui/material';
+import { Typography, Container, Grid, IconButton, Link } from '@mui/material';
 import { Facebook, Twitter, Instagram } from '@mui/icons-material';
 import { keyframes } from 'styled-components';
 
@@ -56,6 +56,20 @@ const Footer = () => {
                         </SocialIcons>
                     </Grid>
                 </Grid>
+                {/* Bloque Modificado */}
+                <Typography variant="h8" align="center" tw="mt-8 text-lg md:text-xl">
+                    Desarrollado por{' '}
+                    <Link
+                        href="https://www.haricode.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        color="inherit"
+                        underline="always"
+                        tw="font-semibold"
+                    >
+                        Haricode
+                    </Link>
+                </Typography>
             </Container>
         </FooterContainer>
     );

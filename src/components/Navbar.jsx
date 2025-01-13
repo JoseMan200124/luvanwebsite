@@ -8,9 +8,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 // Contenedor del Navbar con estilos dinámicos según el scroll
 const NavbarContainer = styled.nav`
-  ${tw`fixed top-0 left-0 w-full z-50 transition duration-300 ease-in-out`}
-  background-color: ${({ scrolled }) => (scrolled ? '#FFFFFF' : 'transparent')};
-  box-shadow: ${({ scrolled }) => (scrolled ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none')};
+    ${tw`fixed top-0 left-0 w-full z-50 transition duration-300 ease-in-out`}
+    background-color: ${({ scrolled }) => (scrolled ? '#FFFFFF' : 'transparent')};
+    box-shadow: ${({ scrolled }) => (scrolled ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none')};
 `;
 
 // Contenedor interno para alinear contenido
@@ -22,83 +22,98 @@ const NavWrapper = tw.div`flex items-center justify-between h-16`;
 // Sección del logo
 const Logo = tw.div`flex-shrink-0`;
 
-// Enlace del logo
+// Enlace del logo con color dinámico
 const LogoLink = styled.a`
-  ${tw`text-2xl font-bold text-black cursor-pointer`}
+    ${tw`text-2xl font-bold cursor-pointer`}
+    color: ${({ scrolled }) => (scrolled ? '#000000' : '#FFFFFF')};
+    transition: color 0.3s ease-in-out;
 `;
 
-// Botón para el menú móvil
-const MenuIconButton = tw.button`inline-flex items-center justify-center p-2 rounded-md text-black focus:outline-none sm:hidden transition duration-300 ease-in-out`;
+// Botón para el menú móvil con color dinámico
+const MenuIconButton = styled.button`
+    ${tw`inline-flex items-center justify-center p-2 rounded-md focus:outline-none sm:hidden transition duration-300 ease-in-out`}
+    color: ${({ scrolled }) => (scrolled ? '#000000' : '#FFFFFF')};
+`;
 
-// Contenedor de enlaces para escritorio
+// Contenedor de enlaces para escritorio con color dinámico
 const MenuLinks = styled.div`
-  ${tw`hidden sm:flex items-center space-x-4`}
+    ${tw`hidden sm:flex items-center space-x-4`}
 `;
 
-// Menú desplegable para móviles
+// Menú desplegable para móviles con fondo blanco fijo
 const MobileMenu = styled.div`
-  ${tw`sm:hidden absolute top-16 left-0 w-full bg-white shadow-lg transition-all duration-300 ease-in-out`}
-  max-height: ${({ open }) => (open ? '500px' : '0')};
-  overflow: hidden;
+    ${tw`sm:hidden absolute top-16 left-0 w-full transition-all duration-300 ease-in-out`}
+    background-color: #FFFFFF; /* Fondo blanco fijo para móviles */
+    box-shadow: ${({ scrolled }) => (scrolled ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none')};
+    max-height: ${({ open }) => (open ? '500px' : '0')};
+    overflow: hidden;
 `;
 
 // Contenedor de enlaces dentro del menú móvil
 const MobileMenuLinks = tw.div`flex flex-col px-4 py-6 space-y-4`;
 
-// Estilo para enlaces del Navbar con animación de subrayado
+// Estilo para enlaces del Navbar con animación de subrayado y color dinámico
 const NavLink = styled(HashLink)`
-  ${tw`relative text-black px-3 py-2 rounded-md text-sm font-medium cursor-pointer`}
-  text-decoration: none;
+    ${tw`relative px-3 py-2 rounded-md text-sm font-medium cursor-pointer`}
+    text-decoration: none;
+    color: ${({ scrolled }) => (scrolled ? '#000000' : '#FFFFFF')};
+    transition: color 0.3s ease-in-out;
 
-  &::after {
-    content: '';
-    ${tw`absolute left-0 bottom-0 w-0 h-0.5 bg-green-600 transition-all duration-300`}
-  }
+    &::after {
+        content: '';
+        ${tw`absolute left-0 bottom-0 h-0.5 bg-green-600 transition-all duration-300`}
+        width: 0;
+    }
 
-  &:hover::after {
-    ${tw`w-full`}
-  }
+    &:hover::after {
+        width: 100%;
+    }
 
-  &:hover {
-    color: #144CCC;
-  }
+    &:hover {
+        color: #144CCC;
+    }
 `;
 
-// Estilo para enlaces del menú móvil con animación de subrayado
+// Estilo para enlaces del menú móvil con animación de subrayado y color fijo
 const MobileNavLink = styled(HashLink)`
-  ${tw`relative block text-black px-3 py-2 rounded-md text-base font-medium cursor-pointer`}
-  text-decoration: none;
+    ${tw`relative block px-3 py-2 rounded-md text-base font-medium cursor-pointer`}
+    text-decoration: none;
+    color: #000000; /* Texto negro fijo para el menú móvil */
+    transition: color 0.3s ease-in-out;
 
-  &::after {
-    content: '';
-    ${tw`absolute left-0 bottom-0 w-0 h-0.5 bg-green-600 transition-all duration-300`}
-  }
+    &::after {
+        content: '';
+        ${tw`absolute left-0 bottom-0 h-0.5 bg-green-600 transition-all duration-300`}
+        width: 0;
+    }
 
-  &:hover::after {
-    ${tw`w-full`}
-  }
+    &:hover::after {
+        width: 100%;
+    }
 
-  &:hover {
-    color: #144CCC;
-  }
+    &:hover {
+        color: #144CCC;
+    }
 `;
 
 // Botón para "Iniciar Sesión" en escritorio
 const LoginButton = styled.button`
-  ${tw`ml-4 px-4 py-2 rounded-full text-white font-semibold transition duration-300 ease-in-out`}
-  background-color: #2D966C;
-  &:hover {
-    background-color: #1e704e;
-  }
+    ${tw`ml-4 px-4 py-2 rounded-full font-semibold transition duration-300 ease-in-out`}
+    background-color: #2D966C;
+    color: #FFFFFF;
+    &:hover {
+        background-color: #1e704e;
+    }
 `;
 
 // Botón para "Iniciar Sesión" en móvil
 const MobileLoginButton = styled.button`
-  ${tw`w-full text-center px-4 py-2 rounded-full text-white font-semibold transition duration-300 ease-in-out`}
-  background-color: #2D966C;
-  &:hover {
-    background-color: #1e704e;
-  }
+    ${tw`w-full text-center px-4 py-2 rounded-full font-semibold transition duration-300 ease-in-out`}
+    background-color: #2D966C;
+    color: #FFFFFF;
+    &:hover {
+        background-color: #1e704e;
+    }
 `;
 
 const Navbar = () => {
@@ -148,11 +163,14 @@ const Navbar = () => {
             <NavContent>
                 <NavWrapper>
                     <Logo>
-                        <LogoLink href="/">Transportes Luvan</LogoLink>
+                        <LogoLink href="/" scrolled={scrolled}>
+                            Transportes Luvan
+                        </LogoLink>
                     </Logo>
                     {/* Menú Desktop */}
                     <MenuLinks>
                         <NavLink
+                            scrolled={scrolled}
                             smooth
                             to="/#inicio"
                             scroll={(el) => el.scrollIntoView({ behavior: 'smooth', block: 'start' })}
@@ -160,6 +178,7 @@ const Navbar = () => {
                             Inicio
                         </NavLink>
                         <NavLink
+                            scrolled={scrolled}
                             smooth
                             to="/#servicios"
                             scroll={(el) => el.scrollIntoView({ behavior: 'smooth', block: 'start' })}
@@ -167,6 +186,7 @@ const Navbar = () => {
                             Servicios
                         </NavLink>
                         <NavLink
+                            scrolled={scrolled}
                             smooth
                             to="/#nosotros"
                             scroll={(el) => el.scrollIntoView({ behavior: 'smooth', block: 'start' })}
@@ -174,6 +194,7 @@ const Navbar = () => {
                             Sobre Nosotros
                         </NavLink>
                         <NavLink
+                            scrolled={scrolled}
                             smooth
                             to="/#contacto"
                             scroll={(el) => el.scrollIntoView({ behavior: 'smooth', block: 'start' })}
@@ -183,13 +204,13 @@ const Navbar = () => {
                         <LoginButton onClick={handleLoginClick}>Iniciar Sesión</LoginButton>
                     </MenuLinks>
                     {/* Botón del Menú Móvil */}
-                    <MenuIconButton onClick={handleMobileMenuToggle} aria-label="Menu">
+                    <MenuIconButton onClick={handleMobileMenuToggle} aria-label="Menu" scrolled={scrolled}>
                         {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
                     </MenuIconButton>
                 </NavWrapper>
             </NavContent>
             {/* Menú Móvil */}
-            <MobileMenu open={mobileMenuOpen}>
+            <MobileMenu open={mobileMenuOpen} scrolled={scrolled}>
                 <MobileMenuLinks>
                     <MobileNavLink
                         smooth

@@ -6,9 +6,9 @@ import {
     Typography,
     CircularProgress,
     Grid,
-    Divider,
     Snackbar,
-    Alert
+    Alert,
+    Divider
 } from '@mui/material';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -29,6 +29,7 @@ const ContractViewer = () => {
     });
 
     useEffect(() => {
+        // Obtener el contrato desde el backend
         const fetchContract = async () => {
             try {
                 const response = await api.get(`/contracts/${uuid}`);
@@ -48,6 +49,7 @@ const ContractViewer = () => {
     }, [uuid]);
 
     useEffect(() => {
+        // Inicializa los valores de los placeholders que no son firmas
         if (contract) {
             const placeholders = extractPlaceholders(contract.content);
             const initVals = {};
@@ -60,7 +62,7 @@ const ContractViewer = () => {
         }
     }, [contract]);
 
-    // Soportamos text, signature, date, number
+    // Extrae los placeholders con su tipo (text|signature|date|number)
     const extractPlaceholders = (content) => {
         const regex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
         const result = [];
@@ -69,21 +71,25 @@ const ContractViewer = () => {
             const nameTrim = match[1].trim();
             result.push({ name: nameTrim, type: match[2] });
         }
+        // Elimina duplicados (si los hubiera)
         return Array.from(new Set(result.map(JSON.stringify))).map(JSON.parse);
     };
 
+    // Maneja cambios en inputs (text, date, number)
     const handleChange = (name, value) => {
         setFormValues((prev) => ({ ...prev, [name]: value }));
     };
 
+    // Genera PDF con datos (firmas + inputs)
     const handleGeneratePDF = async () => {
         if (!contract) return;
 
         let filledContent = contract.content;
 
-        // Reemplazar firmas
+        // Sustituye placeholders de firma con la imagen en base64 (o los elimina)
         Object.keys(sigCanvasRefs.current).forEach((name) => {
             const pad = sigCanvasRefs.current[name];
+            // Escapar caracteres especiales en el nombre
             const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             if (pad && !pad.isEmpty()) {
                 const dataUrl = pad.getTrimmedCanvas().toDataURL('image/png');
@@ -92,7 +98,7 @@ const ContractViewer = () => {
                     `<img src="${dataUrl}" alt="Firma" style="width:200px; height:100px;" />`
                 );
             } else {
-                // Eliminar
+                // Elimina el placeholder si no hay firma
                 filledContent = filledContent.replace(
                     new RegExp(`{{\\s*${escapedName}\\s*:\\s*signature\\s*}}`, 'g'),
                     ''
@@ -100,17 +106,17 @@ const ContractViewer = () => {
             }
         });
 
-        // Reemplazar text/date/number
+        // Sustituye placeholders de tipo text/date/number
         const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
         filledContent = filledContent.replace(placeholderRegex, (all, rawName, type) => {
             const nameTrim = rawName.trim();
             if (type === 'text' || type === 'date' || type === 'number') {
                 return formValues[nameTrim] || '';
             }
-            return all; // signature ya se manejó arriba
+            return all; // para signature ya lo manejamos arriba
         });
 
-        // Generar PDF
+        // Crear un div temporal para hacerle captura
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = filledContent;
         tempDiv.style.width = '210mm';
@@ -144,7 +150,7 @@ const ContractViewer = () => {
         document.body.removeChild(tempDiv);
     };
 
-    // Render placeholders
+    // Reemplaza placeholders en el HTML con inputs o lienzos de firma
     const renderContent = (content) => {
         const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
 
@@ -157,37 +163,46 @@ const ContractViewer = () => {
                     let match;
 
                     while ((match = placeholderRegex.exec(txt)) !== null) {
-                        const [full, rawName, type] = match;
+                        const [fullMatch, rawName, type] = match;
                         const nameTrim = rawName.trim();
 
+                        // Texto anterior al placeholder
                         const beforeText = txt.substring(lastIndex, match.index);
                         if (beforeText) {
                             segments.push(beforeText);
                         }
 
                         if (type === 'signature') {
+                            // Bloque para la firma
                             segments.push(
                                 <div
                                     key={`sig-${nameTrim}-${match.index}`}
                                     style={{
-                                        border: '1px solid #000',
-                                        width: '300px',
-                                        height: '150px',
-                                        margin: '10px 0'
+                                        display: 'block',
+                                        margin: '20px 0',
+                                        clear: 'both'
                                     }}
                                 >
-                                    <Typography variant="subtitle1" gutterBottom>
-                                        {nameTrim}
-                                    </Typography>
-                                    <SignatureCanvas
-                                        penColor="black"
-                                        canvasProps={{ width: 300, height: 150 }}
-                                        ref={(ref) => {
-                                            if (ref) {
-                                                sigCanvasRefs.current[nameTrim] = ref;
-                                            }
+                                    <div
+                                        style={{
+                                            border: '1px solid #000',
+                                            width: '300px',
+                                            height: '150px'
                                         }}
-                                    />
+                                    >
+                                        <Typography variant="subtitle1" gutterBottom>
+                                            {nameTrim}
+                                        </Typography>
+                                        <SignatureCanvas
+                                            penColor="black"
+                                            canvasProps={{ width: 300, height: 150 }}
+                                            ref={(ref) => {
+                                                if (ref) {
+                                                    sigCanvasRefs.current[nameTrim] = ref;
+                                                }
+                                            }}
+                                        />
+                                    </div>
                                     <Button
                                         variant="outlined"
                                         onClick={() => {
@@ -201,7 +216,8 @@ const ContractViewer = () => {
                                     </Button>
                                 </div>
                             );
-                        } else if (type === 'text' || type === 'date' || type === 'number') {
+                        } else {
+                            // text, date, number
                             segments.push(
                                 <input
                                     key={`inp-${nameTrim}-${match.index}`}
@@ -223,16 +239,16 @@ const ContractViewer = () => {
                                         borderBottom: '1px solid #000',
                                         fontSize: '1rem',
                                         fontFamily: 'inherit',
-                                        background: 'transparent',
-                                        verticalAlign: 'baseline'
+                                        background: 'transparent'
                                     }}
                                 />
                             );
                         }
 
-                        lastIndex = match.index + full.length;
+                        lastIndex = match.index + fullMatch.length;
                     }
 
+                    // Texto restante después del placeholder
                     const remainder = txt.substring(lastIndex);
                     if (remainder) {
                         segments.push(remainder);
@@ -273,12 +289,14 @@ const ContractViewer = () => {
             </Typography>
             <ErrorBoundary>
                 <Grid container spacing={2}>
-                    {/* Contenido */}
+                    {/* Sección para "llenar" los placeholders */}
                     <Grid item xs={12} md={6}>
                         <div id="contract-content">
                             {renderContent(contract.content)}
                         </div>
                     </Grid>
+
+                    {/* Vista previa (misma renderización) */}
                     <Grid item xs={12} md={6}>
                         <Typography variant="h6">Vista Previa del Contrato</Typography>
                         <Divider style={{ margin: '10px 0' }} />
@@ -300,6 +318,7 @@ const ContractViewer = () => {
                         </div>
                     </Grid>
                 </Grid>
+
                 <Button
                     variant="contained"
                     color="primary"
@@ -309,6 +328,7 @@ const ContractViewer = () => {
                     Generar PDF
                 </Button>
             </ErrorBoundary>
+
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}

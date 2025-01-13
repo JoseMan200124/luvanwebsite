@@ -1,3 +1,5 @@
+// src/pages/LoginPage.jsx
+
 import React, { useState, useContext } from 'react';
 import tw, { styled } from 'twin.macro';
 import {
@@ -138,20 +140,26 @@ const LoginPage = () => {
         setSnackbarMessage('');
         setSnackbarSeverity('success');
 
-        if (!formData.email || !formData.password) {
+        // Trimear el correo electrónico para eliminar espacios en blanco al inicio y al final
+        const trimmedEmail = formData.email.trim();
+
+        if (!trimmedEmail || !formData.password) {
             setError('Por favor, completa todos los campos.');
             return;
         }
 
         try {
-            await login(formData.email, formData.password);
+            // Utilizar el correo electrónico sin espacios
+            await login(trimmedEmail, formData.password);
             setSnackbarMessage('¡Inicio de sesión exitoso!');
             setSnackbarSeverity('success');
             setOpenSnackbar(true);
             navigate('/admin/dashboard');
         } catch (err) {
-            setError(err.response?.data?.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.');
-            setSnackbarMessage(err.response?.data?.message || 'Error en el inicio de sesión.');
+            // Verificar si el error es por roles restringidos
+            const customMessage = err.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
+            setError(customMessage);
+            setSnackbarMessage(customMessage);
             setSnackbarSeverity('error');
             setOpenSnackbar(true);
         }
@@ -224,7 +232,6 @@ const LoginPage = () => {
                             <LoginButton type="submit" variant="contained" fullWidth size="large">
                                 Ingresar
                             </LoginButton>
-                            <Divider tw="my-4" />
                         </form>
                     </LoginFormContainer>
                 </RightSection>

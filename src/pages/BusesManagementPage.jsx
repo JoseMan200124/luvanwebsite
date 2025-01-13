@@ -41,17 +41,25 @@ const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 const BusesManagementPage = () => {
     const { auth } = useContext(AuthContext);
+
     const [buses, setBuses] = useState([]);
     const [selectedBus, setSelectedBus] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
+
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
-    const [availablePilots, setAvailablePilots] = useState([]);
 
-    // Función para obtener todos los buses
+    // Pilotos disponibles
+    const [availablePilots, setAvailablePilots] = useState([]);
+    // Monitores disponibles
+    const [availableMonitors, setAvailableMonitors] = useState([]);
+
+    /**
+     * Cargar lista de Buses
+     */
     const fetchBuses = async () => {
         setLoading(true);
         try {
@@ -60,7 +68,8 @@ const BusesManagementPage = () => {
                     Authorization: `Bearer ${auth.token}`,
                 },
             });
-            setBuses(Array.isArray(response.data.buses) ? response.data.buses : []);
+            const data = response.data;
+            setBuses(Array.isArray(data.buses) ? data.buses : []);
             setLoading(false);
         } catch (err) {
             console.error('Error fetching buses:', err);
@@ -69,33 +78,77 @@ const BusesManagementPage = () => {
         }
     };
 
-    // Función para obtener pilotos disponibles
+    /**
+     * Cargar lista de pilotos (role=Piloto)
+     */
     const fetchPilots = async () => {
         try {
-            const response = await api.get('/users?role=Piloto', {
-                headers: {
-                    Authorization: `Bearer ${auth.token}`,
-                },
+            // Endpoint para obtener los pilotos
+            const response = await api.get('/users/pilots', {
+                headers: { Authorization: `Bearer ${auth.token}` },
             });
             setAvailablePilots(Array.isArray(response.data.users) ? response.data.users : []);
         } catch (err) {
             console.error('Error fetching pilots:', err);
-            // Manejar error o dejar pilotos vacíos
+        }
+    };
+
+    /**
+     * Cargar lista de monitores (role=Monitora)
+     */
+    const fetchMonitors = async () => {
+        try {
+            // Endpoint para obtener monitores
+            const response = await api.get('/users/monitors', {
+                headers: { Authorization: `Bearer ${auth.token}` },
+            });
+            setAvailableMonitors(Array.isArray(response.data.users) ? response.data.users : []);
+        } catch (err) {
+            console.error('Error fetching monitors:', err);
         }
     };
 
     useEffect(() => {
         fetchBuses();
         fetchPilots();
+        fetchMonitors();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [auth.token]);
 
-    // Función para manejar la edición de un bus
-    const handleEditClick = (bus) => {
-        setSelectedBus(bus);
+    /**
+     * Abrir diálogo para crear un nuevo bus
+     */
+    const handleAddBus = () => {
+        setSelectedBus({
+            plate: '',
+            capacity: '',
+            description: '',
+            pilotId: '',
+            monitoraId: '',
+            files: [],
+        });
         setOpenDialog(true);
     };
 
-    // Función para manejar la eliminación de un bus
+    /**
+     * Seleccionar un bus para editarlo
+     */
+    const handleEditClick = (bus) => {
+        setSelectedBus({
+            id: bus.id,
+            plate: bus.plate,
+            capacity: bus.capacity || '',
+            description: bus.description || '',
+            pilotId: bus.pilotId || '',
+            monitoraId: bus.monitoraId || '',
+            files: bus.files || [],
+        });
+        setOpenDialog(true);
+    };
+
+    /**
+     * Eliminar un bus
+     */
     const handleDeleteClick = async (busId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este bus?')) {
             try {
@@ -104,115 +157,121 @@ const BusesManagementPage = () => {
                         Authorization: `Bearer ${auth.token}`,
                     },
                 });
-                setSnackbar({ open: true, message: 'Bus eliminado exitosamente', severity: 'success' });
+                setSnackbar({
+                    open: true,
+                    message: 'Bus eliminado exitosamente',
+                    severity: 'success',
+                });
                 fetchBuses();
             } catch (err) {
                 console.error('Error deleting bus:', err);
-                setSnackbar({ open: true, message: 'Error al eliminar el bus', severity: 'error' });
+                setSnackbar({
+                    open: true,
+                    message: 'Error al eliminar el bus',
+                    severity: 'error',
+                });
             }
         }
     };
 
-    // Función para cerrar el diálogo
+    /**
+     * Cerrar diálogo
+     */
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedBus(null);
     };
 
-    // Función para manejar cambios en los inputs del formulario
+    /**
+     * Manejar cambios en el formulario (inputs)
+     */
     const handleInputChange = (e) => {
-        setSelectedBus({
-            ...selectedBus,
-            [e.target.name]: e.target.value,
-        });
+        const { name, value } = e.target;
+        setSelectedBus((prev) => ({
+            ...prev,
+            [name]: value,
+        }));
     };
 
-    // Función para manejar cambios en los archivos
+    /**
+     * Manejar archivos subidos en <input type="file" />
+     */
     const handleFileChange = (e) => {
-        setSelectedBus({
-            ...selectedBus,
+        setSelectedBus((prev) => ({
+            ...prev,
             files: e.target.files,
-        });
+        }));
     };
 
-    // Función para guardar (crear o actualizar) un bus
+    /**
+     * Guardar el bus (crear o actualizar)
+     */
     const handleSave = async () => {
         try {
             const formData = new FormData();
             formData.append('plate', selectedBus.plate);
             formData.append('capacity', selectedBus.capacity);
             formData.append('description', selectedBus.description);
+
             if (selectedBus.pilotId) {
                 formData.append('pilotId', selectedBus.pilotId);
             }
+            if (selectedBus.monitoraId) {
+                formData.append('monitoraId', selectedBus.monitoraId);
+            }
+
             if (selectedBus.files && selectedBus.files.length > 0) {
-                Array.from(selectedBus.files).forEach(file => {
-                    formData.append('files', file);
+                // Subir sólo los archivos nuevos (File objects)
+                Array.from(selectedBus.files).forEach((file) => {
+                    if (!file.id) {
+                        formData.append('files', file);
+                    }
                 });
             }
 
             if (selectedBus.id) {
-                // Actualizar bus
+                // Update
                 await api.put(`/buses/${selectedBus.id}`, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                         Authorization: `Bearer ${auth.token}`,
                     },
                 });
-                setSnackbar({ open: true, message: 'Bus actualizado exitosamente', severity: 'success' });
+                setSnackbar({
+                    open: true,
+                    message: 'Bus actualizado exitosamente',
+                    severity: 'success',
+                });
             } else {
-                // Crear bus
+                // Create
                 await api.post('/buses', formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                         Authorization: `Bearer ${auth.token}`,
                     },
                 });
-                setSnackbar({ open: true, message: 'Bus creado exitosamente', severity: 'success' });
+                setSnackbar({
+                    open: true,
+                    message: 'Bus creado exitosamente',
+                    severity: 'success',
+                });
             }
 
             fetchBuses();
             handleDialogClose();
         } catch (err) {
             console.error('Error saving bus:', err);
-            setSnackbar({ open: true, message: 'Error al guardar el bus', severity: 'error' });
+            setSnackbar({
+                open: true,
+                message: 'Error al guardar el bus',
+                severity: 'error',
+            });
         }
     };
 
-    // Función para abrir el diálogo de creación de bus
-    const handleAddBus = () => {
-        setSelectedBus({
-            plate: '',
-            capacity: '',
-            description: '',
-            pilotId: '',
-            files: [],
-        });
-        setOpenDialog(true);
-    };
-
-    // Función para cerrar el Snackbar
-    const handleSnackbarClose = () => {
-        setSnackbar({ ...snackbar, open: false });
-    };
-
-    // Función para manejar cambios en la búsqueda
-    const handleSearchChange = (e) => {
-        setSearchQuery(e.target.value);
-    };
-
-    // Función para manejar el cambio de página en la tabla
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    // Función para manejar el cambio en el número de filas por página
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
-    // Función para eliminar un archivo específico de un bus
+    /**
+     * Eliminar un archivo específico de un bus
+     */
     const handleDeleteFile = async (busId, fileId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este archivo?')) {
             try {
@@ -221,22 +280,60 @@ const BusesManagementPage = () => {
                         Authorization: `Bearer ${auth.token}`,
                     },
                 });
-                setSnackbar({ open: true, message: 'Archivo eliminado exitosamente', severity: 'success' });
+                setSnackbar({
+                    open: true,
+                    message: 'Archivo eliminado exitosamente',
+                    severity: 'success',
+                });
                 fetchBuses();
             } catch (err) {
                 console.error('Error deleting file:', err);
-                setSnackbar({ open: true, message: 'Error al eliminar el archivo', severity: 'error' });
+                setSnackbar({
+                    open: true,
+                    message: 'Error al eliminar el archivo',
+                    severity: 'error',
+                });
             }
         }
     };
 
-    // Filtrar buses según la búsqueda
+    /**
+     * Cerrar Snackbar
+     */
+    const handleSnackbarClose = () => {
+        setSnackbar({ ...snackbar, open: false });
+    };
+
+    /**
+     * Manejar cambios en la búsqueda
+     */
+    const handleSearchChange = (e) => {
+        setSearchQuery(e.target.value);
+    };
+
+    /**
+     * Filtrar buses según la búsqueda
+     */
     const filteredBuses = buses.filter((bus) => {
-        return (
-            bus.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (bus.description && bus.description.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
+        const inPlate = bus.plate.toLowerCase().includes(searchQuery.toLowerCase());
+        const inDesc = bus.description && bus.description.toLowerCase().includes(searchQuery.toLowerCase());
+        return inPlate || inDesc;
     });
+
+    /**
+     * Manejar cambio de página en la tabla
+     */
+    const handleChangePage = (event, newPage) => {
+        setPage(newPage);
+    };
+
+    /**
+     * Manejar cambio de rowsPerPage
+     */
+    const handleChangeRowsPerPage = (event) => {
+        setRowsPerPage(parseInt(event.target.value, 10));
+        setPage(0);
+    };
 
     return (
         <BusesContainer>
@@ -261,6 +358,7 @@ const BusesManagementPage = () => {
                     Añadir Bus
                 </Button>
             </div>
+
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
                     <CircularProgress />
@@ -275,60 +373,80 @@ const BusesManagementPage = () => {
                                     <TableCell>Capacidad</TableCell>
                                     <TableCell>Descripción</TableCell>
                                     <TableCell>Piloto</TableCell>
+                                    <TableCell>Monitora</TableCell>
                                     <TableCell>Archivos</TableCell>
                                     <TableCell align="center">Acciones</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {filteredBuses.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((bus) => (
-                                    <TableRow key={bus.id}>
-                                        <TableCell>{bus.plate}</TableCell>
-                                        <TableCell>{bus.capacity}</TableCell>
-                                        <TableCell>{bus.description}</TableCell>
-                                        <TableCell>{bus.pilotName}</TableCell>
-                                        <TableCell>
-                                            <List>
-                                                {bus.files.map(file => (
-                                                    <ListItem key={file.id}>
-                                                        {file.fileType === 'application/pdf' ? <InsertDriveFile /> : <ImageIcon />}
-                                                        <ListItemText>
-                                                            <Link href={file.fileUrl} target="_blank" rel="noopener noreferrer">
-                                                                {file.fileName.split('/').pop()}
-                                                            </Link>
-                                                        </ListItemText>
-                                                        <ListItemSecondaryAction>
-                                                            <Tooltip title="Eliminar Archivo">
-                                                                <IconButton edge="end" onClick={() => handleDeleteFile(bus.id, file.id)}>
-                                                                    <Delete />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                        </ListItemSecondaryAction>
-                                                    </ListItem>
-                                                ))}
-                                                {bus.files.length === 0 && (
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        No hay archivos.
-                                                    </Typography>
-                                                )}
-                                            </List>
-                                        </TableCell>
-                                        <TableCell align="center">
-                                            <Tooltip title="Editar">
-                                                <IconButton onClick={() => handleEditClick(bus)}>
-                                                    <Edit />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Eliminar">
-                                                <IconButton onClick={() => handleDeleteClick(bus.id)}>
-                                                    <Delete />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                {filteredBuses
+                                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                    .map((bus) => (
+                                        <TableRow key={bus.id}>
+                                            <TableCell>{bus.plate}</TableCell>
+                                            <TableCell>{bus.capacity}</TableCell>
+                                            <TableCell>{bus.description}</TableCell>
+                                            {/* MOSTRAR NOMBRE DEL PILOTO si existe */}
+                                            <TableCell>
+                                                {bus.pilot ? bus.pilot.name : ''}
+                                            </TableCell>
+                                            {/* MOSTRAR NOMBRE DE LA MONITORA si existe */}
+                                            <TableCell>
+                                                {bus.monitora ? bus.monitora.name : ''}
+                                            </TableCell>
+                                            <TableCell>
+                                                <List>
+                                                    {bus.files.map(file => (
+                                                        <ListItem key={file.id}>
+                                                            {file.fileType === 'application/pdf'
+                                                                ? <InsertDriveFile />
+                                                                : <ImageIcon />
+                                                            }
+                                                            <ListItemText>
+                                                                <Link
+                                                                    href={file.fileUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                >
+                                                                    {file.fileName.split('/').pop()}
+                                                                </Link>
+                                                            </ListItemText>
+                                                            <ListItemSecondaryAction>
+                                                                <Tooltip title="Eliminar Archivo">
+                                                                    <IconButton
+                                                                        edge="end"
+                                                                        onClick={() => handleDeleteFile(bus.id, file.id)}
+                                                                    >
+                                                                        <Delete />
+                                                                    </IconButton>
+                                                                </Tooltip>
+                                                            </ListItemSecondaryAction>
+                                                        </ListItem>
+                                                    ))}
+                                                    {bus.files.length === 0 && (
+                                                        <Typography variant="body2" color="textSecondary">
+                                                            No hay archivos.
+                                                        </Typography>
+                                                    )}
+                                                </List>
+                                            </TableCell>
+                                            <TableCell align="center">
+                                                <Tooltip title="Editar">
+                                                    <IconButton onClick={() => handleEditClick(bus)}>
+                                                        <Edit />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Eliminar">
+                                                    <IconButton onClick={() => handleDeleteClick(bus.id)}>
+                                                        <Delete />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
                                 {filteredBuses.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={6} align="center">
+                                        <TableCell colSpan={7} align="center">
                                             No se encontraron buses.
                                         </TableCell>
                                     </TableRow>
@@ -348,8 +466,12 @@ const BusesManagementPage = () => {
                     />
                 </Paper>
             )}
+
+            {/* Diálogo de Crear/Editar Bus */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
-                <DialogTitle>{selectedBus && selectedBus.id ? 'Editar Bus' : 'Añadir Bus'}</DialogTitle>
+                <DialogTitle>
+                    {selectedBus && selectedBus.id ? 'Editar Bus' : 'Añadir Bus'}
+                </DialogTitle>
                 <DialogContent>
                     <TextField
                         autoFocus
@@ -383,25 +505,60 @@ const BusesManagementPage = () => {
                         value={selectedBus ? selectedBus.description : ''}
                         onChange={handleInputChange}
                     />
+
+                    {/* SELECT PILOTO */}
                     <FormControl fullWidth margin="dense">
                         <InputLabel id="pilot-select-label">Piloto</InputLabel>
                         <Select
                             labelId="pilot-select-label"
                             name="pilotId"
-                            value={selectedBus ? selectedBus.pilotId || '' : ''}
-                            onChange={handleInputChange}
+                            value={selectedBus ? (selectedBus.pilotId || '') : ''}
+                            onChange={(e) =>
+                                setSelectedBus((prev) => ({
+                                    ...prev,
+                                    pilotId: e.target.value ? parseInt(e.target.value, 10) : null,
+                                }))
+                            }
                             label="Piloto"
                         >
                             <MenuItem value="">
                                 <em>Ninguno</em>
                             </MenuItem>
-                            {availablePilots.map(pilot => (
+                            {availablePilots.map((pilot) => (
                                 <MenuItem key={pilot.id} value={pilot.id}>
                                     {pilot.name}
                                 </MenuItem>
                             ))}
                         </Select>
                     </FormControl>
+
+                    {/* SELECT MONITORA */}
+                    <FormControl fullWidth margin="dense">
+                        <InputLabel id="monitora-select-label">Monitora</InputLabel>
+                        <Select
+                            labelId="monitora-select-label"
+                            name="monitoraId"
+                            value={selectedBus ? (selectedBus.monitoraId || '') : ''}
+                            onChange={(e) =>
+                                setSelectedBus((prev) => ({
+                                    ...prev,
+                                    monitoraId: e.target.value ? parseInt(e.target.value, 10) : null,
+                                }))
+                            }
+                            label="Monitora"
+                        >
+                            <MenuItem value="">
+                                <em>Ninguna</em>
+                            </MenuItem>
+                            {availableMonitors.map((monitor) => (
+                                <MenuItem key={monitor.id} value={monitor.id}>
+                                    {monitor.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    {/* INPUT DE ARCHIVOS */}
                     <input
                         accept="application/pdf,image/jpeg,image/png"
                         style={{ display: 'none' }}
@@ -411,18 +568,52 @@ const BusesManagementPage = () => {
                         onChange={handleFileChange}
                     />
                     <label htmlFor="file-input">
-                        <Button variant="outlined" color="primary" component="span" style={{ marginTop: '16px' }}>
+                        <Button
+                            variant="outlined"
+                            color="primary"
+                            component="span"
+                            style={{ marginTop: '16px' }}
+                        >
                             Subir Archivos
                         </Button>
                     </label>
+
+                    {/* LISTA DE ARCHIVOS (si existen) */}
                     {selectedBus && selectedBus.files && selectedBus.files.length > 0 && (
-                        <List>
-                            {Array.from(selectedBus.files).map((file, index) => (
-                                <ListItem key={index}>
-                                    {file.type === 'application/pdf' ? <InsertDriveFile /> : <ImageIcon />}
-                                    <ListItemText primary={file.name} />
-                                </ListItem>
-                            ))}
+                        <List sx={{ mt: 2 }}>
+                            {[...selectedBus.files].map((file, index) => {
+                                if (file.id) {
+                                    // archivo existente
+                                    return (
+                                        <ListItem key={file.id}>
+                                            {file.fileType === 'application/pdf'
+                                                ? <InsertDriveFile />
+                                                : <ImageIcon />
+                                            }
+                                            <ListItemText>
+                                                <Link
+                                                    href={file.fileUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                >
+                                                    {file.fileName.split('/').pop()}
+                                                </Link>
+                                            </ListItemText>
+                                        </ListItem>
+                                    );
+                                } else {
+                                    // archivo recién adjuntado
+                                    return (
+                                        <ListItem key={index}>
+                                            {file.type === 'application/pdf'
+                                                ? <InsertDriveFile />
+                                                : <ImageIcon />
+                                            }
+                                            <ListItemText primary={file.name} />
+                                        </ListItem>
+                                    );
+                                }
+                            })}
                         </List>
                     )}
                 </DialogContent>
@@ -430,15 +621,12 @@ const BusesManagementPage = () => {
                     <Button onClick={handleDialogClose} color="primary">
                         Cancelar
                     </Button>
-                    <Button
-                        onClick={handleSave}
-                        color="primary"
-                        variant="contained"
-                    >
+                    <Button onClick={handleSave} color="primary" variant="contained">
                         {selectedBus && selectedBus.id ? 'Guardar Cambios' : 'Crear Bus'}
                     </Button>
                 </DialogActions>
             </Dialog>
+
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}

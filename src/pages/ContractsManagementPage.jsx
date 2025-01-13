@@ -51,13 +51,13 @@ const ContractsManagementPage = () => {
     const [contractTitle, setContractTitle] = useState('');
     const [editorData, setEditorData] = useState('');
 
-    // Para placeholders en la vista previa
+    // Manejo de placeholders en vista previa
     const signatureRefs = useRef({});
     const [formValues, setFormValues] = useState({});
 
     const navigate = useNavigate();
 
-    // Contratos Llenados
+    // Contratos Llenados (paginación, búsqueda)
     const [filledContracts, setFilledContracts] = useState([]);
     const [filledContractsLoading, setFilledContractsLoading] = useState(false);
     const [filledContractsPage, setFilledContractsPage] = useState(1);
@@ -65,6 +65,7 @@ const ContractsManagementPage = () => {
     const [filledContractsTotalPages, setFilledContractsTotalPages] = useState(1);
     const [filledContractsSearch, setFilledContractsSearch] = useState('');
 
+    // Cargar lista de contratos
     useEffect(() => {
         const fetchContracts = async () => {
             try {
@@ -82,6 +83,7 @@ const ContractsManagementPage = () => {
         fetchContracts();
     }, []);
 
+    // Cargar lista de contratos llenos (paginados)
     useEffect(() => {
         const fetchFilledContracts = async () => {
             setFilledContractsLoading(true);
@@ -108,6 +110,7 @@ const ContractsManagementPage = () => {
         fetchFilledContracts();
     }, [filledContractsPage, filledContractsLimit]);
 
+    // Subir archivo Word y convertirlo a HTML
     const handleWordUpload = async (event) => {
         const file = event.target.files[0];
         if (file && file.name.endsWith('.docx')) {
@@ -126,18 +129,19 @@ const ContractsManagementPage = () => {
         } else {
             setSnackbar({
                 open: true,
-                message: 'Por favor, suba un archivo de Word (.docx).',
+                message: 'Por favor, sube un archivo de Word (.docx).',
                 severity: 'warning'
             });
         }
         event.target.value = null;
     };
 
+    // Crear o actualizar un contrato
     const handleSaveOrUpdate = async () => {
         if (!contractTitle.trim()) {
             setSnackbar({
                 open: true,
-                message: 'Por favor, ingrese un título para el contrato.',
+                message: 'Por favor, ingresa un título para el contrato.',
                 severity: 'warning'
             });
             return;
@@ -145,11 +149,13 @@ const ContractsManagementPage = () => {
         try {
             let response;
             if (currentContract) {
+                // Actualizar
                 response = await api.put(`/contracts/${currentContract.uuid}`, {
                     title: contractTitle,
                     content: editorData
                 });
             } else {
+                // Crear
                 response = await api.post('/contracts', {
                     title: contractTitle,
                     content: editorData
@@ -166,6 +172,7 @@ const ContractsManagementPage = () => {
             };
 
             if (currentContract) {
+                // Actualizamos en la lista
                 setContracts((prev) =>
                     prev.map((c) => (c.id === currentContract.id ? savedContract : c))
                 );
@@ -175,6 +182,7 @@ const ContractsManagementPage = () => {
                     severity: 'success'
                 });
             } else {
+                // Agregamos al final
                 setContracts((prev) => [...prev, savedContract]);
                 setSnackbar({
                     open: true,
@@ -194,6 +202,7 @@ const ContractsManagementPage = () => {
         }
     };
 
+    // Editar
     const handleEdit = (contract) => {
         setCurrentContract(contract);
         setContractTitle(contract.title);
@@ -201,6 +210,7 @@ const ContractsManagementPage = () => {
         setOpenEditor(true);
     };
 
+    // Eliminar
     const handleDelete = async (uuid) => {
         if (!window.confirm('¿Está seguro de que desea eliminar este contrato?')) return;
         try {
@@ -221,6 +231,7 @@ const ContractsManagementPage = () => {
         }
     };
 
+    // Cerrar el diálogo de creación/edición
     const handleCloseEditor = () => {
         setOpenEditor(false);
         setCurrentContract(null);
@@ -230,6 +241,7 @@ const ContractsManagementPage = () => {
         setFormValues({});
     };
 
+    // Copiar link de un contrato
     const handleCopyLink = async (url) => {
         try {
             await navigator.clipboard.writeText(url);
@@ -248,7 +260,7 @@ const ContractsManagementPage = () => {
         }
     };
 
-    // Regex con lazy matching y soporta text|signature|date|number
+    // Extraer placeholders (text|signature|date|number)
     const extractPlaceholders = (content) => {
         const regex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
         const out = [];
@@ -257,6 +269,7 @@ const ContractsManagementPage = () => {
             const nameTrim = match[1].trim();
             out.push({ name: nameTrim, type: match[2] });
         }
+        // Elimina duplicados
         return Array.from(new Set(out.map(JSON.stringify))).map(JSON.parse);
     };
 
@@ -268,10 +281,12 @@ const ContractsManagementPage = () => {
         signatureRefs.current[name] = ref;
     };
 
+    // Ir a la vista de un contrato en particular
     const handleViewContract = (contract) => {
         navigate(`/admin/contratos/${contract.uuid}`);
     };
 
+    // Renderizar contenido con placeholders
     const renderContent = (html) => {
         const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
 
@@ -287,6 +302,7 @@ const ContractsManagementPage = () => {
                         const [fullMatch, rawName, type] = match;
                         const nameTrim = rawName.trim();
 
+                        // Texto antes del placeholder
                         const beforeText = txt.slice(lastIndex, match.index);
                         if (beforeText) segments.push(beforeText);
 
@@ -294,7 +310,11 @@ const ContractsManagementPage = () => {
                             segments.push(
                                 <div
                                     key={`sig-${nameTrim}-${match.index}`}
-                                    style={{ margin: '10px 0' }}
+                                    style={{
+                                        display: 'block',
+                                        margin: '20px 0',
+                                        clear: 'both'
+                                    }}
                                 >
                                     <Typography variant="subtitle1" gutterBottom>
                                         {nameTrim}
@@ -344,8 +364,7 @@ const ContractsManagementPage = () => {
                                         borderBottom: '1px solid #000',
                                         fontSize: '1rem',
                                         fontFamily: 'inherit',
-                                        background: 'transparent',
-                                        verticalAlign: 'baseline'
+                                        background: 'transparent'
                                     }}
                                 />
                             );
@@ -354,6 +373,7 @@ const ContractsManagementPage = () => {
                         lastIndex = match.index + fullMatch.length;
                     }
 
+                    // Resto del texto después del placeholder
                     const remainder = txt.slice(lastIndex);
                     if (remainder) segments.push(remainder);
 
@@ -369,7 +389,7 @@ const ContractsManagementPage = () => {
         });
     };
 
-    // Eliminar Contrato Llenado
+    // Eliminar un contrato llenado
     const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
     const [filledContractToDelete, setFilledContractToDelete] = useState(null);
 
@@ -407,6 +427,7 @@ const ContractsManagementPage = () => {
         }
     };
 
+    // Generar PDF de la vista previa (lo que hay en editorData + placeholders)
     const handleGeneratePDF = async () => {
         if (!editorData) {
             setSnackbar({
@@ -420,6 +441,7 @@ const ContractsManagementPage = () => {
         let filledContent = editorData;
         const placeholders = extractPlaceholders(editorData);
 
+        // Reemplazamos placeholders con firmas o texto
         placeholders.forEach((ph) => {
             if (ph.type === 'signature') {
                 const sigPad = signatureRefs.current[ph.name];
@@ -430,12 +452,14 @@ const ContractsManagementPage = () => {
                         `<img src="${dataUrl}" alt="Firma" style="width:200px; height:100px;" />`
                     );
                 } else {
+                    // Placeholder vacío => lo borramos
                     filledContent = filledContent.replace(
                         new RegExp(`{{\\s*${ph.name}\\s*:\\s*signature\\s*}}`, 'g'),
                         ''
                     );
                 }
-            } else if (ph.type === 'text' || ph.type === 'date' || ph.type === 'number') {
+            } else {
+                // text|date|number
                 filledContent = filledContent.replace(
                     new RegExp(`{{\\s*${ph.name}\\s*:\\s*${ph.type}\\s*}}`, 'g'),
                     formValues[ph.name] || ''
@@ -443,6 +467,7 @@ const ContractsManagementPage = () => {
             }
         });
 
+        // Crear div temporal y generar PDF
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = filledContent;
         tempDiv.style.width = '210mm';
@@ -498,6 +523,7 @@ const ContractsManagementPage = () => {
                 Crear Nuevo Contrato
             </Button>
 
+            {/* Lista de contratos */}
             <List>
                 {contracts.map((contract) => (
                     <ListItem key={contract.id} divider>
@@ -563,7 +589,9 @@ const ContractsManagementPage = () => {
             ) : (
                 <List>
                     {filledContracts.length === 0 ? (
-                        <Typography variant="body1">No se encontraron contratos llenados.</Typography>
+                        <Typography variant="body1">
+                            No se encontraron contratos llenados.
+                        </Typography>
                     ) : (
                         filledContracts
                             .filter((fc) => {
@@ -622,6 +650,7 @@ const ContractsManagementPage = () => {
                 </List>
             )}
 
+            {/* Paginación si hay varias páginas */}
             {filledContractsTotalPages > 1 && (
                 <Box display="flex" justifyContent="center" mt={2}>
                     <Pagination
@@ -633,7 +662,7 @@ const ContractsManagementPage = () => {
                 </Box>
             )}
 
-            {/* DIALOG CREAR/EDITAR CONTRATO */}
+            {/* Diálogo Crear/Editar Contrato */}
             <Dialog open={openEditor} onClose={handleCloseEditor} maxWidth="lg" fullWidth>
                 <DialogTitle>
                     {currentContract ? 'Editar Contrato' : 'Crear Contrato'}
@@ -719,7 +748,7 @@ const ContractsManagementPage = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* DIALOG ELIMINAR CONTRATO LLENADO */}
+            {/* Diálogo para confirmar eliminación de Contrato Llenado */}
             <Dialog open={openDeleteDialog} onClose={handleCloseDeleteDialog}>
                 <DialogTitle>Confirmar Eliminación</DialogTitle>
                 <DialogContent>

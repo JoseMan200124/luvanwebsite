@@ -26,7 +26,8 @@ const FilledContractViewer = () => {
         severity: 'success'
     });
 
-    // Aunque aquí no hay inputs que llenar (ya está “llenado”), mantenemos la referencia por consistencia
+    // Aunque aquí no hay inputs que llenar (el contrato ya está lleno),
+    // conservamos la referencia de firma por consistencia
     const signaturePads = useRef({});
 
     useEffect(() => {
@@ -39,7 +40,7 @@ const FilledContractViewer = () => {
                 console.error('Error al obtener el contrato llenado:', error);
                 setSnackbar({
                     open: true,
-                    message: 'No se pudo cargar el contrato llenado. Por favor, verifica el enlace.',
+                    message: 'No se pudo cargar el contrato llenado. Verifica el enlace.',
                     severity: 'error'
                 });
                 setLoading(false);
@@ -48,9 +49,9 @@ const FilledContractViewer = () => {
         fetchFilledContract();
     }, [uuid]);
 
-    // Renderizar el contenido con los datos en filledContract.filledData
+    // Renderizamos el contenido (con firmas y textos ya llenos)
     const renderContent = (content) => {
-        // Admite los tipos: text, signature, date, number
+        // Soporta {text|signature|date|number} pero ya vienen con data en filledContract.filledData
         const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
 
         return parse(content, {
@@ -66,42 +67,58 @@ const FilledContractViewer = () => {
                         const nameTrim = rawName.trim();
                         const beforeText = text.substring(lastIndex, match.index);
 
+                        // Texto antes del placeholder
                         if (beforeText) {
                             segments.push(beforeText);
                         }
 
-                        // Si es firma, text, date, number
                         if (type === 'signature') {
-                            // Mostrar la firma si existe
+                            // Mostramos la firma si existe en filledContract.filledData
                             const signatureDataUrl =
                                 filledContract?.filledData[`${nameTrim}_signature`] || '';
                             if (signatureDataUrl) {
                                 segments.push(
-                                    <img
+                                    <div
                                         key={`sig-${nameTrim}-${match.index}`}
-                                        src={signatureDataUrl}
-                                        alt={`Firma de ${nameTrim}`}
                                         style={{
-                                            width: '200px',
-                                            height: '100px',
-                                            border: '1px solid #000',
-                                            margin: '10px 0'
+                                            display: 'block',
+                                            margin: '20px 0',
+                                            clear: 'both'
                                         }}
-                                    />
+                                    >
+                                        <img
+                                            src={signatureDataUrl}
+                                            alt={`Firma de ${nameTrim}`}
+                                            style={{
+                                                width: '200px',
+                                                height: '100px',
+                                                border: '1px solid #000'
+                                            }}
+                                        />
+                                    </div>
                                 );
                             } else {
+                                // Si no hay firma, solo un texto
                                 segments.push(
-                                    <Typography
+                                    <div
                                         key={`sig-placeholder-${nameTrim}-${match.index}`}
-                                        variant="subtitle1"
-                                        gutterBottom
+                                        style={{
+                                            display: 'block',
+                                            margin: '20px 0',
+                                            clear: 'both',
+                                            border: '1px solid #000',
+                                            width: '200px',
+                                            height: '100px'
+                                        }}
                                     >
-                                        {nameTrim}
-                                    </Typography>
+                                        <Typography variant="subtitle1" gutterBottom>
+                                            {nameTrim}
+                                        </Typography>
+                                    </div>
                                 );
                             }
                         } else {
-                            // text, date, number → mostramos valor
+                            // Campos text, date, number => se muestran con su valor
                             const value = filledContract?.filledData[nameTrim] || '';
                             segments.push(
                                 <Typography
@@ -121,7 +138,8 @@ const FilledContractViewer = () => {
 
                         lastIndex = match.index + fullMatch.length;
                     }
-                    // Resto del texto
+
+                    // Texto restante después del último placeholder
                     const remainingText = text.substring(lastIndex);
                     if (remainingText) {
                         segments.push(remainingText);
@@ -139,10 +157,11 @@ const FilledContractViewer = () => {
         });
     };
 
+    // Generamos PDF a partir del contenido ya "llenado"
     const handleGeneratePDF = async () => {
         if (!filledContract) return;
 
-        // Crear un div temporal con el contenido
+        // Crear un div temporal con el contenido ya llenado
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = filledContract.content;
         tempDiv.style.width = '210mm';

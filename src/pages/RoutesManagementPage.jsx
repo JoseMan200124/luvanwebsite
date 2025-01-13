@@ -61,7 +61,6 @@ const RoutesManagementPage = () => {
                     Authorization: `Bearer ${auth.token}`,
                 },
             });
-            console.log('Respuesta de la API (Rutas):', response.data);
             setRoutes(Array.isArray(response.data.routes) ? response.data.routes : []);
             setLoading(false);
         } catch (err) {

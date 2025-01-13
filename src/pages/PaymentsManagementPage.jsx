@@ -1,6 +1,3 @@
-// Comando para instalar moment.js
-// npm install moment
-
 import React, { useEffect, useState, useContext } from 'react';
 import moment from 'moment';
 import {
@@ -38,13 +35,16 @@ const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 const PaymentsManagementPage = () => {
     const { auth } = useContext(AuthContext);
 
-    // Listado completo
+    // Listado de pagos
     const [payments, setPayments] = useState([]);
-    const [filteredPayments, setFilteredPayments] = useState([]);
+    // Listado de colegios
+    const [schools, setSchools] = useState([]);
 
-    // Filtros
+    // Filtrado
+    const [filteredPayments, setFilteredPayments] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [schoolFilter, setSchoolFilter] = useState('');
 
     // Paginación
     const [page, setPage] = useState(0);
@@ -55,7 +55,7 @@ const PaymentsManagementPage = () => {
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [emailSubject, setEmailSubject] = useState('');
     const [emailMessage, setEmailMessage] = useState('');
-    const [attachments, setAttachments] = useState([]); // Para adjuntar archivos
+    const [attachments, setAttachments] = useState([]);
 
     // Dialog de editar Payment
     const [openEditDialog, setOpenEditDialog] = useState(false);
@@ -64,10 +64,11 @@ const PaymentsManagementPage = () => {
         status: '',
         amount: '',
         nextPaymentDate: '',
-        lastPaymentDate: ''
+        lastPaymentDate: '',
+        schoolId: ''
     });
 
-    // Notificaciones
+    // Snackbar
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
@@ -75,7 +76,7 @@ const PaymentsManagementPage = () => {
     });
 
     // ============================
-    // 1) Cargar Pagos y actualizar estados vencidos
+    // 1) Cargar Pagos y Colegios
     // ============================
     const fetchPayments = async () => {
         try {
@@ -83,45 +84,6 @@ const PaymentsManagementPage = () => {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             let fetchedPayments = res.data.payments || [];
-
-            // Obtener la fecha actual (sin hora)
-            const today = moment().startOf('day');
-
-            // Array para almacenar las promesas de actualización
-            const updatePromises = [];
-
-            // Iterar sobre los pagos para actualizar el estado si es necesario
-            fetchedPayments.forEach((payment) => {
-                const nextPaymentDate = payment.nextPaymentDate
-                    ? moment(payment.nextPaymentDate, 'YYYY-MM-DD').startOf('day')
-                    : null;
-
-                if (
-                    nextPaymentDate &&
-                    nextPaymentDate.isBefore(today) &&
-                    payment.status !== 'VENCIDO'
-                ) {
-                    // Actualizar el estado a 'VENCIDO'
-                    const updatePromise = api
-                        .put(
-                            `/payments/${payment.id}`,
-                            { status: 'VENCIDO' },
-                            { headers: { Authorization: `Bearer ${auth.token}` } }
-                        )
-                        .then(() => {
-                            payment.status = 'VENCIDO';
-                        })
-                        .catch((error) => {
-                            console.error(`Error al actualizar el pago ID ${payment.id}:`, error);
-                        });
-
-                    updatePromises.push(updatePromise);
-                }
-            });
-
-            // Esperar a que todas las actualizaciones se completen
-            await Promise.all(updatePromises);
-
             setPayments(fetchedPayments);
             setFilteredPayments(fetchedPayments);
         } catch (error) {
@@ -134,8 +96,20 @@ const PaymentsManagementPage = () => {
         }
     };
 
+    const fetchSchools = async () => {
+        try {
+            const res = await api.get('/schools', {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            setSchools(res.data.schools || []);
+        } catch (error) {
+            console.error('Error al obtener colegios:', error);
+        }
+    };
+
     useEffect(() => {
         fetchPayments();
+        fetchSchools();
         // eslint-disable-next-line
     }, []);
 
@@ -144,6 +118,7 @@ const PaymentsManagementPage = () => {
     // ============================
     useEffect(() => {
         let temp = [...payments];
+
         if (searchQuery.trim() !== '') {
             const query = searchQuery.toLowerCase();
             temp = temp.filter((p) => {
@@ -155,11 +130,18 @@ const PaymentsManagementPage = () => {
         if (statusFilter !== '') {
             temp = temp.filter((p) => p.status === statusFilter);
         }
+        if (schoolFilter !== '') {
+            temp = temp.filter(
+                (p) => p.School && String(p.School.id) === String(schoolFilter)
+            );
+        }
+
         setFilteredPayments(temp);
-    }, [payments, searchQuery, statusFilter]);
+    }, [payments, searchQuery, statusFilter, schoolFilter]);
 
     const handleSearchChange = (e) => setSearchQuery(e.target.value);
     const handleStatusFilterChange = (e) => setStatusFilter(e.target.value);
+    const handleSchoolFilterChange = (e) => setSchoolFilter(e.target.value);
 
     // ============================
     // 3) Paginación
@@ -180,17 +162,14 @@ const PaymentsManagementPage = () => {
         setAttachments([]);
         setOpenEmailDialog(true);
     };
-
     const handleCloseEmailDialog = () => {
         setOpenEmailDialog(false);
         setSelectedPayment(null);
         setAttachments([]);
     };
-
     const handleSendEmail = async () => {
         if (!selectedPayment) return;
         try {
-            // Usamos FormData para adjuntar archivos
             const formData = new FormData();
             formData.append('subject', emailSubject);
             formData.append('message', emailMessage);
@@ -211,7 +190,6 @@ const PaymentsManagementPage = () => {
                     }
                 }
             );
-
             setSnackbar({
                 open: true,
                 message: 'Correo enviado exitosamente',
@@ -236,13 +214,12 @@ const PaymentsManagementPage = () => {
             id: payment.id,
             status: payment.status,
             amount: payment.amount,
-            // Al abrir el diálogo, mostramos la fecha sin conversión que cause shift
             nextPaymentDate: payment.nextPaymentDate || '',
-            lastPaymentDate: payment.lastPaymentDate || ''
+            lastPaymentDate: payment.lastPaymentDate || '',
+            schoolId: payment.School ? payment.School.id : ''
         });
         setOpenEditDialog(true);
     };
-
     const handleCloseEditDialog = () => {
         setOpenEditDialog(false);
         setEditPayment({
@@ -250,25 +227,22 @@ const PaymentsManagementPage = () => {
             status: '',
             amount: '',
             nextPaymentDate: '',
-            lastPaymentDate: ''
+            lastPaymentDate: '',
+            schoolId: ''
         });
     };
 
     const handleSaveEdit = async () => {
         try {
-            // Enviamos las fechas tal cual en formato YYYY-MM-DD
-            // (sin convertir a Date para evitar cambios de día por zonas horarias)
             await api.put(
                 `/payments/${editPayment.id}`,
                 {
                     status: editPayment.status,
-                    amount: editPayment.amount,
-                    nextPaymentDate: editPayment.nextPaymentDate || null,
-                    lastPaymentDate: editPayment.lastPaymentDate || null
+                    lastPaymentDate: editPayment.lastPaymentDate || null,
+                    schoolId: editPayment.schoolId !== '' ? editPayment.schoolId : null
                 },
                 { headers: { Authorization: `Bearer ${auth.token}` } }
             );
-
             setSnackbar({
                 open: true,
                 message: 'Pago actualizado exitosamente',
@@ -292,23 +266,37 @@ const PaymentsManagementPage = () => {
     const getRowColor = (payment) => {
         switch (payment.status) {
             case 'VENCIDO':
-                return '#fca5a5'; // rojo claro
+                return '#fca5a5';
             case 'EN_PROCESO':
             case 'PENDIENTE':
-                return '#fde68a'; // amarillo claro
+                return '#fde68a';
             case 'CONFIRMADO':
-                return '#bbf7d0'; // verde claro
+                return '#bbf7d0';
             default:
                 return '#fff';
         }
     };
 
     // ============================
+    // 7) Agrupar por colegio
+    // ============================
+    const paymentsBySchool = {};
+    filteredPayments.forEach((p) => {
+        const schoolName = p.School ? p.School.name : 'Sin colegio';
+        if (!paymentsBySchool[schoolName]) paymentsBySchool[schoolName] = [];
+        paymentsBySchool[schoolName].push(p);
+    });
+
+    const schoolSections = Object.keys(paymentsBySchool).map((schoolName) => ({
+        schoolName,
+        payments: paymentsBySchool[schoolName]
+    }));
+
+    // ============================
     // Render principal
     // ============================
     return (
         <Container>
-            {/* Encabezado y leyenda en la misma fila, con la leyenda a la derecha */}
             <div
                 style={{
                     display: 'flex',
@@ -321,7 +309,7 @@ const PaymentsManagementPage = () => {
                     Gestión de Pagos
                 </Typography>
 
-                {/* LEYENDA DE COLORES a la derecha */}
+                {/* Leyenda de Colores */}
                 <div
                     style={{
                         background: '#fff',
@@ -334,8 +322,6 @@ const PaymentsManagementPage = () => {
                     <Typography variant="h6" gutterBottom>
                         Leyenda de Colores
                     </Typography>
-
-                    {/* Cada estado con un círculo y texto */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div
@@ -350,7 +336,6 @@ const PaymentsManagementPage = () => {
                                 Confirmado
                             </Typography>
                         </div>
-
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div
                                 style={{
@@ -364,7 +349,6 @@ const PaymentsManagementPage = () => {
                                 Pendiente / En Proceso
                             </Typography>
                         </div>
-
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div
                                 style={{
@@ -390,9 +374,9 @@ const PaymentsManagementPage = () => {
                     size="small"
                     value={searchQuery}
                     onChange={handleSearchChange}
-                    style={{ width: '300px' }}
+                    style={{ width: '220px' }}
                 />
-                <FormControl variant="outlined" size="small" style={{ width: '200px' }}>
+                <FormControl variant="outlined" size="small" style={{ width: '150px' }}>
                     <InputLabel>Estado</InputLabel>
                     <Select
                         value={statusFilter}
@@ -406,96 +390,115 @@ const PaymentsManagementPage = () => {
                         <MenuItem value="VENCIDO">Vencido</MenuItem>
                     </Select>
                 </FormControl>
+
+                <FormControl variant="outlined" size="small" style={{ width: '200px' }}>
+                    <InputLabel>Colegio</InputLabel>
+                    <Select
+                        value={schoolFilter}
+                        onChange={handleSchoolFilterChange}
+                        label="Colegio"
+                    >
+                        <MenuItem value="">Todos</MenuItem>
+                        {schools.map((sch) => (
+                            <MenuItem key={sch.id} value={sch.id}>
+                                {sch.name}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
             </div>
 
-            <Paper>
-                <TableContainer>
-                    <Table>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Padre (Usuario)</TableCell>
-                                <TableCell>Email</TableCell>
-                                <TableCell>Status</TableCell>
-                                <TableCell>Próximo Pago</TableCell>
-                                <TableCell>Último Pago</TableCell>
-                                <TableCell>Monto</TableCell>
-                                <TableCell align="center">Acciones</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {filteredPayments
-                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                .map((payment) => (
-                                    <TableRow
-                                        key={payment.id}
-                                        style={{ backgroundColor: getRowColor(payment) }}
-                                    >
-                                        <TableCell>
-                                            {payment.User ? payment.User.name : '—'}
-                                        </TableCell>
-                                        <TableCell>
-                                            {payment.User ? payment.User.email : '—'}
-                                        </TableCell>
-                                        <TableCell>{payment.status}</TableCell>
-                                        <TableCell>
-                                            {payment.nextPaymentDate
-                                                ? moment(payment.nextPaymentDate, 'YYYY-MM-DD').format(
-                                                    'DD/MM/YYYY'
-                                                )
-                                                : '—'}
-                                        </TableCell>
-                                        <TableCell>
-                                            {payment.lastPaymentDate
-                                                ? moment(payment.lastPaymentDate, 'YYYY-MM-DD').format(
-                                                    'DD/MM/YYYY'
-                                                )
-                                                : '—'}
-                                        </TableCell>
-                                        <TableCell>Q {payment.amount}</TableCell>
-                                        <TableCell align="center">
-                                            {/* Botón para enviar correo */}
-                                            <IconButton
-                                                onClick={() => handleOpenEmailDialog(payment)}
-                                                title="Enviar correo"
-                                                color="primary"
-                                            >
-                                                <SendIcon />
-                                            </IconButton>
-
-                                            {/* Botón para editar */}
-                                            <IconButton
-                                                onClick={() => handleOpenEditDialog(payment)}
-                                                title="Editar"
-                                                color="secondary"
-                                            >
-                                                <EditIcon />
-                                            </IconButton>
-                                        </TableCell>
+            {/* Secciones por colegio */}
+            {schoolSections.map((section) => (
+                <div key={section.schoolName} style={{ marginBottom: '40px' }}>
+                    <Typography variant="h5" style={{ marginBottom: '16px' }}>
+                        {section.schoolName}
+                    </Typography>
+                    <Paper>
+                        <TableContainer>
+                            <Table>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Padre (Usuario)</TableCell>
+                                        <TableCell>Email</TableCell>
+                                        <TableCell>Status</TableCell>
+                                        <TableCell>Próximo Pago</TableCell>
+                                        <TableCell>Último Pago</TableCell>
+                                        <TableCell>Monto</TableCell>
+                                        <TableCell align="center">Acciones</TableCell>
                                     </TableRow>
-                                ))}
-                            {filteredPayments.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={7} align="center">
-                                        No hay pagos registrados.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-                <TablePagination
-                    component="div"
-                    count={filteredPayments.length}
-                    page={page}
-                    onPageChange={handleChangePage}
-                    rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={handleChangeRowsPerPage}
-                    rowsPerPageOptions={[5, 10, 25]}
-                    labelRowsPerPage="Filas por página"
-                />
-            </Paper>
+                                </TableHead>
+                                <TableBody>
+                                    {section.payments
+                                        .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                        .map((payment) => (
+                                            <TableRow
+                                                key={payment.id}
+                                                style={{ backgroundColor: getRowColor(payment) }}
+                                            >
+                                                <TableCell>
+                                                    {payment.User ? payment.User.name : '—'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {payment.User ? payment.User.email : '—'}
+                                                </TableCell>
+                                                <TableCell>{payment.status}</TableCell>
+                                                <TableCell>
+                                                    {payment.nextPaymentDate
+                                                        ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
+                                                        : '—'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {payment.lastPaymentDate
+                                                        ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
+                                                        : '—'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    Q {payment.amount}
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    <IconButton
+                                                        onClick={() => handleOpenEmailDialog(payment)}
+                                                        title="Enviar correo"
+                                                        color="primary"
+                                                    >
+                                                        <SendIcon />
+                                                    </IconButton>
+                                                    <IconButton
+                                                        onClick={() => handleOpenEditDialog(payment)}
+                                                        title="Editar"
+                                                        color="secondary"
+                                                    >
+                                                        <EditIcon />
+                                                    </IconButton>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    {section.payments.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={7} align="center">
+                                                No hay pagos registrados.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                        <TablePagination
+                            component="div"
+                            count={section.payments.length}
+                            page={page}
+                            onPageChange={handleChangePage}
+                            rowsPerPage={rowsPerPage}
+                            onRowsPerPageChange={handleChangeRowsPerPage}
+                            rowsPerPageOptions={[5, 10, 25]}
+                            labelRowsPerPage="Filas por página"
+                        />
+                    </Paper>
+                </div>
+            ))}
 
-            {/* Dialog para enviar correo */}
+            {/* Dialog de enviar correo */}
             <Dialog
                 open={openEmailDialog}
                 onClose={handleCloseEmailDialog}
@@ -524,7 +527,6 @@ const PaymentsManagementPage = () => {
                         value={emailMessage}
                         onChange={(e) => setEmailMessage(e.target.value)}
                     />
-
                     <Button variant="outlined" component="label" sx={{ mt: 2 }}>
                         Adjuntar Archivos
                         <input
@@ -582,8 +584,8 @@ const PaymentsManagementPage = () => {
                         onChange={(e) =>
                             setEditPayment({ ...editPayment, amount: e.target.value })
                         }
-                        // Un poco de padding lateral
                         style={{ paddingLeft: '8px', paddingRight: '8px' }}
+                        disabled
                     />
                     <TextField
                         margin="dense"
@@ -592,12 +594,16 @@ const PaymentsManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
-                        value={editPayment.nextPaymentDate}
+                        value={
+                            editPayment.nextPaymentDate
+                                ? moment(editPayment.nextPaymentDate).format('YYYY-MM-DD')
+                                : ''
+                        }
                         onChange={(e) =>
                             setEditPayment({ ...editPayment, nextPaymentDate: e.target.value })
                         }
-                        // Un poco de padding lateral
                         style={{ paddingLeft: '8px', paddingRight: '8px' }}
+                        disabled
                     />
                     <TextField
                         margin="dense"
@@ -606,13 +612,36 @@ const PaymentsManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
-                        value={editPayment.lastPaymentDate}
+                        value={
+                            editPayment.lastPaymentDate
+                                ? moment(editPayment.lastPaymentDate).format('YYYY-MM-DD')
+                                : ''
+                        }
                         onChange={(e) =>
                             setEditPayment({ ...editPayment, lastPaymentDate: e.target.value })
                         }
-                        // Un poco de padding lateral
                         style={{ paddingLeft: '8px', paddingRight: '8px' }}
                     />
+                    {/* Seleccionar Colegio */}
+                    <FormControl fullWidth margin="dense">
+                        <InputLabel>Colegio</InputLabel>
+                        <Select
+                            value={editPayment.schoolId}
+                            onChange={(e) =>
+                                setEditPayment({ ...editPayment, schoolId: e.target.value })
+                            }
+                            label="Colegio"
+                        >
+                            <MenuItem value="">
+                                <em>Ninguno</em>
+                            </MenuItem>
+                            {schools.map((sch) => (
+                                <MenuItem key={sch.id} value={sch.id}>
+                                    {sch.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseEditDialog}>Cancelar</Button>
@@ -622,7 +651,6 @@ const PaymentsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
