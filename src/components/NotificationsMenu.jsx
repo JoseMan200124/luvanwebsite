@@ -1,5 +1,4 @@
 // src/components/NotificationsMenu.jsx
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
     IconButton,
@@ -16,28 +15,28 @@ import PropTypes from 'prop-types';
 import api from '../utils/axiosConfig';
 import { getSocket } from '../services/socketService';
 
+// Botón estilizado (twin.macro + styled-components)
 const NotificationIconButton = styled(IconButton)`
     ${tw`text-white`}
 `;
 
 const NotificationsMenu = ({ authToken }) => {
+    // Estado local con TODAS las notificaciones (read y unread)
     const [notifications, setNotifications] = useState([]);
     const [anchorEl, setAnchorEl] = useState(null);
     const menuOpen = Boolean(anchorEl);
     const menuRef = useRef();
 
-    // Cargar notificaciones
-    const fetchNotificationsFromAPI = async () => {
+    // 1) Cargar **todas** las notificaciones (read y unread)
+    const fetchAllNotifications = async () => {
         try {
-            const response = await api.get('/notifications', {
-                headers: {
-                    Authorization: `Bearer ${authToken}`,
-                },
-                params: {
-                    limit: 50,
-                    offset: 0,
-                },
+            // Asegúrate de que tu backend, con ?allStatuses=true,
+            // retorne TODAS en data.notifications, sean read o unread
+            const response = await api.get('/notifications?allStatuses=true', {
+                headers: { Authorization: `Bearer ${authToken}` },
             });
+            console.log('RESPUESTA NOTIFICACIONES:', response);
+
             const fetched = Array.isArray(response.data.notifications)
                 ? response.data.notifications
                 : [];
@@ -48,17 +47,53 @@ const NotificationsMenu = ({ authToken }) => {
         }
     };
 
-    useEffect(() => {
-        if (authToken) {
-            fetchNotificationsFromAPI();
+    // 2) Marcar una notificación como leída
+    const markNotificationAsRead = async (notificationId) => {
+        try {
+            await api.put(`/notifications/${notificationId}/read`, null, {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            // En local, cambiamos status => 'read'
+            setNotifications((prev) =>
+                prev.map((n) => {
+                    if (n.id === notificationId) {
+                        return { ...n, status: 'read' };
+                    }
+                    return n;
+                })
+            );
+        } catch (err) {
+            console.error('Error marking notification as read:', err);
         }
+    };
 
-        // Escuchar notificaciones via socket
+    const handleNotificationClick = (notificationId) => {
+        markNotificationAsRead(notificationId);
+        handleMenuClose();
+    };
+
+    // 3) Limpiar todas => marca todas read
+    const handleClearNotifications = async () => {
+        for (const notif of notifications) {
+            if (notif.status === 'unread') {
+                await markNotificationAsRead(notif.id);
+            }
+        }
+        handleMenuClose();
+    };
+
+    // 4) useEffect => cargar notifs + socket
+    useEffect(() => {
+        if (!authToken) return;
+
+        // Cargar TODAS las notificaciones
+        fetchAllNotifications();
+
+        // Conectar socket
         const socket = getSocket();
         if (socket) {
             socket.on('new_notification', (newNoti) => {
                 console.log('Recibida notificación via socket:', newNoti);
-                // Insertar al comienzo
                 setNotifications((prev) => [newNoti, ...prev]);
             });
         }
@@ -70,28 +105,25 @@ const NotificationsMenu = ({ authToken }) => {
         };
     }, [authToken]);
 
-    // Manejo de apertura/cierre del menú
+    // 5) Manejo del Menú
     const handleMenuOpen = async (event) => {
         setAnchorEl(event.currentTarget);
-        if (authToken) {
-            await fetchNotificationsFromAPI();
-        }
+        // Volvemos a pedir la lista más reciente
+        await fetchAllNotifications();
     };
-
     const handleMenuClose = () => {
         setAnchorEl(null);
     };
 
-    const handleClearNotifications = () => {
-        // Esto limpia solo en frontend
-        setNotifications([]);
-        handleMenuClose();
-    };
+    // 6) Cálculo del badge => sólo las que están "unread"
+    // de esta forma, si la notificación ya es "read", el badge no la cuenta.
+    const unreadCount = notifications.filter((n) => n.status === 'unread').length;
 
+    // RENDER
     return (
         <>
             <NotificationIconButton onClick={handleMenuOpen} ref={menuRef}>
-                <Badge badgeContent={notifications.length} color="secondary">
+                <Badge badgeContent={unreadCount} color="secondary">
                     <Notifications />
                 </Badge>
             </NotificationIconButton>
@@ -125,11 +157,10 @@ const NotificationsMenu = ({ authToken }) => {
                     notifications.map((notification, index) => (
                         <div key={notification.id || index}>
                             <MenuItem
-                                onClick={handleMenuClose}
-                                // Forzamos altura y alineamos arriba
+                                onClick={() => handleNotificationClick(notification.id)}
                                 style={{
                                     position: 'relative',
-                                    minHeight: '100px', // más alto para no tapar la fecha
+                                    minHeight: '80px',
                                     alignItems: 'flex-start',
                                 }}
                             >
@@ -139,23 +170,23 @@ const NotificationsMenu = ({ authToken }) => {
                                         flexDirection: 'column',
                                         position: 'relative',
                                         width: '100%',
-                                        paddingRight: '60px', // espacio lateral
-                                        paddingBottom: '28px', // espacio inferior para la fecha
+                                        paddingRight: '60px',
+                                        paddingBottom: '28px',
                                     }}
                                 >
-                                    {/* Título */}
                                     <Typography
                                         variant="body1"
                                         style={{
                                             whiteSpace: 'pre-wrap',
                                             overflowWrap: 'anywhere',
                                             marginBottom: '4px',
+                                            fontWeight: 'bold',
                                         }}
                                     >
                                         {notification.title}
+                                        {notification.status === 'unread' && ' (unread)'}
                                     </Typography>
 
-                                    {/* Mensaje */}
                                     <Typography
                                         variant="body2"
                                         style={{
@@ -166,7 +197,6 @@ const NotificationsMenu = ({ authToken }) => {
                                         {notification.message}
                                     </Typography>
 
-                                    {/* Fecha/hora en esquina inferior derecha */}
                                     <Typography
                                         variant="caption"
                                         color="textSecondary"
