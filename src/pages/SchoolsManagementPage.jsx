@@ -22,8 +22,15 @@ import {
     Snackbar,
     Alert,
     CircularProgress,
+    Chip,
+    Popover,
+    Box,
+    Select,
+    MenuItem,
+    InputLabel,
+    FormControl,
 } from '@mui/material';
-import { Edit, Delete, Add } from '@mui/icons-material';
+import { Edit, Delete, Add, ContentCopy } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
@@ -42,9 +49,13 @@ const SchoolsManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // Aquí guardamos el "schoolSchedules" como un array de objetos:
-    // Ej: [ { day: "Lunes", times: ["06:30", "12:00"] } ]
-    const [schoolSchedules, setSchoolSchedules] = useState([]);
+    // Estados para rutas y grados
+    const [schoolRoutes, setSchoolRoutes] = useState([]);
+    const [schoolGrades, setSchoolGrades] = useState([]); // Nuevo estado para grados
+
+    // Estados para Popover de grados adicionales
+    const [anchorEl, setAnchorEl] = useState(null);
+    const [popoverGrades, setPopoverGrades] = useState([]);
 
     // ============================
     // 1) Cargar lista de colegios
@@ -58,7 +69,42 @@ const SchoolsManagementPage = () => {
                 },
             });
             // La respuesta es { schools: [...] }
-            setSchools(Array.isArray(response.data.schools) ? response.data.schools : []);
+            let fetchedSchools = Array.isArray(response.data.schools) ? response.data.schools : [];
+
+            // Parsear schedules y grades si son cadenas JSON
+            fetchedSchools = fetchedSchools.map((school) => {
+                let parsedSchedules = [];
+                if (typeof school.schedules === 'string' && school.schedules.trim()) {
+                    try {
+                        parsedSchedules = JSON.parse(school.schedules);
+                    } catch (err) {
+                        console.error('Error parseando schedules JSON:', err);
+                        parsedSchedules = [];
+                    }
+                } else if (Array.isArray(school.schedules)) {
+                    parsedSchedules = school.schedules;
+                }
+
+                let parsedGrades = [];
+                if (typeof school.grades === 'string' && school.grades.trim()) {
+                    try {
+                        parsedGrades = JSON.parse(school.grades);
+                    } catch (err) {
+                        console.error('Error parseando grades JSON:', err);
+                        parsedGrades = [];
+                    }
+                } else if (Array.isArray(school.grades)) {
+                    parsedGrades = school.grades;
+                }
+
+                return {
+                    ...school,
+                    schedules: parsedSchedules,
+                    grades: parsedGrades,
+                };
+            });
+
+            setSchools(fetchedSchools);
             setLoading(false);
         } catch (err) {
             console.error('Error al obtener los colegios:', err);
@@ -83,12 +129,13 @@ const SchoolsManagementPage = () => {
             contactPerson: '',
             contactEmail: '',
             contactPhone: '',
-            // Campos nuevos:
-            transportFee: '',
+            transportFeeComplete: '',
+            transportFeeHalf: '',
             duePaymentDay: ''
         });
-        // Schedules vacío
-        setSchoolSchedules([]);
+        // Routes y grades vacío
+        setSchoolRoutes([]);
+        setSchoolGrades([]);
         setOpenDialog(true);
     };
 
@@ -96,11 +143,15 @@ const SchoolsManagementPage = () => {
     // 3) Editar un colegio
     // ============================
     const handleEditClick = (school) => {
-        // Si el back ya retorna transportFee y duePaymentDay, los guardamos.
+        // Si el backend ya retorna transportFeeComplete y transportFeeHalf, los guardamos.
         // En caso de que no vengan, los inicializamos para evitar "undefined".
-        const transportFeeValue =
-            school.transportFee !== undefined && school.transportFee !== null
-                ? school.transportFee
+        const transportFeeCompleteValue =
+            school.transportFeeComplete !== undefined && school.transportFeeComplete !== null
+                ? school.transportFeeComplete
+                : '';
+        const transportFeeHalfValue =
+            school.transportFeeHalf !== undefined && school.transportFeeHalf !== null
+                ? school.transportFeeHalf
                 : '';
         const duePaymentDayValue =
             school.duePaymentDay !== undefined && school.duePaymentDay !== null
@@ -109,29 +160,49 @@ const SchoolsManagementPage = () => {
 
         setSelectedSchool({
             ...school,
-            transportFee: transportFeeValue,
+            transportFeeComplete: transportFeeCompleteValue,
+            transportFeeHalf: transportFeeHalfValue,
             duePaymentDay: duePaymentDayValue
         });
 
-        // Checamos si el campo "schedules" es un string JSON
+        // Manejar routes
         if (typeof school.schedules === 'string' && school.schedules.trim()) {
             try {
                 const parsed = JSON.parse(school.schedules);
                 if (Array.isArray(parsed)) {
-                    setSchoolSchedules(parsed);
+                    setSchoolRoutes(parsed);
                 } else {
-                    setSchoolSchedules([]);
+                    setSchoolRoutes([]);
                 }
             } catch (err) {
                 console.error('Error parseando schedules JSON:', err);
-                setSchoolSchedules([]);
+                setSchoolRoutes([]);
             }
         }
-        // Si ya es un array, lo asignamos directamente
         else if (Array.isArray(school.schedules)) {
-            setSchoolSchedules(school.schedules);
+            setSchoolRoutes(school.schedules);
         } else {
-            setSchoolSchedules([]);
+            setSchoolRoutes([]);
+        }
+
+        // Manejar grades
+        if (typeof school.grades === 'string' && school.grades.trim()) {
+            try {
+                const parsedGrades = JSON.parse(school.grades);
+                if (Array.isArray(parsedGrades)) {
+                    setSchoolGrades(parsedGrades);
+                } else {
+                    setSchoolGrades([]);
+                }
+            } catch (err) {
+                console.error('Error parseando grades JSON:', err);
+                setSchoolGrades([]);
+            }
+        }
+        else if (Array.isArray(school.grades)) {
+            setSchoolGrades(school.grades);
+        } else {
+            setSchoolGrades([]);
         }
 
         setOpenDialog(true);
@@ -161,11 +232,12 @@ const SchoolsManagementPage = () => {
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedSchool(null);
-        setSchoolSchedules([]);
+        setSchoolRoutes([]);
+        setSchoolGrades([]); // Resetear grades
     };
 
     // ============================
-    // 6) Manejadores de input simple (para name, address, city, etc.)
+    // 6) Manejadores de input simple
     // ============================
     const handleInputChange = (e) => {
         setSelectedSchool((prev) => ({
@@ -174,52 +246,86 @@ const SchoolsManagementPage = () => {
         }));
     };
 
-    // ============ Manejo de schoolSchedules (UI Dinámica) ============
-    const handleAddDay = () => {
-        setSchoolSchedules((prev) => [
+    // ============ Manejo de schoolRoutes (UI Dinámica) ============
+    const handleAddRoute = () => {
+        setSchoolRoutes((prev) => [
             ...prev,
-            { day: '', times: [''] }
+            { day: '', times: [''], type: 'ruta Completa' } // Añadir campo 'type' por defecto
         ]);
     };
 
-    const handleRemoveDay = (dayIndex) => {
-        setSchoolSchedules((prev) => {
+    const handleRemoveRoute = (routeIndex) => {
+        setSchoolRoutes((prev) => {
             const newArr = [...prev];
-            newArr.splice(dayIndex, 1);
+            newArr.splice(routeIndex, 1);
             return newArr;
         });
     };
 
-    const handleDayChange = (e, dayIndex) => {
+    const handleRouteChange = (e, routeIndex) => {
         const { value } = e.target;
-        setSchoolSchedules((prev) => {
+        setSchoolRoutes((prev) => {
             const clone = [...prev];
-            clone[dayIndex].day = value;
+            clone[routeIndex].day = value;
             return clone;
         });
     };
 
-    const handleAddTime = (dayIndex) => {
-        setSchoolSchedules((prev) => {
-            const clone = [...prev];
-            clone[dayIndex].times.push('');
-            return clone;
-        });
-    };
-
-    const handleRemoveTime = (dayIndex, timeIndex) => {
-        setSchoolSchedules((prev) => {
-            const clone = [...prev];
-            clone[dayIndex].times.splice(timeIndex, 1);
-            return clone;
-        });
-    };
-
-    const handleTimeChange = (e, dayIndex, timeIndex) => {
+    const handleRouteTypeChange = (e, routeIndex) => {
         const { value } = e.target;
-        setSchoolSchedules((prev) => {
+        setSchoolRoutes((prev) => {
             const clone = [...prev];
-            clone[dayIndex].times[timeIndex] = value;
+            clone[routeIndex].type = value;
+            return clone;
+        });
+    };
+
+    const handleAddTime = (routeIndex) => {
+        setSchoolRoutes((prev) => {
+            const clone = [...prev];
+            clone[routeIndex].times.push('');
+            return clone;
+        });
+    };
+
+    const handleRemoveTime = (routeIndex, timeIndex) => {
+        setSchoolRoutes((prev) => {
+            const clone = [...prev];
+            clone[routeIndex].times.splice(timeIndex, 1);
+            return clone;
+        });
+    };
+
+    const handleTimeChange = (e, routeIndex, timeIndex) => {
+        const { value } = e.target;
+        setSchoolRoutes((prev) => {
+            const clone = [...prev];
+            clone[routeIndex].times[timeIndex] = value;
+            return clone;
+        });
+    };
+
+    // ============ Manejo de schoolGrades (UI Dinámica) ============
+    const handleAddGrade = () => {
+        setSchoolGrades((prev) => [
+            ...prev,
+            { name: '' }
+        ]);
+    };
+
+    const handleRemoveGrade = (gradeIndex) => {
+        setSchoolGrades((prev) => {
+            const newArr = [...prev];
+            newArr.splice(gradeIndex, 1);
+            return newArr;
+        });
+    };
+
+    const handleGradeChange = (e, gradeIndex) => {
+        const { value } = e.target;
+        setSchoolGrades((prev) => {
+            const clone = [...prev];
+            clone[gradeIndex].name = value;
             return clone;
         });
     };
@@ -230,11 +336,19 @@ const SchoolsManagementPage = () => {
     const handleSave = async () => {
         if (!selectedSchool) return;
 
-        // Validaciones específicas para transportFee y duePaymentDay
-        if (Number(selectedSchool.transportFee) < 0) {
+        // Validaciones específicas para transportFeeComplete y transportFeeHalf
+        if (Number(selectedSchool.transportFeeComplete) < 0) {
             setSnackbar({
                 open: true,
-                message: 'La cuota de transporte no puede ser negativa.',
+                message: 'La cuota de transporte completa no puede ser negativa.',
+                severity: 'error'
+            });
+            return;
+        }
+        if (Number(selectedSchool.transportFeeHalf) < 0) {
+            setSnackbar({
+                open: true,
+                message: 'La cuota de transporte media no puede ser negativa.',
                 severity: 'error'
             });
             return;
@@ -252,7 +366,7 @@ const SchoolsManagementPage = () => {
         }
 
         try {
-            // Armamos el payload, incluyendo transportFee y duePaymentDay
+            // Armamos el payload, incluyendo transportFeeComplete y transportFeeHalf
             const payload = {
                 name: selectedSchool.name,
                 address: selectedSchool.address,
@@ -260,8 +374,10 @@ const SchoolsManagementPage = () => {
                 contactPerson: selectedSchool.contactPerson,
                 contactEmail: selectedSchool.contactEmail,
                 contactPhone: selectedSchool.contactPhone,
-                schedules: schoolSchedules, // array => se guardará como JSON en el backend
-                transportFee: selectedSchool.transportFee || 0,
+                schedules: schoolRoutes, // array => se guardará como JSON en el backend
+                grades: schoolGrades, // Nuevo campo
+                transportFeeComplete: selectedSchool.transportFeeComplete || 0.0,
+                transportFeeHalf: selectedSchool.transportFeeHalf || 0.0,
                 duePaymentDay: selectedSchool.duePaymentDay || 1
             };
 
@@ -313,6 +429,45 @@ const SchoolsManagementPage = () => {
         (sch.city || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // ============================
+    // NUEVO: Copiar enlace
+    // ============================
+    const handleCopyLink = (schoolId) => {
+        const baseUrl = window.location.origin;
+        const link = `${baseUrl}/schools/enroll/${schoolId}`;
+
+        navigator.clipboard.writeText(link).then(() => {
+            setSnackbar({
+                open: true,
+                message: 'Enlace copiado al portapapeles',
+                severity: 'success',
+            });
+        }).catch((err) => {
+            console.error('Error copiando enlace:', err);
+            setSnackbar({
+                open: true,
+                message: 'No se pudo copiar el enlace',
+                severity: 'error'
+            });
+        });
+    };
+
+    // ============================
+    // Manejo del Popover para grados adicionales
+    // ============================
+    const handlePopoverOpen = (event, grades) => {
+        setAnchorEl(event.currentTarget);
+        setPopoverGrades(grades);
+    };
+
+    const handlePopoverClose = () => {
+        setAnchorEl(null);
+        setPopoverGrades([]);
+    };
+
+    const open = Boolean(anchorEl);
+    const id = open ? 'grades-popover' : undefined;
+
     return (
         <SchoolsContainer>
             <Typography variant="h4" gutterBottom>
@@ -352,38 +507,74 @@ const SchoolsManagementPage = () => {
                                     <TableCell>Contacto</TableCell>
                                     <TableCell>Teléfono</TableCell>
                                     <TableCell>Email</TableCell>
+                                    <TableCell>Grados</TableCell> {/* Nueva columna */}
+                                    <TableCell align="center">Formulario</TableCell>
                                     <TableCell align="center">Acciones</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {filteredSchools
                                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                    .map((school) => (
-                                        <TableRow key={school.id}>
-                                            <TableCell>{school.name}</TableCell>
-                                            <TableCell>{school.city}</TableCell>
-                                            <TableCell>{school.address}</TableCell>
-                                            <TableCell>{school.contactPerson}</TableCell>
-                                            <TableCell>{school.contactPhone}</TableCell>
-                                            <TableCell>{school.contactEmail}</TableCell>
-                                            <TableCell align="center">
-                                                <Tooltip title="Editar">
-                                                    <IconButton onClick={() => handleEditClick(school)}>
-                                                        <Edit />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <Tooltip title="Eliminar">
-                                                    <IconButton onClick={() => handleDeleteClick(school.id)}>
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                                    .map((school) => {
+                                        const maxVisibleGrades = 3;
+                                        const visibleGrades = school.grades.slice(0, maxVisibleGrades);
+                                        const remainingGrades = school.grades.length - maxVisibleGrades;
+
+                                        return (
+                                            <TableRow key={school.id}>
+                                                <TableCell>{school.name}</TableCell>
+                                                <TableCell>{school.city}</TableCell>
+                                                <TableCell>{school.address}</TableCell>
+                                                <TableCell>{school.contactPerson}</TableCell>
+                                                <TableCell>{school.contactPhone}</TableCell>
+                                                <TableCell>{school.contactEmail}</TableCell>
+                                                <TableCell>
+                                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                                        {visibleGrades.map((grade, index) => (
+                                                            <Chip
+                                                                key={index}
+                                                                label={grade.name}
+                                                                size="small"
+                                                                color="primary"
+                                                            />
+                                                        ))}
+                                                        {remainingGrades > 0 && (
+                                                            <Chip
+                                                                label={`+${remainingGrades} más`}
+                                                                size="small"
+                                                                onClick={(e) => handlePopoverOpen(e, school.grades.slice(maxVisibleGrades))}
+                                                                clickable
+                                                                color="secondary"
+                                                            />
+                                                        )}
+                                                    </Box>
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    <Tooltip title="Copiar enlace">
+                                                        <IconButton onClick={() => handleCopyLink(school.id)}>
+                                                            <ContentCopy />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    <Tooltip title="Editar">
+                                                        <IconButton onClick={() => handleEditClick(school)}>
+                                                            <Edit />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title="Eliminar">
+                                                        <IconButton onClick={() => handleDeleteClick(school.id)}>
+                                                            <Delete />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })
                                 }
                                 {filteredSchools.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={7} align="center">
+                                        <TableCell colSpan={9} align="center">
                                             No se encontraron colegios.
                                         </TableCell>
                                     </TableRow>
@@ -475,15 +666,26 @@ const SchoolsManagementPage = () => {
                         onChange={handleInputChange}
                     />
 
-                    {/* Campos NUEVOS: transportFee y duePaymentDay */}
+                    {/* Campos NUEVOS: transportFeeComplete y transportFeeHalf */}
                     <TextField
                         margin="dense"
-                        name="transportFee"
-                        label="Cuota de Transporte (Q)"
+                        name="transportFeeComplete"
+                        label="Cuota de Transporte Completa (Q)"
                         type="number"
                         fullWidth
                         variant="outlined"
-                        value={selectedSchool ? selectedSchool.transportFee : ''}
+                        value={selectedSchool ? selectedSchool.transportFeeComplete : ''}
+                        onChange={handleInputChange}
+                        required
+                    />
+                    <TextField
+                        margin="dense"
+                        name="transportFeeHalf"
+                        label="Cuota de Transporte Media (Q)"
+                        type="number"
+                        fullWidth
+                        variant="outlined"
+                        value={selectedSchool ? selectedSchool.transportFeeHalf : ''}
                         onChange={handleInputChange}
                         required
                     />
@@ -499,18 +701,18 @@ const SchoolsManagementPage = () => {
                         required
                     />
 
-                    {/* Horarios con UI/UX */}
+                    {/* Título actualizado: Rutas */}
                     <Typography variant="h6" style={{ marginTop: '1rem' }}>
-                        Horarios del Colegio
+                        Rutas
                     </Typography>
-                    {schoolSchedules.map((sch, dayIndex) => (
-                        <Paper key={dayIndex} style={{ padding: '1rem', marginTop: '1rem' }}>
+                    {schoolRoutes.map((route, routeIndex) => (
+                        <Paper key={routeIndex} style={{ padding: '1rem', marginTop: '1rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <Typography variant="subtitle1">
-                                    Horario #{dayIndex + 1}
+                                    Ruta #{routeIndex + 1}
                                 </Typography>
                                 <IconButton
-                                    onClick={() => handleRemoveDay(dayIndex)}
+                                    onClick={() => handleRemoveRoute(routeIndex)}
                                     color="error"
                                     size="small"
                                 >
@@ -520,17 +722,35 @@ const SchoolsManagementPage = () => {
                             <TextField
                                 margin="dense"
                                 name="day"
-                                label="Día"
+                                label="Día/Días"
                                 type="text"
                                 fullWidth
                                 variant="outlined"
-                                value={sch.day}
-                                onChange={(e) => handleDayChange(e, dayIndex)}
+                                value={route.day}
+                                onChange={(e) => handleRouteChange(e, routeIndex)}
+                                required
                             />
+
+                            {/* Nuevo: Select para Tipo de Ruta */}
+                            <FormControl fullWidth variant="outlined" margin="dense" required>
+                                <InputLabel id={`route-type-label-${routeIndex}`}>Tipo de Ruta</InputLabel>
+                                <Select
+                                    labelId={`route-type-label-${routeIndex}`}
+                                    label="Tipo de Ruta"
+                                    value={route.type}
+                                    onChange={(e) => handleRouteTypeChange(e, routeIndex)}
+                                    name="type"
+                                >
+                                    <MenuItem value="ruta Completa">Ruta Completa</MenuItem>
+                                    <MenuItem value="media AM">Media AM</MenuItem>
+                                    <MenuItem value="media PM">Media PM</MenuItem>
+                                </Select>
+                            </FormControl>
+
                             <Typography variant="subtitle2" style={{ marginTop: '0.5rem' }}>
                                 Horas
                             </Typography>
-                            {sch.times.map((timeValue, timeIndex) => (
+                            {route.times.map((timeValue, timeIndex) => (
                                 <div
                                     key={timeIndex}
                                     style={{
@@ -545,13 +765,14 @@ const SchoolsManagementPage = () => {
                                         variant="outlined"
                                         type="time"
                                         value={timeValue}
-                                        onChange={(e) => handleTimeChange(e, dayIndex, timeIndex)}
+                                        onChange={(e) => handleTimeChange(e, routeIndex, timeIndex)}
                                         InputLabelProps={{
                                             shrink: true,
                                         }}
+                                        required
                                     />
                                     <IconButton
-                                        onClick={() => handleRemoveTime(dayIndex, timeIndex)}
+                                        onClick={() => handleRemoveTime(routeIndex, timeIndex)}
                                         color="error"
                                         size="small"
                                     >
@@ -562,7 +783,7 @@ const SchoolsManagementPage = () => {
                             <Button
                                 variant="outlined"
                                 startIcon={<Add />}
-                                onClick={() => handleAddTime(dayIndex)}
+                                onClick={() => handleAddTime(routeIndex)}
                             >
                                 Agregar hora
                             </Button>
@@ -572,10 +793,51 @@ const SchoolsManagementPage = () => {
                     <Button
                         variant="contained"
                         style={{ marginTop: '1rem' }}
-                        onClick={handleAddDay}
+                        onClick={handleAddRoute}
                         startIcon={<Add />}
                     >
-                        Agregar Día
+                        Agregar Ruta
+                    </Button>
+
+                    {/* Nueva Sección: Gestión de Grados */}
+                    <Typography variant="h6" style={{ marginTop: '2rem' }}>
+                        Grados del Colegio
+                    </Typography>
+                    {schoolGrades.map((grade, gradeIndex) => (
+                        <Paper key={gradeIndex} style={{ padding: '1rem', marginTop: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="subtitle1">
+                                    Grado #{gradeIndex + 1}
+                                </Typography>
+                                <IconButton
+                                    onClick={() => handleRemoveGrade(gradeIndex)}
+                                    color="error"
+                                    size="small"
+                                >
+                                    <Delete />
+                                </IconButton>
+                            </div>
+                            <TextField
+                                margin="dense"
+                                name="name"
+                                label="Nombre del Grado"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={grade.name}
+                                onChange={(e) => handleGradeChange(e, gradeIndex)}
+                                required
+                            />
+                        </Paper>
+                    ))}
+
+                    <Button
+                        variant="outlined"
+                        style={{ marginTop: '1rem' }}
+                        onClick={handleAddGrade}
+                        startIcon={<Add />}
+                    >
+                        Agregar Grado
                     </Button>
                 </DialogContent>
                 <DialogActions>
@@ -592,6 +854,35 @@ const SchoolsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
+            {/* Popover para Grados Adicionales */}
+            <Popover
+                id={id}
+                open={open}
+                anchorEl={anchorEl}
+                onClose={handlePopoverClose}
+                anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'left',
+                }}
+                transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'left',
+                }}
+            >
+                <Box sx={{ p: 2 }}>
+                    <Typography variant="subtitle1">Grados Adicionales:</Typography>
+                    {popoverGrades.map((grade, index) => (
+                        <Chip
+                            key={index}
+                            label={grade.name}
+                            size="small"
+                            color="primary"
+                            sx={{ m: 0.5 }}
+                        />
+                    ))}
+                </Box>
+            </Popover>
+
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
@@ -604,6 +895,7 @@ const SchoolsManagementPage = () => {
             </Snackbar>
         </SchoolsContainer>
     );
+
 };
 
 export default SchoolsManagementPage;

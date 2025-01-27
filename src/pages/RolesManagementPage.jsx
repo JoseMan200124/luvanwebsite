@@ -70,7 +70,9 @@ const RolesManagementPage = () => {
         mainAddress: '',
         alternativeAddress: '',
         students: [],
-        scheduleSlots: []
+        scheduleSlots: [],
+        // AÑADIMOS specialFee POR DEFECTO
+        specialFee: 0
     });
 
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
@@ -104,11 +106,7 @@ const RolesManagementPage = () => {
         fetchSchools();
         fetchBuses();
         fetchContracts();
-
-        // =====================================================
-        // NUEVO: Obtener todos los pilotos (para supervisores)
-        // =====================================================
-        fetchAllPilots();
+        fetchAllPilots(); // Para supervisores
     }, []);
 
     const fetchAllPilots = async () => {
@@ -213,7 +211,11 @@ const RolesManagementPage = () => {
                 mainAddress: user.FamilyDetail.mainAddress || '',
                 alternativeAddress: user.FamilyDetail.alternativeAddress || '',
                 students: user.FamilyDetail.Students || [],
-                scheduleSlots: user.FamilyDetail.ScheduleSlots || []
+                scheduleSlots: user.FamilyDetail.ScheduleSlots || [],
+                // Cargar specialFee si existe
+                specialFee: user.FamilyDetail.specialFee !== undefined
+                    ? user.FamilyDetail.specialFee
+                    : 0
             });
         } else {
             setFamilyDetail({
@@ -228,7 +230,8 @@ const RolesManagementPage = () => {
                 mainAddress: '',
                 alternativeAddress: '',
                 students: [],
-                scheduleSlots: []
+                scheduleSlots: [],
+                specialFee: 0
             });
         }
 
@@ -250,31 +253,10 @@ const RolesManagementPage = () => {
         // NUEVO: Si es supervisor => obtener la lista de pilotos asignados
         // =====================================================
         if (user.Role && user.Role.name === 'Supervisor') {
-            // 1) Obtenemos la relación SupervisorPilots
-            //    * Para simplificar, podemos traerlo del back con includes
-            //    * O lo hacemos con un endpoint. Suponiendo que getUsers() ya lo trae
-            //      ... no lo tenemos en getUsers() en este momento, habría que expandirlo.
-            //      * Alternativamente, creamos un endpoint para eso, pero por simplicidad
-            //        haremos un "mini fetch" en updateUser.
-
-            //     Para este ejemplo, vamos a suponer que NO lo tenemos y necesitamos
-            //     un request. O lo guardamos manualmente. Escogemos la vía "manual" aquí:
-            // 2) Buscamos en la BD => Hacemos una request adicional
-            try {
-                const resp = await api.get('/users');
-                // Este GET no trae la pivot. Para ello habría que modificar el backend
-                // y hacer un include: [ { model: SupervisorPilot, as: 'supervisorPilots' } ]
-                // Para no complicarnos, supongamos que "user" ya trae un "supervisorPilots" array:
-                // EJEMPLO:
-                // setSelectedSupervisorPilots(user.supervisorPilots.map(sp => sp.pilotId));
-                // Lo real es que habría que expandir el getUsers o un getUserById
-                setSelectedSupervisorPilots(
-                    user.supervisorPilots ? user.supervisorPilots.map(sp => sp.pilotId) : []
-                );
-            } catch (err) {
-                console.error('Error al obtener la info de SupervisorPilots:', err);
-                setSelectedSupervisorPilots([]);
-            }
+            // En este ejemplo simulamos la carga de supervisorPilots desde user
+            setSelectedSupervisorPilots(
+                user.supervisorPilots ? user.supervisorPilots.map(sp => sp.pilotId) : []
+            );
         } else {
             setSelectedSupervisorPilots([]);
         }
@@ -305,7 +287,8 @@ const RolesManagementPage = () => {
             mainAddress: '',
             alternativeAddress: '',
             students: [],
-            scheduleSlots: []
+            scheduleSlots: [],
+            specialFee: 0
         });
 
         setSelectedContractUuid('');
@@ -867,6 +850,19 @@ const RolesManagementPage = () => {
                                         onChange={handleFamilyDetailChange}
                                     />
                                 </Grid>
+
+                                {/* DESCUENTO ESPECIAL */}
+                                <Grid item xs={12} md={6}>
+                                    <TextField
+                                        name="specialFee"
+                                        label="Descuento Especial (monto fijo)"
+                                        type="number"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.specialFee}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
                             </Grid>
 
                             <Typography variant="h6" sx={{ mt: 3 }}>
@@ -999,7 +995,6 @@ const RolesManagementPage = () => {
                             </Typography>
                         </>
                     )}
-
 
                     {selectedUser?.roleId == 6 && (
                         <>

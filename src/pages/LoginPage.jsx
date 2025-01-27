@@ -7,20 +7,19 @@ import {
     Button,
     Typography,
     Link,
-    Divider,
     Snackbar,
     Alert,
     Box
 } from '@mui/material';
 import { AuthContext } from '../context/AuthProvider';
 import ForgotPasswordModal from '../components/modals/ForgotPasswordModal';
-import { Google as GoogleIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { keyframes } from 'styled-components';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import logoLuvan from '../assets/img/logo-luvan.jpg';
+import logoLuvan from '../assets/img/logo-sin-fondo.png';
 
+// (Opcionales) Animaciones
 const moveUp = keyframes`
     0% {
         background-position: center bottom;
@@ -30,30 +29,43 @@ const moveUp = keyframes`
     }
 `;
 
-const LoginContainer = tw.div`flex flex-col md:flex-row flex-grow min-h-screen`;
-
-const LeftSection = styled.div`
-    ${tw`flex flex-col items-center justify-center bg-gray-900 text-white md:w-1/2 p-8 relative overflow-hidden`}
-    &::before {
-        content: '';
-        ${tw`absolute inset-0`}
-        background-image: url('data:image/svg+xml;charset=UTF-8,<svg width="200" height="600" xmlns="http://www.w3.org/2000/svg"><text x="0" y="200" font-size="200" fill="%232D966C20">🚍</text><text x="0" y="400" font-size="200" fill="%232D966C20">📚</text><text x="0" y="600" font-size="200" fill="%232D966C20">🎒</text></svg>');
-        background-repeat: repeat-y;
-        background-size: contain;
-        animation: ${moveUp} 30s linear infinite;
+const fadeIn = keyframes`
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
     }
 `;
 
-const Logo = styled.img`
-    ${tw`h-20 mb-4`}
+/* Contenedores principales */
+const LoginContainer = tw.div`flex flex-col md:flex-row flex-grow min-h-screen`;
+
+const LeftSection = styled.div`
+    ${tw`flex flex-col items-center justify-center bg-gray-800 text-white md:w-1/2 p-8 relative overflow-hidden`}
 `;
 
-const Slogan = tw(Typography)`text-center text-lg mt-2`;
+const RightSection = tw.div`flex flex-col items-center justify-center bg-[rgb(31,29,29)] md:w-1/2 p-8`;
 
-const RightSection = tw.div`flex flex-col items-center justify-center bg-white md:w-1/2 p-8`;
+/* Textos de la parte izquierda */
+const Title = styled(Typography)`
+    ${tw`text-center font-bold mb-2`}
+    color: #FFFFFF;
+`;
 
+const Slogan = styled(Typography)`
+    ${tw`text-center text-lg mt-2`}
+    color: #FFFFFF;
+`;
+
+/* Logo */
+const Logo = styled.img`
+    ${tw`h-20 w-auto mb-4`}
+`;
+
+/* Contenedor principal del formulario */
 const LoginFormContainer = styled.div`
-    ${tw`bg-gray-50 rounded-lg p-8 shadow-lg relative w-full max-w-md`}
+    ${tw`relative bg-gray-50 rounded-lg p-8 shadow-lg w-full max-w-md mx-auto flex flex-col items-center`}
 `;
 
 const FormTitleTab = styled.div`
@@ -62,6 +74,7 @@ const FormTitleTab = styled.div`
 
 const FormTitle = tw(Typography)`text-white font-semibold`;
 
+/* Campos del formulario */
 const StyledTextField = styled(TextField)`
     & .MuiInputBase-root {
         ${tw`bg-white rounded`}
@@ -90,15 +103,7 @@ const ErrorMessage = styled(Typography)`
     ${tw`mb-4 text-center text-red-600`}
 `;
 
-const fadeIn = keyframes`
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-`;
-
+/* Snackbar con animación */
 const AnimatedSnackbar = styled(Snackbar)`
     & .MuiAlert-root {
         animation: ${fadeIn} 0.5s ease-out;
@@ -140,7 +145,6 @@ const LoginPage = () => {
         setSnackbarMessage('');
         setSnackbarSeverity('success');
 
-        // Trimear el correo electrónico para eliminar espacios en blanco al inicio y al final
         const trimmedEmail = formData.email.trim();
 
         if (!trimmedEmail || !formData.password) {
@@ -149,14 +153,12 @@ const LoginPage = () => {
         }
 
         try {
-            // Utilizar el correo electrónico sin espacios
             await login(trimmedEmail, formData.password);
             setSnackbarMessage('¡Inicio de sesión exitoso!');
             setSnackbarSeverity('success');
             setOpenSnackbar(true);
             navigate('/admin/dashboard');
         } catch (err) {
-            // Verificar si el error es por roles restringidos
             const customMessage = err.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
             setError(customMessage);
             setSnackbarMessage(customMessage);
@@ -179,28 +181,36 @@ const LoginPage = () => {
     return (
         <Box tw="flex flex-col min-h-screen">
             <Navbar />
+
             <LoginContainer>
+                {/* Sección izquierda con Título y Slogan */}
                 <LeftSection>
-                    <Logo src={logoLuvan} alt="Transportes Luvan" />
-                    <Typography variant="h4" tw="text-center font-bold mb-4">
-                        Transportes Luvan
-                    </Typography>
+                    <Title variant="h4">Transportes Luvan</Title>
                     <Slogan variant="subtitle1">
                         Soluciones de Transporte Escolar Seguras y Confiables
                     </Slogan>
                 </LeftSection>
 
+                {/* Sección derecha con el formulario */}
                 <RightSection>
                     <LoginFormContainer>
+                        {/* Pestaña verde con el título "Iniciar Sesión" */}
                         <FormTitleTab>
                             <FormTitle variant="h6">Iniciar Sesión</FormTitle>
                         </FormTitleTab>
+
+                        {/* Logo centrado */}
+                        <Logo src={logoLuvan} alt="Transportes Luvan" />
+
+                        {/* Mensaje de error, si corresponde */}
                         {error && (
                             <ErrorMessage variant="body1">
                                 {error}
                             </ErrorMessage>
                         )}
-                        <form tw="mt-8" onSubmit={handleSubmit}>
+
+                        {/* Formulario con margen superior para separarlo del logo */}
+                        <form tw="mt-6 w-full" onSubmit={handleSubmit}>
                             <StyledTextField
                                 label="Correo Electrónico"
                                 variant="outlined"
@@ -226,19 +236,34 @@ const LoginPage = () => {
                                 required
                                 aria-label="Contraseña"
                             />
-                            <ForgotPasswordLink href="#" variant="body2" onClick={handleOpenModal}>
+
+                            <ForgotPasswordLink
+                                href="#"
+                                variant="body2"
+                                onClick={handleOpenModal}
+                            >
                                 ¿Olvidaste tu contraseña?
                             </ForgotPasswordLink>
-                            <LoginButton type="submit" variant="contained" fullWidth size="large">
+
+                            <LoginButton
+                                type="submit"
+                                variant="contained"
+                                fullWidth
+                                size="large"
+                            >
                                 Ingresar
                             </LoginButton>
                         </form>
                     </LoginFormContainer>
                 </RightSection>
             </LoginContainer>
+
             <Footer />
 
-            <ForgotPasswordModal open={isModalOpen} handleClose={handleCloseModal} />
+            <ForgotPasswordModal
+                open={isModalOpen}
+                handleClose={handleCloseModal}
+            />
 
             <AnimatedSnackbar
                 open={openSnackbar}
@@ -246,7 +271,11 @@ const LoginPage = () => {
                 onClose={handleSnackbarClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                <Alert
+                    onClose={handleSnackbarClose}
+                    severity={snackbarSeverity}
+                    sx={{ width: '100%' }}
+                >
                     {snackbarMessage}
                 </Alert>
             </AnimatedSnackbar>

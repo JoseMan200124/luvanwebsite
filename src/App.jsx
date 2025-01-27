@@ -15,6 +15,10 @@ import ContractsManagementPage from './pages/ContractsManagementPage';
 import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
 import FilledContractViewer from './pages/FilledContractViewer';
+import SchoolsManagementPage from './pages/SchoolsManagementPage';
+
+// 1) IMPORTAMOS NUEVA PÁGINA:
+import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage';
 
 // Importas tus "modules"
 import { modules } from './modules';
@@ -51,11 +55,11 @@ function App() {
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/mfa" element={<MFAVerify />} />
 
-                    {/* Ruta pública para llenar contratos compartidos */}
+                    {/* Rutas para llenar contratos compartidos */}
                     <Route path="/contracts" element={<ContractsManagementPage />} />
                     <Route path="/contracts/share/:uuid" element={<ContractFillPage />} />
 
-                    {/* Nueva Ruta para ver detalles de contratos llenados */}
+                    {/* Ver detalles de contratos llenados */}
                     <Route
                         path="/admin/contratos-llenados/:uuid"
                         element={
@@ -65,7 +69,7 @@ function App() {
                         }
                     />
 
-                    {/* Ruta para ver detalles de contratos originales */}
+                    {/* Ver detalles de contratos originales */}
                     <Route
                         path="/admin/contratos/:uuid"
                         element={
@@ -73,6 +77,12 @@ function App() {
                                 <ContractViewer />
                             </ProtectedRoute>
                         }
+                    />
+
+                    {/* 2) NUEVA RUTA PÚBLICA PARA FORMULARIO DE INSCRIPCIÓN POR COLEGIO */}
+                    <Route
+                        path="/schools/enroll/:schoolId"
+                        element={<SchoolEnrollmentPage />}
                     />
 
                     {/* Rutas protegidas con layout */}
@@ -90,7 +100,6 @@ function App() {
 
                         {/* Rutas dinámicas generadas a partir de "modules.js" */}
                         {renderDynamicRoutes()}
-
 
                         {/* Roles y Permisos */}
                         <Route

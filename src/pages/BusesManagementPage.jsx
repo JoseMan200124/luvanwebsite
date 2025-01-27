@@ -1,4 +1,4 @@
-// src/pages/BusesManagementPage.js
+// src/pages/BusesManagementPage.jsx
 
 import React, { useState, useEffect, useContext } from 'react';
 import {
@@ -125,6 +125,7 @@ const BusesManagementPage = () => {
             description: '',
             pilotId: '',
             monitoraId: '',
+            routeNumber: '', // Añadido
             files: [],
         });
         setOpenDialog(true);
@@ -141,6 +142,7 @@ const BusesManagementPage = () => {
             description: bus.description || '',
             pilotId: bus.pilotId || '',
             monitoraId: bus.monitoraId || '',
+            routeNumber: bus.routeNumber || '', // Añadido
             files: bus.files || [],
         });
         setOpenDialog(true);
@@ -212,6 +214,7 @@ const BusesManagementPage = () => {
             formData.append('plate', selectedBus.plate);
             formData.append('capacity', selectedBus.capacity);
             formData.append('description', selectedBus.description);
+            formData.append('routeNumber', selectedBus.routeNumber); // Añadido
 
             if (selectedBus.pilotId) {
                 formData.append('pilotId', selectedBus.pilotId);
@@ -316,8 +319,11 @@ const BusesManagementPage = () => {
      */
     const filteredBuses = buses.filter((bus) => {
         const inPlate = bus.plate.toLowerCase().includes(searchQuery.toLowerCase());
-        const inDesc = bus.description && bus.description.toLowerCase().includes(searchQuery.toLowerCase());
-        return inPlate || inDesc;
+        const inDesc =
+            bus.description && bus.description.toLowerCase().includes(searchQuery.toLowerCase());
+        const inRouteNumber =
+            bus.routeNumber && bus.routeNumber.toLowerCase().includes(searchQuery.toLowerCase());
+        return inPlate || inDesc || inRouteNumber;
     });
 
     /**
@@ -371,6 +377,9 @@ const BusesManagementPage = () => {
                                 <TableRow>
                                     <TableCell>Placa</TableCell>
                                     <TableCell>Capacidad</TableCell>
+                                    {/* NUEVA COLUMNA "Número de Ruta" */}
+                                    <TableCell>Número de Ruta</TableCell>
+                                    <TableCell>Ocupación</TableCell>
                                     <TableCell>Descripción</TableCell>
                                     <TableCell>Piloto</TableCell>
                                     <TableCell>Monitora</TableCell>
@@ -385,6 +394,10 @@ const BusesManagementPage = () => {
                                         <TableRow key={bus.id}>
                                             <TableCell>{bus.plate}</TableCell>
                                             <TableCell>{bus.capacity}</TableCell>
+                                            {/* MOSTRAR Número de Ruta */}
+                                            <TableCell>{bus.routeNumber || 'N/A'}</TableCell>
+                                            {/* Mostramos la ocupación (0 si no existe) */}
+                                            <TableCell>{bus.occupation || 0}</TableCell>
                                             <TableCell>{bus.description}</TableCell>
                                             {/* MOSTRAR NOMBRE DEL PILOTO si existe */}
                                             <TableCell>
@@ -396,7 +409,7 @@ const BusesManagementPage = () => {
                                             </TableCell>
                                             <TableCell>
                                                 <List>
-                                                    {bus.files.map(file => (
+                                                    {bus.files.map((file) => (
                                                         <ListItem key={file.id}>
                                                             {file.fileType === 'application/pdf'
                                                                 ? <InsertDriveFile />
@@ -446,7 +459,7 @@ const BusesManagementPage = () => {
                                     ))}
                                 {filteredBuses.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={7} align="center">
+                                        <TableCell colSpan={9} align="center">
                                             No se encontraron buses.
                                         </TableCell>
                                     </TableRow>
@@ -493,6 +506,17 @@ const BusesManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         value={selectedBus ? selectedBus.capacity : ''}
+                        onChange={handleInputChange}
+                    />
+                    {/* NUEVO: Campo para Número de Ruta */}
+                    <TextField
+                        margin="dense"
+                        name="routeNumber"
+                        label="Número de Ruta"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={selectedBus ? selectedBus.routeNumber : ''}
                         onChange={handleInputChange}
                     />
                     <TextField
