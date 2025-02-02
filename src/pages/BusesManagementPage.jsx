@@ -1,5 +1,3 @@
-// src/pages/BusesManagementPage.jsx
-
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -31,13 +29,35 @@ import {
     ListItemText,
     ListItemSecondaryAction,
     Link,
+    Box
 } from '@mui/material';
-import { Edit, Delete, Add, InsertDriveFile, Image as ImageIcon } from '@mui/icons-material';
+import {
+    Edit,
+    Delete,
+    Add,
+    InsertDriveFile,
+    Image as ImageIcon,
+    FileUpload
+} from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 
 const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
+
+/**
+ * Función para formatear fecha/hora (para el nombre del archivo de plantilla, etc.)
+ */
+const getFormattedDateTime = () => {
+    const currentDate = new Date();
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const day = String(currentDate.getDate()).padStart(2, '0');
+    const hours = String(currentDate.getHours()).padStart(2, '0');
+    const minutes = String(currentDate.getMinutes()).padStart(2, '0');
+    const seconds = String(currentDate.getSeconds()).padStart(2, '0');
+    return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+};
 
 const BusesManagementPage = () => {
     const { auth } = useContext(AuthContext);
@@ -46,7 +66,11 @@ const BusesManagementPage = () => {
     const [selectedBus, setSelectedBus] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const [snackbar, setSnackbar] = useState({
+        open: false,
+        message: '',
+        severity: 'success'
+    });
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -57,6 +81,12 @@ const BusesManagementPage = () => {
     // Monitores disponibles
     const [availableMonitors, setAvailableMonitors] = useState([]);
 
+    // ==== Carga Masiva ====
+    const [openBulkDialog, setOpenBulkDialog] = useState(false);
+    const [bulkFile, setBulkFile] = useState(null);
+    const [bulkResults, setBulkResults] = useState(null);
+    const [bulkLoading, setBulkLoading] = useState(false);
+
     /**
      * Cargar lista de Buses
      */
@@ -64,28 +94,29 @@ const BusesManagementPage = () => {
         setLoading(true);
         try {
             const response = await api.get('/buses', {
-                headers: {
-                    Authorization: `Bearer ${auth.token}`,
-                },
+                headers: { Authorization: `Bearer ${auth.token}` }
             });
             const data = response.data;
             setBuses(Array.isArray(data.buses) ? data.buses : []);
             setLoading(false);
         } catch (err) {
             console.error('Error fetching buses:', err);
-            setSnackbar({ open: true, message: 'Error al obtener los buses', severity: 'error' });
+            setSnackbar({
+                open: true,
+                message: 'Error al obtener los buses',
+                severity: 'error'
+            });
             setLoading(false);
         }
     };
 
     /**
-     * Cargar lista de pilotos (role=Piloto)
+     * Cargar lista de pilotos y monitores
      */
     const fetchPilots = async () => {
         try {
-            // Endpoint para obtener los pilotos
             const response = await api.get('/users/pilots', {
-                headers: { Authorization: `Bearer ${auth.token}` },
+                headers: { Authorization: `Bearer ${auth.token}` }
             });
             setAvailablePilots(Array.isArray(response.data.users) ? response.data.users : []);
         } catch (err) {
@@ -93,14 +124,10 @@ const BusesManagementPage = () => {
         }
     };
 
-    /**
-     * Cargar lista de monitores (role=Monitora)
-     */
     const fetchMonitors = async () => {
         try {
-            // Endpoint para obtener monitores
             const response = await api.get('/users/monitors', {
-                headers: { Authorization: `Bearer ${auth.token}` },
+                headers: { Authorization: `Bearer ${auth.token}` }
             });
             setAvailableMonitors(Array.isArray(response.data.users) ? response.data.users : []);
         } catch (err) {
@@ -125,8 +152,8 @@ const BusesManagementPage = () => {
             description: '',
             pilotId: '',
             monitoraId: '',
-            routeNumber: '', // Añadido
-            files: [],
+            routeNumber: '',
+            files: []
         });
         setOpenDialog(true);
     };
@@ -142,8 +169,8 @@ const BusesManagementPage = () => {
             description: bus.description || '',
             pilotId: bus.pilotId || '',
             monitoraId: bus.monitoraId || '',
-            routeNumber: bus.routeNumber || '', // Añadido
-            files: bus.files || [],
+            routeNumber: bus.routeNumber || '',
+            files: bus.files || []
         });
         setOpenDialog(true);
     };
@@ -155,14 +182,12 @@ const BusesManagementPage = () => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este bus?')) {
             try {
                 await api.delete(`/buses/${busId}`, {
-                    headers: {
-                        Authorization: `Bearer ${auth.token}`,
-                    },
+                    headers: { Authorization: `Bearer ${auth.token}` }
                 });
                 setSnackbar({
                     open: true,
                     message: 'Bus eliminado exitosamente',
-                    severity: 'success',
+                    severity: 'success'
                 });
                 fetchBuses();
             } catch (err) {
@@ -170,7 +195,7 @@ const BusesManagementPage = () => {
                 setSnackbar({
                     open: true,
                     message: 'Error al eliminar el bus',
-                    severity: 'error',
+                    severity: 'error'
                 });
             }
         }
@@ -185,23 +210,23 @@ const BusesManagementPage = () => {
     };
 
     /**
-     * Manejar cambios en el formulario (inputs)
+     * Manejar cambios en el formulario
      */
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setSelectedBus((prev) => ({
             ...prev,
-            [name]: value,
+            [name]: value
         }));
     };
 
     /**
-     * Manejar archivos subidos en <input type="file" />
+     * Manejar archivos subidos
      */
     const handleFileChange = (e) => {
         setSelectedBus((prev) => ({
             ...prev,
-            files: e.target.files,
+            files: e.target.files
         }));
     };
 
@@ -214,7 +239,7 @@ const BusesManagementPage = () => {
             formData.append('plate', selectedBus.plate);
             formData.append('capacity', selectedBus.capacity);
             formData.append('description', selectedBus.description);
-            formData.append('routeNumber', selectedBus.routeNumber); // Añadido
+            formData.append('routeNumber', selectedBus.routeNumber);
 
             if (selectedBus.pilotId) {
                 formData.append('pilotId', selectedBus.pilotId);
@@ -224,7 +249,6 @@ const BusesManagementPage = () => {
             }
 
             if (selectedBus.files && selectedBus.files.length > 0) {
-                // Subir sólo los archivos nuevos (File objects)
                 Array.from(selectedBus.files).forEach((file) => {
                     if (!file.id) {
                         formData.append('files', file);
@@ -233,30 +257,30 @@ const BusesManagementPage = () => {
             }
 
             if (selectedBus.id) {
-                // Update
+                // Actualizar
                 await api.put(`/buses/${selectedBus.id}`, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
-                        Authorization: `Bearer ${auth.token}`,
-                    },
+                        Authorization: `Bearer ${auth.token}`
+                    }
                 });
                 setSnackbar({
                     open: true,
                     message: 'Bus actualizado exitosamente',
-                    severity: 'success',
+                    severity: 'success'
                 });
             } else {
-                // Create
+                // Crear
                 await api.post('/buses', formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
-                        Authorization: `Bearer ${auth.token}`,
-                    },
+                        Authorization: `Bearer ${auth.token}`
+                    }
                 });
                 setSnackbar({
                     open: true,
                     message: 'Bus creado exitosamente',
-                    severity: 'success',
+                    severity: 'success'
                 });
             }
 
@@ -267,7 +291,7 @@ const BusesManagementPage = () => {
             setSnackbar({
                 open: true,
                 message: 'Error al guardar el bus',
-                severity: 'error',
+                severity: 'error'
             });
         }
     };
@@ -279,14 +303,12 @@ const BusesManagementPage = () => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este archivo?')) {
             try {
                 await api.delete(`/buses/${busId}/files/${fileId}`, {
-                    headers: {
-                        Authorization: `Bearer ${auth.token}`,
-                    },
+                    headers: { Authorization: `Bearer ${auth.token}` }
                 });
                 setSnackbar({
                     open: true,
                     message: 'Archivo eliminado exitosamente',
-                    severity: 'success',
+                    severity: 'success'
                 });
                 fetchBuses();
             } catch (err) {
@@ -294,7 +316,7 @@ const BusesManagementPage = () => {
                 setSnackbar({
                     open: true,
                     message: 'Error al eliminar el archivo',
-                    severity: 'error',
+                    severity: 'error'
                 });
             }
         }
@@ -308,14 +330,14 @@ const BusesManagementPage = () => {
     };
 
     /**
-     * Manejar cambios en la búsqueda
+     * Manejar búsqueda
      */
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
     };
 
     /**
-     * Filtrar buses según la búsqueda
+     * Filtrar buses
      */
     const filteredBuses = buses.filter((bus) => {
         const inPlate = bus.plate.toLowerCase().includes(searchQuery.toLowerCase());
@@ -327,25 +349,67 @@ const BusesManagementPage = () => {
     });
 
     /**
-     * Manejar cambio de página en la tabla
+     * Paginación
      */
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
     };
 
-    /**
-     * Manejar cambio de rowsPerPage
-     */
     const handleChangeRowsPerPage = (event) => {
         setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
     };
+
+    // ============== CARGA MASIVA ==============
+    const handleOpenBulkDialog = () => {
+        setBulkFile(null);
+        setBulkResults(null);
+        setOpenBulkDialog(true);
+    };
+    const handleCloseBulkDialog = () => {
+        setOpenBulkDialog(false);
+    };
+    const handleBulkFileChange = (e) => {
+        const file = e.target.files[0];
+        setBulkFile(file);
+    };
+
+    const handleUploadBulk = async () => {
+        if (!bulkFile) return;
+        setBulkLoading(true);
+        setBulkResults(null);
+
+        const formData = new FormData();
+        formData.append('file', bulkFile);
+
+        try {
+            const resp = await api.post('/buses/bulk-upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${auth.token}`
+                }
+            });
+            setBulkResults(resp.data);
+            fetchBuses();
+        } catch (error) {
+            console.error('Error al subir buses masivamente:', error);
+            setSnackbar({
+                open: true,
+                message: 'Ocurrió un error al procesar la carga masiva',
+                severity: 'error'
+            });
+        }
+        setBulkLoading(false);
+    };
+
+    const downloadFilename = `buses_template_${getFormattedDateTime()}.xlsx`;
 
     return (
         <BusesContainer>
             <Typography variant="h4" gutterBottom>
                 Gestión de Buses
             </Typography>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
                 <TextField
                     label="Buscar buses"
@@ -355,14 +419,25 @@ const BusesManagementPage = () => {
                     onChange={handleSearchChange}
                     style={{ width: '300px' }}
                 />
-                <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<Add />}
-                    onClick={handleAddBus}
-                >
-                    Añadir Bus
-                </Button>
+                <div>
+                    <Button
+                        variant="contained"
+                        color="info"
+                        startIcon={<FileUpload />}
+                        sx={{ mr: 2 }}
+                        onClick={handleOpenBulkDialog}
+                    >
+                        Carga Masiva
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<Add />}
+                        onClick={handleAddBus}
+                    >
+                        Añadir Bus
+                    </Button>
+                </div>
             </div>
 
             {loading ? (
@@ -377,12 +452,11 @@ const BusesManagementPage = () => {
                                 <TableRow>
                                     <TableCell>Placa</TableCell>
                                     <TableCell>Capacidad</TableCell>
-                                    {/* NUEVA COLUMNA "Número de Ruta" */}
                                     <TableCell>Número de Ruta</TableCell>
                                     <TableCell>Ocupación</TableCell>
                                     <TableCell>Descripción</TableCell>
-                                    <TableCell>Piloto</TableCell>
-                                    <TableCell>Monitora</TableCell>
+                                    <TableCell>Piloto (Email)</TableCell>
+                                    <TableCell>Monitora (Email)</TableCell>
                                     <TableCell>Archivos</TableCell>
                                     <TableCell align="center">Acciones</TableCell>
                                 </TableRow>
@@ -394,27 +468,22 @@ const BusesManagementPage = () => {
                                         <TableRow key={bus.id}>
                                             <TableCell>{bus.plate}</TableCell>
                                             <TableCell>{bus.capacity}</TableCell>
-                                            {/* MOSTRAR Número de Ruta */}
                                             <TableCell>{bus.routeNumber || 'N/A'}</TableCell>
-                                            {/* Mostramos la ocupación (0 si no existe) */}
                                             <TableCell>{bus.occupation || 0}</TableCell>
                                             <TableCell>{bus.description}</TableCell>
-                                            {/* MOSTRAR NOMBRE DEL PILOTO si existe */}
-                                            <TableCell>
-                                                {bus.pilot ? bus.pilot.name : ''}
-                                            </TableCell>
-                                            {/* MOSTRAR NOMBRE DE LA MONITORA si existe */}
-                                            <TableCell>
-                                                {bus.monitora ? bus.monitora.name : ''}
-                                            </TableCell>
+                                            {/* Mostrar email del piloto */}
+                                            <TableCell>{bus.pilot ? bus.pilot.email : ''}</TableCell>
+                                            {/* Mostrar email de la monitora */}
+                                            <TableCell>{bus.monitora ? bus.monitora.email : ''}</TableCell>
                                             <TableCell>
                                                 <List>
                                                     {bus.files.map((file) => (
                                                         <ListItem key={file.id}>
-                                                            {file.fileType === 'application/pdf'
-                                                                ? <InsertDriveFile />
-                                                                : <ImageIcon />
-                                                            }
+                                                            {file.fileType === 'application/pdf' ? (
+                                                                <InsertDriveFile />
+                                                            ) : (
+                                                                <ImageIcon />
+                                                            )}
                                                             <ListItemText>
                                                                 <Link
                                                                     href={file.fileUrl}
@@ -480,7 +549,7 @@ const BusesManagementPage = () => {
                 </Paper>
             )}
 
-            {/* Diálogo de Crear/Editar Bus */}
+            {/* Diálogo para crear/editar un bus */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
                 <DialogTitle>
                     {selectedBus && selectedBus.id ? 'Editar Bus' : 'Añadir Bus'}
@@ -508,7 +577,6 @@ const BusesManagementPage = () => {
                         value={selectedBus ? selectedBus.capacity : ''}
                         onChange={handleInputChange}
                     />
-                    {/* NUEVO: Campo para Número de Ruta */}
                     <TextField
                         margin="dense"
                         name="routeNumber"
@@ -530,59 +598,54 @@ const BusesManagementPage = () => {
                         onChange={handleInputChange}
                     />
 
-                    {/* SELECT PILOTO */}
+                    {/* Selección de Piloto: se muestra el email en lugar del nombre */}
                     <FormControl fullWidth margin="dense">
-                        <InputLabel id="pilot-select-label">Piloto</InputLabel>
+                        <InputLabel>Piloto</InputLabel>
                         <Select
-                            labelId="pilot-select-label"
                             name="pilotId"
-                            value={selectedBus ? (selectedBus.pilotId || '') : ''}
+                            value={selectedBus ? selectedBus.pilotId || '' : ''}
                             onChange={(e) =>
                                 setSelectedBus((prev) => ({
                                     ...prev,
-                                    pilotId: e.target.value ? parseInt(e.target.value, 10) : null,
+                                    pilotId: e.target.value ? parseInt(e.target.value, 10) : null
                                 }))
                             }
-                            label="Piloto"
                         >
                             <MenuItem value="">
                                 <em>Ninguno</em>
                             </MenuItem>
                             {availablePilots.map((pilot) => (
                                 <MenuItem key={pilot.id} value={pilot.id}>
-                                    {pilot.name}
+                                    {pilot.email}
                                 </MenuItem>
                             ))}
                         </Select>
                     </FormControl>
 
-                    {/* SELECT MONITORA */}
+                    {/* Selección de Monitora: se muestra el email en lugar del nombre */}
                     <FormControl fullWidth margin="dense">
-                        <InputLabel id="monitora-select-label">Monitora</InputLabel>
+                        <InputLabel>Monitora</InputLabel>
                         <Select
-                            labelId="monitora-select-label"
                             name="monitoraId"
-                            value={selectedBus ? (selectedBus.monitoraId || '') : ''}
+                            value={selectedBus ? selectedBus.monitoraId || '' : ''}
                             onChange={(e) =>
                                 setSelectedBus((prev) => ({
                                     ...prev,
-                                    monitoraId: e.target.value ? parseInt(e.target.value, 10) : null,
+                                    monitoraId: e.target.value ? parseInt(e.target.value, 10) : null
                                 }))
                             }
-                            label="Monitora"
                         >
                             <MenuItem value="">
                                 <em>Ninguna</em>
                             </MenuItem>
                             {availableMonitors.map((monitor) => (
                                 <MenuItem key={monitor.id} value={monitor.id}>
-                                    {monitor.name}
+                                    {monitor.email}
                                 </MenuItem>
                             ))}
                         </Select>
                     </FormControl>
 
-                    {/* INPUT DE ARCHIVOS */}
                     <input
                         accept="application/pdf,image/jpeg,image/png"
                         style={{ display: 'none' }}
@@ -602,37 +665,32 @@ const BusesManagementPage = () => {
                         </Button>
                     </label>
 
-                    {/* LISTA DE ARCHIVOS (si existen) */}
                     {selectedBus && selectedBus.files && selectedBus.files.length > 0 && (
                         <List sx={{ mt: 2 }}>
                             {[...selectedBus.files].map((file, index) => {
                                 if (file.id) {
-                                    // archivo existente
                                     return (
                                         <ListItem key={file.id}>
-                                            {file.fileType === 'application/pdf'
-                                                ? <InsertDriveFile />
-                                                : <ImageIcon />
-                                            }
+                                            {file.fileType === 'application/pdf' ? (
+                                                <InsertDriveFile />
+                                            ) : (
+                                                <ImageIcon />
+                                            )}
                                             <ListItemText>
-                                                <Link
-                                                    href={file.fileUrl}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                >
+                                                <Link href={file.fileUrl} target="_blank" rel="noopener noreferrer">
                                                     {file.fileName.split('/').pop()}
                                                 </Link>
                                             </ListItemText>
                                         </ListItem>
                                     );
                                 } else {
-                                    // archivo recién adjuntado
                                     return (
                                         <ListItem key={index}>
-                                            {file.type === 'application/pdf'
-                                                ? <InsertDriveFile />
-                                                : <ImageIcon />
-                                            }
+                                            {file.type === 'application/pdf' ? (
+                                                <InsertDriveFile />
+                                            ) : (
+                                                <ImageIcon />
+                                            )}
                                             <ListItemText primary={file.name} />
                                         </ListItem>
                                     );
@@ -651,13 +709,96 @@ const BusesManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
+            {/* Diálogo para carga masiva */}
+            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Carga Masiva de Buses</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body1" sx={{ mb: 1 }}>
+                        Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial
+                        (Columnas sugeridas: "Placa", "Capacidad", "Descripción", <strong>"Piloto"</strong>,{' '}
+                        <strong>"Monitora"</strong>, "Número de Ruta").
+                    </Typography>
+
+                    <Button
+                        variant="outlined"
+                        color="success"
+                        href="/plantillas/plantilla_buses.xlsx"
+                        download={downloadFilename}
+                        sx={{ mr: 2 }}
+                    >
+                        Descargar Plantilla
+                    </Button>
+
+                    <Button variant="outlined" component="label" startIcon={<FileUpload />}>
+                        Seleccionar Archivo
+                        <input
+                            type="file"
+                            hidden
+                            onChange={handleBulkFileChange}
+                            accept=".xlsx, .xls, .csv"
+                        />
+                    </Button>
+                    {bulkFile && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            {bulkFile.name}
+                        </Typography>
+                    )}
+
+                    {bulkLoading && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+                            <CircularProgress size={24} />
+                            <Typography variant="body2" sx={{ ml: 2 }}>
+                                Procesando archivo...
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {bulkResults && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="info">
+                                <Typography>
+                                    <strong>Buses creados/actualizados:</strong> {bulkResults.successCount}
+                                </Typography>
+                                <Typography>
+                                    <strong>Errores:</strong> {bulkResults.errorsCount}
+                                </Typography>
+                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
+                                    <ul>
+                                        {bulkResults.errorsList.map((err, idx) => (
+                                            <li key={idx}>
+                                                Fila {err.row}: {err.errorMessage}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </Alert>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
+                    <Button
+                        onClick={handleUploadBulk}
+                        variant="contained"
+                        color="primary"
+                        disabled={!bulkFile || bulkLoading}
+                    >
+                        Subir
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
                 onClose={handleSnackbarClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
+                <Alert
+                    onClose={handleSnackbarClose}
+                    severity={snackbar.severity}
+                    sx={{ width: '100%' }}
+                >
                     {snackbar.message}
                 </Alert>
             </Snackbar>

@@ -1,6 +1,6 @@
 // src/context/AuthProvider.js
 import React, { createContext, useState, useEffect } from 'react';
-import { jwtDecode } from 'jwt-decode'; // Asegúrate de instalar 'jwt-decode' con npm o yarn
+import { jwtDecode } from 'jwt-decode';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { loginUser } from '../services/authService';
 import { initSocket, closeSocket } from '../services/socketService';

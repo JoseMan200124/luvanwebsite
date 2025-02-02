@@ -1,106 +1,144 @@
-// src/components/dashboard/Filters.jsx
+// frontend/src/components/dashboard/Filters.jsx
 
-import React from 'react';
-import { FormControl, InputLabel, Select, MenuItem, TextField } from '@mui/material';
+import React, { useEffect, useState } from 'react';
 import tw from 'twin.macro';
 import styled from 'styled-components';
+import { TextField, MenuItem, Button } from '@mui/material';
+import api from '../../utils/axiosConfig';
 
-// Contenedor de los filtros con mayor espacio
-const FiltersContainer = styled.div`
-    ${tw`flex flex-wrap space-x-4 space-y-2 md:space-y-0`}
-`;
-
-// Ajuste de los FormControl para mayor ancho
-const StyledFormControl = styled(FormControl)`
-    ${tw`min-w-[200px]`}
-`;
+const FiltersContainer = tw.div`flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 mb-8`;
 
 const Filters = ({ filters, setFilters }) => {
-    const handleFilterChange = (name, value) => {
+    const [schools, setSchools] = useState([]);
+    const [pilots, setPilots] = useState([]);
+
+    useEffect(() => {
+        // Obtener lista de colegios
+        const fetchSchools = async () => {
+            try {
+                const response = await api.get('/schools');
+                setSchools(response.data.schools);
+            } catch (error) {
+                console.error('Error fetching schools:', error);
+            }
+        };
+
+        // Obtener lista de pilotos
+        const fetchPilots = async () => {
+            try {
+                const response = await api.get('/users?role=Piloto')
+                setPilots(response.data.users);
+            } catch (error) {
+                console.error('Error fetching pilots:', error);
+            }
+        };
+
+        fetchSchools();
+        fetchPilots();
+    }, []);
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
+
+    const handleReset = () => {
         setFilters({
-            ...filters,
-            [name]: value,
+            colegio: '',
+            ruta: '',
+            mes: '',
+            fechaInicio: '',
+            fechaFin: '',
         });
     };
 
     return (
         <FiltersContainer>
-            {/* Filtro de Colegio */}
-            <StyledFormControl variant="outlined" size="small">
-                <InputLabel>Colegio</InputLabel>
-                <Select
-                    value={filters.colegio}
-                    onChange={(e) => handleFilterChange('colegio', e.target.value)}
-                    label="Colegio"
-                >
-                    <MenuItem value="">
-                        <em>Todos</em>
+            <TextField
+                select
+                label="Colegio"
+                name="colegio"
+                value={filters.colegio}
+                onChange={handleChange}
+                variant="outlined"
+                fullWidth
+            >
+                <MenuItem value="">Todas</MenuItem>
+                {schools.map((school) => (
+                    <MenuItem key={school.id} value={school.name}>
+                        {school.name}
                     </MenuItem>
-                    <MenuItem value="Colegio A">Colegio A</MenuItem>
-                    <MenuItem value="Colegio B">Colegio B</MenuItem>
-                    {/* Añade más opciones según sea necesario */}
-                </Select>
-            </StyledFormControl>
-
-            {/* Filtro de Ruta */}
-            <StyledFormControl variant="outlined" size="small">
-                <InputLabel>Ruta</InputLabel>
-                <Select
-                    value={filters.ruta}
-                    onChange={(e) => handleFilterChange('ruta', e.target.value)}
-                    label="Ruta"
-                >
-                    <MenuItem value="">
-                        <em>Todas</em>
+                ))}
+            </TextField>
+            <TextField
+                select
+                label="Piloto"
+                name="ruta"
+                value={filters.ruta}
+                onChange={handleChange}
+                variant="outlined"
+                fullWidth
+            >
+                <MenuItem value="">Todos</MenuItem>
+                {pilots.map((pilot) => (
+                    <MenuItem key={pilot.id} value={pilot.name}>
+                        {pilot.name}
                     </MenuItem>
-                    <MenuItem value="Ruta 1">Ruta 1</MenuItem>
-                    <MenuItem value="Ruta 2">Ruta 2</MenuItem>
-                    {/* Añade más opciones según sea necesario */}
-                </Select>
-            </StyledFormControl>
-
-            {/* Filtro de Mes */}
-            <StyledFormControl variant="outlined" size="small">
-                <InputLabel>Mes</InputLabel>
-                <Select
-                    value={filters.mes}
-                    onChange={(e) => handleFilterChange('mes', e.target.value)}
-                    label="Mes"
-                >
-                    <MenuItem value="">
-                        <em>Todos</em>
-                    </MenuItem>
-                    <MenuItem value="Enero">Enero</MenuItem>
-                    <MenuItem value="Febrero">Febrero</MenuItem>
-                    {/* Añade más opciones según sea necesario */}
-                </Select>
-            </StyledFormControl>
-
-            {/* Filtro de Fecha Inicio */}
-            <StyledFormControl variant="outlined" size="small">
-                <TextField
-                    label="Fecha Inicio"
-                    type="date"
-                    InputLabelProps={{
-                        shrink: true,
-                    }}
-                    value={filters.fechaInicio}
-                    onChange={(e) => handleFilterChange('fechaInicio', e.target.value)}
-                />
-            </StyledFormControl>
-
-            {/* Filtro de Fecha Fin */}
-            <StyledFormControl variant="outlined" size="small">
-                <TextField
-                    label="Fecha Fin"
-                    type="date"
-                    InputLabelProps={{
-                        shrink: true,
-                    }}
-                    value={filters.fechaFin}
-                    onChange={(e) => handleFilterChange('fechaFin', e.target.value)}
-                />
-            </StyledFormControl>
+                ))}
+            </TextField>
+            <TextField
+                select
+                label="Mes"
+                name="mes"
+                value={filters.mes}
+                onChange={handleChange}
+                variant="outlined"
+                fullWidth
+            >
+                <MenuItem value="">Todos</MenuItem>
+                <MenuItem value="Enero">Enero</MenuItem>
+                <MenuItem value="Febrero">Febrero</MenuItem>
+                <MenuItem value="Marzo">Marzo</MenuItem>
+                <MenuItem value="Abril">Abril</MenuItem>
+                <MenuItem value="Mayo">Mayo</MenuItem>
+                <MenuItem value="Junio">Junio</MenuItem>
+                <MenuItem value="Julio">Julio</MenuItem>
+                <MenuItem value="Agosto">Agosto</MenuItem>
+                <MenuItem value="Septiembre">Septiembre</MenuItem>
+                <MenuItem value="Octubre">Octubre</MenuItem>
+                <MenuItem value="Noviembre">Noviembre</MenuItem>
+                <MenuItem value="Diciembre">Diciembre</MenuItem>
+            </TextField>
+            <TextField
+                label="Fecha Inicio"
+                name="fechaInicio"
+                type="date"
+                value={filters.fechaInicio}
+                onChange={handleChange}
+                variant="outlined"
+                fullWidth
+                InputLabelProps={{
+                    shrink: true,
+                }}
+            />
+            <TextField
+                label="Fecha Fin"
+                name="fechaFin"
+                type="date"
+                value={filters.fechaFin}
+                onChange={handleChange}
+                variant="outlined"
+                fullWidth
+                InputLabelProps={{
+                    shrink: true,
+                }}
+            />
+            <Button variant="outlined" color="secondary" onClick={handleReset}>
+                Resetear
+            </Button>
         </FiltersContainer>
     );
 };

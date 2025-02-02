@@ -1,3 +1,5 @@
+// src/pages/RolesManagementPage.js
+
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -27,17 +29,19 @@ import {
     CircularProgress,
     Grid,
     Checkbox,
-    FormControlLabel
+    FormControlLabel,
+    Box,
+    Link
 } from '@mui/material';
-import { Edit, Delete, Add } from '@mui/icons-material';
+import { Edit, Delete, Add, FileUpload } from '@mui/icons-material';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import styled from 'styled-components';
 import tw from 'twin.macro';
 
 const RolesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
+/** Ejemplo de roles que maneja tu sistema */
 const roleOptions = [
     { id: 1, name: 'Gestor' },
     { id: 2, name: 'Administrador' },
@@ -50,14 +54,17 @@ const roleOptions = [
 const RolesManagementPage = () => {
     const { auth } = useContext(AuthContext);
 
+    // Listas principales
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
     const [buses, setBuses] = useState([]);
     const [contracts, setContracts] = useState([]);
 
+    // Manejo de usuario seleccionado
     const [selectedUser, setSelectedUser] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
+    // Para rol Padre (FamilyDetail)
     const [familyDetail, setFamilyDetail] = useState({
         motherName: '',
         motherCellphone: '',
@@ -71,14 +78,14 @@ const RolesManagementPage = () => {
         alternativeAddress: '',
         students: [],
         scheduleSlots: [],
-        // AÑADIMOS specialFee POR DEFECTO
         specialFee: 0
     });
-
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
     const [newSlot, setNewSlot] = useState({ time: '', note: '' });
+
     const [selectedContractUuid, setSelectedContractUuid] = useState('');
 
+    // Snackbar
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
@@ -88,25 +95,31 @@ const RolesManagementPage = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
-
     const [loading, setLoading] = useState(false);
 
-    // =====================================================
-    // NUEVO: Lista de Pilotos para asignar a un Supervisor
-    // =====================================================
+    // Para Supervisor
     const [allPilots, setAllPilots] = useState([]);
     const [selectedSupervisorPilots, setSelectedSupervisorPilots] = useState([]);
 
-    // PilotSchedules
+    // Para Pilotos => Horarios
     const [availablePilotSchedules, setAvailablePilotSchedules] = useState([]);
     const [selectedPilotSchedules, setSelectedPilotSchedules] = useState([]);
+
+    // Carga masiva
+    const [openBulkDialog, setOpenBulkDialog] = useState(false);
+    const [bulkFile, setBulkFile] = useState(null);
+    const [bulkResults, setBulkResults] = useState(null);
+    const [bulkLoading, setBulkLoading] = useState(false);
+
+    // Para almacenar los grados del colegio en caso de rol Padre
+    const [schoolGrades, setSchoolGrades] = useState([]);
 
     useEffect(() => {
         fetchUsers();
         fetchSchools();
         fetchBuses();
         fetchContracts();
-        fetchAllPilots(); // Para supervisores
+        fetchAllPilots();
     }, []);
 
     const fetchAllPilots = async () => {
@@ -160,7 +173,6 @@ const RolesManagementPage = () => {
         }
     };
 
-    // Obtiene los Schedules (horarios) configurados en el colegio
     const fetchSchedulesForSchool = async (schoolId) => {
         try {
             const resp = await api.get(`/schools/${schoolId}/schedules`);
@@ -176,22 +188,37 @@ const RolesManagementPage = () => {
                 setAvailablePilotSchedules([]);
             }
         } catch (error) {
-            console.error('Error al obtener schedules del colegio:', error);
+            console.error('Error al obtener schedules:', error);
             setAvailablePilotSchedules([]);
         }
     };
 
-    // Obtiene los horarios (PilotSchedules) que ya tiene asignado un piloto
+    // Nuevo: obtener grados para rol Padre
+    const fetchSchoolGrades = async (schoolId) => {
+        try {
+            const response = await api.get(`/schools/${schoolId}`);
+            if (response.data && response.data.school && Array.isArray(response.data.school.grades)) {
+                setSchoolGrades(response.data.school.grades);
+            } else {
+                setSchoolGrades([]);
+            }
+        } catch (error) {
+            console.error('Error al obtener los grados del colegio:', error);
+            setSchoolGrades([]);
+        }
+    };
+
     const fetchPilotAssignedSchedules = async (pilotId) => {
         try {
             const resp = await api.get(`/transportistas/${pilotId}/schedules`);
             setSelectedPilotSchedules(resp.data.schedules || []);
         } catch (error) {
-            console.error('Error al obtener los horarios asignados al piloto:', error);
+            console.error('Error al obtener schedules del piloto:', error);
             setSelectedPilotSchedules([]);
         }
     };
 
+    // Editar
     const handleEditClick = async (user) => {
         setSelectedUser({
             ...user,
@@ -212,11 +239,14 @@ const RolesManagementPage = () => {
                 alternativeAddress: user.FamilyDetail.alternativeAddress || '',
                 students: user.FamilyDetail.Students || [],
                 scheduleSlots: user.FamilyDetail.ScheduleSlots || [],
-                // Cargar specialFee si existe
                 specialFee: user.FamilyDetail.specialFee !== undefined
                     ? user.FamilyDetail.specialFee
                     : 0
             });
+            // Cargar grados si el usuario tiene colegio asignado
+            if (user.school) {
+                await fetchSchoolGrades(user.school);
+            }
         } else {
             setFamilyDetail({
                 motherName: '',
@@ -236,12 +266,10 @@ const RolesManagementPage = () => {
         }
 
         setSelectedContractUuid('');
-
-        // Limpiamos info de piloto
         setAvailablePilotSchedules([]);
         setSelectedPilotSchedules([]);
+        setSelectedSupervisorPilots([]);
 
-        // Si es piloto => cargamos schedules
         if (user.roleId === 5) {
             if (user.school) {
                 await fetchSchedulesForSchool(user.school);
@@ -249,21 +277,16 @@ const RolesManagementPage = () => {
             await fetchPilotAssignedSchedules(user.id);
         }
 
-        // =====================================================
-        // NUEVO: Si es supervisor => obtener la lista de pilotos asignados
-        // =====================================================
         if (user.Role && user.Role.name === 'Supervisor') {
-            // En este ejemplo simulamos la carga de supervisorPilots desde user
             setSelectedSupervisorPilots(
                 user.supervisorPilots ? user.supervisorPilots.map(sp => sp.pilotId) : []
             );
-        } else {
-            setSelectedSupervisorPilots([]);
         }
 
         setOpenDialog(true);
     };
 
+    // Añadir
     const handleAddUser = () => {
         setSelectedUser({
             id: null,
@@ -274,7 +297,6 @@ const RolesManagementPage = () => {
             school: '',
             busId: ''
         });
-
         setFamilyDetail({
             motherName: '',
             motherCellphone: '',
@@ -290,11 +312,11 @@ const RolesManagementPage = () => {
             scheduleSlots: [],
             specialFee: 0
         });
-
         setSelectedContractUuid('');
         setAvailablePilotSchedules([]);
         setSelectedPilotSchedules([]);
         setSelectedSupervisorPilots([]);
+        setSchoolGrades([]);
 
         setOpenDialog(true);
     };
@@ -305,6 +327,7 @@ const RolesManagementPage = () => {
         setSelectedSupervisorPilots([]);
     };
 
+    // Eliminar
     const handleDeleteClick = async (userId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
             try {
@@ -366,7 +389,6 @@ const RolesManagementPage = () => {
         setNewSlot({ time: '', note: '' });
     };
 
-    // Agrega o quita un horario del array selectedPilotSchedules
     const handleTogglePilotSchedule = (day, time) => {
         const found = selectedPilotSchedules.find(s => s.day === day && s.time === time);
         if (found) {
@@ -376,7 +398,6 @@ const RolesManagementPage = () => {
         }
     };
 
-    // Envía los horarios seleccionados (check) al backend
     const finalizePilotSchedules = async (pilotId) => {
         try {
             await api.post(`/transportistas/${pilotId}/schedules`, {
@@ -387,9 +408,6 @@ const RolesManagementPage = () => {
         }
     };
 
-    // =====================================================
-    // NUEVO: Manejo de Pilotos en un Supervisor
-    // =====================================================
     const handleToggleSupervisorPilot = (pilotId) => {
         if (selectedSupervisorPilots.includes(pilotId)) {
             setSelectedSupervisorPilots(prev => prev.filter(x => x !== pilotId));
@@ -409,38 +427,28 @@ const RolesManagementPage = () => {
                 busId: selectedUser.busId || null
             };
 
-            // Si escribió algo en password => lo incluimos
             if (selectedUser.password && selectedUser.password.trim() !== '') {
                 payload.password = selectedUser.password;
             }
 
-            // Si es Padre => añadir familyDetail
             if (payload.roleId === 3) {
                 payload.familyDetail = familyDetail;
                 payload.selectedContractUuid = selectedContractUuid;
             }
 
-            // =========================================
-            // NUEVO: Si es Supervisor => lista de Pilotos
-            // =========================================
             if (payload.roleId === 6) {
                 payload.supervisorPilots = selectedSupervisorPilots;
             }
 
-            // Procede a crear o actualizar
             if (selectedUser.id) {
-                // UPDATE
                 await api.put(`/users/${selectedUser.id}`, payload);
-                // Si es Piloto => finalizePilotSchedules
                 if (payload.roleId === 5) {
                     await finalizePilotSchedules(selectedUser.id);
                 }
                 setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
             } else {
-                // CREATE
                 const resp = await api.post('/users', payload);
                 const newUserId = resp.data.user.id;
-
                 if (payload.roleId === 5) {
                     await finalizePilotSchedules(newUserId);
                 }
@@ -473,30 +481,97 @@ const RolesManagementPage = () => {
         (u.email || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Carga masiva
+    const handleOpenBulkDialog = () => {
+        setBulkFile(null);
+        setBulkResults(null);
+        setOpenBulkDialog(true);
+    };
+
+    const handleCloseBulkDialog = () => {
+        setOpenBulkDialog(false);
+    };
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        setBulkFile(file);
+    };
+
+    const handleUploadBulk = async () => {
+        if (!bulkFile) return;
+        setBulkLoading(true);
+        setBulkResults(null);
+
+        const formData = new FormData();
+        formData.append('file', bulkFile);
+
+        try {
+            const resp = await api.post('/users/bulk-upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            setBulkResults(resp.data);
+            fetchUsers();
+        } catch (error) {
+            console.error('Error al subir usuarios masivamente:', error);
+            setSnackbar({
+                open: true,
+                message: 'Ocurrió un error al procesar la carga masiva',
+                severity: 'error'
+            });
+        }
+        setBulkLoading(false);
+    };
+
+    const getFormattedDateTime = () => {
+        const currentDate = new Date();
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const hours = String(currentDate.getHours()).padStart(2, '0');
+        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
+        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
+        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+    };
+
+    const downloadFilename = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
+
     return (
         <RolesContainer>
             <Typography variant="h4" gutterBottom>
                 Gestión de Usuarios y Roles
             </Typography>
 
-            <div tw="flex justify-between mb-4">
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                 <TextField
                     label="Buscar usuarios"
                     variant="outlined"
                     size="small"
                     value={searchQuery}
                     onChange={handleSearchChange}
-                    tw="w-1/3"
+                    sx={{ width: '40%' }}
                 />
-                <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<Add />}
-                    onClick={handleAddUser}
-                >
-                    Añadir Usuario
-                </Button>
-            </div>
+                <div>
+                    <Button
+                        variant="contained"
+                        color="info"
+                        startIcon={<FileUpload />}
+                        sx={{ mr: 2 }}
+                        onClick={handleOpenBulkDialog}
+                    >
+                        Carga Masiva
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<Add />}
+                        onClick={handleAddUser}
+                    >
+                        Añadir Usuario
+                    </Button>
+                </div>
+            </Box>
 
             {loading ? (
                 <div tw="flex justify-center p-4">
@@ -509,7 +584,7 @@ const RolesManagementPage = () => {
                             <TableHead>
                                 <TableRow>
                                     <TableCell>Nombre</TableCell>
-                                    <TableCell>Email</TableCell>
+                                    <TableCell>Correo</TableCell>
                                     <TableCell>Rol</TableCell>
                                     <TableCell>Colegio</TableCell>
                                     <TableCell align="center">Acciones</TableCell>
@@ -522,12 +597,8 @@ const RolesManagementPage = () => {
                                         <TableRow key={user.id}>
                                             <TableCell>{user.name}</TableCell>
                                             <TableCell>{user.email}</TableCell>
-                                            <TableCell>
-                                                {user.Role ? user.Role.name : '—'}
-                                            </TableCell>
-                                            <TableCell>
-                                                {user.School ? user.School.name : '—'}
-                                            </TableCell>
+                                            <TableCell>{user.Role ? user.Role.name : '—'}</TableCell>
+                                            <TableCell>{user.School ? user.School.name : '—'}</TableCell>
                                             <TableCell align="center">
                                                 <Tooltip title="Editar">
                                                     <IconButton onClick={() => handleEditClick(user)}>
@@ -566,9 +637,7 @@ const RolesManagementPage = () => {
             )}
 
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
-                <DialogTitle>
-                    {selectedUser?.id ? 'Editar Usuario' : 'Añadir Usuario'}
-                </DialogTitle>
+                <DialogTitle>{selectedUser?.id ? 'Editar Usuario' : 'Añadir Usuario'}</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
                         {selectedUser?.id
@@ -603,7 +672,6 @@ const RolesManagementPage = () => {
                                 disabled={Boolean(selectedUser?.id)}
                             />
                         </Grid>
-                        {/* Si es usuario nuevo => password es obligatorio */}
                         {(!selectedUser?.id) && (
                             <Grid item xs={12} md={6}>
                                 <TextField
@@ -618,7 +686,6 @@ const RolesManagementPage = () => {
                                 />
                             </Grid>
                         )}
-                        {/* Si es usuario existente => password opcional */}
                         {(selectedUser?.id) && (
                             <Grid item xs={12} md={6}>
                                 <TextField
@@ -653,26 +720,33 @@ const RolesManagementPage = () => {
                             </FormControl>
                         </Grid>
 
-                        {/* Colegio */}
                         <Grid item xs={12} md={6}>
                             <FormControl variant="outlined" fullWidth>
                                 <InputLabel>Colegio</InputLabel>
                                 <Select
                                     name="school"
                                     value={selectedUser?.school || ''}
-                                    onChange={(e) => {
+                                    onChange={async (e) => {
                                         const newSchoolId = e.target.value;
                                         setSelectedUser((prev) => ({
                                             ...prev,
                                             school: newSchoolId
                                         }));
-                                        // si es Piloto, recargamos schedules
+                                        // Si es rol Piloto, cargamos los schedules del colegio
                                         if (selectedUser?.roleId === 5) {
                                             if (newSchoolId) {
-                                                fetchSchedulesForSchool(newSchoolId);
+                                                await fetchSchedulesForSchool(newSchoolId);
                                             } else {
                                                 setAvailablePilotSchedules([]);
                                                 setSelectedPilotSchedules([]);
+                                            }
+                                        }
+                                        // Si es rol Padre, cargamos los grados del colegio
+                                        if (selectedUser?.roleId === 3) {
+                                            if (newSchoolId) {
+                                                await fetchSchoolGrades(newSchoolId);
+                                            } else {
+                                                setSchoolGrades([]);
                                             }
                                         }
                                     }}
@@ -690,7 +764,7 @@ const RolesManagementPage = () => {
                             </FormControl>
                         </Grid>
 
-                        {/* Si rol = 3 (Padre) => Bus */}
+                        {/* Padre => bus */}
                         {selectedUser?.roleId == 3 && (
                             <Grid item xs={12} md={6}>
                                 <FormControl variant="outlined" fullWidth>
@@ -715,7 +789,7 @@ const RolesManagementPage = () => {
                         )}
                     </Grid>
 
-                    {/* Si es Padre => FamilyDetail */}
+                    {/* Padre => familyDetail */}
                     {selectedUser?.roleId == 3 && (
                         <>
                             <Typography variant="h6" sx={{ mt: 3 }}>
@@ -743,7 +817,6 @@ const RolesManagementPage = () => {
                                 Datos de la Familia (Padre)
                             </Typography>
                             <Grid container spacing={2} sx={{ mt: 1 }}>
-                                {/* MADRE */}
                                 <Grid item xs={12} md={4}>
                                     <TextField
                                         name="motherName"
@@ -757,7 +830,7 @@ const RolesManagementPage = () => {
                                 <Grid item xs={12} md={4}>
                                     <TextField
                                         name="motherCellphone"
-                                        label="Celular Madre"
+                                        label="Celular de la Madre"
                                         fullWidth
                                         variant="outlined"
                                         value={familyDetail.motherCellphone}
@@ -767,15 +840,13 @@ const RolesManagementPage = () => {
                                 <Grid item xs={12} md={4}>
                                     <TextField
                                         name="motherEmail"
-                                        label="Correo Madre"
+                                        label="Correo de la Madre"
                                         fullWidth
                                         variant="outlined"
                                         value={familyDetail.motherEmail}
                                         onChange={handleFamilyDetailChange}
                                     />
                                 </Grid>
-
-                                {/* PADRE */}
                                 <Grid item xs={12} md={4}>
                                     <TextField
                                         name="fatherName"
@@ -789,7 +860,7 @@ const RolesManagementPage = () => {
                                 <Grid item xs={12} md={4}>
                                     <TextField
                                         name="fatherCellphone"
-                                        label="Celular Padre"
+                                        label="Celular del Padre"
                                         fullWidth
                                         variant="outlined"
                                         value={familyDetail.fatherCellphone}
@@ -799,15 +870,13 @@ const RolesManagementPage = () => {
                                 <Grid item xs={12} md={4}>
                                     <TextField
                                         name="fatherEmail"
-                                        label="Correo Padre"
+                                        label="Correo del Padre"
                                         fullWidth
                                         variant="outlined"
                                         value={familyDetail.fatherEmail}
                                         onChange={handleFamilyDetailChange}
                                     />
                                 </Grid>
-
-                                {/* RAZON SOCIAL / NIT */}
                                 <Grid item xs={12} md={6}>
                                     <TextField
                                         name="razonSocial"
@@ -821,15 +890,13 @@ const RolesManagementPage = () => {
                                 <Grid item xs={12} md={6}>
                                     <TextField
                                         name="nit"
-                                        label="NIT (sin guiones)"
+                                        label="NIT"
                                         fullWidth
                                         variant="outlined"
                                         value={familyDetail.nit}
                                         onChange={handleFamilyDetailChange}
                                     />
                                 </Grid>
-
-                                {/* DIRECCIONES */}
                                 <Grid item xs={12} md={6}>
                                     <TextField
                                         name="mainAddress"
@@ -850,8 +917,6 @@ const RolesManagementPage = () => {
                                         onChange={handleFamilyDetailChange}
                                     />
                                 </Grid>
-
-                                {/* DESCUENTO ESPECIAL */}
                                 <Grid item xs={12} md={6}>
                                     <TextField
                                         name="specialFee"
@@ -879,7 +944,7 @@ const RolesManagementPage = () => {
                                 <Grid item xs={12} md={6}>
                                     <TextField
                                         name="fullName"
-                                        label="Nombre Completo Alumno"
+                                        label="Nombre Completo del Alumno"
                                         fullWidth
                                         variant="outlined"
                                         value={newStudent.fullName}
@@ -888,21 +953,31 @@ const RolesManagementPage = () => {
                                         }
                                     />
                                 </Grid>
+                                {/* Select para grado del alumno */}
                                 <Grid item xs={12} md={4}>
-                                    <TextField
-                                        name="grade"
-                                        label="Grado"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={newStudent.grade}
-                                        onChange={(e) =>
-                                            setNewStudent({ ...newStudent, grade: e.target.value })
-                                        }
-                                    />
+                                    <FormControl fullWidth>
+                                        <InputLabel>Grado</InputLabel>
+                                        <Select
+                                            value={newStudent.grade}
+                                            label="Grado"
+                                            onChange={(e) =>
+                                                setNewStudent({ ...newStudent, grade: e.target.value })
+                                            }
+                                        >
+                                            <MenuItem value="">
+                                                <em>Seleccione un grado</em>
+                                            </MenuItem>
+                                            {schoolGrades.map((grade, idx) => (
+                                                <MenuItem key={idx} value={grade.name}>
+                                                    {grade.name}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
                                 </Grid>
                                 <Grid item xs={12} md={2} display="flex" alignItems="center">
                                     <Button variant="outlined" onClick={handleAddStudent} sx={{ mt: 1 }}>
-                                        Agregar Alumno
+                                        Agregar
                                     </Button>
                                 </Grid>
                             </Grid>
@@ -955,7 +1030,7 @@ const RolesManagementPage = () => {
                         </>
                     )}
 
-                    {/* Si es Piloto => mostrar horarios disponibles */}
+                    {/* Piloto => Horarios */}
                     {selectedUser?.roleId == 5 && (
                         <>
                             <Typography variant="h6" sx={{ mt: 3 }}>
@@ -978,9 +1053,7 @@ const RolesManagementPage = () => {
                                                 control={
                                                     <Checkbox
                                                         checked={checked}
-                                                        onChange={() =>
-                                                            handleTogglePilotSchedule(slot.day, slot.time)
-                                                        }
+                                                        onChange={() => handleTogglePilotSchedule(slot.day, slot.time)}
                                                         color="primary"
                                                     />
                                                 }
@@ -996,6 +1069,7 @@ const RolesManagementPage = () => {
                         </>
                     )}
 
+                    {/* Supervisor => Pilotos */}
                     {selectedUser?.roleId == 6 && (
                         <>
                             <Typography variant="h6" sx={{ mt: 3 }}>
@@ -1031,6 +1105,79 @@ const RolesManagementPage = () => {
                     </Button>
                     <Button onClick={handleSaveUser} color="primary" variant="contained">
                         {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog Carga Masiva */}
+            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Carga Masiva de Usuarios</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Sube el archivo con las columnas correctas. Usa la plantilla oficial.
+                    </DialogContentText>
+
+                    <Box sx={{ mt: 2 }}>
+                        <Button
+                            variant="outlined"
+                            sx={{ mr: 2 }}
+                            color="success"
+                            component={Link}
+                            href="/plantillas/plantilla_usuarios.xlsx"
+                            download={downloadFilename}
+                        >
+                            Descargar Plantilla
+                        </Button>
+
+                        <Button variant="outlined" component="label" startIcon={<FileUpload />}>
+                            Seleccionar Archivo
+                            <input
+                                type="file"
+                                hidden
+                                onChange={handleFileChange}
+                                accept=".xlsx, .xls, .csv"
+                            />
+                        </Button>
+                        {bulkFile && <Typography variant="body2" sx={{ mt: 1 }}>{bulkFile.name}</Typography>}
+                    </Box>
+
+                    {bulkLoading && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+                            <CircularProgress size={24} />
+                            <Typography variant="body2" sx={{ ml: 2 }}>Procesando archivo...</Typography>
+                        </Box>
+                    )}
+                    {bulkResults && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="info">
+                                <Typography>
+                                    <strong>Usuarios creados/actualizados:</strong> {bulkResults.successCount}
+                                </Typography>
+                                <Typography>
+                                    <strong>Errores:</strong> {bulkResults.errorsCount}
+                                </Typography>
+                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
+                                    <ul>
+                                        {bulkResults.errorsList.map((err, idx) => (
+                                            <li key={idx}>
+                                                Fila {err.row}: {err.errorMessage}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </Alert>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
+                    <Button
+                        onClick={handleUploadBulk}
+                        variant="contained"
+                        color="primary"
+                        disabled={!bulkFile || bulkLoading}
+                    >
+                        Subir
                     </Button>
                 </DialogActions>
             </Dialog>

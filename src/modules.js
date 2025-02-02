@@ -1,3 +1,4 @@
+// src/modules.js
 import {
     Group,
     School,
@@ -11,17 +12,17 @@ import {
 import RolesManagementPage from './pages/RolesManagementPage';
 import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import MonitorsManagementPage from './pages/MonitorsManagementPage';
+import PilotsManagementPage from './pages/PilotsManagementPage';
+import SupervisorsManagementPage from './pages/SupervisorsManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import ContractsManagementPage from './pages/ContractsManagementPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import PaymentsManagementPage from './pages/PaymentsManagementPage';
 
-/**
- * Cada "module" debe tener una key y un icon (opcional),
- * y cada "submodule" debe tener:
- *   key, name, path, component, roles (opcional).
- */
+// IMPORTA TU NUEVO COMPONENTE
+import ActivityLogPage from './pages/ActivityLogPage';
+
 export const modules = [
     {
         key: 'gestion-usuarios-roles',
@@ -32,8 +33,8 @@ export const modules = [
                 key: 'usuarios',
                 name: 'Usuarios',
                 path: 'usuarios',
-                component: RolesManagementPage, // Importado arriba
-                roles: ['Administrador', 'Gestor'], // Ejemplo
+                component: RolesManagementPage,
+                roles: ['Administrador', 'Gestor'],
             },
         ],
     },
@@ -49,7 +50,6 @@ export const modules = [
                 component: SchoolsManagementPage,
                 roles: ['Administrador', 'Gestor'],
             },
-
             {
                 key: 'buses',
                 name: 'Buses',
@@ -90,9 +90,9 @@ export const modules = [
                 name: 'Gestión de Pagos',
                 path: 'pagos',
                 roles: ['Administrador', 'Gestor'],
-                component: PaymentsManagementPage
-            }
-        ]
+                component: PaymentsManagementPage,
+            },
+        ],
     },
     {
         key: 'gestion-personal',
@@ -110,15 +110,15 @@ export const modules = [
                 key: 'pilotos',
                 name: 'Pilotos',
                 path: 'pilotos',
-                component: MonitorsManagementPage,
+                component: PilotsManagementPage,
                 roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
                 key: 'supervisores',
                 name: 'Supervisores',
                 path: 'supervisores',
-                component: MonitorsManagementPage,
-                roles: ['Administrador', 'Supervisor'],
+                component: SupervisorsManagementPage,
+                roles: ['Administrador', 'Gestor'],
             },
         ],
     },
@@ -131,15 +131,8 @@ export const modules = [
                 key: 'registro-actividades',
                 name: 'Registro de Actividades',
                 path: 'registro-actividades',
-                component: FinancialStatisticsPage,
-                roles: ['Administrador', 'Supervisor'],
-            },
-            {
-                key: 'auditoria-seguridad',
-                name: 'Auditoría de Seguridad',
-                path: 'auditoria-seguridad',
-                component: FinancialStatisticsPage,
-                roles: ['Administrador', 'Supervisor'],
+                component: ActivityLogPage,
+                roles: ['Gestor', 'Administrador', 'Supervisor'],
             },
         ],
     },

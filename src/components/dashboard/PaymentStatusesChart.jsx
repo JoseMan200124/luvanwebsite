@@ -1,4 +1,4 @@
-// src/components/dashboard/PieChartComponent.jsx
+// frontend/src/components/dashboard/PaymentStatusesChart.jsx
 
 import React, { useEffect, useState } from 'react';
 import tw from 'twin.macro';
@@ -12,43 +12,39 @@ import {
     Legend,
 } from 'recharts';
 import { Typography } from '@mui/material';
+import api from '../../utils/axiosConfig';
 
 const ChartContainer = tw.div`bg-white p-4 rounded-lg shadow-md`;
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28'];
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
-const PieChartComponent = ({ filters }) => {
+const PaymentStatusesChart = ({ filters }) => {
     const [data, setData] = useState([]);
 
     useEffect(() => {
-        // Aquí deberías filtrar o cargar los datos según los filtros
-        // Para este ejemplo, usamos datos estáticos
-        const fetchData = () => {
-            let filteredData = [
-                { name: 'Pagos Completados', value: 3200 },
-                { name: 'Pagos Pendientes', value: 800 },
-                { name: 'Moras', value: 200 },
-            ];
-
-            // Puedes añadir lógica de filtrado aquí si es necesario
-
-            setData(filteredData);
+        const fetchPaymentStatuses = async () => {
+            try {
+                const response = await api.get('/reports/payment-statuses');
+                setData(response.data.paymentStatuses);
+            } catch (error) {
+                console.error('Error fetching payment statuses:', error);
+            }
         };
 
-        fetchData();
+        fetchPaymentStatuses();
     }, [filters]);
 
     return (
         <ChartContainer>
             <Typography variant="h6" gutterBottom>
-                Estado de Pagos
+                Estados de Pagos
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                     <Pie
                         data={data}
-                        dataKey="value"
-                        nameKey="name"
+                        dataKey="count"
+                        nameKey="status"
                         cx="50%"
                         cy="50%"
                         outerRadius={100}
@@ -56,13 +52,10 @@ const PieChartComponent = ({ filters }) => {
                         label
                     >
                         {data.map((entry, index) => (
-                            <Cell
-                                key={`cell-${index}`}
-                                fill={COLORS[index % COLORS.length]}
-                            />
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip formatter={(value) => value} />
                     <Legend />
                 </PieChart>
             </ResponsiveContainer>
@@ -70,4 +63,4 @@ const PieChartComponent = ({ filters }) => {
     );
 };
 
-export default PieChartComponent;
+export default PaymentStatusesChart;

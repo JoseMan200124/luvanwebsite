@@ -1,5 +1,4 @@
 // src/pages/SchoolsManagementPage.jsx
-
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -25,60 +24,89 @@ import {
     Chip,
     Popover,
     Box,
-    Select,
-    MenuItem,
-    InputLabel,
+    Checkbox,
     FormControl,
+    FormControlLabel,
+    InputLabel,
+    Select,
+    MenuItem
 } from '@mui/material';
-import { Edit, Delete, Add, ContentCopy } from '@mui/icons-material';
+import { Edit, Delete, Add, ContentCopy, FileUpload } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 
-// Contenedor con twin.macro
+// Contenedor con estilos
 const SchoolsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
+
+/**
+ * Función para formatear fecha/hora (para nombrar la plantilla de Excel, etc.)
+ */
+const getFormattedDateTime = () => {
+    const currentDate = new Date();
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const day = String(currentDate.getDate()).padStart(2, '0');
+    const hours = String(currentDate.getHours()).padStart(2, '0');
+    const minutes = String(currentDate.getMinutes()).padStart(2, '0');
+    const seconds = String(currentDate.getSeconds()).padStart(2, '0');
+    return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+};
 
 const SchoolsManagementPage = () => {
     const { auth } = useContext(AuthContext);
+
+    // Lista de colegios
     const [schools, setSchools] = useState([]);
+
+    // Manejo de modal (crear/editar)
     const [selectedSchool, setSelectedSchool] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
+
+    // Alertas / Snackbar
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+    // Búsqueda / paginación
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // Estados para rutas y grados
-    const [schoolRoutes, setSchoolRoutes] = useState([]);
-    const [schoolGrades, setSchoolGrades] = useState([]); // Nuevo estado para grados
+    // Manejo de "Horarios" y "grades" al editar/crear
+    const [schoolSchedules, setSchoolSchedules] = useState([]);
+    const [schoolGrades, setSchoolGrades] = useState([]);
 
-    // Estados para Popover de grados adicionales
+    // Manejo de extra fields (un solo nombre => fieldName)
+    const [schoolExtraFields, setSchoolExtraFields] = useState([]);
+
+    // Popover para mostrar +n grados
     const [anchorEl, setAnchorEl] = useState(null);
     const [popoverGrades, setPopoverGrades] = useState([]);
 
-    // ============================
-    // 1) Cargar lista de colegios
-    // ============================
+    // Carga Masiva
+    const [openBulkDialog, setOpenBulkDialog] = useState(false);
+    const [bulkFile, setBulkFile] = useState(null);
+    const [bulkResults, setBulkResults] = useState(null);
+    const [bulkLoading, setBulkLoading] = useState(false);
+
+    /**
+     * Obtener lista de Colegios
+     */
     const fetchSchools = async () => {
         setLoading(true);
         try {
             const response = await api.get('/schools', {
-                headers: {
-                    Authorization: `Bearer ${auth.token}`,
-                },
+                headers: { Authorization: `Bearer ${auth.token}` },
             });
-            // La respuesta es { schools: [...] }
             let fetchedSchools = Array.isArray(response.data.schools) ? response.data.schools : [];
 
-            // Parsear schedules y grades si son cadenas JSON
+            // Parsear "schedules", "grades" y "extraEnrollmentFields"
             fetchedSchools = fetchedSchools.map((school) => {
                 let parsedSchedules = [];
                 if (typeof school.schedules === 'string' && school.schedules.trim()) {
                     try {
                         parsedSchedules = JSON.parse(school.schedules);
-                    } catch (err) {
-                        console.error('Error parseando schedules JSON:', err);
+                    } catch {
                         parsedSchedules = [];
                     }
                 } else if (Array.isArray(school.schedules)) {
@@ -89,18 +117,32 @@ const SchoolsManagementPage = () => {
                 if (typeof school.grades === 'string' && school.grades.trim()) {
                     try {
                         parsedGrades = JSON.parse(school.grades);
-                    } catch (err) {
-                        console.error('Error parseando grades JSON:', err);
+                    } catch {
                         parsedGrades = [];
                     }
                 } else if (Array.isArray(school.grades)) {
                     parsedGrades = school.grades;
                 }
 
+                let parsedExtraFields = [];
+                if (
+                    typeof school.extraEnrollmentFields === 'string' &&
+                    school.extraEnrollmentFields.trim()
+                ) {
+                    try {
+                        parsedExtraFields = JSON.parse(school.extraEnrollmentFields);
+                    } catch {
+                        parsedExtraFields = [];
+                    }
+                } else if (Array.isArray(school.extraEnrollmentFields)) {
+                    parsedExtraFields = school.extraEnrollmentFields;
+                }
+
                 return {
                     ...school,
                     schedules: parsedSchedules,
                     grades: parsedGrades,
+                    extraEnrollmentFields: parsedExtraFields
                 };
             });
 
@@ -117,9 +159,9 @@ const SchoolsManagementPage = () => {
         fetchSchools();
     }, [auth.token]);
 
-    // ============================
-    // 2) Crear un colegio (modal vacío)
-    // ============================
+    /**
+     * Añadir Colegio
+     */
     const handleAddSchool = () => {
         setSelectedSchool({
             id: null,
@@ -133,30 +175,19 @@ const SchoolsManagementPage = () => {
             transportFeeHalf: '',
             duePaymentDay: ''
         });
-        // Routes y grades vacío
-        setSchoolRoutes([]);
+        setSchoolSchedules([]);
         setSchoolGrades([]);
+        setSchoolExtraFields([]);
         setOpenDialog(true);
     };
 
-    // ============================
-    // 3) Editar un colegio
-    // ============================
+    /**
+     * Editar Colegio
+     */
     const handleEditClick = (school) => {
-        // Si el backend ya retorna transportFeeComplete y transportFeeHalf, los guardamos.
-        // En caso de que no vengan, los inicializamos para evitar "undefined".
-        const transportFeeCompleteValue =
-            school.transportFeeComplete !== undefined && school.transportFeeComplete !== null
-                ? school.transportFeeComplete
-                : '';
-        const transportFeeHalfValue =
-            school.transportFeeHalf !== undefined && school.transportFeeHalf !== null
-                ? school.transportFeeHalf
-                : '';
-        const duePaymentDayValue =
-            school.duePaymentDay !== undefined && school.duePaymentDay !== null
-                ? school.duePaymentDay
-                : '';
+        const transportFeeCompleteValue = school.transportFeeComplete ?? '';
+        const transportFeeHalfValue = school.transportFeeHalf ?? '';
+        const duePaymentDayValue = school.duePaymentDay ?? '';
 
         setSelectedSchool({
             ...school,
@@ -165,52 +196,51 @@ const SchoolsManagementPage = () => {
             duePaymentDay: duePaymentDayValue
         });
 
-        // Manejar routes
-        if (typeof school.schedules === 'string' && school.schedules.trim()) {
+        // Schedules
+        let parsedSchedules = [];
+        if (Array.isArray(school.schedules)) {
+            parsedSchedules = school.schedules;
+        } else {
             try {
-                const parsed = JSON.parse(school.schedules);
-                if (Array.isArray(parsed)) {
-                    setSchoolRoutes(parsed);
-                } else {
-                    setSchoolRoutes([]);
-                }
-            } catch (err) {
-                console.error('Error parseando schedules JSON:', err);
-                setSchoolRoutes([]);
+                parsedSchedules = JSON.parse(school.schedules) || [];
+            } catch {
+                parsedSchedules = [];
             }
         }
-        else if (Array.isArray(school.schedules)) {
-            setSchoolRoutes(school.schedules);
-        } else {
-            setSchoolRoutes([]);
-        }
+        setSchoolSchedules(parsedSchedules);
 
-        // Manejar grades
-        if (typeof school.grades === 'string' && school.grades.trim()) {
+        // Grades
+        let parsedGrades = [];
+        if (Array.isArray(school.grades)) {
+            parsedGrades = school.grades;
+        } else {
             try {
-                const parsedGrades = JSON.parse(school.grades);
-                if (Array.isArray(parsedGrades)) {
-                    setSchoolGrades(parsedGrades);
-                } else {
-                    setSchoolGrades([]);
-                }
-            } catch (err) {
-                console.error('Error parseando grades JSON:', err);
-                setSchoolGrades([]);
+                parsedGrades = JSON.parse(school.grades) || [];
+            } catch {
+                parsedGrades = [];
             }
         }
-        else if (Array.isArray(school.grades)) {
-            setSchoolGrades(school.grades);
+        setSchoolGrades(parsedGrades);
+
+        // Extra Fields
+        let parsedExtraFields = [];
+        if (Array.isArray(school.extraEnrollmentFields)) {
+            parsedExtraFields = school.extraEnrollmentFields;
         } else {
-            setSchoolGrades([]);
+            try {
+                parsedExtraFields = JSON.parse(school.extraEnrollmentFields) || [];
+            } catch {
+                parsedExtraFields = [];
+            }
         }
+        setSchoolExtraFields(parsedExtraFields);
 
         setOpenDialog(true);
     };
 
-    // ============================
-    // 4) Eliminar colegio
-    // ============================
+    /**
+     * Eliminar Colegio
+     */
     const handleDeleteClick = async (schoolId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este colegio?')) {
             try {
@@ -226,19 +256,20 @@ const SchoolsManagementPage = () => {
         }
     };
 
-    // ============================
-    // 5) Cerrar el modal
-    // ============================
+    /**
+     * Cerrar Modal
+     */
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedSchool(null);
-        setSchoolRoutes([]);
-        setSchoolGrades([]); // Resetear grades
+        setSchoolSchedules([]);
+        setSchoolGrades([]);
+        setSchoolExtraFields([]);
     };
 
-    // ============================
-    // 6) Manejadores de input simple
-    // ============================
+    /**
+     * Manejo de Inputs (colegio)
+     */
     const handleInputChange = (e) => {
         setSelectedSchool((prev) => ({
             ...prev,
@@ -246,73 +277,52 @@ const SchoolsManagementPage = () => {
         }));
     };
 
-    // ============ Manejo de schoolRoutes (UI Dinámica) ============
-    const handleAddRoute = () => {
-        setSchoolRoutes((prev) => [
-            ...prev,
-            { day: '', times: [''], type: 'ruta Completa' } // Añadir campo 'type' por defecto
-        ]);
+    // Horarios
+    const handleAddSchedule = () => {
+        setSchoolSchedules((prev) => [...prev, { day: '', times: [''] }]);
     };
-
-    const handleRemoveRoute = (routeIndex) => {
-        setSchoolRoutes((prev) => {
+    const handleRemoveSchedule = (scheduleIndex) => {
+        setSchoolSchedules((prev) => {
             const newArr = [...prev];
-            newArr.splice(routeIndex, 1);
+            newArr.splice(scheduleIndex, 1);
             return newArr;
         });
     };
-
-    const handleRouteChange = (e, routeIndex) => {
+    const handleScheduleDayChange = (e, scheduleIndex) => {
         const { value } = e.target;
-        setSchoolRoutes((prev) => {
+        setSchoolSchedules((prev) => {
             const clone = [...prev];
-            clone[routeIndex].day = value;
+            clone[scheduleIndex].day = value;
             return clone;
         });
     };
-
-    const handleRouteTypeChange = (e, routeIndex) => {
+    const handleAddTime = (scheduleIndex) => {
+        setSchoolSchedules((prev) => {
+            const clone = [...prev];
+            clone[scheduleIndex].times.push('');
+            return clone;
+        });
+    };
+    const handleRemoveTime = (scheduleIndex, timeIndex) => {
+        setSchoolSchedules((prev) => {
+            const clone = [...prev];
+            clone[scheduleIndex].times.splice(timeIndex, 1);
+            return clone;
+        });
+    };
+    const handleTimeChange = (e, scheduleIndex, timeIndex) => {
         const { value } = e.target;
-        setSchoolRoutes((prev) => {
+        setSchoolSchedules((prev) => {
             const clone = [...prev];
-            clone[routeIndex].type = value;
+            clone[scheduleIndex].times[timeIndex] = value;
             return clone;
         });
     };
 
-    const handleAddTime = (routeIndex) => {
-        setSchoolRoutes((prev) => {
-            const clone = [...prev];
-            clone[routeIndex].times.push('');
-            return clone;
-        });
-    };
-
-    const handleRemoveTime = (routeIndex, timeIndex) => {
-        setSchoolRoutes((prev) => {
-            const clone = [...prev];
-            clone[routeIndex].times.splice(timeIndex, 1);
-            return clone;
-        });
-    };
-
-    const handleTimeChange = (e, routeIndex, timeIndex) => {
-        const { value } = e.target;
-        setSchoolRoutes((prev) => {
-            const clone = [...prev];
-            clone[routeIndex].times[timeIndex] = value;
-            return clone;
-        });
-    };
-
-    // ============ Manejo de schoolGrades (UI Dinámica) ============
+    // Grados
     const handleAddGrade = () => {
-        setSchoolGrades((prev) => [
-            ...prev,
-            { name: '' }
-        ]);
+        setSchoolGrades((prev) => [...prev, { name: '' }]);
     };
-
     const handleRemoveGrade = (gradeIndex) => {
         setSchoolGrades((prev) => {
             const newArr = [...prev];
@@ -320,7 +330,6 @@ const SchoolsManagementPage = () => {
             return newArr;
         });
     };
-
     const handleGradeChange = (e, gradeIndex) => {
         const { value } = e.target;
         setSchoolGrades((prev) => {
@@ -330,25 +339,39 @@ const SchoolsManagementPage = () => {
         });
     };
 
-    // ============================
-    // 7) Guardar (crear o actualizar)
-    // ============================
+    // Extra Fields (un solo campo => fieldName)
+    const handleAddExtraField = () => {
+        setSchoolExtraFields((prev) => [
+            ...prev,
+            { fieldName: '', type: 'text', required: false }
+        ]);
+    };
+    const handleRemoveExtraField = (index) => {
+        setSchoolExtraFields((prev) => {
+            const clone = [...prev];
+            clone.splice(index, 1);
+            return clone;
+        });
+    };
+    const handleChangeExtraField = (index, field, value) => {
+        setSchoolExtraFields((prev) => {
+            const clone = [...prev];
+            clone[index][field] = value;
+            return clone;
+        });
+    };
+
+    /**
+     * Guardar (Crear/Actualizar)
+     */
     const handleSave = async () => {
         if (!selectedSchool) return;
 
-        // Validaciones específicas para transportFeeComplete y transportFeeHalf
-        if (Number(selectedSchool.transportFeeComplete) < 0) {
+        // Validaciones simples
+        if (Number(selectedSchool.transportFeeComplete) < 0 || Number(selectedSchool.transportFeeHalf) < 0) {
             setSnackbar({
                 open: true,
-                message: 'La cuota de transporte completa no puede ser negativa.',
-                severity: 'error'
-            });
-            return;
-        }
-        if (Number(selectedSchool.transportFeeHalf) < 0) {
-            setSnackbar({
-                open: true,
-                message: 'La cuota de transporte media no puede ser negativa.',
+                message: 'Las cuotas de transporte no pueden ser negativas.',
                 severity: 'error'
             });
             return;
@@ -366,7 +389,6 @@ const SchoolsManagementPage = () => {
         }
 
         try {
-            // Armamos el payload, incluyendo transportFeeComplete y transportFeeHalf
             const payload = {
                 name: selectedSchool.name,
                 address: selectedSchool.address,
@@ -374,21 +396,24 @@ const SchoolsManagementPage = () => {
                 contactPerson: selectedSchool.contactPerson,
                 contactEmail: selectedSchool.contactEmail,
                 contactPhone: selectedSchool.contactPhone,
-                schedules: schoolRoutes, // array => se guardará como JSON en el backend
-                grades: schoolGrades, // Nuevo campo
-                transportFeeComplete: selectedSchool.transportFeeComplete || 0.0,
-                transportFeeHalf: selectedSchool.transportFeeHalf || 0.0,
-                duePaymentDay: selectedSchool.duePaymentDay || 1
+                schedules: schoolSchedules,
+                grades: schoolGrades,
+                transportFeeComplete: Number(selectedSchool.transportFeeComplete) || 0.0,
+                transportFeeHalf: Number(selectedSchool.transportFeeHalf) || 0.0,
+                duePaymentDay: Number(selectedSchool.duePaymentDay) || 1,
+
+                // Guardar extraEnrollmentFields con un solo campo (fieldName)
+                extraEnrollmentFields: schoolExtraFields
             };
 
             if (selectedSchool.id) {
-                // Update
+                // Actualizar
                 await api.put(`/schools/${selectedSchool.id}`, payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
                 setSnackbar({ open: true, message: 'Colegio actualizado exitosamente', severity: 'success' });
             } else {
-                // Create
+                // Crear
                 await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
@@ -403,76 +428,115 @@ const SchoolsManagementPage = () => {
         }
     };
 
-    // ============================
-    // 8) Búsqueda, paginación, etc.
-    // ============================
+    /**
+     * Búsqueda y paginación
+     */
     const handleSnackbarClose = () => {
         setSnackbar({ ...snackbar, open: false });
     };
-
-    const handleSearchChange = (e) => {
-        setSearchQuery(e.target.value);
-    };
-
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
+    const handleSearchChange = (e) => setSearchQuery(e.target.value);
+    const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => {
         setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
     };
 
-    // Filtrar
     const filteredSchools = schools.filter((sch) =>
         sch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (sch.city || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    // ============================
-    // NUEVO: Copiar enlace
-    // ============================
+    /**
+     * Copiar enlace del formulario de inscripción
+     */
     const handleCopyLink = (schoolId) => {
         const baseUrl = window.location.origin;
         const link = `${baseUrl}/schools/enroll/${schoolId}`;
 
-        navigator.clipboard.writeText(link).then(() => {
-            setSnackbar({
-                open: true,
-                message: 'Enlace copiado al portapapeles',
-                severity: 'success',
+        navigator.clipboard.writeText(link)
+            .then(() => {
+                setSnackbar({
+                    open: true,
+                    message: 'Enlace copiado al portapapeles',
+                    severity: 'success',
+                });
+            })
+            .catch((err) => {
+                console.error('Error copiando enlace:', err);
+                setSnackbar({
+                    open: true,
+                    message: 'No se pudo copiar el enlace',
+                    severity: 'error'
+                });
             });
-        }).catch((err) => {
-            console.error('Error copiando enlace:', err);
-            setSnackbar({
-                open: true,
-                message: 'No se pudo copiar el enlace',
-                severity: 'error'
-            });
-        });
     };
 
-    // ============================
-    // Manejo del Popover para grados adicionales
-    // ============================
+    /**
+     * Popover => ver +N grados
+     */
     const handlePopoverOpen = (event, grades) => {
         setAnchorEl(event.currentTarget);
         setPopoverGrades(grades);
     };
-
     const handlePopoverClose = () => {
         setAnchorEl(null);
         setPopoverGrades([]);
     };
+    const openPopover = Boolean(anchorEl);
+    const popoverId = openPopover ? 'grades-popover' : undefined;
 
-    const open = Boolean(anchorEl);
-    const id = open ? 'grades-popover' : undefined;
+    /**
+     * Carga Masiva (bulk)
+     */
+    const handleOpenBulkDialog = () => {
+        setBulkFile(null);
+        setBulkResults(null);
+        setOpenBulkDialog(true);
+    };
+    const handleCloseBulkDialog = () => {
+        setOpenBulkDialog(false);
+    };
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        setBulkFile(file);
+    };
+
+    const handleUploadBulk = async () => {
+        if (!bulkFile) return;
+        setBulkLoading(true);
+        setBulkResults(null);
+
+        const formData = new FormData();
+        formData.append('file', bulkFile);
+
+        try {
+            const resp = await api.post('/schools/bulk-upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${auth.token}`,
+                }
+            });
+            setBulkResults(resp.data);
+            fetchSchools();
+        } catch (error) {
+            console.error('Error al subir colegios masivamente:', error);
+            setSnackbar({
+                open: true,
+                message: 'Ocurrió un error al procesar la carga masiva',
+                severity: 'error'
+            });
+        }
+        setBulkLoading(false);
+    };
+
+    const downloadFilename = `colegios_template_${getFormattedDateTime()}.xlsx`;
 
     return (
         <SchoolsContainer>
             <Typography variant="h4" gutterBottom>
                 Gestión de Colegios
             </Typography>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
                 <TextField
                     label="Buscar colegios"
@@ -482,15 +546,27 @@ const SchoolsManagementPage = () => {
                     onChange={handleSearchChange}
                     style={{ width: '300px' }}
                 />
-                <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<Add />}
-                    onClick={handleAddSchool}
-                >
-                    Añadir Colegio
-                </Button>
+                <div>
+                    <Button
+                        variant="contained"
+                        color="info"
+                        startIcon={<FileUpload />}
+                        style={{ marginRight: '8px' }}
+                        onClick={handleOpenBulkDialog}
+                    >
+                        Carga Masiva
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<Add />}
+                        onClick={handleAddSchool}
+                    >
+                        Añadir Colegio
+                    </Button>
+                </div>
             </div>
+
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
                     <CircularProgress />
@@ -507,7 +583,7 @@ const SchoolsManagementPage = () => {
                                     <TableCell>Contacto</TableCell>
                                     <TableCell>Teléfono</TableCell>
                                     <TableCell>Email</TableCell>
-                                    <TableCell>Grados</TableCell> {/* Nueva columna */}
+                                    <TableCell>Grados</TableCell>
                                     <TableCell align="center">Formulario</TableCell>
                                     <TableCell align="center">Acciones</TableCell>
                                 </TableRow>
@@ -542,7 +618,9 @@ const SchoolsManagementPage = () => {
                                                             <Chip
                                                                 label={`+${remainingGrades} más`}
                                                                 size="small"
-                                                                onClick={(e) => handlePopoverOpen(e, school.grades.slice(maxVisibleGrades))}
+                                                                onClick={(e) =>
+                                                                    handlePopoverOpen(e, school.grades.slice(maxVisibleGrades))
+                                                                }
                                                                 clickable
                                                                 color="secondary"
                                                             />
@@ -569,9 +647,8 @@ const SchoolsManagementPage = () => {
                                                     </Tooltip>
                                                 </TableCell>
                                             </TableRow>
-                                        )
-                                    })
-                                }
+                                        );
+                                    })}
                                 {filteredSchools.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={9} align="center">
@@ -666,7 +743,6 @@ const SchoolsManagementPage = () => {
                         onChange={handleInputChange}
                     />
 
-                    {/* Campos NUEVOS: transportFeeComplete y transportFeeHalf */}
                     <TextField
                         margin="dense"
                         name="transportFeeComplete"
@@ -677,6 +753,7 @@ const SchoolsManagementPage = () => {
                         value={selectedSchool ? selectedSchool.transportFeeComplete : ''}
                         onChange={handleInputChange}
                         required
+                        inputProps={{ min: '0', step: '0.01' }}
                     />
                     <TextField
                         margin="dense"
@@ -688,6 +765,7 @@ const SchoolsManagementPage = () => {
                         value={selectedSchool ? selectedSchool.transportFeeHalf : ''}
                         onChange={handleInputChange}
                         required
+                        inputProps={{ min: '0', step: '0.01' }}
                     />
                     <TextField
                         margin="dense"
@@ -699,20 +777,21 @@ const SchoolsManagementPage = () => {
                         value={selectedSchool ? selectedSchool.duePaymentDay : ''}
                         onChange={handleInputChange}
                         required
+                        inputProps={{ min: '1', max: '31' }}
                     />
 
-                    {/* Título actualizado: Rutas */}
+                    {/* Horarios */}
                     <Typography variant="h6" style={{ marginTop: '1rem' }}>
-                        Rutas
+                        Horarios
                     </Typography>
-                    {schoolRoutes.map((route, routeIndex) => (
-                        <Paper key={routeIndex} style={{ padding: '1rem', marginTop: '1rem' }}>
+                    {schoolSchedules.map((sch, scheduleIndex) => (
+                        <Paper key={scheduleIndex} style={{ padding: '1rem', marginTop: '1rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <Typography variant="subtitle1">
-                                    Ruta #{routeIndex + 1}
+                                    Horario #{scheduleIndex + 1}
                                 </Typography>
                                 <IconButton
-                                    onClick={() => handleRemoveRoute(routeIndex)}
+                                    onClick={() => handleRemoveSchedule(scheduleIndex)}
                                     color="error"
                                     size="small"
                                 >
@@ -722,35 +801,18 @@ const SchoolsManagementPage = () => {
                             <TextField
                                 margin="dense"
                                 name="day"
-                                label="Día/Días"
+                                label="Día (ej: Lunes)"
                                 type="text"
                                 fullWidth
                                 variant="outlined"
-                                value={route.day}
-                                onChange={(e) => handleRouteChange(e, routeIndex)}
+                                value={sch.day}
+                                onChange={(e) => handleScheduleDayChange(e, scheduleIndex)}
                                 required
                             />
-
-                            {/* Nuevo: Select para Tipo de Ruta */}
-                            <FormControl fullWidth variant="outlined" margin="dense" required>
-                                <InputLabel id={`route-type-label-${routeIndex}`}>Tipo de Ruta</InputLabel>
-                                <Select
-                                    labelId={`route-type-label-${routeIndex}`}
-                                    label="Tipo de Ruta"
-                                    value={route.type}
-                                    onChange={(e) => handleRouteTypeChange(e, routeIndex)}
-                                    name="type"
-                                >
-                                    <MenuItem value="ruta Completa">Ruta Completa</MenuItem>
-                                    <MenuItem value="media AM">Media AM</MenuItem>
-                                    <MenuItem value="media PM">Media PM</MenuItem>
-                                </Select>
-                            </FormControl>
-
                             <Typography variant="subtitle2" style={{ marginTop: '0.5rem' }}>
                                 Horas
                             </Typography>
-                            {route.times.map((timeValue, timeIndex) => (
+                            {sch.times.map((timeValue, timeIndex) => (
                                 <div
                                     key={timeIndex}
                                     style={{
@@ -765,14 +827,14 @@ const SchoolsManagementPage = () => {
                                         variant="outlined"
                                         type="time"
                                         value={timeValue}
-                                        onChange={(e) => handleTimeChange(e, routeIndex, timeIndex)}
+                                        onChange={(e) => handleTimeChange(e, scheduleIndex, timeIndex)}
                                         InputLabelProps={{
                                             shrink: true,
                                         }}
                                         required
                                     />
                                     <IconButton
-                                        onClick={() => handleRemoveTime(routeIndex, timeIndex)}
+                                        onClick={() => handleRemoveTime(scheduleIndex, timeIndex)}
                                         color="error"
                                         size="small"
                                     >
@@ -783,23 +845,22 @@ const SchoolsManagementPage = () => {
                             <Button
                                 variant="outlined"
                                 startIcon={<Add />}
-                                onClick={() => handleAddTime(routeIndex)}
+                                onClick={() => handleAddTime(scheduleIndex)}
                             >
                                 Agregar hora
                             </Button>
                         </Paper>
                     ))}
-
                     <Button
                         variant="contained"
                         style={{ marginTop: '1rem' }}
-                        onClick={handleAddRoute}
+                        onClick={handleAddSchedule}
                         startIcon={<Add />}
                     >
-                        Agregar Ruta
+                        Agregar Horario
                     </Button>
 
-                    {/* Nueva Sección: Gestión de Grados */}
+                    {/* Grados */}
                     <Typography variant="h6" style={{ marginTop: '2rem' }}>
                         Grados del Colegio
                     </Typography>
@@ -830,7 +891,6 @@ const SchoolsManagementPage = () => {
                             />
                         </Paper>
                     ))}
-
                     <Button
                         variant="outlined"
                         style={{ marginTop: '1rem' }}
@@ -838,6 +898,67 @@ const SchoolsManagementPage = () => {
                         startIcon={<Add />}
                     >
                         Agregar Grado
+                    </Button>
+
+                    {/* CAMPOS EXTRA DE INSCRIPCIÓN */}
+                    <Typography variant="h6" style={{ marginTop: '2rem' }}>
+                        Campos Extra de Inscripción
+                    </Typography>
+                    {schoolExtraFields.map((field, idx) => (
+                        <Paper key={idx} style={{ padding: '1rem', marginTop: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="subtitle1">
+                                    Campo #{idx + 1}
+                                </Typography>
+                                <IconButton
+                                    onClick={() => handleRemoveExtraField(idx)}
+                                    color="error"
+                                    size="small"
+                                >
+                                    <Delete />
+                                </IconButton>
+                            </div>
+                            {/* Un solo nombre para placeholder y nombre interno => fieldName */}
+                            <TextField
+                                margin="dense"
+                                label="Nombre del Campo"
+                                type="text"
+                                fullWidth
+                                value={field.fieldName || ''}
+                                onChange={(e) => handleChangeExtraField(idx, 'fieldName', e.target.value)}
+                                required
+                            />
+
+                            <FormControl fullWidth margin="dense">
+                                <InputLabel>Tipo</InputLabel>
+                                <Select
+                                    value={field.type || 'text'}
+                                    onChange={(e) => handleChangeExtraField(idx, 'type', e.target.value)}
+                                >
+                                    <MenuItem value="text">Texto</MenuItem>
+                                    <MenuItem value="number">Número</MenuItem>
+                                    <MenuItem value="date">Fecha</MenuItem>
+                                    <MenuItem value="select">Select/Combo</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        checked={!!field.required}
+                                        onChange={(e) => handleChangeExtraField(idx, 'required', e.target.checked)}
+                                    />
+                                }
+                                label="Requerido"
+                            />
+                        </Paper>
+                    ))}
+                    <Button
+                        variant="outlined"
+                        style={{ marginTop: '1rem' }}
+                        onClick={handleAddExtraField}
+                        startIcon={<Add />}
+                    >
+                        Agregar Campo Extra
                     </Button>
                 </DialogContent>
                 <DialogActions>
@@ -854,10 +975,10 @@ const SchoolsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Popover para Grados Adicionales */}
+            {/* Popover => ver +N grados */}
             <Popover
-                id={id}
-                open={open}
+                id={popoverId}
+                open={openPopover}
                 anchorEl={anchorEl}
                 onClose={handlePopoverClose}
                 anchorOrigin={{
@@ -883,19 +1004,104 @@ const SchoolsManagementPage = () => {
                 </Box>
             </Popover>
 
+            {/* Diálogo Carga Masiva */}
+            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Carga Masiva de Colegios</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body1" sx={{ mb: 1 }}>
+                        Sube un archivo Excel/CSV con las columnas necesarias.
+                        <br />
+                        <strong>¡No necesitas usar JSON!</strong> <br />
+                        Para <em>Horarios</em> puedes escribir algo como: <br />
+                        <code>Lunes=08:00,09:00;Martes=07:00,09:30</code> <br />
+                        Para <em>Grados</em>, simplemente: <br />
+                        <code>Kinder,Primero,Segundo</code>
+                    </Typography>
+                    <Button
+                        variant="outlined"
+                        color="success"
+                        href="/plantillas/plantilla_colegios.xlsx"
+                        download={downloadFilename}
+                        sx={{ mr: 2 }}
+                    >
+                        Descargar Plantilla
+                    </Button>
+
+                    <Button variant="outlined" component="label" startIcon={<FileUpload />}>
+                        Seleccionar Archivo
+                        <input
+                            type="file"
+                            hidden
+                            onChange={handleFileChange}
+                            accept=".xlsx, .xls, .csv"
+                        />
+                    </Button>
+                    {bulkFile && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            {bulkFile.name}
+                        </Typography>
+                    )}
+
+                    {bulkLoading && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+                            <CircularProgress size={24} />
+                            <Typography variant="body2" sx={{ ml: 2 }}>
+                                Procesando archivo...
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {bulkResults && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="info">
+                                <Typography>
+                                    <strong>Colegios creados/actualizados:</strong> {bulkResults.successCount}
+                                </Typography>
+                                <Typography>
+                                    <strong>Errores:</strong> {bulkResults.errorsCount}
+                                </Typography>
+                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
+                                    <ul>
+                                        {bulkResults.errorsList.map((err, idx) => (
+                                            <li key={idx}>
+                                                Fila {err.row}: {err.errorMessage}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </Alert>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
+                    <Button
+                        onClick={handleUploadBulk}
+                        variant="contained"
+                        color="primary"
+                        disabled={!bulkFile || bulkLoading}
+                    >
+                        Subir
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
                 onClose={handleSnackbarClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
+                <Alert
+                    onClose={handleSnackbarClose}
+                    severity={snackbar.severity}
+                    sx={{ width: '100%' }}
+                >
                     {snackbar.message}
                 </Alert>
             </Snackbar>
         </SchoolsContainer>
     );
-
 };
 
 export default SchoolsManagementPage;

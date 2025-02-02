@@ -26,6 +26,9 @@ const SchoolEnrollmentPage = () => {
     const [loading, setLoading] = useState(true);
     const [grades, setGrades] = useState([]);
 
+    // Campos extra definidos en el colegio
+    const [extraFields, setExtraFields] = useState([]);
+
     // SECCIÓN I
     const [familyLastName, setFamilyLastName] = useState('');
     const [serviceAddress, setServiceAddress] = useState('');
@@ -55,6 +58,9 @@ const SchoolEnrollmentPage = () => {
     const [accountFullName, setAccountFullName] = useState('');
     const [accountEmail, setAccountEmail] = useState('');
     const [accountPassword, setAccountPassword] = useState('');
+
+    // Objeto para guardar los valores de los campos extra
+    const [formExtraValues, setFormExtraValues] = useState({});
 
     // SNACKBAR
     const [snackbar, setSnackbar] = useState({
@@ -93,6 +99,7 @@ const SchoolEnrollmentPage = () => {
 
         const finalStudentsCount = students.length;
 
+        // Construimos objeto con todos los campos
         const payload = {
             schoolId,
             familyLastName,
@@ -115,7 +122,11 @@ const SchoolEnrollmentPage = () => {
             emergencyPhone,
             accountFullName,
             accountEmail,
-            accountPassword
+            accountPassword,
+            specialFee: 0, // si requieres algún ajuste
+
+            // Aquí enviamos los valores extra
+            extraFields: formExtraValues
         };
 
         try {
@@ -147,6 +158,7 @@ const SchoolEnrollmentPage = () => {
             setAccountFullName('');
             setAccountEmail('');
             setAccountPassword('');
+            setFormExtraValues({});
         } catch (error) {
             console.error('Error al enviar formulario:', error);
             setSnackbar({
@@ -157,27 +169,43 @@ const SchoolEnrollmentPage = () => {
         }
     };
 
-    // Fetch de grados del colegio seleccionado
+    // Fetch de datos del colegio: grados y extraFields
     useEffect(() => {
-        const fetchGrades = async () => {
+        const fetchSchoolData = async () => {
             try {
-                const response = await api.get(`/schools/${schoolId}`, {
-                    headers: {
-                        // Si el endpoint requiere autenticación, añade el token aquí
-                        // Authorization: `Bearer ${token}`,
-                    }
-                });
+                const response = await api.get(`/schools/${schoolId}`);
+                if (response.data && response.data.school) {
+                    const { school } = response.data;
 
-                if (response.data && response.data.school && Array.isArray(response.data.school.grades)) {
-                    setGrades(response.data.school.grades);
+                    // Grades
+                    if (Array.isArray(school.grades)) {
+                        setGrades(school.grades);
+                    } else {
+                        setGrades([]);
+                    }
+
+                    // Extra fields (arreglo con fieldName, type, required)
+                    let parsedExtraFields = [];
+                    if (Array.isArray(school.extraEnrollmentFields)) {
+                        parsedExtraFields = school.extraEnrollmentFields;
+                    } else {
+                        try {
+                            parsedExtraFields = JSON.parse(school.extraEnrollmentFields) || [];
+                        } catch {
+                            parsedExtraFields = [];
+                        }
+                    }
+                    setExtraFields(parsedExtraFields);
+
                 } else {
                     setGrades([]);
+                    setExtraFields([]);
                 }
             } catch (error) {
-                console.error('Error al obtener los grados del colegio:', error);
+                console.error('Error al obtener info del colegio:', error);
                 setSnackbar({
                     open: true,
-                    message: 'No se pudieron obtener los grados del colegio.',
+                    message: 'No se pudieron obtener los datos del colegio.',
                     severity: 'error'
                 });
             } finally {
@@ -185,7 +213,7 @@ const SchoolEnrollmentPage = () => {
             }
         };
 
-        fetchGrades();
+        fetchSchoolData();
     }, [schoolId]);
 
     if (loading) {
@@ -253,6 +281,10 @@ const SchoolEnrollmentPage = () => {
 
                 {/* Formulario */}
                 <form onSubmit={handleSubmit} style={{ flexGrow: 1 }}>
+                    {/* SECCIÓN I */}
+                    <Typography variant="h6" sx={{ mb: 2 }}>
+                        Información Familiar
+                    </Typography>
                     <TextField
                         label="Apellidos de familia (del alumno NO de los padres)"
                         fullWidth
@@ -275,6 +307,7 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={zoneOrSector}
                         onChange={(e) => setZoneOrSector(e.target.value)}
+                        required
                     />
                     <FormControl fullWidth margin="normal">
                         <InputLabel>Tipo de ruta</InputLabel>
@@ -282,6 +315,7 @@ const SchoolEnrollmentPage = () => {
                             value={routeType}
                             onChange={(e) => setRouteType(e.target.value)}
                             label="Tipo de ruta"
+                            required
                         >
                             <MenuItem value="Completa">Completa</MenuItem>
                             <MenuItem value="Media PM">Media PM</MenuItem>
@@ -294,12 +328,12 @@ const SchoolEnrollmentPage = () => {
                             value={studentsCount}
                             onChange={(e) => setStudentsCount(e.target.value)}
                             label="Cantidad de alumnos"
+                            required
                         >
                             <MenuItem value={1}>1</MenuItem>
                             <MenuItem value={2}>2</MenuItem>
                             <MenuItem value={3}>3</MenuItem>
                             <MenuItem value={4}>4</MenuItem>
-                            {/* Puedes agregar más opciones si es necesario */}
                         </Select>
                     </FormControl>
 
@@ -348,13 +382,8 @@ const SchoolEnrollmentPage = () => {
 
                     <Divider sx={{ my: 3 }} />
 
-                    <Typography variant="h6" sx={{
-                        backgroundColor: '#47A56B',
-                        color: '#FFFFFF',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '4px',
-                        mb: 2
-                    }}>
+                    {/* SECCIÓN II */}
+                    <Typography variant="h6" sx={{ mb: 2 }}>
                         Datos de la Madre
                     </Typography>
                     <TextField
@@ -363,6 +392,7 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={motherName}
                         onChange={(e) => setMotherName(e.target.value)}
+                        required
                     />
                     <TextField
                         label="Celular madre"
@@ -370,6 +400,7 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={motherPhone}
                         onChange={(e) => setMotherPhone(e.target.value)}
+                        required
                     />
                     <TextField
                         label="Correo madre"
@@ -378,17 +409,13 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={motherEmail}
                         onChange={(e) => setMotherEmail(e.target.value)}
+                        required
                     />
 
                     <Divider sx={{ my: 3 }} />
 
-                    <Typography variant="h6" sx={{
-                        backgroundColor: '#47A56B',
-                        color: '#FFFFFF',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '4px',
-                        mb: 2
-                    }}>
+                    {/* SECCIÓN III */}
+                    <Typography variant="h6" sx={{ mb: 2 }}>
                         Datos del Padre
                     </Typography>
                     <TextField
@@ -397,6 +424,7 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={fatherName}
                         onChange={(e) => setFatherName(e.target.value)}
+                        required
                     />
                     <TextField
                         label="Celular padre"
@@ -404,6 +432,7 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={fatherPhone}
                         onChange={(e) => setFatherPhone(e.target.value)}
+                        required
                     />
                     <TextField
                         label="Correo padre"
@@ -412,17 +441,13 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={fatherEmail}
                         onChange={(e) => setFatherEmail(e.target.value)}
+                        required
                     />
 
                     <Divider sx={{ my: 3 }} />
 
-                    <Typography variant="h6" sx={{
-                        backgroundColor: '#47A56B',
-                        color: '#FFFFFF',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '4px',
-                        mb: 2
-                    }}>
+                    {/* SECCIÓN IV */}
+                    <Typography variant="h6" sx={{ mb: 2 }}>
                         Contacto de Emergencia
                     </Typography>
                     <TextField
@@ -431,6 +456,7 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={emergencyContact}
                         onChange={(e) => setEmergencyContact(e.target.value)}
+                        required
                     />
                     <TextField
                         label="Parentesco"
@@ -438,6 +464,7 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={emergencyRelationship}
                         onChange={(e) => setEmergencyRelationship(e.target.value)}
+                        required
                     />
                     <TextField
                         label="Celular"
@@ -445,10 +472,12 @@ const SchoolEnrollmentPage = () => {
                         margin="normal"
                         value={emergencyPhone}
                         onChange={(e) => setEmergencyPhone(e.target.value)}
+                        required
                     />
 
                     <Divider sx={{ my: 3 }} />
 
+                    {/* SECCIÓN V */}
                     <Typography
                         variant="h6"
                         sx={{
@@ -487,6 +516,93 @@ const SchoolEnrollmentPage = () => {
                         onChange={(e) => setAccountPassword(e.target.value)}
                         required
                     />
+
+                    <Divider sx={{ my: 3 }} />
+
+                    {/* CAMPOS EXTRA DEFINIDOS POR EL COLEGIO */}
+                    {extraFields.length > 0 && (
+                        <>
+                            <Typography variant="h6" sx={{ mb: 2 }}>
+                                Campos Adicionales
+                            </Typography>
+                            {extraFields.map((field, idx) => (
+                                <Box key={idx} sx={{ mb: 2 }}>
+                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                                        {field.fieldName}
+                                        {field.required && ' *'}
+                                    </Typography>
+
+                                    {field.type === 'text' && (
+                                        <TextField
+                                            placeholder={field.fieldName}
+                                            fullWidth
+                                            required={field.required}
+                                            value={formExtraValues[field.fieldName] || ''}
+                                            onChange={(e) =>
+                                                setFormExtraValues({
+                                                    ...formExtraValues,
+                                                    [field.fieldName]: e.target.value
+                                                })
+                                            }
+                                        />
+                                    )}
+
+                                    {field.type === 'number' && (
+                                        <TextField
+                                            type="number"
+                                            placeholder={field.fieldName}
+                                            fullWidth
+                                            required={field.required}
+                                            value={formExtraValues[field.fieldName] || ''}
+                                            onChange={(e) =>
+                                                setFormExtraValues({
+                                                    ...formExtraValues,
+                                                    [field.fieldName]: e.target.value
+                                                })
+                                            }
+                                        />
+                                    )}
+
+                                    {field.type === 'date' && (
+                                        <TextField
+                                            type="date"
+                                            fullWidth
+                                            required={field.required}
+                                            InputLabelProps={{ shrink: true }}
+                                            placeholder={field.fieldName}
+                                            value={formExtraValues[field.fieldName] || ''}
+                                            onChange={(e) =>
+                                                setFormExtraValues({
+                                                    ...formExtraValues,
+                                                    [field.fieldName]: e.target.value
+                                                })
+                                            }
+                                        />
+                                    )}
+
+                                    {field.type === 'select' && (
+                                        <FormControl fullWidth required={field.required}>
+                                            <InputLabel>{field.fieldName}</InputLabel>
+                                            <Select
+                                                value={formExtraValues[field.fieldName] || ''}
+                                                onChange={(e) =>
+                                                    setFormExtraValues({
+                                                        ...formExtraValues,
+                                                        [field.fieldName]: e.target.value
+                                                    })
+                                                }
+                                            >
+                                                {/* Ejemplo de opciones fijas */}
+                                                <MenuItem value="">-- Seleccione --</MenuItem>
+                                                <MenuItem value="Opción1">Opción1</MenuItem>
+                                                <MenuItem value="Opción2">Opción2</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    )}
+                                </Box>
+                            ))}
+                        </>
+                    )}
 
                     <Button
                         type="submit"
@@ -534,4 +650,5 @@ const SchoolEnrollmentPage = () => {
         </Box>
     );
 };
+
 export default SchoolEnrollmentPage;

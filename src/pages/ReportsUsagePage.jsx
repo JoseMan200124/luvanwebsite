@@ -1,7 +1,7 @@
 // src/pages/ReportsUsagePage.jsx
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Typography, Grid, Card, CardContent, Button } from '@mui/material';
+import { Typography, Grid, Card, CardContent, Button, CircularProgress, Snackbar, Alert } from '@mui/material';
 import {
     LineChart,
     Line,
@@ -25,57 +25,48 @@ import html2canvas from 'html2canvas';
 
 const ReportsUsagePage = () => {
     const [data, setData] = useState({
-        routes: [
-            { routeName: 'Ruta 1', usageCount: 120 },
-            { routeName: 'Ruta 2', usageCount: 80 },
-            { routeName: 'Ruta 3', usageCount: 150 },
-            { routeName: 'Ruta 4', usageCount: 60 },
-            { routeName: 'Ruta 5', usageCount: 200 },
-        ],
-        schools: [
-            { schoolName: 'Colegio San Martín', usageCount: 200 },
-            { schoolName: 'Instituto Belgrano', usageCount: 150 },
-            { schoolName: 'Escuela Nacional', usageCount: 100 },
-            { schoolName: 'Colegio del Sur', usageCount: 50 },
-        ],
-        incidents: [
-            { date: 'Enero', mechanical: 2, electrical: 1, accidents: 0 },
-            { date: 'Febrero', mechanical: 1, electrical: 2, accidents: 1 },
-            { date: 'Marzo', mechanical: 3, electrical: 1, accidents: 0 },
-            { date: 'Abril', mechanical: 2, electrical: 0, accidents: 2 },
-            { date: 'Mayo', mechanical: 1, electrical: 1, accidents: 1 },
-        ],
+        // routes: [], // Removido
+        schools: [],
+        incidents: [],
+        distancePerPilot: [], // Nueva métrica
     });
 
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const reportRef = useRef();
 
     useEffect(() => {
         // Llamadas a la API para obtener datos
         const fetchData = async () => {
+            setLoading(true);
+            setError(null);
             try {
-                const [routesRes, schoolsRes, incidentsRes] = await Promise.all([
-                    api.get('/reports/routes-usage'),
+                const [schoolsRes, incidentsRes, distancePerPilotRes] = await Promise.all([
                     api.get('/reports/schools-usage'),
-                    api.get('/reports/incidents'),
+                    api.get('/reports/incidents-by-type'),
+                    api.get('/reports/distance-per-pilot'), // Nueva llamada
                 ]);
 
                 setData({
-                    routes: routesRes.data,
-                    schools: schoolsRes.data,
-                    incidents: incidentsRes.data,
+                    schools: schoolsRes.data.schools,
+                    incidents: incidentsRes.data.incidents,
+                    distancePerPilot: distancePerPilotRes.data.distancePerPilot, // Asignación de la nueva métrica
                 });
             } catch (error) {
                 console.error('Error fetching report data', error);
+                setError('Error al obtener datos de reportes. Por favor, inténtalo de nuevo más tarde.');
+            } finally {
+                setLoading(false);
             }
         };
 
-        // fetchData();
+        fetchData();
     }, []);
 
     // Función para generar PDF
     const generatePDF = () => {
         const input = reportRef.current;
-        html2canvas(input).then((canvas) => {
+        html2canvas(input, { scale: 2 }).then((canvas) => {
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('p', 'mm', 'a4');
             const imgProps = pdf.getImageProperties(imgData);
@@ -91,17 +82,17 @@ const ReportsUsagePage = () => {
     const generateExcel = () => {
         const workbook = XLSX.utils.book_new();
 
-        // Datos de Uso por Rutas
-        const routesSheet = XLSX.utils.json_to_sheet(data.routes);
-        XLSX.utils.book_append_sheet(workbook, routesSheet, 'Uso por Rutas');
-
         // Datos de Uso por Colegios
         const schoolsSheet = XLSX.utils.json_to_sheet(data.schools);
         XLSX.utils.book_append_sheet(workbook, schoolsSheet, 'Uso por Colegios');
 
         // Datos de Incidentes
         const incidentsSheet = XLSX.utils.json_to_sheet(data.incidents);
-        XLSX.utils.book_append_sheet(workbook, incidentsSheet, 'Incidentes');
+        XLSX.utils.book_append_sheet(workbook, incidentsSheet, 'Incidentes por Tipo');
+
+        // Datos de Distancia por Piloto
+        const distancePerPilotSheet = XLSX.utils.json_to_sheet(data.distancePerPilot);
+        XLSX.utils.book_append_sheet(workbook, distancePerPilotSheet, 'Distancia por Piloto');
 
         const excelBuffer = XLSX.write(workbook, {
             bookType: 'xlsx',
@@ -128,97 +119,93 @@ const ReportsUsagePage = () => {
                 </Button>
             </div>
 
-            <div ref={reportRef}>
-                <Grid container spacing={4}>
-                    {/* Gráfico de Uso por Rutas */}
-                    <Grid item xs={12} md={6}>
-                        <Card>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom>
-                                    Uso por Rutas
-                                </Typography>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={data.routes}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="routeName" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="usageCount" name="Cantidad de Uso" fill="#8884d8" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    </Grid>
+            {loading ? (
+                <div tw="flex justify-center items-center h-64">
+                    <CircularProgress />
+                </div>
+            ) : error ? (
+                <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
+                    <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+                        {error}
+                    </Alert>
+                </Snackbar>
+            ) : (
+                <div ref={reportRef}>
+                    <Grid container spacing={4}>
+                        {/* Nueva Gráfica: Distancia Total Recorrida por Piloto */}
+                        <Grid item xs={12} md={6}>
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="h6" gutterBottom>
+                                        Distancia Total Recorrida por Piloto (km)
+                                    </Typography>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <BarChart data={data.distancePerPilot}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="pilotName" />
+                                            <YAxis />
+                                            <Tooltip formatter={(value) => value.toFixed(2)} />
+                                            <Legend />
+                                            <Bar dataKey="totalDistance" name="Distancia (km)" fill="#82ca9d" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </Grid>
 
-                    {/* Gráfico de Uso por Colegios */}
-                    <Grid item xs={12} md={6}>
-                        <Card>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom>
-                                    Uso por Colegios
-                                </Typography>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <PieChart>
-                                        <Pie
-                                            data={data.schools}
-                                            dataKey="usageCount"
-                                            nameKey="schoolName"
-                                            cx="50%"
-                                            cy="50%"
-                                            outerRadius={100}
-                                            fill="#82ca9d"
-                                            label
-                                        />
-                                        <Tooltip />
-                                        <Legend />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    </Grid>
+                        {/* Gráfica de Uso por Colegios */}
+                        <Grid item xs={12} md={6}>
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="h6" gutterBottom>
+                                        Uso por Colegios
+                                    </Typography>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <PieChart>
+                                            <Pie
+                                                data={data.schools}
+                                                dataKey="usageCount"
+                                                nameKey="schoolName"
+                                                cx="50%"
+                                                cy="50%"
+                                                outerRadius={100}
+                                                fill="#82ca9d"
+                                                label
+                                            />
+                                            <Tooltip formatter={(value) => value} />
+                                            <Legend />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </Grid>
 
-                    {/* Gráfico de Incidentes */}
-                    <Grid item xs={12}>
-                        <Card>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom>
-                                    Incidentes por Tipo
-                                </Typography>
-                                <ResponsiveContainer width="100%" height={400}>
-                                    <LineChart data={data.incidents}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="mechanical"
-                                            name="Mecánicos"
-                                            stroke="#8884d8"
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="electrical"
-                                            name="Eléctricos"
-                                            stroke="#82ca9d"
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="accidents"
-                                            name="Accidentes"
-                                            stroke="#ffc658"
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
+                        {/* Gráfica de Incidentes por Tipo */}
+                        <Grid item xs={12}>
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="h6" gutterBottom>
+                                        Incidentes por Tipo
+                                    </Typography>
+                                    <ResponsiveContainer width="100%" height={400}>
+                                        <BarChart data={data.incidents}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="type" />
+                                            <YAxis />
+                                            <Tooltip formatter={(value) => value} />
+                                            <Legend />
+                                            <Bar dataKey="count" name="Cantidad de Incidentes" fill="#ffc658" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </Grid>
                     </Grid>
-                </Grid>
-            </div>
+                </div>
+            )}
         </div>
     );
+
 };
 
 export default ReportsUsagePage;

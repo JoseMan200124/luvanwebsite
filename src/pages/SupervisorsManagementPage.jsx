@@ -1,4 +1,4 @@
-// src/pages/MonitorsManagementPage.jsx
+// src/pages/SupervisorsManagementPage.jsx
 import React, { useEffect, useState, useContext } from 'react';
 import {
     Typography,
@@ -19,12 +19,12 @@ import tw from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 
-const MonitorsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
+const SupervisorsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
-const MonitorsManagementPage = () => {
+const SupervisorsManagementPage = () => {
     const { auth } = useContext(AuthContext);
 
-    const [monitors, setMonitors] = useState([]);
+    const [supervisors, setSupervisors] = useState([]);
     const [loading, setLoading] = useState(false);
 
     // Para búsqueda y paginación
@@ -33,28 +33,28 @@ const MonitorsManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
     useEffect(() => {
-        fetchMonitors();
+        fetchSupervisors();
         // eslint-disable-next-line
     }, []);
 
-    const fetchMonitors = async () => {
+    const fetchSupervisors = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/staff/monitors', {
+            const res = await api.get('/staff/supervisors', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            setMonitors(res.data.monitors || []);
+            setSupervisors(res.data.supervisors || []);
         } catch (error) {
-            console.error('Error al obtener monitores:', error);
-            setMonitors([]);
+            console.error('Error al obtener supervisores:', error);
+            setSupervisors([]);
         }
         setLoading(false);
     };
 
     // Filtrado por texto
-    const filteredMonitors = monitors.filter((m) =>
-        (m.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (m.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredSupervisors = supervisors.filter((s) =>
+        (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.email || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     // Manejo de paginación
@@ -67,15 +67,15 @@ const MonitorsManagementPage = () => {
     };
 
     return (
-        <MonitorsContainer>
+        <SupervisorsContainer>
             <Typography variant="h4" gutterBottom>
-                Gestión de Monitores
+                Gestión de Supervisores
             </Typography>
 
             {/* Búsqueda */}
             <div tw="mb-4 flex">
                 <TextField
-                    label="Buscar Monitores"
+                    label="Buscar Supervisores"
                     variant="outlined"
                     size="small"
                     value={searchQuery}
@@ -100,19 +100,19 @@ const MonitorsManagementPage = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {filteredMonitors
+                                {filteredSupervisors
                                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                    .map((monitor) => (
-                                        <TableRow key={monitor.id}>
-                                            <TableCell>{monitor.id}</TableCell>
-                                            <TableCell>{monitor.name}</TableCell>
-                                            <TableCell>{monitor.email}</TableCell>
+                                    .map((sup) => (
+                                        <TableRow key={sup.id}>
+                                            <TableCell>{sup.id}</TableCell>
+                                            <TableCell>{sup.name}</TableCell>
+                                            <TableCell>{sup.email}</TableCell>
                                         </TableRow>
                                     ))}
-                                {filteredMonitors.length === 0 && (
+                                {filteredSupervisors.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={3} align="center">
-                                            No se encontraron monitores.
+                                            No se encontraron supervisores.
                                         </TableCell>
                                     </TableRow>
                                 )}
@@ -121,7 +121,7 @@ const MonitorsManagementPage = () => {
                     </TableContainer>
                     <TablePagination
                         component="div"
-                        count={filteredMonitors.length}
+                        count={filteredSupervisors.length}
                         page={page}
                         onPageChange={handleChangePage}
                         rowsPerPage={rowsPerPage}
@@ -131,8 +131,8 @@ const MonitorsManagementPage = () => {
                     />
                 </Paper>
             )}
-        </MonitorsContainer>
+        </SupervisorsContainer>
     );
 };
 
-export default MonitorsManagementPage;
+export default SupervisorsManagementPage;

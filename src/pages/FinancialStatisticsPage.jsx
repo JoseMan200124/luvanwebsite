@@ -1,7 +1,16 @@
 // src/pages/FinancialStatisticsPage.jsx
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Typography, Grid, Card, CardContent, Button } from '@mui/material';
+import {
+    Typography,
+    Grid,
+    Card,
+    CardContent,
+    Button,
+    CircularProgress,
+    Snackbar,
+    Alert,
+} from '@mui/material';
 import {
     LineChart,
     Line,
@@ -23,37 +32,19 @@ import html2canvas from 'html2canvas';
 
 const FinancialStatisticsPage = () => {
     const [data, setData] = useState({
-        revenue: [
-            { month: 'Enero', amount: 5000 },
-            { month: 'Febrero', amount: 6000 },
-            { month: 'Marzo', amount: 7000 },
-            { month: 'Abril', amount: 8000 },
-            { month: 'Mayo', amount: 7500 },
-            { month: 'Junio', amount: 8500 },
-        ],
-        outstandingPayments: [
-            { month: 'Enero', amount: 1000 },
-            { month: 'Febrero', amount: 1500 },
-            { month: 'Marzo', amount: 1200 },
-            { month: 'Abril', amount: 1300 },
-            { month: 'Mayo', amount: 1100 },
-            { month: 'Junio', amount: 1400 },
-        ],
-        latePayments: [
-            { month: 'Enero', lateFees: 200 },
-            { month: 'Febrero', lateFees: 250 },
-            { month: 'Marzo', lateFees: 300 },
-            { month: 'Abril', lateFees: 350 },
-            { month: 'Mayo', lateFees: 400 },
-            { month: 'Junio', lateFees: 450 },
-        ],
+        revenue: [],
+        outstandingPayments: [],
+        latePayments: [],
     });
 
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const reportRef = useRef();
 
     useEffect(() => {
-        // Llamadas a la API para obtener datos
         const fetchData = async () => {
+            setLoading(true);
+            setError(null);
             try {
                 const [revenueRes, outstandingRes, lateRes] = await Promise.all([
                     api.get('/reports/revenue'),
@@ -62,22 +53,25 @@ const FinancialStatisticsPage = () => {
                 ]);
 
                 setData({
-                    revenue: revenueRes.data,
-                    outstandingPayments: outstandingRes.data,
-                    latePayments: lateRes.data,
+                    revenue: revenueRes.data.revenue,
+                    outstandingPayments: outstandingRes.data.outstandingPayments,
+                    latePayments: lateRes.data.latePayments,
                 });
             } catch (error) {
                 console.error('Error fetching financial data', error);
+                setError('Error al obtener datos financieros. Por favor, inténtalo de nuevo más tarde.');
+            } finally {
+                setLoading(false);
             }
         };
 
-        // fetchData();
+        fetchData();
     }, []);
 
     // Función para generar PDF
     const generatePDF = () => {
         const input = reportRef.current;
-        html2canvas(input).then((canvas) => {
+        html2canvas(input, { scale: 2 }).then((canvas) => {
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('p', 'mm', 'a4');
             const imgProps = pdf.getImageProperties(imgData);
@@ -130,81 +124,94 @@ const FinancialStatisticsPage = () => {
                 </Button>
             </div>
 
-            <div ref={reportRef}>
-                <Grid container spacing={4}>
-                    {/* Gráfico de Ingresos */}
-                    <Grid item xs={12} md={6}>
-                        <Card>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom>
-                                    Ingresos Mensuales
-                                </Typography>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <LineChart data={data.revenue}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="month" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="amount"
-                                            name="Ingresos"
-                                            stroke="#8884d8"
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    </Grid>
+            {loading ? (
+                <div tw="flex justify-center items-center h-64">
+                    <CircularProgress />
+                </div>
+            ) : error ? (
+                <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
+                    <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+                        {error}
+                    </Alert>
+                </Snackbar>
+            ) : (
+                <div ref={reportRef}>
+                    <Grid container spacing={4}>
+                        {/* Gráfico de Ingresos */}
+                        <Grid item xs={12} md={6}>
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="h6" gutterBottom>
+                                        Ingresos Mensuales
+                                    </Typography>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <LineChart data={data.revenue}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="month" />
+                                            <YAxis />
+                                            <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                            <Legend />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="amount"
+                                                name="Ingresos"
+                                                stroke="#8884d8"
+                                                activeDot={{ r: 8 }}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </Grid>
 
-                    {/* Gráfico de Pagos Pendientes */}
-                    <Grid item xs={12} md={6}>
-                        <Card>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom>
-                                    Pagos Pendientes
-                                </Typography>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={data.outstandingPayments}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="month" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="amount" name="Pendientes" fill="#82ca9d" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    </Grid>
+                        {/* Gráfico de Pagos Pendientes */}
+                        <Grid item xs={12} md={6}>
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="h6" gutterBottom>
+                                        Pagos Pendientes
+                                    </Typography>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <BarChart data={data.outstandingPayments}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="month" />
+                                            <YAxis />
+                                            <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                            <Legend />
+                                            <Bar dataKey="amount" name="Pendientes" fill="#82ca9d" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </Grid>
 
-                    {/* Gráfico de Cobros por Mora */}
-                    <Grid item xs={12}>
-                        <Card>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom>
-                                    Cobros por Mora
-                                </Typography>
-                                <ResponsiveContainer width="100%" height={400}>
-                                    <BarChart data={data.latePayments}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="month" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar
-                                            dataKey="lateFees"
-                                            name="Cobros por Mora"
-                                            fill="#ffc658"
-                                        />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
+                        {/* Gráfico de Cobros por Mora */}
+                        <Grid item xs={12}>
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="h6" gutterBottom>
+                                        Cobros por Mora
+                                    </Typography>
+                                    <ResponsiveContainer width="100%" height={400}>
+                                        <BarChart data={data.latePayments}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="month" />
+                                            <YAxis />
+                                            <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                            <Legend />
+                                            <Bar
+                                                dataKey="lateFees"
+                                                name="Cobros por Mora"
+                                                fill="#ffc658"
+                                            />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </Grid>
                     </Grid>
-                </Grid>
-            </div>
+                </div>
+            )}
         </div>
     );
 };

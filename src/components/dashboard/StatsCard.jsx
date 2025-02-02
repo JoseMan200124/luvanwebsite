@@ -1,18 +1,18 @@
-// src/components/dashboard/StatsCard.jsx
+// frontend/src/components/dashboard/StatsCard.jsx
 
 import React from 'react';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import { Card, CardContent, Typography } from '@mui/material';
-import { Group, AttachMoney, ReportProblem, School } from '@mui/icons-material';
+import { AttachMoney, PendingActions, ReportProblem, School, DirectionsWalk, DirectionsBike } from '@mui/icons-material';
 
 const CardContainer = styled(Card)`
-  ${tw`shadow-lg`}
+    ${tw`shadow-lg`}
 `;
 
 const IconWrapper = styled.div`
-  ${tw`flex items-center justify-center h-12 w-12 rounded-full`}
-  background-color: ${({ iconColor }) => iconColor || '#144CCC'};
+    ${tw`flex items-center justify-center h-12 w-12 rounded-full`}
+    background-color: ${({ iconColor }) => iconColor || '#144CCC'};
 `;
 
 const StatsCard = ({ title, value, icon }) => {
@@ -20,24 +20,32 @@ const StatsCard = ({ title, value, icon }) => {
     let iconColor;
 
     switch (icon) {
-        case 'Group':
-            IconComponent = Group;
-            iconColor = '#2D966C';
-            break;
         case 'AttachMoney':
             IconComponent = AttachMoney;
             iconColor = '#144CCC';
             break;
+        case 'PendingActions':
+            IconComponent = PendingActions;
+            iconColor = '#FF9800'; // Naranja para pendiente
+            break;
         case 'ReportProblem':
             IconComponent = ReportProblem;
-            iconColor = '#F44336'; // Red color for alerts
+            iconColor = '#F44336'; // Rojo para alertas
             break;
         case 'School':
             IconComponent = School;
-            iconColor = '#FFC107'; // Amber color
+            iconColor = '#FFC107'; // Ámbar
+            break;
+        case 'DirectionsWalk':
+            IconComponent = DirectionsWalk;
+            iconColor = '#4CAF50'; // Verde para caminar
+            break;
+        case 'DirectionsBike':
+            IconComponent = DirectionsBike;
+            iconColor = '#2196F3'; // Azul para bicicleta
             break;
         default:
-            IconComponent = Group;
+            IconComponent = School;
             iconColor = '#144CCC';
     }
 
@@ -52,7 +60,7 @@ const StatsCard = ({ title, value, icon }) => {
                         {title}
                     </Typography>
                     <Typography variant="h4" tw="font-bold">
-                        {value}
+                        {value.toLocaleString()}
                     </Typography>
                 </div>
             </CardContent>
