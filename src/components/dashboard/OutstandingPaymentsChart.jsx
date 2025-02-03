@@ -37,14 +37,14 @@ const OutstandingPaymentsChart = ({ filters }) => {
     return (
         <ChartContainer>
             <Typography variant="h6" gutterBottom>
-                Pagos Pendientes (USD) - Últimos 6 Meses
+                Pagos Pendientes (Quetzales) - Últimos 6 Meses
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
-                    <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                    <Tooltip formatter={(value) => `Q${value.toFixed(2)}`} />
                     <Legend />
                     <Bar dataKey="amount" name="Pagos Pendientes" fill="#82ca9d" />
                 </BarChart>

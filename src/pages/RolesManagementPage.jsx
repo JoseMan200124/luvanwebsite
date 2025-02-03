@@ -424,7 +424,9 @@ const RolesManagementPage = () => {
                 email: selectedUser.email,
                 roleId: selectedUser.roleId,
                 school: selectedUser.school,
-                busId: selectedUser.busId || null
+                busId: selectedUser.busId || null,
+                // NUEVA LÍNEA: capturar phoneNumber para rol 4 (o para cualquiera si se quiere)
+                phoneNumber: selectedUser.phoneNumber || null
             };
 
             if (selectedUser.password && selectedUser.password.trim() !== '') {
@@ -785,6 +787,21 @@ const RolesManagementPage = () => {
                                         ))}
                                     </Select>
                                 </FormControl>
+                            </Grid>
+                        )}
+
+                        {/* Monitora => phoneNumber */}
+                        {selectedUser?.roleId == 4 && (
+                            <Grid item xs={12} md={6}>
+                                <TextField
+                                    name="phoneNumber"
+                                    label="Teléfono de la Monitora"
+                                    type="text"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={selectedUser?.phoneNumber || ''}
+                                    onChange={handleUserChange}
+                                />
                             </Grid>
                         )}
                     </Grid>

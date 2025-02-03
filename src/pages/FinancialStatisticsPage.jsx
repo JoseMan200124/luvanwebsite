@@ -26,9 +26,11 @@ import {
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import jsPDF from 'jspdf';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 import html2canvas from 'html2canvas';
+import moment from 'moment-timezone';
+
+// Configuración de la zona horaria de Guatemala:
+moment.tz.setDefault('America/Guatemala');
 
 const FinancialStatisticsPage = () => {
     const [data, setData] = useState({
@@ -68,44 +70,50 @@ const FinancialStatisticsPage = () => {
         fetchData();
     }, []);
 
-    // Función para generar PDF
-    const generatePDF = () => {
-        const input = reportRef.current;
-        html2canvas(input, { scale: 2 }).then((canvas) => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    // Función para generar PDF con estilo mejorado
+    const generatePDF = async () => {
+        const now = moment();
+        const dateString = now.format('YYYY_MM_DD_HH_mm');
+        const fileName = `estadisticas_financieras_${dateString}.pdf`.toLowerCase();
 
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save('Estadisticas_Financieras.pdf');
-        });
-    };
+        // Creamos una copia del contenido
+        const printableArea = reportRef.current.cloneNode(true);
 
-    // Función para generar Excel
-    const generateExcel = () => {
-        const workbook = XLSX.utils.book_new();
+        // Contenedor temporal
+        const tempDiv = document.createElement('div');
+        tempDiv.style.padding = '20px';
+        tempDiv.style.backgroundColor = '#fff';
+        tempDiv.style.color = '#000';
+        tempDiv.style.width = '210mm';
+        tempDiv.style.minHeight = '297mm';
+        tempDiv.style.margin = '0 auto';
 
-        // Datos de Ingresos
-        const revenueSheet = XLSX.utils.json_to_sheet(data.revenue);
-        XLSX.utils.book_append_sheet(workbook, revenueSheet, 'Ingresos');
+        const heading = document.createElement('h2');
+        heading.style.textAlign = 'center';
+        heading.textContent = 'Reporte de Estadísticas Financieras';
 
-        // Datos de Pagos Pendientes
-        const outstandingSheet = XLSX.utils.json_to_sheet(data.outstandingPayments);
-        XLSX.utils.book_append_sheet(workbook, outstandingSheet, 'Pagos Pendientes');
+        const dateInfo = document.createElement('p');
+        dateInfo.style.textAlign = 'center';
+        dateInfo.style.marginBottom = '20px';
+        dateInfo.textContent = `Generado el: ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`;
 
-        // Datos de Cobros por Mora
-        const latePaymentsSheet = XLSX.utils.json_to_sheet(data.latePayments);
-        XLSX.utils.book_append_sheet(workbook, latePaymentsSheet, 'Cobros por Mora');
+        tempDiv.appendChild(heading);
+        tempDiv.appendChild(dateInfo);
+        tempDiv.appendChild(printableArea);
 
-        const excelBuffer = XLSX.write(workbook, {
-            bookType: 'xlsx',
-            type: 'array',
-        });
+        document.body.appendChild(tempDiv);
 
-        const dataBlob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-        saveAs(dataBlob, 'Estadisticas_Financieras.xlsx');
+        const canvas = await html2canvas(tempDiv, { scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(fileName);
+
+        document.body.removeChild(tempDiv);
     };
 
     return (
@@ -114,13 +122,10 @@ const FinancialStatisticsPage = () => {
                 Estadísticas Financieras
             </Typography>
 
-            {/* Botones para generar reportes */}
+            {/* Botón para generar PDF (ya no hay Excel) */}
             <div tw="flex space-x-4 mb-4">
                 <Button variant="contained" color="primary" onClick={generatePDF}>
                     Generar PDF
-                </Button>
-                <Button variant="contained" color="secondary" onClick={generateExcel}>
-                    Generar Excel
                 </Button>
             </div>
 
@@ -135,7 +140,7 @@ const FinancialStatisticsPage = () => {
                     </Alert>
                 </Snackbar>
             ) : (
-                <div ref={reportRef}>
+                <div ref={reportRef} style={{ backgroundColor: '#fff', padding: '16px' }}>
                     <Grid container spacing={4}>
                         {/* Gráfico de Ingresos */}
                         <Grid item xs={12} md={6}>

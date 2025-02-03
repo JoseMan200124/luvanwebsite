@@ -81,7 +81,7 @@ const BusesManagementPage = () => {
     // Monitores disponibles
     const [availableMonitors, setAvailableMonitors] = useState([]);
 
-    // ==== Carga Masiva ====
+    // ==== CARGA MASIVA ====
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
@@ -221,12 +221,32 @@ const BusesManagementPage = () => {
     };
 
     /**
-     * Manejar archivos subidos
+     * Manejar archivos subidos (para crear/editar un bus)
+     * Validamos que ningún archivo supere 5MB antes de setearlo.
      */
     const handleFileChange = (e) => {
+        const files = e.target.files;
+        const maxSize = 5 * 1024 * 1024; // 5MB
+
+        if (files.length > 0) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (file.size > maxSize) {
+                    setSnackbar({
+                        open: true,
+                        message: `El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`,
+                        severity: 'error'
+                    });
+                    e.target.value = null;
+                    return;
+                }
+            }
+        }
+
+        // Si todos los archivos son válidos, los guardamos en el estado
         setSelectedBus((prev) => ({
             ...prev,
-            files: e.target.files
+            files
         }));
     };
 
@@ -250,6 +270,7 @@ const BusesManagementPage = () => {
 
             if (selectedBus.files && selectedBus.files.length > 0) {
                 Array.from(selectedBus.files).forEach((file) => {
+                    // Solo adjuntamos los nuevos (sin id)
                     if (!file.id) {
                         formData.append('files', file);
                     }
@@ -290,7 +311,7 @@ const BusesManagementPage = () => {
             console.error('Error saving bus:', err);
             setSnackbar({
                 open: true,
-                message: 'Error al guardar el bus',
+                message: 'Ocurrió un error al guardar el bus',
                 severity: 'error'
             });
         }
@@ -369,8 +390,25 @@ const BusesManagementPage = () => {
     const handleCloseBulkDialog = () => {
         setOpenBulkDialog(false);
     };
+
+    /**
+     * Validar el tamaño del archivo de carga masiva
+     */
     const handleBulkFileChange = (e) => {
         const file = e.target.files[0];
+        const maxSize = 5 * 1024 * 1024; // 5 MB
+
+        if (file && file.size > maxSize) {
+            setSnackbar({
+                open: true,
+                message: `El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`,
+                severity: 'error'
+            });
+            // Limpiamos el input
+            e.target.value = null;
+            return;
+        }
+
         setBulkFile(file);
     };
 
@@ -457,7 +495,7 @@ const BusesManagementPage = () => {
                                     <TableCell>Descripción</TableCell>
                                     <TableCell>Piloto (Email)</TableCell>
                                     <TableCell>Monitora (Email)</TableCell>
-                                    <TableCell>Archivos</TableCell>
+                                    <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
                                     <TableCell align="center">Acciones</TableCell>
                                 </TableRow>
                             </TableHead>
@@ -471,47 +509,74 @@ const BusesManagementPage = () => {
                                             <TableCell>{bus.routeNumber || 'N/A'}</TableCell>
                                             <TableCell>{bus.occupation || 0}</TableCell>
                                             <TableCell>{bus.description}</TableCell>
-                                            {/* Mostrar email del piloto */}
                                             <TableCell>{bus.pilot ? bus.pilot.email : ''}</TableCell>
-                                            {/* Mostrar email de la monitora */}
                                             <TableCell>{bus.monitora ? bus.monitora.email : ''}</TableCell>
-                                            <TableCell>
-                                                <List>
-                                                    {bus.files.map((file) => (
-                                                        <ListItem key={file.id}>
-                                                            {file.fileType === 'application/pdf' ? (
-                                                                <InsertDriveFile />
-                                                            ) : (
-                                                                <ImageIcon />
-                                                            )}
-                                                            <ListItemText>
-                                                                <Link
-                                                                    href={file.fileUrl}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                >
-                                                                    {file.fileName.split('/').pop()}
-                                                                </Link>
-                                                            </ListItemText>
-                                                            <ListItemSecondaryAction>
-                                                                <Tooltip title="Eliminar Archivo">
-                                                                    <IconButton
-                                                                        edge="end"
-                                                                        onClick={() => handleDeleteFile(bus.id, file.id)}
-                                                                    >
-                                                                        <Delete />
-                                                                    </IconButton>
+
+                                            <TableCell sx={{ maxWidth: 200, verticalAlign: 'top' }}>
+                                                <List disablePadding>
+                                                    {bus.files.map((file) => {
+                                                        const fileLabel = file.fileName.split('/').pop();
+
+                                                        return (
+                                                            <ListItem
+                                                                key={file.id}
+                                                                disableGutters
+                                                                sx={{ paddingTop: 0, paddingBottom: 0 }}
+                                                            >
+                                                                {file.fileType === 'application/pdf' ? (
+                                                                    <InsertDriveFile sx={{ marginRight: 1 }} />
+                                                                ) : (
+                                                                    <ImageIcon sx={{ marginRight: 1 }} />
+                                                                )}
+                                                                <Tooltip title={fileLabel}>
+                                                                    <ListItemText
+                                                                        primary={
+                                                                            <Link
+                                                                                href={file.fileUrl}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                            >
+                                                                                {fileLabel}
+                                                                            </Link>
+                                                                        }
+                                                                        primaryTypographyProps={{
+                                                                            noWrap: true,
+                                                                            sx: {
+                                                                                overflow: 'hidden',
+                                                                                textOverflow: 'ellipsis',
+                                                                                maxWidth: '140px'
+                                                                            }
+                                                                        }}
+                                                                    />
                                                                 </Tooltip>
-                                                            </ListItemSecondaryAction>
-                                                        </ListItem>
-                                                    ))}
+
+                                                                <ListItemSecondaryAction>
+                                                                    <Tooltip title="Eliminar Archivo">
+                                                                        <IconButton
+                                                                            edge="end"
+                                                                            onClick={() =>
+                                                                                handleDeleteFile(bus.id, file.id)
+                                                                            }
+                                                                        >
+                                                                            <Delete />
+                                                                        </IconButton>
+                                                                    </Tooltip>
+                                                                </ListItemSecondaryAction>
+                                                            </ListItem>
+                                                        );
+                                                    })}
                                                     {bus.files.length === 0 && (
-                                                        <Typography variant="body2" color="textSecondary">
+                                                        <Typography
+                                                            variant="body2"
+                                                            color="textSecondary"
+                                                            sx={{ fontStyle: 'italic' }}
+                                                        >
                                                             No hay archivos.
                                                         </Typography>
                                                     )}
                                                 </List>
                                             </TableCell>
+
                                             <TableCell align="center">
                                                 <Tooltip title="Editar">
                                                     <IconButton onClick={() => handleEditClick(bus)}>
@@ -598,7 +663,7 @@ const BusesManagementPage = () => {
                         onChange={handleInputChange}
                     />
 
-                    {/* Selección de Piloto: se muestra el email en lugar del nombre */}
+                    {/* Selección de Piloto */}
                     <FormControl fullWidth margin="dense">
                         <InputLabel>Piloto</InputLabel>
                         <Select
@@ -622,7 +687,7 @@ const BusesManagementPage = () => {
                         </Select>
                     </FormControl>
 
-                    {/* Selección de Monitora: se muestra el email en lugar del nombre */}
+                    {/* Selección de Monitora */}
                     <FormControl fullWidth margin="dense">
                         <InputLabel>Monitora</InputLabel>
                         <Select
@@ -669,6 +734,7 @@ const BusesManagementPage = () => {
                         <List sx={{ mt: 2 }}>
                             {[...selectedBus.files].map((file, index) => {
                                 if (file.id) {
+                                    // Archivos ya existentes en el bus
                                     return (
                                         <ListItem key={file.id}>
                                             {file.fileType === 'application/pdf' ? (
@@ -684,6 +750,7 @@ const BusesManagementPage = () => {
                                         </ListItem>
                                     );
                                 } else {
+                                    // Archivos nuevos que el usuario acaba de subir
                                     return (
                                         <ListItem key={index}>
                                             {file.type === 'application/pdf' ? (
@@ -716,7 +783,7 @@ const BusesManagementPage = () => {
                     <Typography variant="body1" sx={{ mb: 1 }}>
                         Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial
                         (Columnas sugeridas: "Placa", "Capacidad", "Descripción", <strong>"Piloto"</strong>,{' '}
-                        <strong>"Monitora"</strong>, "Número de Ruta").
+                        <strong>"Monitora"</strong>, "Número de Ruta"). El límite de archivo es 5 MB.
                     </Typography>
 
                     <Button

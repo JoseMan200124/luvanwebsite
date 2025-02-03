@@ -160,12 +160,12 @@ const Dashboard = () => {
                     <StatsGrid>
                         {/* Indicadores Existentes */}
                         <StatsCard
-                            title="Pagos Pendientes (USD)"
+                            title="Pagos Pendientes (Quetzales)"
                             value={outstandingPayments.reduce((acc, curr) => acc + curr.amount, 0)}
                             icon="PendingActions"
                         />
                         <StatsCard
-                            title="Cobros por Mora (USD)"
+                            title="Cobros por Mora (Quetzales)"
                             value={latePayments.reduce((acc, curr) => acc + curr.lateFees, 0)}
                             icon="ReportProblem"
                         />
@@ -192,7 +192,6 @@ const Dashboard = () => {
             )}
         </DashboardContainer>
     );
-
 };
 
 export default Dashboard;

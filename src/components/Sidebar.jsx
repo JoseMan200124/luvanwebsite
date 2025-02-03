@@ -13,7 +13,8 @@ import {
     Logout as LogoutIcon,
     AccountCircle,
     Settings,
-} from '@mui/icons-material';
+    Home as HomeIcon,
+} from '@mui/icons-material'; // <-- Importamos un icono "HomeIcon" para Dashboard
 import { AuthContext } from '../context/AuthProvider';
 import NotificationsMenu from './NotificationsMenu';
 import api from '../utils/axiosConfig';
@@ -143,6 +144,19 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 {/* Menú principal */}
                 <MainMenu>
                     <SidebarMenu>
+                        {/* NUEVO: Primer botón => Link al Dashboard */}
+                        <RouterLink
+                            to="/admin/dashboard"
+                            style={{ textDecoration: 'none', color: 'inherit' }}
+                        >
+                            <MenuItem>
+                                <div tw="flex items-center">
+                                    <HomeIcon tw="mr-2" />
+                                    {isOpen && <span>Dashboard</span>}
+                                </div>
+                            </MenuItem>
+                        </RouterLink>
+
                         {modules.map((module, index) => {
                             const { key, name, icon: ModuleIcon, submodules } = module;
 
@@ -153,7 +167,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                 <div key={key}>
                                     <MenuItem onClick={() => handleMenuClick(index)}>
                                         <div tw="flex items-center">
-                                            {/* Icono dinámico (ModuleIcon) si existe; sino muestra algo por defecto */}
                                             {ModuleIcon && <ModuleIcon tw="mr-2" />}
                                             {isOpen && <span>{name}</span>}
                                         </div>
@@ -162,7 +175,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                         )}
                                     </MenuItem>
 
-                                    {/* Submódulos */}
                                     {isOpen && submodules && openMenus[index] && (
                                         <div>
                                             {submodules.map((submodule) => {
@@ -191,7 +203,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 </MainMenu>
 
                 <SidebarMenu tw="flex flex-col">
-
                     {(user.role === 'Administrador' || user.role === 'Gestor') && (
                         <RouterLink to="/admin/roles-permisos" style={{ textDecoration: 'none', color: 'inherit' }}>
                             <MenuItem>
@@ -203,7 +214,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         </RouterLink>
                     )}
 
-                    {/* Logout */}
                     <LogoutItem onClick={handleLogout}>
                         <div tw="flex items-center">
                             <LogoutIcon tw="mr-2" />

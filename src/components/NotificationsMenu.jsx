@@ -1,4 +1,5 @@
 // src/components/NotificationsMenu.jsx
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
     IconButton,
@@ -21,22 +22,20 @@ const NotificationIconButton = styled(IconButton)`
 `;
 
 const NotificationsMenu = ({ authToken }) => {
-    // Estado local con TODAS las notificaciones (read y unread)
     const [notifications, setNotifications] = useState([]);
     const [anchorEl, setAnchorEl] = useState(null);
     const menuOpen = Boolean(anchorEl);
     const menuRef = useRef();
 
-    // 1) Cargar **todas** las notificaciones (read y unread)
+    // ==============================
+    // 1) Cargar todas las notificaciones
+    // ==============================
     const fetchAllNotifications = async () => {
         try {
-            // Asegúrate de que tu backend, con ?allStatuses=true,
-            // retorne TODAS en data.notifications, sean read o unread
+            // Ajusta esta URL/query param si tu backend es diferente
             const response = await api.get('/notifications?allStatuses=true', {
                 headers: { Authorization: `Bearer ${authToken}` },
             });
-            console.log('RESPUESTA NOTIFICACIONES:', response);
-
             const fetched = Array.isArray(response.data.notifications)
                 ? response.data.notifications
                 : [];
@@ -47,79 +46,97 @@ const NotificationsMenu = ({ authToken }) => {
         }
     };
 
+    // ==============================
     // 2) Marcar una notificación como leída
+    // ==============================
     const markNotificationAsRead = async (notificationId) => {
         try {
             await api.put(`/notifications/${notificationId}/read`, null, {
                 headers: { Authorization: `Bearer ${authToken}` },
             });
-            // En local, cambiamos status => 'read'
+            // En local, cambiamos su estado a "read"
             setNotifications((prev) =>
-                prev.map((n) => {
-                    if (n.id === notificationId) {
-                        return { ...n, status: 'read' };
-                    }
-                    return n;
-                })
+                prev.map((n) =>
+                    n.id === notificationId
+                        ? { ...n, status: 'read' }
+                        : n
+                )
             );
         } catch (err) {
             console.error('Error marking notification as read:', err);
         }
     };
 
-    const handleNotificationClick = (notificationId) => {
-        markNotificationAsRead(notificationId);
-        handleMenuClose();
-    };
-
-    // 3) Limpiar todas => marca todas read
-    const handleClearNotifications = async () => {
-        for (const notif of notifications) {
-            if (notif.status === 'unread') {
+    // ==============================
+    // 3) Marcar TODAS como leídas
+    // ==============================
+    const markAllNotificationsAsRead = async () => {
+        try {
+            // Filtramos las "unread"
+            const unreadList = notifications.filter((n) => n.status === 'unread');
+            for (const notif of unreadList) {
+                // Las marcamos como read una por una
                 await markNotificationAsRead(notif.id);
             }
+        } catch (error) {
+            console.error('Error marking all notifications as read:', error);
         }
-        handleMenuClose();
     };
 
-    // 4) useEffect => cargar notifs + socket
-    useEffect(() => {
-        if (!authToken) return;
-
-        // Cargar TODAS las notificaciones
-        fetchAllNotifications();
-
-        // Conectar socket
-        const socket = getSocket();
-        if (socket) {
-            socket.on('new_notification', (newNoti) => {
-                console.log('Recibida notificación via socket:', newNoti);
-                setNotifications((prev) => [newNoti, ...prev]);
-            });
-        }
-
-        return () => {
-            if (socket) {
-                socket.off('new_notification');
-            }
-        };
-    }, [authToken]);
-
-    // 5) Manejo del Menú
+    // ==============================
+    // 4) Al abrir el menú => recargar y marcar leídas
+    // ==============================
     const handleMenuOpen = async (event) => {
         setAnchorEl(event.currentTarget);
         // Volvemos a pedir la lista más reciente
         await fetchAllNotifications();
+        // Marcar todas como leídas
+        await markAllNotificationsAsRead();
     };
+
+    // ==============================
+    // 5) Cerrar el menú
+    // ==============================
     const handleMenuClose = () => {
         setAnchorEl(null);
     };
 
-    // 6) Cálculo del badge => sólo las que están "unread"
-    // de esta forma, si la notificación ya es "read", el badge no la cuenta.
+    // ==============================
+    // 6) "Limpiar" => marcar todas read
+    // (ahora es redundante porque ya se marcan al abrir,
+    //  pero lo dejamos si quieres un botón extra)
+    // ==============================
+    const handleClearNotifications = async () => {
+        await markAllNotificationsAsRead();
+        handleMenuClose();
+    };
+
+    // ==============================
+    // 7) Efecto para cargar y escuchar socket
+    // ==============================
+    useEffect(() => {
+        if (!authToken) return;
+
+        // Cargar notificaciones
+        fetchAllNotifications();
+
+        // Escuchar socket
+        const socket = getSocket();
+        if (socket) {
+            socket.on('new_notification', (newNoti) => {
+                setNotifications((prev) => [newNoti, ...prev]);
+            });
+        }
+        return () => {
+            if (socket) socket.off('new_notification');
+        };
+    }, [authToken]);
+
+    // ==============================
+    // 8) Contador => unread
+    // ==============================
     const unreadCount = notifications.filter((n) => n.status === 'unread').length;
 
-    // RENDER
     return (
         <>
             <NotificationIconButton onClick={handleMenuOpen} ref={menuRef}>
@@ -157,7 +174,9 @@ const NotificationsMenu = ({ authToken }) => {
                     notifications.map((notification, index) => (
                         <div key={notification.id || index}>
                             <MenuItem
-                                onClick={() => handleNotificationClick(notification.id)}
+                                // Eliminamos la acción de 'onClick' individual,
+                                // ya que al abrir el menú se marcan todas
+                                // onClick={() => handleNotificationClick(notification.id)}
                                 style={{
                                     position: 'relative',
                                     minHeight: '80px',

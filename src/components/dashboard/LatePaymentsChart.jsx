@@ -37,14 +37,14 @@ const LatePaymentsChart = ({ filters }) => {
     return (
         <ChartContainer>
             <Typography variant="h6" gutterBottom>
-                Cobros por Mora (USD)
+                Cobros por Mora (Quetzales)
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
-                    <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                    <Tooltip formatter={(value) => `Q${value.toFixed(2)}`} />
                     <Legend />
                     <Bar dataKey="lateFees" name="Cobros por Mora" fill="#FF8042" />
                 </BarChart>

@@ -1,5 +1,3 @@
-// src/pages/ActivityLogPage.jsx
-
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -40,43 +38,56 @@ import {
 import tw, { styled } from 'twin.macro';
 import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
+import moment from 'moment-timezone';
+
+// Configuración de moment-timezone para Guatemala
+moment.tz.setDefault('America/Guatemala');
+
+const formatGuatemalaDatetime = (dateString) => {
+    if (!dateString) return '—';
+    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
+};
+
+const formatGuatemalaDate = (dateString) => {
+    if (!dateString) return '—';
+    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY');
+};
 
 //
-// ======= Estilos con twin.macro / styled-components =======
+// Estilos con twin.macro / styled-components
 //
 const PageContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 const Title = styled(Typography)(() => [
     tw`text-3xl font-bold mb-4`,
     {
-        color: '#1C3FAA',
-    },
+        color: '#1C3FAA'
+    }
 ]);
 
-// Se deja una altura mínima y scroll para cada sección
 const SectionPaper = styled(Paper)(() => [
     tw`p-4 mb-6 rounded-lg`,
     {
         backgroundColor: '#FFFFFF',
         boxShadow: '0 3px 6px rgba(0,0,0,0.1)',
-        minHeight: '600px', // altura mínima fija
-        overflowY: 'auto',  // scroll si sobrepasa
-    },
+        minHeight: '600px',
+        overflowY: 'auto'
+    }
 ]);
 
 const SectionTitle = styled(Typography)(() => [
     tw`font-semibold mb-3`,
     {
-        color: '#2563EB',
-    },
+        color: '#2563EB'
+    }
 ]);
 
-const AccordionStyled = styled(Accordion)(() => [
+const AccordionStyled = styled((props) => <Accordion disableGutters {...props} />)(() => [
     tw`border rounded-lg overflow-hidden mb-2`,
     {
         borderColor: '#93C5FD',
-        backgroundColor: '#F8FAFF',
-    },
+        backgroundColor: '#F8FAFF'
+    }
 ]);
 
 const AccordionSummaryStyled = styled(AccordionSummary)(() => [
@@ -84,63 +95,57 @@ const AccordionSummaryStyled = styled(AccordionSummary)(() => [
     {
         backgroundColor: '#E0F2FE',
         '&:hover': {
-            backgroundColor: '#BAE6FD',
-        },
-    },
+            backgroundColor: '#BAE6FD'
+        }
+    }
 ]);
 
 const TableHeaderCell = styled(TableCell)(() => [
     tw`font-semibold`,
     {
         backgroundColor: '#DCF3FF',
-        color: '#333',
-    },
+        color: '#333'
+    }
 ]);
 
-// Contenedor para los filtros, para que queden en la misma fila con algo de padding
 const FiltersRow = tw.div`flex gap-4 mb-4 items-center`;
 
 //
-// ======= Componente principal =======
+// Componente principal
 //
 const ActivityLogPage = () => {
     const { auth } = useContext(AuthContext);
-
     const [loading, setLoading] = useState(false);
 
-    // ======= Data principal =======
+    // Estados para cada sección
     const [buses, setBuses] = useState([]);
     const [incidents, setIncidents] = useState([]);
     const [emergencies, setEmergencies] = useState([]);
     const [payments, setPayments] = useState([]);
 
-    // ======= Snackbar =======
+    // Snackbar
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
-        severity: 'info',
+        severity: 'info'
     });
 
-    // ======= Diálogo de boletas =======
+    // Diálogo de boletas
     const [openBoletasDialog, setOpenBoletasDialog] = useState(false);
     const [currentBoletas, setCurrentBoletas] = useState([]);
     const [currentParentName, setCurrentParentName] = useState('');
 
-    // ======= Acordeones =======
+    // Acordeones
     const [expanded, setExpanded] = useState(false);
 
-    // ============================
-    //   Filtros & paginación Buses
-    // ============================
+    // Filtros & paginación Buses
     const [busPilotFilter, setBusPilotFilter] = useState('');
     const [busMonitoraFilter, setBusMonitoraFilter] = useState('');
     const [busDescriptionFilter, setBusDescriptionFilter] = useState('');
     const [busPage, setBusPage] = useState(0);
     const [busRowsPerPage, setBusRowsPerPage] = useState(5);
 
-    // ============================
-    //   Filtros & paginación Incidentes
-    // ============================
+    // Filtros & paginación Incidentes
     const [incDateFrom, setIncDateFrom] = useState('');
     const [incDateTo, setIncDateTo] = useState('');
     const [incPilotFilter, setIncPilotFilter] = useState('');
@@ -148,18 +153,14 @@ const ActivityLogPage = () => {
     const [incPage, setIncPage] = useState(0);
     const [incRowsPerPage, setIncRowsPerPage] = useState(5);
 
-    // ============================
-    //   Filtros & paginación Emergencias
-    // ============================
+    // Filtros & paginación Emergencias
     const [emeDateFrom, setEmeDateFrom] = useState('');
     const [emeDateTo, setEmeDateTo] = useState('');
     const [emePilotFilter, setEmePilotFilter] = useState('');
     const [emePage, setEmePage] = useState(0);
     const [emeRowsPerPage, setEmeRowsPerPage] = useState(5);
 
-    // ============================
-    //   Filtros & paginación Pagos
-    // ============================
+    // Filtros & paginación Pagos
     const [payDateFrom, setPayDateFrom] = useState('');
     const [payDateTo, setPayDateTo] = useState('');
     const [payBalanceMin, setPayBalanceMin] = useState('');
@@ -167,9 +168,7 @@ const ActivityLogPage = () => {
     const [payPage, setPayPage] = useState(0);
     const [payRowsPerPage, setPayRowsPerPage] = useState(5);
 
-    // ================================================
-    // useEffect - Cargar Data
-    // ================================================
+    // Cargar data al iniciar
     useEffect(() => {
         fetchAllData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -178,9 +177,8 @@ const ActivityLogPage = () => {
     const fetchAllData = async () => {
         try {
             setLoading(true);
-
-            // Buses
-            const busResp = await api.get('/buses');
+            // <<-- IMPORTANTE: se usa la ruta de activity-logs para obtener los buses con sus paradas -->
+            const busResp = await api.get('/activity-logs');
             // Incidentes
             const incResp = await api.get('/activity-logs/incidents');
             // Emergencias
@@ -188,7 +186,7 @@ const ActivityLogPage = () => {
             // Pagos
             const payResp = await api.get('/payments');
 
-            setBuses(busResp.data.buses || []);
+            setBuses(busResp.data || []);
             setIncidents(incResp.data.incidents || []);
             setEmergencies(emeResp.data.emergencies || []);
             setPayments(payResp.data.payments || []);
@@ -197,23 +195,19 @@ const ActivityLogPage = () => {
             setSnackbar({
                 open: true,
                 message: 'Error al obtener datos para registro de actividades',
-                severity: 'error',
+                severity: 'error'
             });
         } finally {
             setLoading(false);
         }
     };
 
-    // ================================================
     // Acordeón
-    // ================================================
     const handleChangeAccordion = (panel) => (event, isExpanded) => {
         setExpanded(isExpanded ? panel : false);
     };
 
-    // ================================================
     // Ver Boletas (Payments)
-    // ================================================
     const handleViewBoletas = async (fatherId, fatherName) => {
         try {
             setLoading(true);
@@ -227,7 +221,7 @@ const ActivityLogPage = () => {
             setSnackbar({
                 open: true,
                 message: 'Error al obtener boletas del padre',
-                severity: 'error',
+                severity: 'error'
             });
         } finally {
             setLoading(false);
@@ -240,61 +234,48 @@ const ActivityLogPage = () => {
         setCurrentParentName('');
     };
 
-    // ================================================
-    // Bus "En Taller" (Botón e icono)
-    // ================================================
-    const handleBusTaller = async (busId) => {
+    // Toggle "En Taller" del Bus
+    const handleToggleBusTaller = async (bus, newValue) => {
         try {
             setLoading(true);
-            // Ejemplo: PUT /buses/:id/taller (o algo así)
-            await api.put(`/buses/${busId}/taller`, { inWorkshop: true });
+            await api.put(`/buses/${bus.id}/taller`, { inWorkshop: newValue });
             setSnackbar({
                 open: true,
-                message: 'Bus actualizado como "En Taller".',
-                severity: 'success',
+                message: newValue
+                    ? 'Bus marcado como "En Taller".'
+                    : 'Bus marcado como disponible.',
+                severity: 'success'
             });
-            // Refresca data
             fetchAllData();
         } catch (error) {
-            console.error('Error handleBusTaller =>', error);
+            console.error('Error handleToggleBusTaller =>', error);
             setSnackbar({
                 open: true,
-                message: 'No se pudo actualizar el bus al taller',
-                severity: 'error',
+                message: 'No se pudo actualizar el estado del bus',
+                severity: 'error'
             });
         } finally {
             setLoading(false);
         }
     };
 
-    // ================================================
     // Filtros & Paginación (Front-End) - Buses
-    // ================================================
     const filteredBuses = buses.filter((b) => {
-        // Filtra por Piloto
         if (busPilotFilter) {
             const pilotName = b?.pilot?.name?.toLowerCase() || '';
-            if (!pilotName.includes(busPilotFilter.toLowerCase())) {
-                return false;
-            }
+            if (!pilotName.includes(busPilotFilter.toLowerCase())) return false;
         }
-        // Filtra por Monitora
         if (busMonitoraFilter) {
             const monitoraName = b?.monitora?.name?.toLowerCase() || '';
-            if (!monitoraName.includes(busMonitoraFilter.toLowerCase())) {
-                return false;
-            }
+            if (!monitoraName.includes(busMonitoraFilter.toLowerCase())) return false;
         }
-        // Filtra por Descripción
         if (busDescriptionFilter) {
             const desc = b?.description?.toLowerCase() || '';
-            if (!desc.includes(busDescriptionFilter.toLowerCase())) {
-                return false;
-            }
+            if (!desc.includes(busDescriptionFilter.toLowerCase())) return false;
         }
         return true;
     });
-    // Paginación Buses
+
     const busesPaginated = filteredBuses.slice(
         busPage * busRowsPerPage,
         busPage * busRowsPerPage + busRowsPerPage
@@ -308,38 +289,29 @@ const ActivityLogPage = () => {
         setBusPage(0);
     };
 
-    // ================================================
-    // Filtros & Paginación (Front-End) - Incidentes
-    // ================================================
+    // Filtros & Paginación - Incidentes
     const filteredIncidents = incidents.filter((inc) => {
-        // Filtra por rango de fechas
         if (incDateFrom) {
-            const from = new Date(incDateFrom).getTime();
-            const incDate = new Date(inc.fecha).getTime();
-            if (incDate < from) return false;
+            const from = moment(incDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
+            const incDateMs = moment.utc(inc.fecha).tz('America/Guatemala').valueOf();
+            if (incDateMs < from) return false;
         }
         if (incDateTo) {
-            const to = new Date(incDateTo).getTime();
-            const incDate = new Date(inc.fecha).getTime();
-            if (incDate > to) return false;
+            const to = moment(incDateTo, 'YYYY-MM-DD').endOf('day').valueOf();
+            const incDateMs = moment.utc(inc.fecha).tz('America/Guatemala').valueOf();
+            if (incDateMs > to) return false;
         }
-        // Filtra por Piloto
         if (incPilotFilter) {
             const pilotName = inc?.piloto?.name?.toLowerCase() || '';
-            if (!pilotName.includes(incPilotFilter.toLowerCase())) {
-                return false;
-            }
+            if (!pilotName.includes(incPilotFilter.toLowerCase())) return false;
         }
-        // Filtra por descripción (o tipo)
         if (incDescriptionFilter) {
             const desc = inc?.descripcion?.toLowerCase() || '';
-            if (!desc.includes(incDescriptionFilter.toLowerCase())) {
-                return false;
-            }
+            if (!desc.includes(incDescriptionFilter.toLowerCase())) return false;
         }
         return true;
     });
-    // Paginación Incidentes
+
     const incPaginated = filteredIncidents.slice(
         incPage * incRowsPerPage,
         incPage * incRowsPerPage + incRowsPerPage
@@ -353,31 +325,25 @@ const ActivityLogPage = () => {
         setIncPage(0);
     };
 
-    // ================================================
-    // Filtros & Paginación (Front-End) - Emergencias
-    // ================================================
+    // Filtros & Paginación - Emergencias
     const filteredEmergencies = emergencies.filter((eme) => {
-        // Filtra por rango de fechas
         if (emeDateFrom) {
-            const from = new Date(emeDateFrom).getTime();
-            const emeDate = new Date(eme.fecha).getTime();
-            if (emeDate < from) return false;
+            const from = moment(emeDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
+            const emeDateMs = moment.utc(eme.fecha).tz('America/Guatemala').valueOf();
+            if (emeDateMs < from) return false;
         }
         if (emeDateTo) {
-            const to = new Date(emeDateTo).getTime();
-            const emeDate = new Date(eme.fecha).getTime();
-            if (emeDate > to) return false;
+            const to = moment(emeDateTo, 'YYYY-MM-DD').endOf('day').valueOf();
+            const emeDateMs = moment.utc(eme.fecha).tz('America/Guatemala').valueOf();
+            if (emeDateMs > to) return false;
         }
-        // Filtra por Piloto
         if (emePilotFilter) {
             const pilotName = eme?.piloto?.name?.toLowerCase() || '';
-            if (!pilotName.includes(emePilotFilter.toLowerCase())) {
-                return false;
-            }
+            if (!pilotName.includes(emePilotFilter.toLowerCase())) return false;
         }
         return true;
     });
-    // Paginación Emergencias
+
     const emePaginated = filteredEmergencies.slice(
         emePage * emeRowsPerPage,
         emePage * emeRowsPerPage + emeRowsPerPage
@@ -391,26 +357,22 @@ const ActivityLogPage = () => {
         setEmePage(0);
     };
 
-    // ================================================
-    // Filtros & Paginación (Front-End) - Payments
-    // ================================================
+    // Filtros & Paginación - Pagos
     const filteredPayments = payments.filter((pay) => {
-        // Filtra por rango de fecha "próximo pago" (pay.nextPaymentDate) si aplica
         if (payDateFrom) {
-            const from = new Date(payDateFrom).getTime();
-            const payDate = pay.nextPaymentDate
-                ? new Date(pay.nextPaymentDate).getTime()
+            const from = moment(payDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
+            const payDateMs = pay.nextPaymentDate
+                ? moment.utc(pay.nextPaymentDate).tz('America/Guatemala').valueOf()
                 : 0;
-            if (payDate < from) return false;
+            if (payDateMs < from) return false;
         }
         if (payDateTo) {
-            const to = new Date(payDateTo).getTime();
-            const payDate = pay.nextPaymentDate
-                ? new Date(pay.nextPaymentDate).getTime()
+            const to = moment(payDateTo, 'YYYY-MM-DD').endOf('day').valueOf();
+            const payDateMs = pay.nextPaymentDate
+                ? moment.utc(pay.nextPaymentDate).tz('America/Guatemala').valueOf()
                 : 0;
-            if (payDate > to) return false;
+            if (payDateMs > to) return false;
         }
-        // Filtra por rango de saldos (leftover)
         if (payBalanceMin) {
             if ((pay.leftover ?? 0) < parseFloat(payBalanceMin)) return false;
         }
@@ -419,7 +381,7 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    // Paginación Payments
+
     const payPaginated = filteredPayments.slice(
         payPage * payRowsPerPage,
         payPage * payRowsPerPage + payRowsPerPage
@@ -445,13 +407,13 @@ const ActivityLogPage = () => {
                 </div>
             ) : (
                 <div tw="space-y-6">
-                    {/* ==================== Sección Buses ==================== */}
+                    {/* Sección Buses, Pilotos, Monitoras y Paradas */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
                             <DirectionsBusIcon
                                 sx={{ mr: 1, verticalAlign: 'middle', color: '#1976D2' }}
                             />
-                            Buses, Pilotos, Monitoras & Rutas
+                            Buses, Pilotos, Monitoras & Paradas
                         </SectionTitle>
 
                         {/* Filtros para Buses */}
@@ -479,13 +441,11 @@ const ActivityLogPage = () => {
                             />
                         </FiltersRow>
 
-                        {/* Listado Paginado de Buses */}
-                        {filteredBuses.length === 0 && (
+                        {filteredBuses.length === 0 ? (
                             <Typography variant="body2" color="textSecondary">
                                 No hay buses registrados con esos filtros.
                             </Typography>
-                        )}
-                        {filteredBuses.length > 0 && (
+                        ) : (
                             <>
                                 {busesPaginated.map((bus) => (
                                     <AccordionStyled
@@ -494,21 +454,25 @@ const ActivityLogPage = () => {
                                         onChange={handleChangeAccordion(`panel-${bus.id}`)}
                                     >
                                         <AccordionSummaryStyled expandIcon={<ExpandMoreIcon />}>
-                                            <Typography
-                                                variant="subtitle1"
-                                                sx={{ fontWeight: 'bold' }}
-                                            >
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                                                 {bus.plate}
                                             </Typography>
+                                            {bus.inWorkshop && (
+                                                <Chip
+                                                    label="En Taller"
+                                                    color="error"
+                                                    size="small"
+                                                    sx={{ ml: 2 }}
+                                                />
+                                            )}
                                             <Chip
-                                                label={`Ocupación: ${
-                                                    bus.occupation ?? 0
-                                                }/${bus.capacity ?? '--'}`}
+                                                label={`Ocupación: ${bus.occupation ?? 0}/${bus.capacity ?? '--'}`}
                                                 size="small"
                                                 color="success"
                                                 sx={{ ml: 2 }}
                                             />
                                         </AccordionSummaryStyled>
+
                                         <AccordionDetails>
                                             <Grid container spacing={2}>
                                                 <Grid item xs={12} md={6}>
@@ -531,77 +495,64 @@ const ActivityLogPage = () => {
                                                 </Grid>
 
                                                 <Grid item xs={12} md={6}>
-                                                    {Array.isArray(bus.routes) && bus.routes.length > 0 ? (
+                                                    {/* Se muestran las paradas (stops) si existen */}
+                                                    {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
                                                         <Table size="small">
                                                             <TableHead>
                                                                 <TableRow>
-                                                                    <TableHeaderCell>Ruta</TableHeaderCell>
-                                                                    <TableHeaderCell>Inicio</TableHeaderCell>
-                                                                    <TableHeaderCell>Fin</TableHeaderCell>
-                                                                    <TableHeaderCell>Kms</TableHeaderCell>
-                                                                    <TableHeaderCell>Paradas</TableHeaderCell>
+                                                                    <TableHeaderCell>Horario</TableHeaderCell>
+                                                                    <TableHeaderCell>Nota</TableHeaderCell>
+                                                                    <TableHeaderCell>Padre</TableHeaderCell>
+                                                                    <TableHeaderCell>Estudiantes</TableHeaderCell>
                                                                 </TableRow>
                                                             </TableHead>
                                                             <TableBody>
-                                                                {bus.routes.map((rt) => (
-                                                                    <TableRow key={rt.id}>
-                                                                        <TableCell>{rt.name}</TableCell>
-                                                                        <TableCell>
-                                                                            {rt.startTime
-                                                                                ? new Date(rt.startTime).toLocaleString()
-                                                                                : '—'}
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            {rt.endTime
-                                                                                ? new Date(rt.endTime).toLocaleString()
-                                                                                : '—'}
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            {rt.distanceTraveled ?? 0} km
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            {Array.isArray(rt.stops)
-                                                                                ? rt.stops.length
-                                                                                : 0}
-                                                                        </TableCell>
+                                                                {bus.stops.map((stop) => (
+                                                                    <TableRow key={stop.stopId}>
+                                                                        <TableCell>{stop.time}</TableCell>
+                                                                        <TableCell>{stop.note || ''}</TableCell>
+                                                                        <TableCell>{stop.parentName}</TableCell>
+                                                                        <TableCell>{stop.students}</TableCell>
                                                                     </TableRow>
                                                                 ))}
                                                             </TableBody>
                                                         </Table>
                                                     ) : (
-                                                        <Typography
-                                                            variant="body2"
-                                                            color="textSecondary"
-                                                        >
-                                                            Este bus no tiene rutas registradas.
+                                                        <Typography variant="body2" color="textSecondary">
+                                                            No hay paradas registradas.
                                                         </Typography>
                                                     )}
                                                 </Grid>
                                             </Grid>
                                         </AccordionDetails>
+
                                         <Divider />
                                         <AccordionActions>
-                                            <Typography
-                                                variant="caption"
-                                                color="textSecondary"
-                                                sx={{ mr: 2 }}
-                                            >
+                                            <Typography variant="caption" color="textSecondary" sx={{ mr: 2 }}>
                                                 ID Bus: {bus.id}
                                             </Typography>
-                                            {/* Botón "En Taller" */}
-                                            <Tooltip title="Marcar bus en Taller">
-                                                <IconButton
-                                                    color="primary"
-                                                    onClick={() => handleBusTaller(bus.id)}
-                                                >
-                                                    <BuildIcon />
-                                                </IconButton>
-                                            </Tooltip>
+                                            {bus.inWorkshop ? (
+                                                <Tooltip title="Marcar como Disponible">
+                                                    <IconButton
+                                                        color="primary"
+                                                        onClick={() => handleToggleBusTaller(bus, false)}
+                                                    >
+                                                        <BuildIcon />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            ) : (
+                                                <Tooltip title="Marcar bus en Taller">
+                                                    <IconButton
+                                                        color="primary"
+                                                        onClick={() => handleToggleBusTaller(bus, true)}
+                                                    >
+                                                        <BuildIcon />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            )}
                                         </AccordionActions>
                                     </AccordionStyled>
                                 ))}
-
-                                {/* Paginación de Buses */}
                                 <TablePagination
                                     component="div"
                                     count={filteredBuses.length}
@@ -615,31 +566,21 @@ const ActivityLogPage = () => {
                         )}
                     </SectionPaper>
 
-                    {/* ==================== Sección Incidentes y Emergencias ==================== */}
+                    {/* Sección Incidentes y Emergencias */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
-                            <WarningIcon
-                                sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }}
-                            />
-                            Incidentes y{' '}
-                            <HospitalIcon
-                                sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }}
-                            />
+                            <WarningIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }} />
+                            Incidentes y <HospitalIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }} />
                             Emergencias
                         </SectionTitle>
 
                         <Grid container spacing={2} mt={1}>
                             {/* Incidentes */}
                             <Grid item xs={12} md={6}>
-                                <Typography
-                                    variant="subtitle1"
-                                    gutterBottom
-                                    sx={{ fontWeight: 'bold', mb: 2 }}
-                                >
+                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
                                     Incidentes
                                 </Typography>
 
-                                {/* Filtros Incidentes */}
                                 <FiltersRow>
                                     <TextField
                                         label="Fecha desde"
@@ -691,18 +632,10 @@ const ActivityLogPage = () => {
                                             <TableBody>
                                                 {incPaginated.map((incident) => (
                                                     <TableRow key={incident.id} hover>
-                                                        <TableCell>
-                                                            {new Date(incident.fecha).toLocaleString()}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {incident.piloto ? incident.piloto.name : '—'}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {incident.tipo || '—'}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {incident.descripcion || '—'}
-                                                        </TableCell>
+                                                        <TableCell>{formatGuatemalaDatetime(incident.fecha)}</TableCell>
+                                                        <TableCell>{incident.piloto ? incident.piloto.name : '—'}</TableCell>
+                                                        <TableCell>{incident.tipo || '—'}</TableCell>
+                                                        <TableCell>{incident.descripcion || '—'}</TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
@@ -722,15 +655,10 @@ const ActivityLogPage = () => {
 
                             {/* Emergencias */}
                             <Grid item xs={12} md={6}>
-                                <Typography
-                                    variant="subtitle1"
-                                    gutterBottom
-                                    sx={{ fontWeight: 'bold', mb: 2 }}
-                                >
+                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
                                     Emergencias
                                 </Typography>
 
-                                {/* Filtros Emergencias */}
                                 <FiltersRow>
                                     <TextField
                                         label="Fecha desde"
@@ -775,15 +703,9 @@ const ActivityLogPage = () => {
                                             <TableBody>
                                                 {emePaginated.map((eme) => (
                                                     <TableRow key={eme.id} hover>
-                                                        <TableCell>
-                                                            {new Date(eme.fecha).toLocaleString()}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {eme.piloto ? eme.piloto.name : '—'}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {eme.mensaje}
-                                                        </TableCell>
+                                                        <TableCell>{formatGuatemalaDatetime(eme.fecha)}</TableCell>
+                                                        <TableCell>{eme.piloto ? eme.piloto.name : '—'}</TableCell>
+                                                        <TableCell>{eme.mensaje}</TableCell>
                                                         <TableCell>
                                                             {eme.latitud && eme.longitud
                                                                 ? `${eme.latitud}, ${eme.longitud}`
@@ -808,13 +730,12 @@ const ActivityLogPage = () => {
                         </Grid>
                     </SectionPaper>
 
-                    {/* ==================== Sección Pagos y Boletas ==================== */}
+                    {/* Sección Pagos y Boletas */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
                             Pagos y Boletas
                         </SectionTitle>
 
-                        {/* Filtros Pagos */}
                         <FiltersRow>
                             <TextField
                                 label="Próximo Pago Desde"
@@ -868,30 +789,17 @@ const ActivityLogPage = () => {
                                     <TableBody>
                                         {payPaginated.map((pay) => (
                                             <TableRow key={pay.id} hover>
-                                                <TableCell>
-                                                    {pay.User ? pay.User.name : '—'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {pay.User ? pay.User.email : '—'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {pay.finalStatus || pay.status}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {pay.nextPaymentDate
-                                                        ? new Date(pay.nextPaymentDate).toLocaleDateString()
-                                                        : '—'}
-                                                </TableCell>
+                                                <TableCell>{pay.User ? pay.User.name : '—'}</TableCell>
+                                                <TableCell>{pay.User ? pay.User.email : '—'}</TableCell>
+                                                <TableCell>{pay.finalStatus || pay.status}</TableCell>
+                                                <TableCell>{formatGuatemalaDate(pay.nextPaymentDate)}</TableCell>
                                                 <TableCell>Q {pay.leftover ?? 0}</TableCell>
                                                 <TableCell>
                                                     {pay.User && (
                                                         <Tooltip title="Ver boletas de pago">
                                                             <IconButton
                                                                 onClick={() =>
-                                                                    handleViewBoletas(
-                                                                        pay.User.id,
-                                                                        pay.User.name
-                                                                    )
+                                                                    handleViewBoletas(pay.User.id, pay.User.name)
                                                                 }
                                                             >
                                                                 <VisibilityIcon />
@@ -919,13 +827,8 @@ const ActivityLogPage = () => {
                 </div>
             )}
 
-            {/* ========== Dialog para ver Boletas ========== */}
-            <Dialog
-                open={openBoletasDialog}
-                onClose={handleCloseBoletasDialog}
-                maxWidth="md"
-                fullWidth
-            >
+            {/* Dialog para ver Boletas */}
+            <Dialog open={openBoletasDialog} onClose={handleCloseBoletasDialog} maxWidth="md" fullWidth>
                 <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
                 <DialogContent dividers>
                     {loading ? (
@@ -938,13 +841,9 @@ const ActivityLogPage = () => {
                         <Grid container spacing={2}>
                             {currentBoletas.map((b) => (
                                 <Grid item xs={12} md={4} key={b.id}>
-                                    <Paper
-                                        elevation={2}
-                                        sx={{ p: 2, borderRadius: '8px' }}
-                                    >
+                                    <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
                                         <Typography variant="body2">
-                                            <strong>Subido el:</strong>{' '}
-                                            {new Date(b.uploadedAt).toLocaleString()}
+                                            <strong>Subido el:</strong> {formatGuatemalaDatetime(b.uploadedAt)}
                                         </Typography>
                                         <img
                                             src={b.fileUrl}
@@ -953,7 +852,7 @@ const ActivityLogPage = () => {
                                                 maxWidth: '100%',
                                                 border: '1px solid #ddd',
                                                 borderRadius: '4px',
-                                                marginTop: '8px',
+                                                marginTop: '8px'
                                             }}
                                         />
                                     </Paper>
@@ -969,7 +868,7 @@ const ActivityLogPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* ========== Snackbar ========== */}
+            {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={5000}

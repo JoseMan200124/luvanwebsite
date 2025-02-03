@@ -16,15 +16,11 @@ import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
 import FilledContractViewer from './pages/FilledContractViewer';
 import SchoolsManagementPage from './pages/SchoolsManagementPage';
-
-// 1) IMPORTAMOS NUEVA PÁGINA:
-import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage';
-
-// Importas tus "modules"
+import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage'; // Ruta pública de inscripción
 import { modules } from './modules';
 
 function App() {
-    // Este método crea <Route> dinámicos para cada submódulo
+    // Método para crear rutas dinámicas a partir de "modules"
     const renderDynamicRoutes = () => {
         let routes = [];
         modules.forEach((module) => {
@@ -79,7 +75,7 @@ function App() {
                         }
                     />
 
-                    {/* 2) NUEVA RUTA PÚBLICA PARA FORMULARIO DE INSCRIPCIÓN POR COLEGIO */}
+                    {/* Ruta pública para formulario de inscripción por colegio */}
                     <Route
                         path="/schools/enroll/:schoolId"
                         element={<SchoolEnrollmentPage />}

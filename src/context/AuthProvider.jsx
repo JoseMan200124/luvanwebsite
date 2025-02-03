@@ -1,36 +1,74 @@
 // src/context/AuthProvider.js
-import React, { createContext, useState, useEffect } from 'react';
-import { jwtDecode } from 'jwt-decode';
+import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import axios from 'axios';
+import { jwtDecode } from 'jwt-decode';
 import { loginUser } from '../services/authService';
 import { initSocket, closeSocket } from '../services/socketService';
 
-import axios from 'axios';
-
 export const AuthContext = createContext();
+
+const IDLE_TIMEOUT_MS = 20 * 60 * 1000;
+const CHECK_INTERVAL_MS = 30 * 1000;
 
 const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
     const location = useLocation();
+
+    const [initialLoad, setInitialLoad] = useState(true);
+
     const [auth, setAuth] = useState({
         user: null,
         token: null,
     });
 
+    const [lastActivity, setLastActivity] = useState(Date.now());
+
+    const resetTimer = useCallback(() => {
+        setLastActivity(Date.now());
+    }, []);
+
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
+        const checkIdle = () => {
+            const now = Date.now();
+            if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) {
+                logout();
+            }
+        };
+        const interval = setInterval(checkIdle, CHECK_INTERVAL_MS);
+        return () => clearInterval(interval);
+    }, [auth.token, lastActivity]);
+
+    useEffect(() => {
+        const events = [
+            'mousemove',
+            'mousedown',
+            'touchstart',
+            'keydown',
+            'click',
+            'scroll',
+        ];
+        events.forEach((evt) => {
+            window.addEventListener(evt, resetTimer, true);
+        });
+        return () => {
+            events.forEach((evt) => {
+                window.removeEventListener(evt, resetTimer, true);
+            });
+        };
+    }, [resetTimer]);
+
+    useEffect(() => {
+        const storedToken = localStorage.getItem('token');
+        if (storedToken) {
             try {
-                const decoded = jwtDecode(token);
+                const decoded = jwtDecode(storedToken);
                 if (decoded.exp * 1000 < Date.now()) {
                     localStorage.removeItem('token');
                 } else {
                     setAuth({
-                        user: {
-                            ...decoded,
-                            roleId: decoded.roleId,
-                        },
-                        token,
+                        user: { ...decoded, roleId: decoded.roleId },
+                        token: storedToken,
                     });
                 }
             } catch (error) {
@@ -46,21 +84,19 @@ const AuthProvider = ({ children }) => {
                 const decoded = jwtDecode(tokenFromOAuth);
                 localStorage.setItem('token', tokenFromOAuth);
                 setAuth({
-                    user: {
-                        ...decoded,
-                        roleId: decoded.roleId,
-                    },
+                    user: { ...decoded, roleId: decoded.roleId },
                     token: tokenFromOAuth,
                 });
-                navigate('/');
+                // navigate('/admin/dashboard');
             } catch (error) {
                 console.error('Token OAuth inválido:', error);
             }
         }
-    }, [location, navigate]);
+
+        setInitialLoad(false);
+    }, [location]);
 
     useEffect(() => {
-        console.log("AUTH USER: ", auth.user);
         if (auth.user?.id) {
             initSocket(auth.user.id);
         }
@@ -72,23 +108,18 @@ const AuthProvider = ({ children }) => {
             const { token } = response.data;
             const decoded = jwtDecode(token);
 
-            // Verificar si el roleId está en los roles restringidos
             const restrictedRoles = [3, 4, 5];
             if (restrictedRoles.includes(decoded.roleId)) {
-                const userName = decoded.name || 'Usuario'; // Asegúrate de que el token incluya 'name'
-                throw new Error(`Para tu usuario ${userName}, puedes acceder unicamente desde tu aplicación móvil.`);
+                const userName = decoded.name || 'Usuario';
+                throw new Error(`Para tu usuario ${userName}, solo acceso desde la app móvil.`);
             }
-            console.log("DECODED: ", decoded);
+
             localStorage.setItem('token', token);
             setAuth({
-                user: {
-                    ...decoded,
-                    roleId: decoded.roleId,
-                },
+                user: { ...decoded, roleId: decoded.roleId },
                 token,
             });
         } catch (error) {
-            // Re-lanzar el error para que pueda ser manejado en el componente de login
             throw error;
         }
     };
@@ -96,10 +127,7 @@ const AuthProvider = ({ children }) => {
     const logout = () => {
         localStorage.removeItem('token');
         closeSocket();
-        setAuth({
-            user: null,
-            token: null,
-        });
+        setAuth({ user: null, token: null });
         navigate('/login');
     };
 
@@ -125,6 +153,7 @@ const AuthProvider = ({ children }) => {
 
     const value = {
         auth,
+        initialLoad,
         login,
         logout,
         verifyToken,

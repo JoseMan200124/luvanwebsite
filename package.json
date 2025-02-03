@@ -27,6 +27,7 @@
     "jwt-decode": "^4.0.0",
     "mammoth": "^1.8.0",
     "moment": "^2.30.1",
+    "moment-timezone": "^0.5.47",
     "postcss": "^8.4.49",
     "quill": "^2.0.2",
     "react": "^18.3.1",

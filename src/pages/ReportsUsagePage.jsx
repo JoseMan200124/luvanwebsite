@@ -19,16 +19,17 @@ import {
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import jsPDF from 'jspdf';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 import html2canvas from 'html2canvas';
+
+// IMPORTACIÓN DE MOMENT-TIMEZONE PARA MANEJO DE FECHAS EN GUATEMALA:
+import moment from 'moment-timezone';
+moment.tz.setDefault('America/Guatemala');
 
 const ReportsUsagePage = () => {
     const [data, setData] = useState({
-        // routes: [], // Removido
         schools: [],
         incidents: [],
-        distancePerPilot: [], // Nueva métrica
+        distancePerPilot: [],
     });
 
     const [loading, setLoading] = useState(true);
@@ -36,7 +37,6 @@ const ReportsUsagePage = () => {
     const reportRef = useRef();
 
     useEffect(() => {
-        // Llamadas a la API para obtener datos
         const fetchData = async () => {
             setLoading(true);
             setError(null);
@@ -44,13 +44,13 @@ const ReportsUsagePage = () => {
                 const [schoolsRes, incidentsRes, distancePerPilotRes] = await Promise.all([
                     api.get('/reports/schools-usage'),
                     api.get('/reports/incidents-by-type'),
-                    api.get('/reports/distance-per-pilot'), // Nueva llamada
+                    api.get('/reports/distance-per-pilot'),
                 ]);
 
                 setData({
                     schools: schoolsRes.data.schools,
                     incidents: incidentsRes.data.incidents,
-                    distancePerPilot: distancePerPilotRes.data.distancePerPilot, // Asignación de la nueva métrica
+                    distancePerPilot: distancePerPilotRes.data.distancePerPilot,
                 });
             } catch (error) {
                 console.error('Error fetching report data', error);
@@ -63,44 +63,48 @@ const ReportsUsagePage = () => {
         fetchData();
     }, []);
 
-    // Función para generar PDF
-    const generatePDF = () => {
-        const input = reportRef.current;
-        html2canvas(input, { scale: 2 }).then((canvas) => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    // Generar PDF con estilo
+    const generatePDF = async () => {
+        const now = moment();
+        const dateString = now.format('YYYY_MM_DD_HH_mm');
+        const fileName = `reports_usage_reporte_${dateString}.pdf`.toLowerCase();
 
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save('Reporte_de_Uso.pdf');
-        });
-    };
+        const printableArea = reportRef.current.cloneNode(true);
 
-    // Función para generar Excel
-    const generateExcel = () => {
-        const workbook = XLSX.utils.book_new();
+        const tempDiv = document.createElement('div');
+        tempDiv.style.padding = '20px';
+        tempDiv.style.backgroundColor = '#fff';
+        tempDiv.style.color = '#000';
+        tempDiv.style.width = '210mm';
+        tempDiv.style.minHeight = '297mm';
+        tempDiv.style.margin = '0 auto';
 
-        // Datos de Uso por Colegios
-        const schoolsSheet = XLSX.utils.json_to_sheet(data.schools);
-        XLSX.utils.book_append_sheet(workbook, schoolsSheet, 'Uso por Colegios');
+        const heading = document.createElement('h2');
+        heading.style.textAlign = 'center';
+        heading.textContent = 'Reporte de Uso';
 
-        // Datos de Incidentes
-        const incidentsSheet = XLSX.utils.json_to_sheet(data.incidents);
-        XLSX.utils.book_append_sheet(workbook, incidentsSheet, 'Incidentes por Tipo');
+        const dateInfo = document.createElement('p');
+        dateInfo.style.textAlign = 'center';
+        dateInfo.style.marginBottom = '20px';
+        dateInfo.textContent = `Generado el: ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`;
 
-        // Datos de Distancia por Piloto
-        const distancePerPilotSheet = XLSX.utils.json_to_sheet(data.distancePerPilot);
-        XLSX.utils.book_append_sheet(workbook, distancePerPilotSheet, 'Distancia por Piloto');
+        tempDiv.appendChild(heading);
+        tempDiv.appendChild(dateInfo);
+        tempDiv.appendChild(printableArea);
 
-        const excelBuffer = XLSX.write(workbook, {
-            bookType: 'xlsx',
-            type: 'array',
-        });
+        document.body.appendChild(tempDiv);
 
-        const dataBlob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-        saveAs(dataBlob, 'Reporte_de_Uso.xlsx');
+        const canvas = await html2canvas(tempDiv, { scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(fileName);
+
+        document.body.removeChild(tempDiv);
     };
 
     return (
@@ -109,13 +113,10 @@ const ReportsUsagePage = () => {
                 Reportes de Uso
             </Typography>
 
-            {/* Botones para generar reportes */}
+            {/* Botón para generar PDF (se elimina Excel) */}
             <div tw="flex space-x-4 mb-4">
                 <Button variant="contained" color="primary" onClick={generatePDF}>
                     Generar PDF
-                </Button>
-                <Button variant="contained" color="secondary" onClick={generateExcel}>
-                    Generar Excel
                 </Button>
             </div>
 
@@ -130,9 +131,12 @@ const ReportsUsagePage = () => {
                     </Alert>
                 </Snackbar>
             ) : (
-                <div ref={reportRef}>
+                <div
+                    ref={reportRef}
+                    style={{ backgroundColor: '#fff', padding: '16px' }}
+                >
                     <Grid container spacing={4}>
-                        {/* Nueva Gráfica: Distancia Total Recorrida por Piloto */}
+                        {/* Distancia Total Recorrida por Piloto */}
                         <Grid item xs={12} md={6}>
                             <Card>
                                 <CardContent>
@@ -153,7 +157,7 @@ const ReportsUsagePage = () => {
                             </Card>
                         </Grid>
 
-                        {/* Gráfica de Uso por Colegios */}
+                        {/* Uso por Colegios */}
                         <Grid item xs={12} md={6}>
                             <Card>
                                 <CardContent>
@@ -180,7 +184,7 @@ const ReportsUsagePage = () => {
                             </Card>
                         </Grid>
 
-                        {/* Gráfica de Incidentes por Tipo */}
+                        {/* Incidentes por Tipo */}
                         <Grid item xs={12}>
                             <Card>
                                 <CardContent>
@@ -205,7 +209,6 @@ const ReportsUsagePage = () => {
             )}
         </div>
     );
-
 };
 
 export default ReportsUsagePage;
