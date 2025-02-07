@@ -34,7 +34,7 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
         setEditorData(content);
     };
 
-    // Insertar el placeholder en la posición actual del cursor
+    // Insertar placeholder
     const handleInsertPlaceholder = () => {
         if (!placeholderName.trim()) {
             alert('Por favor, ingrese un nombre para el campo.');
@@ -54,7 +54,17 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
     };
 
     return (
-        <div style={{ position: 'relative' }}>
+        // Se ajusta el contenedor con maxWidth y manejo responsivo
+        <div
+            style={{
+                width: '100%',
+                maxWidth: 900,
+                margin: '0 auto',
+                position: 'relative',
+                padding: '1rem',
+                boxSizing: 'border-box',
+            }}
+        >
             <EditorToolbar />
             <ReactQuill
                 ref={quillRef}
@@ -64,7 +74,11 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
                 placeholder="Escribe tu contenido aquí..."
                 modules={modules}
                 formats={formats}
-                style={{ minHeight: '300px' }}
+                style={{
+                    minHeight: '300px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                }}
             />
 
             {/* Botón Flotante para Insertar Placeholder */}

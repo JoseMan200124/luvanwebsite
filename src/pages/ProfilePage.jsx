@@ -10,7 +10,6 @@ import {
     Avatar,
     Card,
     CardContent,
-    IconButton,
 } from '@mui/material';
 import { PhotoCamera } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
@@ -45,7 +44,7 @@ const ProfilePage = () => {
         lastName: auth.user.lastName || '',
         email: auth.user.email || '',
         school: auth.user.school || '',
-        avatar: auth.user.avatar || '', // URL of the avatar
+        avatar: auth.user.avatar || '',
     });
     const [selectedFile, setSelectedFile] = useState(null);
     const [message, setMessage] = useState('');
@@ -89,7 +88,6 @@ const ProfilePage = () => {
                 },
             });
 
-            // Update the auth state with the updated user data
             const updatedUser = { ...auth.user, ...response.data.user };
             setAuth({
                 ...auth,

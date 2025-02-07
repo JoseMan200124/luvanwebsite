@@ -1,6 +1,6 @@
 // frontend/src/components/dashboard/PaymentStatusesChart.jsx
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import {
@@ -12,28 +12,15 @@ import {
     Legend,
 } from 'recharts';
 import { Typography } from '@mui/material';
-import api from '../../utils/axiosConfig';
 
 const ChartContainer = tw.div`bg-white p-4 rounded-lg shadow-md`;
+const COLORS = ['#00C49F', '#FFBB28', '#FF8042', '#0088FE'];
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
+const PaymentStatusesChart = ({ data }) => {
+    // data = array con { status: 'PENDIENTE', count: 5 }, etc.
 
-const PaymentStatusesChart = ({ filters }) => {
-    const [data, setData] = useState([]);
-
-    useEffect(() => {
-        const fetchPaymentStatuses = async () => {
-            try {
-                const response = await api.get('/reports/payment-statuses');
-                setData(response.data.paymentStatuses);
-            } catch (error) {
-                console.error('Error fetching payment statuses:', error);
-            }
-        };
-
-        fetchPaymentStatuses();
-    }, [filters]);
-
+    // Si no hay datos, la gráfica quedará vacía. Podríamos mostrar un fallback
+    // pero preferimos mostrar la gráfica vacía.
     return (
         <ChartContainer>
             <Typography variant="h6" gutterBottom>
@@ -48,7 +35,6 @@ const PaymentStatusesChart = ({ filters }) => {
                         cx="50%"
                         cy="50%"
                         outerRadius={100}
-                        fill="#8884d8"
                         label
                     >
                         {data.map((entry, index) => (

@@ -1,10 +1,17 @@
 // src/pages/ReportsUsagePage.jsx
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Typography, Grid, Card, CardContent, Button, CircularProgress, Snackbar, Alert } from '@mui/material';
 import {
-    LineChart,
-    Line,
+    Typography,
+    Grid,
+    Card,
+    CardContent,
+    Button,
+    CircularProgress,
+    Snackbar,
+    Alert
+} from '@mui/material';
+import {
     BarChart,
     Bar,
     PieChart,
@@ -20,10 +27,15 @@ import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-
-// IMPORTACIÓN DE MOMENT-TIMEZONE PARA MANEJO DE FECHAS EN GUATEMALA:
 import moment from 'moment-timezone';
+
 moment.tz.setDefault('America/Guatemala');
+
+const PageContainer = tw.div`
+  p-8 w-full bg-gray-100
+  flex flex-col
+  min-h-screen
+`;
 
 const ReportsUsagePage = () => {
     const [data, setData] = useState({
@@ -31,7 +43,6 @@ const ReportsUsagePage = () => {
         incidents: [],
         distancePerPilot: [],
     });
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const reportRef = useRef();
@@ -63,7 +74,6 @@ const ReportsUsagePage = () => {
         fetchData();
     }, []);
 
-    // Generar PDF con estilo
     const generatePDF = async () => {
         const now = moment();
         const dateString = now.format('YYYY_MM_DD_HH_mm');
@@ -108,13 +118,12 @@ const ReportsUsagePage = () => {
     };
 
     return (
-        <div tw="p-8">
+        <PageContainer>
             <Typography variant="h4" gutterBottom>
                 Reportes de Uso
             </Typography>
 
-            {/* Botón para generar PDF (se elimina Excel) */}
-            <div tw="flex space-x-4 mb-4">
+            <div tw="flex flex-wrap space-x-4 mb-4">
                 <Button variant="contained" color="primary" onClick={generatePDF}>
                     Generar PDF
                 </Button>
@@ -131,83 +140,87 @@ const ReportsUsagePage = () => {
                     </Alert>
                 </Snackbar>
             ) : (
+                // Ajuste: contenedor con overflowX: auto para evitar cortes en gráficos en pantallas pequeñas
                 <div
                     ref={reportRef}
-                    style={{ backgroundColor: '#fff', padding: '16px' }}
+                    style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}
                 >
                     <Grid container spacing={4}>
-                        {/* Distancia Total Recorrida por Piloto */}
                         <Grid item xs={12} md={6}>
                             <Card>
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom>
                                         Distancia Total Recorrida por Piloto (km)
                                     </Typography>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={data.distancePerPilot}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="pilotName" />
-                                            <YAxis />
-                                            <Tooltip formatter={(value) => value.toFixed(2)} />
-                                            <Legend />
-                                            <Bar dataKey="totalDistance" name="Distancia (km)" fill="#82ca9d" />
-                                        </BarChart>
-                                    </ResponsiveContainer>
+                                    <div style={{ width: '100%', height: 300 }}>
+                                        <ResponsiveContainer>
+                                            <BarChart data={data.distancePerPilot}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="pilotName" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value) => value.toFixed(2)} />
+                                                <Legend />
+                                                <Bar dataKey="totalDistance" name="Distancia (km)" fill="#82ca9d" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </CardContent>
                             </Card>
                         </Grid>
 
-                        {/* Uso por Colegios */}
                         <Grid item xs={12} md={6}>
                             <Card>
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom>
                                         Uso por Colegios
                                     </Typography>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <PieChart>
-                                            <Pie
-                                                data={data.schools}
-                                                dataKey="usageCount"
-                                                nameKey="schoolName"
-                                                cx="50%"
-                                                cy="50%"
-                                                outerRadius={100}
-                                                fill="#82ca9d"
-                                                label
-                                            />
-                                            <Tooltip formatter={(value) => value} />
-                                            <Legend />
-                                        </PieChart>
-                                    </ResponsiveContainer>
+                                    <div style={{ width: '100%', height: 300 }}>
+                                        <ResponsiveContainer>
+                                            <PieChart>
+                                                <Pie
+                                                    data={data.schools}
+                                                    dataKey="usageCount"
+                                                    nameKey="schoolName"
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    outerRadius={100}
+                                                    fill="#82ca9d"
+                                                    label
+                                                />
+                                                <Tooltip formatter={(value) => value} />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </CardContent>
                             </Card>
                         </Grid>
 
-                        {/* Incidentes por Tipo */}
                         <Grid item xs={12}>
                             <Card>
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom>
                                         Incidentes por Tipo
                                     </Typography>
-                                    <ResponsiveContainer width="100%" height={400}>
-                                        <BarChart data={data.incidents}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="type" />
-                                            <YAxis />
-                                            <Tooltip formatter={(value) => value} />
-                                            <Legend />
-                                            <Bar dataKey="count" name="Cantidad de Incidentes" fill="#ffc658" />
-                                        </BarChart>
-                                    </ResponsiveContainer>
+                                    <div style={{ width: '100%', height: 400 }}>
+                                        <ResponsiveContainer>
+                                            <BarChart data={data.incidents}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="type" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value) => value} />
+                                                <Legend />
+                                                <Bar dataKey="count" name="Cantidad de Incidentes" fill="#ffc658" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </CardContent>
                             </Card>
                         </Grid>
                     </Grid>
                 </div>
             )}
-        </div>
+        </PageContainer>
     );
 };
 

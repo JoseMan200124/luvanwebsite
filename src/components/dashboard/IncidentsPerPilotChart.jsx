@@ -1,6 +1,5 @@
 // frontend/src/components/dashboard/IncidentsPerPilotChart.jsx
-
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import {
@@ -14,25 +13,22 @@ import {
     Legend,
 } from 'recharts';
 import { Typography } from '@mui/material';
-import api from '../../utils/axiosConfig';
 
 const ChartContainer = tw.div`bg-white p-4 rounded-lg shadow-md`;
 
-const IncidentsPerPilotChart = ({ filters }) => {
-    const [data, setData] = useState([]);
-
-    useEffect(() => {
-        const fetchIncidentsPerPilot = async () => {
-            try {
-                const response = await api.get('/reports/incidents-per-pilot');
-                setData(response.data.incidentsPerPilot);
-            } catch (error) {
-                console.error('Error fetching incidents per pilot:', error);
+const IncidentsPerPilotChart = ({ data }) => {
+    // data = array de "incidents" con .piloto
+    const chartData = useMemo(() => {
+        const aggregator = {};
+        (data || []).forEach((inc) => {
+            const pilotName = inc?.piloto?.name || 'Desconocido';
+            if (!aggregator[pilotName]) {
+                aggregator[pilotName] = { pilotName, incidentCount: 0 };
             }
-        };
-
-        fetchIncidentsPerPilot();
-    }, [filters]);
+            aggregator[pilotName].incidentCount += 1;
+        });
+        return Object.values(aggregator);
+    }, [data]);
 
     return (
         <ChartContainer>
@@ -40,13 +36,19 @@ const IncidentsPerPilotChart = ({ filters }) => {
                 Incidentes por Piloto
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={data}>
+                <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="pilotName" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => value} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="incidentCount" name="Incidentes" stroke="#FF0000" activeDot={{ r: 8 }} />
+                    <Line
+                        type="monotone"
+                        dataKey="incidentCount"
+                        name="Incidentes"
+                        stroke="#FF0000"
+                        activeDot={{ r: 8 }}
+                    />
                 </LineChart>
             </ResponsiveContainer>
         </ChartContainer>

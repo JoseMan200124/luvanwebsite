@@ -34,7 +34,21 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 import MapComponent from '../components/MapComponent';
 
-const RoutesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
+const RoutesContainer = styled.div`
+    ${tw`bg-gray-100 min-h-screen w-full`}
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+
+    @media (max-width: 640px) {
+        padding: 1rem;
+    }
+
+    // Ajuste adicional para pantallas aún más pequeñas
+    @media (max-width: 480px) {
+        padding: 0.5rem;
+    }
+`;
 
 const RoutesManagementPage = () => {
     const { auth } = useContext(AuthContext);
@@ -50,9 +64,6 @@ const RoutesManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // ==============================
-    // 1. Carga de datos iniciales
-    // ==============================
     const fetchRoutes = async () => {
         setLoading(true);
         try {
@@ -106,11 +117,7 @@ const RoutesManagementPage = () => {
         }
     }, [auth.token]);
 
-    // =================================================
-    // 2. Funciones para el CRUD de Rutas (crear/editar)
-    // =================================================
     const handleEditClick = (route) => {
-        // Asegúrate de formatear la data si no existe la propiedad schedule
         const clonedRoute = { ...route };
         if (!Array.isArray(clonedRoute.schedule)) {
             clonedRoute.schedule = [];
@@ -120,19 +127,15 @@ const RoutesManagementPage = () => {
     };
 
     const handleAddRoute = () => {
-        // Estructura inicial de la ruta
         setSelectedRoute({
             name: '',
             schoolId: '',
             busId: '',
-            // 'schedule' será un array de "horarios", cada elemento con direction, departureTime y un array "stops"
             schedule: [
                 {
                     direction: '',
                     departureTime: '',
-                    stops: [
-                        { address: '', time: '' }
-                    ]
+                    stops: [{ address: '', time: '' }]
                 }
             ]
         });
@@ -156,15 +159,11 @@ const RoutesManagementPage = () => {
         }
     };
 
-    // =========================
-    // 3. Manejo de formularios
-    // =========================
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedRoute(null);
     };
 
-    // Maneja cambios en los campos simples (name, schoolId, busId, etc.)
     const handleInputChange = (e) => {
         setSelectedRoute((prev) => ({
             ...prev,
@@ -172,7 +171,7 @@ const RoutesManagementPage = () => {
         }));
     };
 
-    // ============ Schedules (schedule) a nivel Horario ============
+    // ============ Schedules
     const handleAddSchedule = () => {
         setSelectedRoute((prev) => ({
             ...prev,
@@ -181,9 +180,7 @@ const RoutesManagementPage = () => {
                 {
                     direction: '',
                     departureTime: '',
-                    stops: [
-                        { address: '', time: '' }
-                    ]
+                    stops: [{ address: '', time: '' }]
                 }
             ]
         }));
@@ -195,7 +192,7 @@ const RoutesManagementPage = () => {
             newSchedules.splice(index, 1);
             return {
                 ...prev,
-                schedule: newSchedules // Correcto: Eliminado JSON.stringify
+                schedule: newSchedules
             };
         });
     };
@@ -210,19 +207,19 @@ const RoutesManagementPage = () => {
             };
             return {
                 ...prev,
-                schedule: newSchedules // Correcto: Eliminado JSON.stringify
+                schedule: newSchedules
             };
         });
     };
 
-    // ========== Stops (paradas) dentro de cada horario =========
+    // ========== Stops
     const handleAddStop = (scheduleIndex) => {
         setSelectedRoute((prev) => {
             const newSchedules = [...prev.schedule];
             newSchedules[scheduleIndex].stops.push({ address: '', time: '' });
             return {
                 ...prev,
-                schedule: newSchedules // Correcto: Eliminado JSON.stringify
+                schedule: newSchedules
             };
         });
     };
@@ -233,7 +230,7 @@ const RoutesManagementPage = () => {
             newSchedules[scheduleIndex].stops.splice(stopIndex, 1);
             return {
                 ...prev,
-                schedule: newSchedules // Correcto: Eliminado JSON.stringify
+                schedule: newSchedules
             };
         });
     };
@@ -250,23 +247,18 @@ const RoutesManagementPage = () => {
             newSchedules[scheduleIndex].stops = newStops;
             return {
                 ...prev,
-                schedule: newSchedules // Correcto: Eliminado JSON.stringify
+                schedule: newSchedules
             };
         });
     };
 
-    // ===================================
-    // 4. Guardar (crear/actualizar) ruta
-    // ===================================
     const handleSave = async () => {
         try {
-            // Validaciones previas
             if (!selectedRoute.name || !selectedRoute.schoolId || !selectedRoute.busId || !selectedRoute.schedule) {
                 setSnackbar({ open: true, message: 'Por favor completa todos los campos requeridos.', severity: 'error' });
                 return;
             }
 
-            // Validar que 'schedule' es un array de objetos con las propiedades necesarias
             for (let sch of selectedRoute.schedule) {
                 if (!sch.direction || !sch.departureTime) {
                     setSnackbar({ open: true, message: 'Cada horario debe tener una dirección y una hora de salida.', severity: 'error' });
@@ -284,7 +276,6 @@ const RoutesManagementPage = () => {
                 }
             }
 
-            // Unir todas las paradas definidas en schedule para enviarlas en 'stops'
             const allStops = selectedRoute.schedule.reduce((acc, sch) => {
                 if (Array.isArray(sch.stops)) {
                     return [...acc, ...sch.stops];
@@ -292,14 +283,12 @@ const RoutesManagementPage = () => {
                 return acc;
             }, []);
 
-            // Construir el objeto que enviaremos al backend
             const routeData = {
                 ...selectedRoute,
-                stops: allStops || [], // Correcto: Eliminado JSON.stringify
+                stops: allStops || [],
             };
 
             if (selectedRoute.id) {
-                // Actualizar ruta existente
                 await api.put(`/routes/${selectedRoute.id}`, routeData, {
                     headers: {
                         Authorization: `Bearer ${auth.token}`,
@@ -307,7 +296,6 @@ const RoutesManagementPage = () => {
                 });
                 setSnackbar({ open: true, message: 'Ruta actualizada con éxito', severity: 'success' });
             } else {
-                // Crear nueva ruta
                 await api.post('/routes', routeData, {
                     headers: {
                         Authorization: `Bearer ${auth.token}`,
@@ -323,9 +311,7 @@ const RoutesManagementPage = () => {
         }
     };
 
-    // =========================
-    // 5. Búsqueda y paginación
-    // =========================
+    // Búsqueda y paginación
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
     };
@@ -349,9 +335,6 @@ const RoutesManagementPage = () => {
         })
         : [];
 
-    // =====================
-    // 6. Ver el mapa (demo)
-    // =====================
     const handleViewMap = (route) => {
         setSelectedRoute(route);
         setOpenMapDialog(true);
@@ -362,15 +345,21 @@ const RoutesManagementPage = () => {
         setSelectedRoute(null);
     };
 
-    // =====================
-    // Render principal
-    // =====================
     return (
         <RoutesContainer>
             <Typography variant="h4" gutterBottom>
                 Gestión de Rutas
             </Typography>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+
+            <div
+                style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'space-between',
+                    marginBottom: '16px',
+                    gap: '8px'
+                }}
+            >
                 <TextField
                     label="Buscar rutas"
                     variant="outlined"
@@ -393,9 +382,14 @@ const RoutesManagementPage = () => {
                     <CircularProgress />
                 </div>
             ) : (
-                <Paper>
-                    <TableContainer>
-                        <Table>
+                <Paper sx={{ width: '100%', overflowX: 'auto' }}>
+                    <TableContainer
+                        sx={{
+                            maxHeight: { xs: 400, sm: 'none' },
+                            overflowX: 'auto'
+                        }}
+                    >
+                        <Table stickyHeader>
                             <TableHead>
                                 <TableRow>
                                     <TableCell>Nombre de Ruta</TableCell>
@@ -460,7 +454,6 @@ const RoutesManagementPage = () => {
                     {selectedRoute && selectedRoute.id ? 'Editar Ruta' : 'Añadir Ruta'}
                 </DialogTitle>
                 <DialogContent>
-                    {/* Datos principales: Nombre, Colegio, Bus */}
                     <TextField
                         autoFocus
                         margin="dense"
@@ -472,8 +465,9 @@ const RoutesManagementPage = () => {
                         value={selectedRoute ? selectedRoute.name : ''}
                         onChange={handleInputChange}
                         required
+                        sx={{ my: 1 }}
                     />
-                    <FormControl variant="outlined" fullWidth margin="dense" required>
+                    <FormControl variant="outlined" fullWidth margin="dense" required sx={{ my: 1 }}>
                         <InputLabel>Colegio</InputLabel>
                         <Select
                             name="schoolId"
@@ -492,7 +486,7 @@ const RoutesManagementPage = () => {
                                 ))}
                         </Select>
                     </FormControl>
-                    <FormControl variant="outlined" fullWidth margin="dense" required>
+                    <FormControl variant="outlined" fullWidth margin="dense" required sx={{ my: 1 }}>
                         <InputLabel>Bus</InputLabel>
                         <Select
                             name="busId"
@@ -512,14 +506,13 @@ const RoutesManagementPage = () => {
                         </Select>
                     </FormControl>
 
-                    {/* Sección dinámica de horarios (schedule a nivel "schedule") */}
                     <Typography variant="h6" style={{ marginTop: '1rem' }}>
                         Horarios y Paradas
                     </Typography>
                     {selectedRoute &&
                         selectedRoute.schedule &&
                         selectedRoute.schedule.map((schedule, index) => (
-                            <Paper key={index} style={{ padding: '1rem', marginBottom: '1rem' }}>
+                            <Paper key={index} style={{ padding: '1rem', marginBottom: '1rem', marginTop: '1rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <Typography variant="subtitle1">Horario #{index + 1}</Typography>
                                     <IconButton
@@ -539,8 +532,8 @@ const RoutesManagementPage = () => {
                                     variant="outlined"
                                     value={schedule.direction}
                                     onChange={(e) => handleScheduleChange(e, index)}
+                                    sx={{ my: 1 }}
                                 />
-                                {/* Input de tipo 'time' para 'departureTime' */}
                                 <TextField
                                     margin="dense"
                                     name="departureTime"
@@ -554,11 +547,10 @@ const RoutesManagementPage = () => {
                                         shrink: true,
                                     }}
                                     inputProps={{
-                                        step: 300, // 5 minutos
+                                        step: 300,
                                     }}
+                                    sx={{ my: 1 }}
                                 />
-
-                                {/* Paradas de este horario */}
                                 <Typography variant="subtitle2" style={{ marginTop: '1rem' }}>
                                     Paradas
                                 </Typography>
@@ -579,7 +571,6 @@ const RoutesManagementPage = () => {
                                             onChange={(e) => handleStopChange(e, index, stopIndex)}
                                             style={{ flex: 1 }}
                                         />
-                                        {/* Input de tipo 'time' para 'time' */}
                                         <TextField
                                             label="Hora"
                                             variant="outlined"
@@ -592,7 +583,7 @@ const RoutesManagementPage = () => {
                                                 shrink: true,
                                             }}
                                             inputProps={{
-                                                step: 300, // 5 minutos
+                                                step: 300,
                                             }}
                                         />
                                         <IconButton
@@ -613,7 +604,6 @@ const RoutesManagementPage = () => {
                                 </Button>
                             </Paper>
                         ))}
-                    {/* Botón para agregar un nuevo horario */}
                     <Button
                         variant="contained"
                         onClick={handleAddSchedule}
@@ -636,7 +626,10 @@ const RoutesManagementPage = () => {
             <Dialog open={openMapDialog} onClose={handleMapDialogClose} maxWidth="md" fullWidth>
                 <DialogTitle>Mapa de la Ruta: {selectedRoute?.name}</DialogTitle>
                 <DialogContent>
-                    {selectedRoute && <MapComponent route={selectedRoute} />}
+                    {/* Ajuste responsivo para contenedor del mapa en caso de pantallas muy pequeñas */}
+                    <div style={{ width: '100%', minHeight: '400px' }}>
+                        {selectedRoute && <MapComponent route={selectedRoute} />}
+                    </div>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleMapDialogClose} color="primary">
@@ -645,7 +638,6 @@ const RoutesManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Snackbar para mensajes */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
@@ -664,4 +656,4 @@ const RoutesManagementPage = () => {
     );
 };
 
-    export default RoutesManagementPage;
+export default RoutesManagementPage;

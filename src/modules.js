@@ -1,4 +1,4 @@
-// src/modules.js
+// modules.js
 import {
     Group,
     School,
@@ -19,8 +19,6 @@ import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import ContractsManagementPage from './pages/ContractsManagementPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import PaymentsManagementPage from './pages/PaymentsManagementPage';
-
-// IMPORTA TU NUEVO COMPONENTE
 import ActivityLogPage from './pages/ActivityLogPage';
 
 export const modules = [

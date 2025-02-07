@@ -15,9 +15,24 @@ import {
 import { AuthContext } from '../context/AuthProvider';
 import { Link } from 'react-router-dom';
 
-const RegisterContainer = tw.div`flex flex-col items-center justify-center h-screen bg-gray-100`;
+const RegisterContainer = styled.div`
+    ${tw`flex flex-col items-center justify-center bg-gray-100 w-full min-h-screen`}
+    padding: 2rem;
 
-const Form = tw.form`bg-white p-8 rounded-lg shadow-md w-full max-w-md`;
+    // Ajustes para pantallas muy pequeñas
+    @media (max-width: 480px) {
+        padding: 1rem;
+    }
+`;
+
+const Form = styled.form`
+    ${tw`bg-white p-8 rounded-lg shadow-md w-full max-w-md`}
+
+            // Ajustes para pantallas muy pequeñas
+    @media (max-width: 480px) {
+    padding: 1rem;
+}
+`;
 
 const FormField = tw.div`mb-4`;
 
@@ -112,7 +127,6 @@ const RegisterPage = () => {
                             <MenuItem value="Monitora">Monitora</MenuItem>
                             <MenuItem value="Piloto">Piloto</MenuItem>
                             <MenuItem value="Supervisor">Supervisor</MenuItem>
-                            {/* Añade más roles según sea necesario */}
                         </Select>
                     </FormControl>
                 </FormField>

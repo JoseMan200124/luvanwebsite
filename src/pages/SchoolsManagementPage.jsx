@@ -1,4 +1,5 @@
 // src/pages/SchoolsManagementPage.jsx
+
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -29,18 +30,46 @@ import {
     FormControlLabel,
     InputLabel,
     Select,
-    MenuItem
+    MenuItem,
+    Card,
+    CardContent,
+    CardActions,
+    DialogContentText
 } from '@mui/material';
-import { Edit, Delete, Add, ContentCopy, FileUpload } from '@mui/icons-material';
+import {
+    Edit,
+    Delete,
+    Add,
+    ContentCopy,
+    FileUpload,
+    Visibility
+} from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 
-// Contenedor con estilos
-const SchoolsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
+import {
+    PieChart,
+    Pie,
+    Tooltip as ReTooltip,
+    Legend,
+    Cell,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid
+} from 'recharts';
+
+import SubmissionPreview from './SubmissionPreview';
+
+// Ajustes de contenedor responsivo con tw.macro
+const SchoolsContainer = tw.div`
+  p-8 bg-gray-100 min-h-screen w-full
+`;
 
 /**
- * Función para formatear fecha/hora (para nombrar la plantilla de Excel, etc.)
+ * Función para formatear fecha/hora (p.e. para nombre de plantillas).
  */
 const getFormattedDateTime = () => {
     const currentDate = new Date();
@@ -56,51 +85,43 @@ const getFormattedDateTime = () => {
 const SchoolsManagementPage = () => {
     const { auth } = useContext(AuthContext);
 
-    // Lista de colegios
     const [schools, setSchools] = useState([]);
-
-    // Manejo de modal (crear/editar)
     const [selectedSchool, setSelectedSchool] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
-
-    // Alertas / Snackbar
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-
-    // Búsqueda / paginación
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // Manejo de "Horarios" y "grades" al editar/crear
     const [schoolSchedules, setSchoolSchedules] = useState([]);
     const [schoolGrades, setSchoolGrades] = useState([]);
-
-    // Manejo de extra fields (un solo nombre => fieldName)
     const [schoolExtraFields, setSchoolExtraFields] = useState([]);
 
-    // Popover para mostrar +n grados
     const [anchorEl, setAnchorEl] = useState(null);
     const [popoverGrades, setPopoverGrades] = useState([]);
 
-    // Carga Masiva
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
 
-    /**
-     * Obtener lista de Colegios
-     */
+    const [selectedSchoolForSubmissions, setSelectedSchoolForSubmissions] = useState(null);
+    const [submissions, setSubmissions] = useState([]);
+
+    const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
+    const [submissionDetail, setSubmissionDetail] = useState(null);
+
     const fetchSchools = async () => {
         setLoading(true);
         try {
             const response = await api.get('/schools', {
                 headers: { Authorization: `Bearer ${auth.token}` },
             });
-            let fetchedSchools = Array.isArray(response.data.schools) ? response.data.schools : [];
+            let fetchedSchools = Array.isArray(response.data.schools)
+                ? response.data.schools
+                : [];
 
-            // Parsear "schedules", "grades" y "extraEnrollmentFields"
             fetchedSchools = fetchedSchools.map((school) => {
                 let parsedSchedules = [];
                 if (typeof school.schedules === 'string' && school.schedules.trim()) {
@@ -150,18 +171,20 @@ const SchoolsManagementPage = () => {
             setLoading(false);
         } catch (err) {
             console.error('Error al obtener los colegios:', err);
-            setSnackbar({ open: true, message: 'Error al obtener colegios', severity: 'error' });
+            setSnackbar({
+                open: true,
+                message: 'Error al obtener colegios',
+                severity: 'error'
+            });
             setLoading(false);
         }
     };
 
     useEffect(() => {
         fetchSchools();
+        // eslint-disable-next-line
     }, [auth.token]);
 
-    /**
-     * Añadir Colegio
-     */
     const handleAddSchool = () => {
         setSelectedSchool({
             id: null,
@@ -181,9 +204,6 @@ const SchoolsManagementPage = () => {
         setOpenDialog(true);
     };
 
-    /**
-     * Editar Colegio
-     */
     const handleEditClick = (school) => {
         const transportFeeCompleteValue = school.transportFeeComplete ?? '';
         const transportFeeHalfValue = school.transportFeeHalf ?? '';
@@ -196,7 +216,6 @@ const SchoolsManagementPage = () => {
             duePaymentDay: duePaymentDayValue
         });
 
-        // Schedules
         let parsedSchedules = [];
         if (Array.isArray(school.schedules)) {
             parsedSchedules = school.schedules;
@@ -209,7 +228,6 @@ const SchoolsManagementPage = () => {
         }
         setSchoolSchedules(parsedSchedules);
 
-        // Grades
         let parsedGrades = [];
         if (Array.isArray(school.grades)) {
             parsedGrades = school.grades;
@@ -222,7 +240,6 @@ const SchoolsManagementPage = () => {
         }
         setSchoolGrades(parsedGrades);
 
-        // Extra Fields
         let parsedExtraFields = [];
         if (Array.isArray(school.extraEnrollmentFields)) {
             parsedExtraFields = school.extraEnrollmentFields;
@@ -238,27 +255,6 @@ const SchoolsManagementPage = () => {
         setOpenDialog(true);
     };
 
-    /**
-     * Eliminar Colegio
-     */
-    const handleDeleteClick = async (schoolId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este colegio?')) {
-            try {
-                await api.delete(`/schools/${schoolId}`, {
-                    headers: { Authorization: `Bearer ${auth.token}` },
-                });
-                setSnackbar({ open: true, message: 'Colegio eliminado exitosamente', severity: 'success' });
-                fetchSchools();
-            } catch (err) {
-                console.error('Error al eliminar colegio:', err);
-                setSnackbar({ open: true, message: 'Error al eliminar colegio', severity: 'error' });
-            }
-        }
-    };
-
-    /**
-     * Cerrar Modal
-     */
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedSchool(null);
@@ -267,9 +263,29 @@ const SchoolsManagementPage = () => {
         setSchoolExtraFields([]);
     };
 
-    /**
-     * Manejo de Inputs (colegio)
-     */
+    const handleDeleteClick = async (schoolId) => {
+        if (window.confirm('¿Estás seguro de que deseas eliminar este colegio?')) {
+            try {
+                await api.delete(`/schools/${schoolId}`, {
+                    headers: { Authorization: `Bearer ${auth.token}` },
+                });
+                setSnackbar({
+                    open: true,
+                    message: 'Colegio eliminado exitosamente',
+                    severity: 'success'
+                });
+                fetchSchools();
+            } catch (err) {
+                console.error('Error al eliminar colegio:', err);
+                setSnackbar({
+                    open: true,
+                    message: 'Error al eliminar colegio',
+                    severity: 'error'
+                });
+            }
+        }
+    };
+
     const handleInputChange = (e) => {
         setSelectedSchool((prev) => ({
             ...prev,
@@ -339,7 +355,7 @@ const SchoolsManagementPage = () => {
         });
     };
 
-    // Extra Fields (un solo campo => fieldName)
+    // Extra fields
     const handleAddExtraField = () => {
         setSchoolExtraFields((prev) => [
             ...prev,
@@ -361,14 +377,13 @@ const SchoolsManagementPage = () => {
         });
     };
 
-    /**
-     * Guardar (Crear/Actualizar)
-     */
     const handleSave = async () => {
         if (!selectedSchool) return;
 
-        // Validaciones simples
-        if (Number(selectedSchool.transportFeeComplete) < 0 || Number(selectedSchool.transportFeeHalf) < 0) {
+        if (
+            Number(selectedSchool.transportFeeComplete) < 0 ||
+            Number(selectedSchool.transportFeeHalf) < 0
+        ) {
             setSnackbar({
                 open: true,
                 message: 'Las cuotas de transporte no pueden ser negativas.',
@@ -398,39 +413,47 @@ const SchoolsManagementPage = () => {
                 contactPhone: selectedSchool.contactPhone,
                 schedules: schoolSchedules,
                 grades: schoolGrades,
-                transportFeeComplete: Number(selectedSchool.transportFeeComplete) || 0.0,
-                transportFeeHalf: Number(selectedSchool.transportFeeHalf) || 0.0,
-                duePaymentDay: Number(selectedSchool.duePaymentDay) || 1,
-
-                // Guardar extraEnrollmentFields con un solo campo (fieldName)
+                transportFeeComplete:
+                    Number(selectedSchool.transportFeeComplete) || 0.0,
+                transportFeeHalf:
+                    Number(selectedSchool.transportFeeHalf) || 0.0,
+                duePaymentDay:
+                    Number(selectedSchool.duePaymentDay) || 1,
                 extraEnrollmentFields: schoolExtraFields
             };
 
             if (selectedSchool.id) {
-                // Actualizar
                 await api.put(`/schools/${selectedSchool.id}`, payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
-                setSnackbar({ open: true, message: 'Colegio actualizado exitosamente', severity: 'success' });
+                setSnackbar({
+                    open: true,
+                    message: 'Colegio actualizado exitosamente',
+                    severity: 'success'
+                });
             } else {
-                // Crear
                 await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
-                setSnackbar({ open: true, message: 'Colegio creado exitosamente', severity: 'success' });
+                setSnackbar({
+                    open: true,
+                    message: 'Colegio creado exitosamente',
+                    severity: 'success'
+                });
             }
 
             fetchSchools();
             handleDialogClose();
         } catch (err) {
             console.error('Error al guardar el colegio:', err);
-            setSnackbar({ open: true, message: 'Error al guardar el colegio', severity: 'error' });
+            setSnackbar({
+                open: true,
+                message: 'Error al guardar el colegio',
+                severity: 'error'
+            });
         }
     };
 
-    /**
-     * Búsqueda y paginación
-     */
     const handleSnackbarClose = () => {
         setSnackbar({ ...snackbar, open: false });
     };
@@ -446,9 +469,6 @@ const SchoolsManagementPage = () => {
         (sch.city || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    /**
-     * Copiar enlace del formulario de inscripción
-     */
     const handleCopyLink = (schoolId) => {
         const baseUrl = window.location.origin;
         const link = `${baseUrl}/schools/enroll/${schoolId}`;
@@ -471,9 +491,6 @@ const SchoolsManagementPage = () => {
             });
     };
 
-    /**
-     * Popover => ver +N grados
-     */
     const handlePopoverOpen = (event, grades) => {
         setAnchorEl(event.currentTarget);
         setPopoverGrades(grades);
@@ -485,9 +502,6 @@ const SchoolsManagementPage = () => {
     const openPopover = Boolean(anchorEl);
     const popoverId = openPopover ? 'grades-popover' : undefined;
 
-    /**
-     * Carga Masiva (bulk)
-     */
     const handleOpenBulkDialog = () => {
         setBulkFile(null);
         setBulkResults(null);
@@ -531,27 +545,127 @@ const SchoolsManagementPage = () => {
 
     const downloadFilename = `colegios_template_${getFormattedDateTime()}.xlsx`;
 
+    const handleViewSubmissions = async (school) => {
+        setSelectedSchoolForSubmissions(school);
+        setSubmissions([]);
+        try {
+            setLoading(true);
+            const resp = await api.get(`/schools/${school.id}/submissions`, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+
+            let rawSubmissions = resp.data.submissions || [];
+            const parsedSubmissions = rawSubmissions.map((sub) => {
+                let parsedData;
+                if (typeof sub.data === 'string') {
+                    try {
+                        parsedData = JSON.parse(sub.data);
+                    } catch (err) {
+                        parsedData = {};
+                    }
+                } else {
+                    parsedData = sub.data || {};
+                }
+                return {
+                    ...sub,
+                    data: parsedData
+                };
+            });
+
+            setSubmissions(parsedSubmissions);
+        } catch (error) {
+            console.error('Error al obtener inscripciones:', error);
+            setSnackbar({
+                open: true,
+                message: 'Error al obtener formularios de este colegio',
+                severity: 'error'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleOpenSubmissionDialog = (submission) => {
+        setSubmissionDetail(submission);
+        setOpenSubmissionDialog(true);
+    };
+    const handleCloseSubmissionDialog = () => {
+        setSubmissionDetail(null);
+        setOpenSubmissionDialog(false);
+    };
+
+    const getRouteTypeStats = () => {
+        const counts = {};
+        submissions.forEach((sub) => {
+            const rt = sub.data.routeType || 'Desconocido';
+            counts[rt] = (counts[rt] || 0) + 1;
+        });
+        return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    };
+
+    const totalAlumnos = submissions.reduce((acc, sub) => {
+        return acc + (Number(sub.data.studentsCount) || 0);
+    }, 0);
+
+    const getGradeCounts = () => {
+        if (!selectedSchoolForSubmissions) return [];
+        if (!Array.isArray(selectedSchoolForSubmissions.grades)) return [];
+
+        const counts = {};
+        selectedSchoolForSubmissions.grades.forEach((g) => {
+            if (g.name) {
+                counts[g.name] = 0;
+            }
+        });
+
+        submissions.forEach((sub) => {
+            if (Array.isArray(sub.data.students)) {
+                sub.data.students.forEach((st) => {
+                    const gName = st.grade;
+                    if (counts[gName] !== undefined) {
+                        counts[gName]++;
+                    }
+                });
+            }
+        });
+
+        return Object.entries(counts).map(([gradeName, count]) => ({
+            name: gradeName,
+            value: count
+        }));
+    };
+
+    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
+
     return (
         <SchoolsContainer>
             <Typography variant="h4" gutterBottom>
                 Gestión de Colegios
             </Typography>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div
+                style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px',
+                    gap: '8px'
+                }}
+            >
                 <TextField
                     label="Buscar colegios"
                     variant="outlined"
                     size="small"
                     value={searchQuery}
                     onChange={handleSearchChange}
-                    style={{ width: '300px' }}
+                    style={{ width: '100%', maxWidth: '300px' }}
                 />
-                <div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     <Button
                         variant="contained"
                         color="info"
                         startIcon={<FileUpload />}
-                        style={{ marginRight: '8px' }}
                         onClick={handleOpenBulkDialog}
                     >
                         Carga Masiva
@@ -572,9 +686,15 @@ const SchoolsManagementPage = () => {
                     <CircularProgress />
                 </div>
             ) : (
-                <Paper>
-                    <TableContainer>
-                        <Table>
+                <Paper sx={{ width: '100%', overflowX: 'auto' }}>
+                    <TableContainer
+                        sx={{
+                            // Forzamos scroll horizontal en pantallas más pequeñas
+                            overflowX: 'auto',
+                            maxHeight: { xs: 400, sm: 'none' },
+                        }}
+                    >
+                        <Table stickyHeader>
                             <TableHead>
                                 <TableRow>
                                     <TableCell>Nombre</TableCell>
@@ -645,6 +765,11 @@ const SchoolsManagementPage = () => {
                                                             <Delete />
                                                         </IconButton>
                                                     </Tooltip>
+                                                    <Tooltip title="Ver Formularios Llenados">
+                                                        <IconButton onClick={() => handleViewSubmissions(school)}>
+                                                            <Visibility />
+                                                        </IconButton>
+                                                    </Tooltip>
                                                 </TableCell>
                                             </TableRow>
                                         );
@@ -672,7 +797,127 @@ const SchoolsManagementPage = () => {
                 </Paper>
             )}
 
-            {/* Diálogo para Crear/Editar Colegio */}
+            {selectedSchoolForSubmissions && (
+                <Box sx={{ mt: 4 }}>
+                    <Typography variant="h5">
+                        Formularios llenados para: {selectedSchoolForSubmissions.name}
+                    </Typography>
+
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            gap: 3,
+                            mt: 2,
+                            flexWrap: 'wrap',
+                        }}
+                    >
+                        <Box>
+                            <Typography variant="subtitle1">Tipos de Ruta (Gráfica)</Typography>
+                            <PieChart width={300} height={300}>
+                                <Pie
+                                    data={getRouteTypeStats()}
+                                    dataKey="value"
+                                    nameKey="name"
+                                    cx="50%"
+                                    cy="50%"
+                                    outerRadius={80}
+                                    label
+                                >
+                                    {getRouteTypeStats().map((entry, index) => (
+                                        <Cell
+                                            key={`cell-rt-${index}`}
+                                            fill={COLORS[index % COLORS.length]}
+                                        />
+                                    ))}
+                                </Pie>
+                                <ReTooltip />
+                                <Legend />
+                            </PieChart>
+                        </Box>
+
+                        <Box>
+                            <Typography variant="subtitle1">
+                                Cantidad de Alumnos por Grado
+                            </Typography>
+                            <BarChart width={400} height={300} data={getGradeCounts()}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" />
+                                <YAxis />
+                                <ReTooltip />
+                                <Legend />
+                                <Bar dataKey="value" fill="#8884d8" />
+                            </BarChart>
+                        </Box>
+
+                        <Box>
+                            <Typography variant="subtitle1">
+                                Total de Formularios: {submissions.length}
+                            </Typography>
+                            <Typography variant="subtitle1">
+                                Total de Alumnos: {totalAlumnos}
+                            </Typography>
+                        </Box>
+                    </Box>
+
+                    <Box
+                        sx={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                            gap: 2,
+                            mt: 2
+                        }}
+                    >
+                        {submissions.map((sub) => (
+                            <Card key={sub.id} sx={{ border: '1px solid #ccc' }}>
+                                <CardContent>
+                                    <Typography variant="h6">
+                                        {sub.data.familyLastName || 'Sin Apellido Familiar'}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary">
+                                        Ruta: {sub.data.routeType || 'Desconocido'}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary">
+                                        Cant. Alumnos: {sub.data.studentsCount || 0}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary">
+                                        Fecha de envío: {new Date(sub.createdAt).toLocaleString()}
+                                    </Typography>
+                                </CardContent>
+                                <CardActions>
+                                    <Button
+                                        size="small"
+                                        onClick={() => handleOpenSubmissionDialog(sub)}
+                                    >
+                                        VER DETALLES
+                                    </Button>
+                                </CardActions>
+                            </Card>
+                        ))}
+                    </Box>
+                </Box>
+            )}
+
+            <Dialog
+                open={openSubmissionDialog}
+                onClose={handleCloseSubmissionDialog}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle>Detalle del Formulario</DialogTitle>
+                <DialogContent>
+                    {submissionDetail ? (
+                        <SubmissionPreview submission={submissionDetail} />
+                    ) : (
+                        <DialogContentText>
+                            No hay datos para mostrar.
+                        </DialogContentText>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseSubmissionDialog}>Cerrar</Button>
+                </DialogActions>
+            </Dialog>
+
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
                 <DialogTitle>
                     {selectedSchool?.id ? 'Editar Colegio' : 'Añadir Colegio'}
@@ -780,7 +1025,6 @@ const SchoolsManagementPage = () => {
                         inputProps={{ min: '1', max: '31' }}
                     />
 
-                    {/* Horarios */}
                     <Typography variant="h6" style={{ marginTop: '1rem' }}>
                         Horarios
                     </Typography>
@@ -860,7 +1104,6 @@ const SchoolsManagementPage = () => {
                         Agregar Horario
                     </Button>
 
-                    {/* Grados */}
                     <Typography variant="h6" style={{ marginTop: '2rem' }}>
                         Grados del Colegio
                     </Typography>
@@ -900,7 +1143,6 @@ const SchoolsManagementPage = () => {
                         Agregar Grado
                     </Button>
 
-                    {/* CAMPOS EXTRA DE INSCRIPCIÓN */}
                     <Typography variant="h6" style={{ marginTop: '2rem' }}>
                         Campos Extra de Inscripción
                     </Typography>
@@ -918,7 +1160,6 @@ const SchoolsManagementPage = () => {
                                     <Delete />
                                 </IconButton>
                             </div>
-                            {/* Un solo nombre para placeholder y nombre interno => fieldName */}
                             <TextField
                                 margin="dense"
                                 label="Nombre del Campo"
@@ -928,7 +1169,6 @@ const SchoolsManagementPage = () => {
                                 onChange={(e) => handleChangeExtraField(idx, 'fieldName', e.target.value)}
                                 required
                             />
-
                             <FormControl fullWidth margin="dense">
                                 <InputLabel>Tipo</InputLabel>
                                 <Select
@@ -975,7 +1215,6 @@ const SchoolsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Popover => ver +N grados */}
             <Popover
                 id={popoverId}
                 open={openPopover}
@@ -1004,7 +1243,6 @@ const SchoolsManagementPage = () => {
                 </Box>
             </Popover>
 
-            {/* Diálogo Carga Masiva */}
             <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
                 <DialogTitle>Carga Masiva de Colegios</DialogTitle>
                 <DialogContent>
@@ -1012,9 +1250,11 @@ const SchoolsManagementPage = () => {
                         Sube un archivo Excel/CSV con las columnas necesarias.
                         <br />
                         <strong>¡No necesitas usar JSON!</strong> <br />
-                        Para <em>Horarios</em> puedes escribir algo como: <br />
+                        Para <em>Horarios</em> puedes escribir algo como:
+                        <br />
                         <code>Lunes=08:00,09:00;Martes=07:00,09:30</code> <br />
-                        Para <em>Grados</em>, simplemente: <br />
+                        Para <em>Grados</em>:
+                        <br />
                         <code>Kinder,Primero,Segundo</code>
                     </Typography>
                     <Button

@@ -1,6 +1,6 @@
 // frontend/src/components/dashboard/LatePaymentsChart.jsx
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import {
@@ -14,26 +14,10 @@ import {
     Legend,
 } from 'recharts';
 import { Typography } from '@mui/material';
-import api from '../../utils/axiosConfig';
 
 const ChartContainer = tw.div`bg-white p-4 rounded-lg shadow-md`;
 
-const LatePaymentsChart = ({ filters }) => {
-    const [data, setData] = useState([]);
-
-    useEffect(() => {
-        const fetchLatePayments = async () => {
-            try {
-                const response = await api.get('/reports/late-payments');
-                setData(response.data.latePayments);
-            } catch (error) {
-                console.error('Error fetching late payments:', error);
-            }
-        };
-
-        fetchLatePayments();
-    }, [filters]);
-
+const LatePaymentsChart = ({ data }) => {
     return (
         <ChartContainer>
             <Typography variant="h6" gutterBottom>

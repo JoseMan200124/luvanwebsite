@@ -10,17 +10,21 @@ import LandingPage from './pages/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthProvider from './context/AuthProvider';
 import MFAVerify from './components/MFAVerify';
-import PermissionsManagementPage from "./pages/PermissionsManagmentPage";
+import PermissionsManagementPage from "./pages/PermissionsManagmentPage"; // Cambia si tu archivo se llama distinto
 import ContractsManagementPage from './pages/ContractsManagementPage';
 import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
 import FilledContractViewer from './pages/FilledContractViewer';
 import SchoolsManagementPage from './pages/SchoolsManagementPage';
-import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage'; // Ruta pública de inscripción
+import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage';
+
+// El archivo con todos los módulos
 import { modules } from './modules';
+// Nuestro componente de redirección por defecto
+import DefaultAdminRoute from './components/DefaultAdminRoute';
 
 function App() {
-    // Método para crear rutas dinámicas a partir de "modules"
+    // Crea rutas dinámicas según "modules.js"
     const renderDynamicRoutes = () => {
         let routes = [];
         modules.forEach((module) => {
@@ -51,7 +55,7 @@ function App() {
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/mfa" element={<MFAVerify />} />
 
-                    {/* Rutas para llenar contratos compartidos */}
+                    {/* Rutas para llenar contratos (públicas o semipúblicas) */}
                     <Route path="/contracts" element={<ContractsManagementPage />} />
                     <Route path="/contracts/share/:uuid" element={<ContractFillPage />} />
 
@@ -75,7 +79,7 @@ function App() {
                         }
                     />
 
-                    {/* Ruta pública para formulario de inscripción por colegio */}
+                    {/* Ruta pública para inscripción de alumnos a un colegio */}
                     <Route
                         path="/schools/enroll/:schoolId"
                         element={<SchoolEnrollmentPage />}
@@ -90,11 +94,14 @@ function App() {
                             </ProtectedRoute>
                         }
                     >
-                        {/* Ruta por defecto al dashboard */}
-                        <Route index element={<Navigate to="dashboard" replace />} />
+                        {/* En lugar de redirigir por defecto al Dashboard,
+                            ahora usamos <DefaultAdminRoute /> */}
+                        <Route index element={<DefaultAdminRoute />} />
+
+                        {/* Dashboard */}
                         <Route path="dashboard" element={<Dashboard />} />
 
-                        {/* Rutas dinámicas generadas a partir de "modules.js" */}
+                        {/* Rutas dinámicas según modules.js */}
                         {renderDynamicRoutes()}
 
                         {/* Roles y Permisos */}

@@ -1,3 +1,4 @@
+// src/pages/ActivityLogPage.jsx
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -25,7 +26,13 @@ import {
     AccordionActions,
     Divider,
     TextField,
-    TablePagination
+    TablePagination,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    Checkbox,
+    FormControlLabel
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
@@ -33,16 +40,20 @@ import {
     DirectionsBus as DirectionsBusIcon,
     WarningAmber as WarningIcon,
     LocalHospital as HospitalIcon,
-    Build as BuildIcon
+    Build as BuildIcon,
+    LocationOn as LocationOnIcon,
+    Report as ReportIcon
 } from '@mui/icons-material';
 import tw, { styled } from 'twin.macro';
 import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
 import moment from 'moment-timezone';
 
-// Configuración de moment-timezone para Guatemala
 moment.tz.setDefault('America/Guatemala');
 
+// -------------
+// Formateos
+// -------------
 const formatGuatemalaDatetime = (dateString) => {
     if (!dateString) return '—';
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
@@ -53,16 +64,14 @@ const formatGuatemalaDate = (dateString) => {
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY');
 };
 
-//
-// Estilos con twin.macro / styled-components
-//
+// -------------
+// Estilos con Twin.macro
+// -------------
 const PageContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 const Title = styled(Typography)(() => [
     tw`text-3xl font-bold mb-4`,
-    {
-        color: '#1C3FAA'
-    }
+    { color: '#1C3FAA' }
 ]);
 
 const SectionPaper = styled(Paper)(() => [
@@ -77,9 +86,7 @@ const SectionPaper = styled(Paper)(() => [
 
 const SectionTitle = styled(Typography)(() => [
     tw`font-semibold mb-3`,
-    {
-        color: '#2563EB'
-    }
+    { color: '#2563EB' }
 ]);
 
 const AccordionStyled = styled((props) => <Accordion disableGutters {...props} />)(() => [
@@ -115,12 +122,18 @@ const FiltersRow = tw.div`flex gap-4 mb-4 items-center`;
 //
 const ActivityLogPage = () => {
     const { auth } = useContext(AuthContext);
+
+    // Asumiendo que roleId = 6 corresponde a "Supervisor"
+    const isSupervisor = auth?.user?.roleId === 6;
+
     const [loading, setLoading] = useState(false);
 
-    // Estados para cada sección
+    // Estado general
     const [buses, setBuses] = useState([]);
     const [incidents, setIncidents] = useState([]);
     const [emergencies, setEmergencies] = useState([]);
+
+    // Pagos (solo si NO es supervisor)
     const [payments, setPayments] = useState([]);
 
     // Snackbar
@@ -130,22 +143,39 @@ const ActivityLogPage = () => {
         severity: 'info'
     });
 
-    // Diálogo de boletas
+    // Diálogo Boletas
     const [openBoletasDialog, setOpenBoletasDialog] = useState(false);
     const [currentBoletas, setCurrentBoletas] = useState([]);
     const [currentParentName, setCurrentParentName] = useState('');
 
+    // Diálogo Mapa
+    const [openMapDialog, setOpenMapDialog] = useState(false);
+    const [selectedCoords, setSelectedCoords] = useState({ lat: null, lng: null });
+
+    // Diálogo Reportar Incidencia
+    const [openIncidentDialog, setOpenIncidentDialog] = useState(false);
+    const [incidentForm, setIncidentForm] = useState({
+        busId: null,
+        tipoFalla: 'mecánico',
+        impacto: false,
+        descripcion: '',
+        tipo: 'incidente'
+    });
+
     // Acordeones
     const [expanded, setExpanded] = useState(false);
 
-    // Filtros & paginación Buses
+    // ---------------------
+    // Filtros & Paginación
+    // ---------------------
+    // Buses
     const [busPilotFilter, setBusPilotFilter] = useState('');
     const [busMonitoraFilter, setBusMonitoraFilter] = useState('');
     const [busDescriptionFilter, setBusDescriptionFilter] = useState('');
     const [busPage, setBusPage] = useState(0);
     const [busRowsPerPage, setBusRowsPerPage] = useState(5);
 
-    // Filtros & paginación Incidentes
+    // Incidentes
     const [incDateFrom, setIncDateFrom] = useState('');
     const [incDateTo, setIncDateTo] = useState('');
     const [incPilotFilter, setIncPilotFilter] = useState('');
@@ -153,14 +183,14 @@ const ActivityLogPage = () => {
     const [incPage, setIncPage] = useState(0);
     const [incRowsPerPage, setIncRowsPerPage] = useState(5);
 
-    // Filtros & paginación Emergencias
+    // Emergencias
     const [emeDateFrom, setEmeDateFrom] = useState('');
     const [emeDateTo, setEmeDateTo] = useState('');
     const [emePilotFilter, setEmePilotFilter] = useState('');
     const [emePage, setEmePage] = useState(0);
     const [emeRowsPerPage, setEmeRowsPerPage] = useState(5);
 
-    // Filtros & paginación Pagos
+    // Pagos
     const [payDateFrom, setPayDateFrom] = useState('');
     const [payDateTo, setPayDateTo] = useState('');
     const [payBalanceMin, setPayBalanceMin] = useState('');
@@ -168,28 +198,34 @@ const ActivityLogPage = () => {
     const [payPage, setPayPage] = useState(0);
     const [payRowsPerPage, setPayRowsPerPage] = useState(5);
 
-    // Cargar data al iniciar
+    // ---------------------
+    // Al montar el componente
+    // ---------------------
     useEffect(() => {
         fetchAllData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Cargar data desde el backend
     const fetchAllData = async () => {
         try {
             setLoading(true);
-            // <<-- IMPORTANTE: se usa la ruta de activity-logs para obtener los buses con sus paradas -->
+
+            // Buses
             const busResp = await api.get('/activity-logs');
             // Incidentes
             const incResp = await api.get('/activity-logs/incidents');
             // Emergencias
             const emeResp = await api.get('/activity-logs/emergencies');
-            // Pagos
-            const payResp = await api.get('/payments');
 
             setBuses(busResp.data || []);
             setIncidents(incResp.data.incidents || []);
             setEmergencies(emeResp.data.emergencies || []);
-            setPayments(payResp.data.payments || []);
+
+            // Pagos, solo si NO es supervisor
+            if (!isSupervisor) {
+                const payResp = await api.get('/payments');
+                setPayments(payResp.data.payments || []);
+            }
         } catch (error) {
             console.error('Error fetchAllData =>', error);
             setSnackbar({
@@ -202,12 +238,16 @@ const ActivityLogPage = () => {
         }
     };
 
-    // Acordeón
+    // ---------------------
+    // Manejo Acordeón
+    // ---------------------
     const handleChangeAccordion = (panel) => (event, isExpanded) => {
         setExpanded(isExpanded ? panel : false);
     };
 
-    // Ver Boletas (Payments)
+    // ---------------------
+    // Ver Boletas
+    // ---------------------
     const handleViewBoletas = async (fatherId, fatherName) => {
         try {
             setLoading(true);
@@ -234,7 +274,21 @@ const ActivityLogPage = () => {
         setCurrentParentName('');
     };
 
-    // Toggle "En Taller" del Bus
+    // ---------------------
+    // Mapa
+    // ---------------------
+    const handleOpenMap = (lat, lng) => {
+        setSelectedCoords({ lat, lng });
+        setOpenMapDialog(true);
+    };
+    const handleCloseMap = () => {
+        setOpenMapDialog(false);
+        setSelectedCoords({ lat: null, lng: null });
+    };
+
+    // ---------------------
+    // Taller
+    // ---------------------
     const handleToggleBusTaller = async (bus, newValue) => {
         try {
             setLoading(true);
@@ -259,7 +313,84 @@ const ActivityLogPage = () => {
         }
     };
 
-    // Filtros & Paginación (Front-End) - Buses
+    // ---------------------
+    // Reportar Incidente
+    // ---------------------
+    const handleOpenIncidentDialog = (bus) => {
+        setIncidentForm({
+            busId: bus.id,
+            tipoFalla: 'mecánico',
+            impacto: false,
+            descripcion: '',
+            tipo: 'incidente'
+        });
+        setOpenIncidentDialog(true);
+    };
+
+    const handleCloseIncidentDialog = () => {
+        setOpenIncidentDialog(false);
+    };
+
+    const handleIncidentFormChange = (field, value) => {
+        setIncidentForm((prev) => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
+    const handleSubmitIncident = async () => {
+        if (!incidentForm.descripcion) {
+            setSnackbar({
+                open: true,
+                message: 'La descripción es obligatoria para el incidente',
+                severity: 'warning'
+            });
+            return;
+        }
+        if (!incidentForm.busId) {
+            setSnackbar({
+                open: true,
+                message: 'No se encontró el bus para el incidente.',
+                severity: 'error'
+            });
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await api.post('/activity-logs/incidents', {
+                busId: incidentForm.busId,
+                tipoFalla: incidentForm.tipoFalla,
+                impacto: incidentForm.impacto,
+                descripcion: incidentForm.descripcion,
+                tipo: incidentForm.tipo
+            });
+            setSnackbar({
+                open: true,
+                message: 'Incidencia reportada correctamente',
+                severity: 'success'
+            });
+            setOpenIncidentDialog(false);
+
+            // Refrescar incidentes
+            const incResp = await api.get('/activity-logs/incidents');
+            setIncidents(incResp.data.incidents || []);
+        } catch (error) {
+            console.error('Error al crear incidente =>', error);
+            setSnackbar({
+                open: true,
+                message: 'No se pudo reportar el incidente.',
+                severity: 'error'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ---------------------
+    // Filtrado & Paginación
+    // ---------------------
+    // Buses
     const filteredBuses = buses.filter((b) => {
         if (busPilotFilter) {
             const pilotName = b?.pilot?.name?.toLowerCase() || '';
@@ -275,12 +406,10 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-
     const busesPaginated = filteredBuses.slice(
         busPage * busRowsPerPage,
         busPage * busRowsPerPage + busRowsPerPage
     );
-
     const handleChangeBusPage = (event, newPage) => {
         setBusPage(newPage);
     };
@@ -289,7 +418,7 @@ const ActivityLogPage = () => {
         setBusPage(0);
     };
 
-    // Filtros & Paginación - Incidentes
+    // Incidentes
     const filteredIncidents = incidents.filter((inc) => {
         if (incDateFrom) {
             const from = moment(incDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -311,12 +440,10 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-
     const incPaginated = filteredIncidents.slice(
         incPage * incRowsPerPage,
         incPage * incRowsPerPage + incRowsPerPage
     );
-
     const handleChangeIncPage = (event, newPage) => {
         setIncPage(newPage);
     };
@@ -325,7 +452,7 @@ const ActivityLogPage = () => {
         setIncPage(0);
     };
 
-    // Filtros & Paginación - Emergencias
+    // Emergencias
     const filteredEmergencies = emergencies.filter((eme) => {
         if (emeDateFrom) {
             const from = moment(emeDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -343,12 +470,10 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-
     const emePaginated = filteredEmergencies.slice(
         emePage * emeRowsPerPage,
         emePage * emeRowsPerPage + emeRowsPerPage
     );
-
     const handleChangeEmePage = (event, newPage) => {
         setEmePage(newPage);
     };
@@ -357,7 +482,7 @@ const ActivityLogPage = () => {
         setEmePage(0);
     };
 
-    // Filtros & Paginación - Pagos
+    // Pagos (solo si NO es supervisor)
     const filteredPayments = payments.filter((pay) => {
         if (payDateFrom) {
             const from = moment(payDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -381,12 +506,10 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-
     const payPaginated = filteredPayments.slice(
         payPage * payRowsPerPage,
         payPage * payRowsPerPage + payRowsPerPage
     );
-
     const handleChangePayPage = (event, newPage) => {
         setPayPage(newPage);
     };
@@ -395,19 +518,23 @@ const ActivityLogPage = () => {
         setPayPage(0);
     };
 
+    // ---------------------
+    // Render
+    // ---------------------
     return (
         <PageContainer>
             <Title variant="h4" gutterBottom>
                 Registro de Actividades
             </Title>
 
+            {/* Spinner global si loading es true */}
             {loading ? (
                 <div tw="flex justify-center p-4">
                     <CircularProgress />
                 </div>
             ) : (
                 <div tw="space-y-6">
-                    {/* Sección Buses, Pilotos, Monitoras y Paradas */}
+                    {/* Sección Buses */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
                             <DirectionsBusIcon
@@ -416,7 +543,7 @@ const ActivityLogPage = () => {
                             Buses, Pilotos, Monitoras & Paradas
                         </SectionTitle>
 
-                        {/* Filtros para Buses */}
+                        {/* Filtros Buses */}
                         <FiltersRow>
                             <TextField
                                 label="Filtrar por Piloto"
@@ -466,7 +593,9 @@ const ActivityLogPage = () => {
                                                 />
                                             )}
                                             <Chip
-                                                label={`Ocupación: ${bus.occupation ?? 0}/${bus.capacity ?? '--'}`}
+                                                label={`Ocupación: ${
+                                                    bus.occupation ?? 0
+                                                }/${bus.capacity ?? '--'}`}
                                                 size="small"
                                                 color="success"
                                                 sx={{ ml: 2 }}
@@ -495,7 +624,6 @@ const ActivityLogPage = () => {
                                                 </Grid>
 
                                                 <Grid item xs={12} md={6}>
-                                                    {/* Se muestran las paradas (stops) si existen */}
                                                     {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
                                                         <Table size="small">
                                                             <TableHead>
@@ -550,6 +678,15 @@ const ActivityLogPage = () => {
                                                     </IconButton>
                                                 </Tooltip>
                                             )}
+                                            {/* Botón Reportar Incidente */}
+                                            <Tooltip title="Reportar Incidencia">
+                                                <IconButton
+                                                    color="warning"
+                                                    onClick={() => handleOpenIncidentDialog(bus)}
+                                                >
+                                                    <ReportIcon />
+                                                </IconButton>
+                                            </Tooltip>
                                         </AccordionActions>
                                     </AccordionStyled>
                                 ))}
@@ -570,7 +707,8 @@ const ActivityLogPage = () => {
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
                             <WarningIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }} />
-                            Incidentes y <HospitalIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }} />
+                            Incidentes y{' '}
+                            <HospitalIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }} />
                             Emergencias
                         </SectionTitle>
 
@@ -632,8 +770,12 @@ const ActivityLogPage = () => {
                                             <TableBody>
                                                 {incPaginated.map((incident) => (
                                                     <TableRow key={incident.id} hover>
-                                                        <TableCell>{formatGuatemalaDatetime(incident.fecha)}</TableCell>
-                                                        <TableCell>{incident.piloto ? incident.piloto.name : '—'}</TableCell>
+                                                        <TableCell>
+                                                            {formatGuatemalaDatetime(incident.fecha)}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {incident.piloto ? incident.piloto.name : '—'}
+                                                        </TableCell>
                                                         <TableCell>{incident.tipo || '—'}</TableCell>
                                                         <TableCell>{incident.descripcion || '—'}</TableCell>
                                                     </TableRow>
@@ -703,13 +845,51 @@ const ActivityLogPage = () => {
                                             <TableBody>
                                                 {emePaginated.map((eme) => (
                                                     <TableRow key={eme.id} hover>
-                                                        <TableCell>{formatGuatemalaDatetime(eme.fecha)}</TableCell>
-                                                        <TableCell>{eme.piloto ? eme.piloto.name : '—'}</TableCell>
+                                                        <TableCell>
+                                                            {formatGuatemalaDatetime(eme.fecha)}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {eme.piloto ? eme.piloto.name : '—'}
+                                                        </TableCell>
                                                         <TableCell>{eme.mensaje}</TableCell>
                                                         <TableCell>
-                                                            {eme.latitud && eme.longitud
-                                                                ? `${eme.latitud}, ${eme.longitud}`
-                                                                : '—'}
+                                                            {eme.latitud && eme.longitud ? (
+                                                                (() => {
+                                                                    const lat = parseFloat(eme.latitud);
+                                                                    const lng = parseFloat(eme.longitud);
+
+                                                                    if (isNaN(lat) || isNaN(lng)) {
+                                                                        return (
+                                                                            <span>{`${eme.latitud}, ${eme.longitud}`}</span>
+                                                                        );
+                                                                    }
+
+                                                                    return (
+                                                                        <div
+                                                                            style={{
+                                                                                display: 'inline-flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '0.5rem',
+                                                                                whiteSpace: 'nowrap'
+                                                                            }}
+                                                                        >
+                                                                            {`${lat.toFixed(6)}, ${lng.toFixed(6)}`}
+                                                                            <Tooltip title="Ver mapa">
+                                                                                <IconButton
+                                                                                    size="small"
+                                                                                    onClick={() =>
+                                                                                        handleOpenMap(lat, lng)
+                                                                                    }
+                                                                                >
+                                                                                    <LocationOnIcon color="primary" />
+                                                                                </IconButton>
+                                                                            </Tooltip>
+                                                                        </div>
+                                                                    );
+                                                                })()
+                                                            ) : (
+                                                                '—'
+                                                            )}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
@@ -730,140 +910,273 @@ const ActivityLogPage = () => {
                         </Grid>
                     </SectionPaper>
 
-                    {/* Sección Pagos y Boletas */}
-                    <SectionPaper>
-                        <SectionTitle variant="h6" gutterBottom>
-                            Pagos y Boletas
-                        </SectionTitle>
+                    {/* Pagos y Boletas (NO se muestra si es supervisor) */}
+                    {!isSupervisor && (
+                        <SectionPaper>
+                            <SectionTitle variant="h6" gutterBottom>
+                                Pagos y Boletas
+                            </SectionTitle>
 
-                        <FiltersRow>
-                            <TextField
-                                label="Próximo Pago Desde"
-                                type="date"
-                                value={payDateFrom}
-                                onChange={(e) => setPayDateFrom(e.target.value)}
-                                InputLabelProps={{ shrink: true }}
-                                size="small"
-                            />
-                            <TextField
-                                label="Próximo Pago Hasta"
-                                type="date"
-                                value={payDateTo}
-                                onChange={(e) => setPayDateTo(e.target.value)}
-                                InputLabelProps={{ shrink: true }}
-                                size="small"
-                            />
-                            <TextField
-                                label="Saldo Mínimo"
-                                variant="outlined"
-                                size="small"
-                                value={payBalanceMin}
-                                onChange={(e) => setPayBalanceMin(e.target.value)}
-                            />
-                            <TextField
-                                label="Saldo Máximo"
-                                variant="outlined"
-                                size="small"
-                                value={payBalanceMax}
-                                onChange={(e) => setPayBalanceMax(e.target.value)}
-                            />
-                        </FiltersRow>
-
-                        {filteredPayments.length === 0 ? (
-                            <Typography variant="body2" color="textSecondary">
-                                Aún no hay registros de pagos con esos filtros.
-                            </Typography>
-                        ) : (
-                            <>
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableHeaderCell>Padre (Usuario)</TableHeaderCell>
-                                            <TableHeaderCell>Email</TableHeaderCell>
-                                            <TableHeaderCell>Estado</TableHeaderCell>
-                                            <TableHeaderCell>Próximo Pago</TableHeaderCell>
-                                            <TableHeaderCell>Saldo</TableHeaderCell>
-                                            <TableHeaderCell>Acciones</TableHeaderCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {payPaginated.map((pay) => (
-                                            <TableRow key={pay.id} hover>
-                                                <TableCell>{pay.User ? pay.User.name : '—'}</TableCell>
-                                                <TableCell>{pay.User ? pay.User.email : '—'}</TableCell>
-                                                <TableCell>{pay.finalStatus || pay.status}</TableCell>
-                                                <TableCell>{formatGuatemalaDate(pay.nextPaymentDate)}</TableCell>
-                                                <TableCell>Q {pay.leftover ?? 0}</TableCell>
-                                                <TableCell>
-                                                    {pay.User && (
-                                                        <Tooltip title="Ver boletas de pago">
-                                                            <IconButton
-                                                                onClick={() =>
-                                                                    handleViewBoletas(pay.User.id, pay.User.name)
-                                                                }
-                                                            >
-                                                                <VisibilityIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-
-                                <TablePagination
-                                    component="div"
-                                    count={filteredPayments.length}
-                                    page={payPage}
-                                    onPageChange={handleChangePayPage}
-                                    rowsPerPage={payRowsPerPage}
-                                    onRowsPerPageChange={handleChangePayRowsPerPage}
-                                    labelRowsPerPage="Filas por página"
+                            <FiltersRow>
+                                <TextField
+                                    label="Próximo Pago Desde"
+                                    type="date"
+                                    value={payDateFrom}
+                                    onChange={(e) => setPayDateFrom(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    size="small"
                                 />
-                            </>
-                        )}
-                    </SectionPaper>
+                                <TextField
+                                    label="Próximo Pago Hasta"
+                                    type="date"
+                                    value={payDateTo}
+                                    onChange={(e) => setPayDateTo(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    size="small"
+                                />
+                                <TextField
+                                    label="Saldo Mínimo"
+                                    variant="outlined"
+                                    size="small"
+                                    value={payBalanceMin}
+                                    onChange={(e) => setPayBalanceMin(e.target.value)}
+                                />
+                                <TextField
+                                    label="Saldo Máximo"
+                                    variant="outlined"
+                                    size="small"
+                                    value={payBalanceMax}
+                                    onChange={(e) => setPayBalanceMax(e.target.value)}
+                                />
+                            </FiltersRow>
+
+                            {filteredPayments.length === 0 ? (
+                                <Typography variant="body2" color="textSecondary">
+                                    Aún no hay registros de pagos con esos filtros.
+                                </Typography>
+                            ) : (
+                                <>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableHeaderCell>Padre (Usuario)</TableHeaderCell>
+                                                <TableHeaderCell>Email</TableHeaderCell>
+                                                <TableHeaderCell>Estado</TableHeaderCell>
+                                                <TableHeaderCell>Próximo Pago</TableHeaderCell>
+                                                <TableHeaderCell>Saldo</TableHeaderCell>
+                                                <TableHeaderCell>Acciones</TableHeaderCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {payPaginated.map((pay) => (
+                                                <TableRow key={pay.id} hover>
+                                                    <TableCell>
+                                                        {pay.User ? pay.User.name : '—'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {pay.User ? pay.User.email : '—'}
+                                                    </TableCell>
+                                                    <TableCell>{pay.finalStatus || pay.status}</TableCell>
+                                                    <TableCell>
+                                                        {formatGuatemalaDate(pay.nextPaymentDate)}
+                                                    </TableCell>
+                                                    <TableCell>Q {pay.leftover ?? 0}</TableCell>
+                                                    <TableCell>
+                                                        {pay.User && (
+                                                            <Tooltip title="Ver boletas de pago">
+                                                                <IconButton
+                                                                    onClick={() =>
+                                                                        handleViewBoletas(
+                                                                            pay.User.id,
+                                                                            pay.User.name
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <VisibilityIcon />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                    <TablePagination
+                                        component="div"
+                                        count={filteredPayments.length}
+                                        page={payPage}
+                                        onPageChange={handleChangePayPage}
+                                        rowsPerPage={payRowsPerPage}
+                                        onRowsPerPageChange={handleChangePayRowsPerPage}
+                                        labelRowsPerPage="Filas por página"
+                                    />
+                                </>
+                            )}
+                        </SectionPaper>
+                    )}
                 </div>
             )}
 
-            {/* Dialog para ver Boletas */}
-            <Dialog open={openBoletasDialog} onClose={handleCloseBoletasDialog} maxWidth="md" fullWidth>
-                <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
+            {/* Dialog Boletas */}
+            {!isSupervisor && (
+                <Dialog
+                    open={openBoletasDialog}
+                    onClose={handleCloseBoletasDialog}
+                    maxWidth="md"
+                    fullWidth
+                >
+                    <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
+                    <DialogContent dividers>
+                        {loading ? (
+                            <div tw="flex justify-center p-4">
+                                <CircularProgress />
+                            </div>
+                        ) : currentBoletas.length === 0 ? (
+                            <Typography>No hay boletas para este padre.</Typography>
+                        ) : (
+                            <Grid container spacing={2}>
+                                {currentBoletas.map((b) => (
+                                    <Grid item xs={12} md={4} key={b.id}>
+                                        <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
+                                            <Typography variant="body2">
+                                                <strong>Subido el:</strong>{' '}
+                                                {formatGuatemalaDatetime(b.uploadedAt)}
+                                            </Typography>
+                                            <img
+                                                src={b.fileUrl}
+                                                alt="Boleta"
+                                                style={{
+                                                    maxWidth: '100%',
+                                                    border: '1px solid #ddd',
+                                                    borderRadius: '4px',
+                                                    marginTop: '8px'
+                                                }}
+                                            />
+                                        </Paper>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        )}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCloseBoletasDialog} variant="outlined">
+                            Cerrar
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+            )}
+
+            {/* Dialog ver Mapa */}
+            <Dialog
+                open={openMapDialog}
+                onClose={handleCloseMap}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle>Ubicación en Mapa</DialogTitle>
                 <DialogContent dividers>
-                    {loading ? (
-                        <div tw="flex justify-center p-4">
-                            <CircularProgress />
-                        </div>
-                    ) : currentBoletas.length === 0 ? (
-                        <Typography>No hay boletas para este padre.</Typography>
+                    {selectedCoords.lat && selectedCoords.lng ? (
+                        <iframe
+                            width="100%"
+                            height="450"
+                            style={{ border: 0 }}
+                            loading="lazy"
+                            allowFullScreen
+                            src={`https://www.google.com/maps?q=${selectedCoords.lat},${selectedCoords.lng}&z=15&output=embed`}
+                        />
                     ) : (
-                        <Grid container spacing={2}>
-                            {currentBoletas.map((b) => (
-                                <Grid item xs={12} md={4} key={b.id}>
-                                    <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
-                                        <Typography variant="body2">
-                                            <strong>Subido el:</strong> {formatGuatemalaDatetime(b.uploadedAt)}
-                                        </Typography>
-                                        <img
-                                            src={b.fileUrl}
-                                            alt="Boleta"
-                                            style={{
-                                                maxWidth: '100%',
-                                                border: '1px solid #ddd',
-                                                borderRadius: '4px',
-                                                marginTop: '8px'
-                                            }}
-                                        />
-                                    </Paper>
-                                </Grid>
-                            ))}
-                        </Grid>
+                        <Typography>Coordenadas no disponibles</Typography>
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleCloseBoletasDialog} variant="outlined">
+                    <Button variant="outlined" onClick={handleCloseMap}>
                         Cerrar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog Reportar Incidencia */}
+            <Dialog
+                open={openIncidentDialog}
+                onClose={handleCloseIncidentDialog}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Reportar Incidente</DialogTitle>
+                <DialogContent dividers>
+                    <Grid container spacing={2}>
+                        {/* Tipo de Falla */}
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth margin="normal">
+                                <InputLabel id="tipo-falla-label">Tipo de Falla</InputLabel>
+                                <Select
+                                    labelId="tipo-falla-label"
+                                    label="Tipo de Falla"
+                                    value={incidentForm.tipoFalla}
+                                    onChange={(e) => handleIncidentFormChange('tipoFalla', e.target.value)}
+                                >
+                                    <MenuItem value="mecánico">Mecánico</MenuItem>
+                                    <MenuItem value="eléctrico">Eléctrico</MenuItem>
+                                    <MenuItem value="choque">Choque</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+
+                        {/* Tipo de Incidente */}
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth margin="normal">
+                                <InputLabel id="tipo-incidente-label">Tipo de Incidente</InputLabel>
+                                <Select
+                                    labelId="tipo-incidente-label"
+                                    label="Tipo de Incidente"
+                                    value={incidentForm.tipo}
+                                    onChange={(e) => handleIncidentFormChange('tipo', e.target.value)}
+                                >
+                                    <MenuItem value="incidente">Incidente</MenuItem>
+                                    <MenuItem value="accidente">Accidente</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+
+                        {/* ¿Hubo impacto? */}
+                        <Grid item xs={12}>
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        checked={incidentForm.impacto}
+                                        onChange={(e) =>
+                                            handleIncidentFormChange('impacto', e.target.checked)
+                                        }
+                                    />
+                                }
+                                label="¿Hubo impacto?"
+                            />
+                        </Grid>
+
+                        {/* Descripción */}
+                        <Grid item xs={12}>
+                            <TextField
+                                label="Descripción"
+                                value={incidentForm.descripcion}
+                                onChange={(e) => handleIncidentFormChange('descripcion', e.target.value)}
+                                multiline
+                                rows={4}
+                                fullWidth
+                            />
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+                <DialogActions>
+                    <Button variant="outlined" onClick={handleCloseIncidentDialog}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleSubmitIncident}
+                        disabled={loading}
+                    >
+                        Reportar
                     </Button>
                 </DialogActions>
             </Dialog>

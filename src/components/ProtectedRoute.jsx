@@ -4,11 +4,11 @@ import { Navigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import { CircularProgress } from '@mui/material';
 
-
 const ProtectedRoute = ({ children, roles = [] }) => {
     const { auth, initialLoad } = useContext(AuthContext);
 
     if (initialLoad) {
+        // Muestra un loader mientras determinamos si el usuario está logueado
         return (
             <div style={{ width: '100%', height: '80vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <CircularProgress />

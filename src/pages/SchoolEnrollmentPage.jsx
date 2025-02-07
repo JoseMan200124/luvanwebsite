@@ -22,54 +22,41 @@ import logoLuvan from '../assets/img/logo-sin-fondo.png';
 const SchoolEnrollmentPage = () => {
     const { schoolId } = useParams();
 
-    // Estados para la carga de datos
     const [loading, setLoading] = useState(true);
     const [grades, setGrades] = useState([]);
-
-    // Campos extra definidos en el colegio
     const [extraFields, setExtraFields] = useState([]);
 
-    // SECCIÓN I
     const [familyLastName, setFamilyLastName] = useState('');
     const [serviceAddress, setServiceAddress] = useState('');
     const [zoneOrSector, setZoneOrSector] = useState('');
     const [routeType, setRouteType] = useState('Completa');
     const [studentsCount, setStudentsCount] = useState(1);
-
-    // Array de alumnos:
     const [students, setStudents] = useState([{ fullName: '', grade: '' }]);
 
-    // SECCIÓN II
     const [motherName, setMotherName] = useState('');
     const [motherPhone, setMotherPhone] = useState('');
     const [motherEmail, setMotherEmail] = useState('');
 
-    // SECCIÓN III
     const [fatherName, setFatherName] = useState('');
     const [fatherPhone, setFatherPhone] = useState('');
     const [fatherEmail, setFatherEmail] = useState('');
 
-    // SECCIÓN IV
     const [emergencyContact, setEmergencyContact] = useState('');
     const [emergencyRelationship, setEmergencyRelationship] = useState('');
     const [emergencyPhone, setEmergencyPhone] = useState('');
 
-    // DATOS USUARIO PADRE
     const [accountFullName, setAccountFullName] = useState('');
     const [accountEmail, setAccountEmail] = useState('');
     const [accountPassword, setAccountPassword] = useState('');
 
-    // Objeto para guardar los valores de los campos extra
     const [formExtraValues, setFormExtraValues] = useState({});
 
-    // SNACKBAR
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
         severity: 'success'
     });
 
-    // Ajustar longitud de `students` según `studentsCount`
     useEffect(() => {
         const count = Number(studentsCount);
         const newArray = [...students];
@@ -83,9 +70,9 @@ const SchoolEnrollmentPage = () => {
             newArray.splice(count);
         }
         setStudents(newArray);
+        // eslint-disable-next-line
     }, [studentsCount]);
 
-    // Manejar cambios en los campos de cada alumno
     const handleChangeStudentField = (index, field, value) => {
         setStudents((prev) => {
             const clone = [...prev];
@@ -98,8 +85,6 @@ const SchoolEnrollmentPage = () => {
         e.preventDefault();
 
         const finalStudentsCount = students.length;
-
-        // Construimos objeto con todos los campos
         const payload = {
             schoolId,
             familyLastName,
@@ -123,9 +108,7 @@ const SchoolEnrollmentPage = () => {
             accountFullName,
             accountEmail,
             accountPassword,
-            specialFee: 0, // si requieres algún ajuste
-
-            // Aquí enviamos los valores extra
+            specialFee: 0,
             extraFields: formExtraValues
         };
 
@@ -138,14 +121,12 @@ const SchoolEnrollmentPage = () => {
                 severity: 'success'
             });
 
-            // Limpieza
             setFamilyLastName('');
             setServiceAddress('');
             setZoneOrSector('');
             setRouteType('Completa');
             setStudentsCount(1);
             setStudents([{ fullName: '', grade: '' }]);
-
             setMotherName('');
             setMotherPhone('');
             setMotherEmail('');
@@ -169,22 +150,18 @@ const SchoolEnrollmentPage = () => {
         }
     };
 
-    // Fetch de datos del colegio: grados y extraFields
     useEffect(() => {
         const fetchSchoolData = async () => {
             try {
                 const response = await api.get(`/schools/${schoolId}`);
                 if (response.data && response.data.school) {
                     const { school } = response.data;
-
-                    // Grades
                     if (Array.isArray(school.grades)) {
                         setGrades(school.grades);
                     } else {
                         setGrades([]);
                     }
 
-                    // Extra fields (arreglo con fieldName, type, required)
                     let parsedExtraFields = [];
                     if (Array.isArray(school.extraEnrollmentFields)) {
                         parsedExtraFields = school.extraEnrollmentFields;
@@ -234,6 +211,7 @@ const SchoolEnrollmentPage = () => {
     }
 
     return (
+        // Contenedor principal responsivo
         <Box
             sx={{
                 backgroundColor: '#f7f7f7',
@@ -255,15 +233,22 @@ const SchoolEnrollmentPage = () => {
                     position: 'relative',
                     display: 'flex',
                     flexDirection: 'column',
-                    minHeight: '80vh'
+                    minHeight: '80vh',
+                    // Ajustes para pantallas más pequeñas
+                    '@media (max-width: 480px)': {
+                        padding: '20px',
+                        minHeight: 'auto',
+                    }
                 }}
             >
-                {/* Logo */}
                 <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-                    <img src={logoLuvan} alt="Logo Transportes Luvan" style={{ maxWidth: '150px' }} />
+                    <img
+                        src={logoLuvan}
+                        alt="Logo Transportes Luvan"
+                        style={{ maxWidth: '150px', height: 'auto' }}
+                    />
                 </Box>
 
-                {/* Título del Formulario */}
                 <Typography
                     variant="h4"
                     gutterBottom
@@ -279,9 +264,7 @@ const SchoolEnrollmentPage = () => {
                     Formulario de Inscripción
                 </Typography>
 
-                {/* Formulario */}
                 <form onSubmit={handleSubmit} style={{ flexGrow: 1 }}>
-                    {/* SECCIÓN I */}
                     <Typography variant="h6" sx={{ mb: 2 }}>
                         Información Familiar
                     </Typography>
@@ -382,7 +365,6 @@ const SchoolEnrollmentPage = () => {
 
                     <Divider sx={{ my: 3 }} />
 
-                    {/* SECCIÓN II */}
                     <Typography variant="h6" sx={{ mb: 2 }}>
                         Datos de la Madre
                     </Typography>
@@ -414,7 +396,6 @@ const SchoolEnrollmentPage = () => {
 
                     <Divider sx={{ my: 3 }} />
 
-                    {/* SECCIÓN III */}
                     <Typography variant="h6" sx={{ mb: 2 }}>
                         Datos del Padre
                     </Typography>
@@ -446,7 +427,6 @@ const SchoolEnrollmentPage = () => {
 
                     <Divider sx={{ my: 3 }} />
 
-                    {/* SECCIÓN IV */}
                     <Typography variant="h6" sx={{ mb: 2 }}>
                         Contacto de Emergencia
                     </Typography>
@@ -477,7 +457,6 @@ const SchoolEnrollmentPage = () => {
 
                     <Divider sx={{ my: 3 }} />
 
-                    {/* SECCIÓN V */}
                     <Typography
                         variant="h6"
                         sx={{
@@ -519,7 +498,6 @@ const SchoolEnrollmentPage = () => {
 
                     <Divider sx={{ my: 3 }} />
 
-                    {/* CAMPOS EXTRA DEFINIDOS POR EL COLEGIO */}
                     {extraFields.length > 0 && (
                         <>
                             <Typography variant="h6" sx={{ mb: 2 }}>
@@ -592,7 +570,6 @@ const SchoolEnrollmentPage = () => {
                                                     })
                                                 }
                                             >
-                                                {/* Ejemplo de opciones fijas */}
                                                 <MenuItem value="">-- Seleccione --</MenuItem>
                                                 <MenuItem value="Opción1">Opción1</MenuItem>
                                                 <MenuItem value="Opción2">Opción2</MenuItem>
@@ -620,7 +597,6 @@ const SchoolEnrollmentPage = () => {
                     </Button>
                 </form>
 
-                {/* Footer */}
                 <Box sx={{ mt: 4, textAlign: 'center', color: '#777' }}>
                     <Divider sx={{ mb: 1 }} />
                     <Typography variant="body2">
@@ -631,7 +607,6 @@ const SchoolEnrollmentPage = () => {
                     </Typography>
                 </Box>
 
-                {/* Snackbar */}
                 <Snackbar
                     open={snackbar.open}
                     autoHideDuration={6000}

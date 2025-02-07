@@ -10,31 +10,18 @@ const FiltersContainer = tw.div`flex flex-col md:flex-row space-y-4 md:space-y-0
 
 const Filters = ({ filters, setFilters }) => {
     const [schools, setSchools] = useState([]);
-    const [pilots, setPilots] = useState([]);
 
     useEffect(() => {
-        // Obtener lista de colegios
         const fetchSchools = async () => {
             try {
                 const response = await api.get('/schools');
-                setSchools(response.data.schools);
+                setSchools(response.data.schools || []);
             } catch (error) {
                 console.error('Error fetching schools:', error);
             }
         };
 
-        // Obtener lista de pilotos
-        const fetchPilots = async () => {
-            try {
-                const response = await api.get('/users?role=Piloto')
-                setPilots(response.data.users);
-            } catch (error) {
-                console.error('Error fetching pilots:', error);
-            }
-        };
-
         fetchSchools();
-        fetchPilots();
     }, []);
 
     const handleChange = (e) => {
@@ -43,16 +30,6 @@ const Filters = ({ filters, setFilters }) => {
             ...prev,
             [name]: value
         }));
-    };
-
-    const handleReset = () => {
-        setFilters({
-            colegio: '',
-            ruta: '',
-            mes: '',
-            fechaInicio: '',
-            fechaFin: '',
-        });
     };
 
     return (
@@ -73,22 +50,7 @@ const Filters = ({ filters, setFilters }) => {
                     </MenuItem>
                 ))}
             </TextField>
-            <TextField
-                select
-                label="Piloto"
-                name="ruta"
-                value={filters.ruta}
-                onChange={handleChange}
-                variant="outlined"
-                fullWidth
-            >
-                <MenuItem value="">Todos</MenuItem>
-                {pilots.map((pilot) => (
-                    <MenuItem key={pilot.id} value={pilot.name}>
-                        {pilot.name}
-                    </MenuItem>
-                ))}
-            </TextField>
+
             <TextField
                 select
                 label="Mes"
@@ -112,6 +74,7 @@ const Filters = ({ filters, setFilters }) => {
                 <MenuItem value="Noviembre">Noviembre</MenuItem>
                 <MenuItem value="Diciembre">Diciembre</MenuItem>
             </TextField>
+
             <TextField
                 label="Fecha Inicio"
                 name="fechaInicio"
@@ -136,9 +99,7 @@ const Filters = ({ filters, setFilters }) => {
                     shrink: true,
                 }}
             />
-            <Button variant="outlined" color="secondary" onClick={handleReset}>
-                Resetear
-            </Button>
+
         </FiltersContainer>
     );
 };

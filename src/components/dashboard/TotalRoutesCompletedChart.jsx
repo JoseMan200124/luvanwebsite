@@ -1,6 +1,6 @@
 // frontend/src/components/dashboard/TotalRoutesCompletedChart.jsx
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import {
@@ -12,30 +12,16 @@ import {
     Legend,
 } from 'recharts';
 import { Typography } from '@mui/material';
-import api from '../../utils/axiosConfig';
 
 const ChartContainer = tw.div`bg-white p-4 rounded-lg shadow-md`;
-
 const COLORS = ['#0088FE', '#00C49F'];
 
-const TotalRoutesCompletedChart = ({ filters }) => {
-    const [data, setData] = useState([]);
-
-    useEffect(() => {
-        const fetchTotalRoutesCompleted = async () => {
-            try {
-                const response = await api.get('/reports/total-routes-completed');
-                setData([
-                    { name: 'Rutas Completadas', value: response.data.totalRoutesCompleted },
-                    { name: 'Rutas Pendientes', value: 0 } // Puedes ajustar este valor si tienes datos
-                ]);
-            } catch (error) {
-                console.error('Error fetching total routes completed:', error);
-            }
-        };
-
-        fetchTotalRoutesCompleted();
-    }, [filters]);
+const TotalRoutesCompletedChart = ({ data }) => {
+    // Convert the numeric "data" to a small array for a PieChart
+    const chartData = [
+        { name: 'Rutas Completadas', value: data },
+        { name: 'Rutas Pendientes', value: 0 },
+    ];
 
     return (
         <ChartContainer>
@@ -45,16 +31,15 @@ const TotalRoutesCompletedChart = ({ filters }) => {
             <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                     <Pie
-                        data={data}
+                        data={chartData}
                         dataKey="value"
                         nameKey="name"
                         cx="50%"
                         cy="50%"
                         outerRadius={100}
-                        fill="#8884d8"
                         label
                     >
-                        {data.map((entry, index) => (
+                        {chartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                     </Pie>

@@ -45,7 +45,6 @@ const AuthProvider = ({ children }) => {
             'mousedown',
             'touchstart',
             'keydown',
-            'click',
             'scroll',
         ];
         events.forEach((evt) => {

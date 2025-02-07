@@ -29,7 +29,9 @@ import {
     ListItemText,
     ListItemSecondaryAction,
     Link,
-    Box
+    Box,
+    FormControlLabel,
+    Switch
 } from '@mui/material';
 import {
     Edit,
@@ -153,7 +155,8 @@ const BusesManagementPage = () => {
             pilotId: '',
             monitoraId: '',
             routeNumber: '',
-            files: []
+            files: [],
+            inWorkshop: false
         });
         setOpenDialog(true);
     };
@@ -170,7 +173,8 @@ const BusesManagementPage = () => {
             pilotId: bus.pilotId || '',
             monitoraId: bus.monitoraId || '',
             routeNumber: bus.routeNumber || '',
-            files: bus.files || []
+            files: bus.files || [],
+            inWorkshop: bus.inWorkshop || false
         });
         setOpenDialog(true);
     };
@@ -260,6 +264,8 @@ const BusesManagementPage = () => {
             formData.append('capacity', selectedBus.capacity);
             formData.append('description', selectedBus.description);
             formData.append('routeNumber', selectedBus.routeNumber);
+            // Agregamos el nuevo campo inWorkshop
+            formData.append('inWorkshop', selectedBus.inWorkshop);
 
             if (selectedBus.pilotId) {
                 formData.append('pilotId', selectedBus.pilotId);
@@ -495,6 +501,7 @@ const BusesManagementPage = () => {
                                     <TableCell>Descripción</TableCell>
                                     <TableCell>Piloto (Email)</TableCell>
                                     <TableCell>Monitora (Email)</TableCell>
+                                    <TableCell>Estado</TableCell>
                                     <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
                                     <TableCell align="center">Acciones</TableCell>
                                 </TableRow>
@@ -510,8 +517,19 @@ const BusesManagementPage = () => {
                                             <TableCell>{bus.occupation || 0}</TableCell>
                                             <TableCell>{bus.description}</TableCell>
                                             <TableCell>{bus.pilot ? bus.pilot.email : ''}</TableCell>
-                                            <TableCell>{bus.monitora ? bus.monitora.email : ''}</TableCell>
-
+                                            <TableCell>
+                                                {bus.monitora ? bus.monitora.email : ''}
+                                            </TableCell>
+                                            {/* Leyenda en rojo si el bus está en taller */}
+                                            <TableCell>
+                                                {bus.inWorkshop ? (
+                                                    <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
+                                                        EN TALLER
+                                                    </Typography>
+                                                ) : (
+                                                    'Disponible'
+                                                )}
+                                            </TableCell>
                                             <TableCell sx={{ maxWidth: 200, verticalAlign: 'top' }}>
                                                 <List disablePadding>
                                                     {bus.files.map((file) => {
@@ -593,7 +611,7 @@ const BusesManagementPage = () => {
                                     ))}
                                 {filteredBuses.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={9} align="center">
+                                        <TableCell colSpan={10} align="center">
                                             No se encontraron buses.
                                         </TableCell>
                                     </TableRow>
@@ -710,6 +728,24 @@ const BusesManagementPage = () => {
                             ))}
                         </Select>
                     </FormControl>
+
+                    {/* Switch para inWorkshop */}
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={selectedBus ? selectedBus.inWorkshop : false}
+                                onChange={(e) =>
+                                    setSelectedBus((prev) => ({
+                                        ...prev,
+                                        inWorkshop: e.target.checked
+                                    }))
+                                }
+                                color="primary"
+                            />
+                        }
+                        label="¿En taller?"
+                        sx={{ mt: 1 }}
+                    />
 
                     <input
                         accept="application/pdf,image/jpeg,image/png"

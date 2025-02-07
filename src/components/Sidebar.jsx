@@ -1,6 +1,5 @@
 // src/components/Sidebar.jsx
-
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
@@ -11,24 +10,25 @@ import {
     ExpandLess,
     ExpandMore,
     Logout as LogoutIcon,
-    AccountCircle,
     Settings,
     Home as HomeIcon,
-} from '@mui/icons-material'; // <-- Importamos un icono "HomeIcon" para Dashboard
+} from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import NotificationsMenu from './NotificationsMenu';
 import api from '../utils/axiosConfig';
 import userImage from '../assets/img/user.png';
 import { modules } from '../modules';
 
-// =============== Estilos con styled-components y twin.macro ===============
+const ITEM_HEIGHT = 48;
+
 const SidebarContainer = styled.div`
-    ${tw`bg-gray-800 text-white h-screen fixed top-0 left-0 z-50 flex flex-col`}
-    width: ${(props) => (props.isOpen ? '250px' : '60px')};
+    ${tw`bg-gray-800 text-white h-screen fixed top-0 left-0 z-40 flex flex-col`}
+    width: ${({ isOpen }) => (isOpen ? '250px' : '60px')};
     transition: width 0.3s ease;
     overflow: hidden;
+
     @media (max-width: 768px) {
-        width: ${(props) => (props.isOpen ? '250px' : '0')};
+        width: ${({ isOpen }) => (isOpen ? '250px' : '0')};
     }
 `;
 
@@ -45,13 +45,16 @@ const MainMenu = styled.div`
 
 const SidebarMenu = styled.ul`
     ${tw`mt-4`}
-    padding: 0;
     list-style: none;
+    margin: 0;
+    padding: 0;
 `;
 
 const MenuItem = styled.li`
     ${tw`px-4 py-2 hover:bg-gray-700 cursor-pointer flex justify-between items-center`}
     transition: background-color 0.2s ease;
+    height: ${ITEM_HEIGHT}px;
+    position: relative;
 `;
 
 const SubMenuItem = styled.li`
@@ -59,33 +62,61 @@ const SubMenuItem = styled.li`
     transition: background-color 0.2s ease;
 `;
 
+const LogoutItem = styled.li`
+    ${tw`px-4 py-2 mt-auto hover:bg-gray-700 cursor-pointer flex items-center`}
+    transition: background-color 0.2s ease;
+`;
+
 const ToggleTab = styled.div`
-    ${tw`absolute bg-red-500 rounded-r-md cursor-pointer`}
+    ${tw`bg-red-500 rounded-r-md cursor-pointer`}
+    position: fixed;
+    top: 10px;
+    left: ${({ isOpen }) => (isOpen ? '250px' : '60px')};
     width: 40px;
     height: 40px;
-    top: 10px;
-    right: -20px;
+    z-index: 50;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: left 0.3s ease;
     box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
-    @media (min-width: 769px) {
-        display: none;
+
+    @media (max-width: 768px) {
+        left: ${({ isOpen }) => (isOpen ? '250px' : '0')};
     }
 `;
 
-const LogoutItem = styled.li`
-    ${tw`px-4 py-2 mt-auto hover:bg-gray-700 cursor-pointer flex items-center`}
+const SubMenuPopout = styled.div`
+    ${tw`bg-gray-800 text-white rounded-md shadow-lg`}
+    position: fixed;
+    left: 60px;
+    top: ${({ popY }) => `${popY}px`};
+    width: 200px;
+    z-index: 60;
+    border: 1px solid #444;
+    overflow: hidden;
+`;
+
+const PopoutList = styled.ul`
+    list-style: none;
+    margin: 0;
+    padding: 0;
+`;
+
+const PopoutItem = styled.li`
+    ${tw`px-4 py-2 hover:bg-gray-700 cursor-pointer`}
     transition: background-color 0.2s ease;
 `;
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
     const [openMenus, setOpenMenus] = useState({});
     const [permissions, setPermissions] = useState({});
-    const navigate = useNavigate();
     const { auth, logout } = useContext(AuthContext);
+    const navigate = useNavigate();
 
-    // 1) Cargar permisos del usuario logueado
+    const [hoveredItem, setHoveredItem] = useState(null);
+    const hoverTimer = useRef(null);
+
     useEffect(() => {
         if (auth?.token && auth?.user?.roleId) {
             fetchUserPermissions(auth.user.roleId);
@@ -103,18 +134,16 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         }
     };
 
-    // 2) Manejo de apertura/cierre de submenús
     const handleMenuClick = (index) => {
+        if (!isOpen) return;
         setOpenMenus((prev) => ({ ...prev, [index]: !prev[index] }));
     };
 
-    // 3) Logout
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
-    // Si no hay usuario autenticado, no renderizamos nada
     if (!auth.user) {
         return null;
     }
@@ -125,10 +154,46 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         avatar: userImage,
     };
 
+    const getPopoutPosition = (index) => {
+        const headerOffset = 64;
+        return headerOffset + index * ITEM_HEIGHT;
+    };
+
+    const handleItemMouseEnter = (index, hasSubmodules) => {
+        if (!isOpen && hasSubmodules) {
+            if (hoverTimer.current) {
+                clearTimeout(hoverTimer.current);
+            }
+            setHoveredItem(index);
+        }
+    };
+
+    const handleItemMouseLeave = (index, hasSubmodules) => {
+        if (!isOpen && hasSubmodules) {
+            hoverTimer.current = setTimeout(() => {
+                setHoveredItem(null);
+            }, 200);
+        }
+    };
+
+    const handlePopoutMouseEnter = () => {
+        if (hoverTimer.current) {
+            clearTimeout(hoverTimer.current);
+        }
+    };
+
+    const handlePopoutMouseLeave = () => {
+        hoverTimer.current = setTimeout(() => {
+            setHoveredItem(null);
+        }, 200);
+    };
+
+    // Verifica si el usuario tiene permiso de Dashboard
+    const canAccessDashboard = !!permissions['dashboard'];
+
     return (
         <>
             <SidebarContainer isOpen={isOpen}>
-                {/* Encabezado con perfil de usuario */}
                 <SidebarHeader>
                     {isOpen && (
                         <ProfileInfo>
@@ -141,41 +206,53 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     )}
                 </SidebarHeader>
 
-                {/* Menú principal */}
                 <MainMenu>
                     <SidebarMenu>
-                        {/* NUEVO: Primer botón => Link al Dashboard */}
-                        <RouterLink
-                            to="/admin/dashboard"
-                            style={{ textDecoration: 'none', color: 'inherit' }}
-                        >
-                            <MenuItem>
-                                <div tw="flex items-center">
-                                    <HomeIcon tw="mr-2" />
-                                    {isOpen && <span>Dashboard</span>}
-                                </div>
-                            </MenuItem>
-                        </RouterLink>
+                        {canAccessDashboard && (
+                            <RouterLink
+                                to="/admin/dashboard"
+                                style={{ textDecoration: 'none', color: 'inherit' }}
+                            >
+                                <MenuItem
+                                    onMouseEnter={() => setHoveredItem(null)}
+                                    onMouseLeave={() => setHoveredItem(null)}
+                                >
+                                    <div tw="flex items-center">
+                                        <HomeIcon tw="mr-2" />
+                                        {isOpen && <span>Dashboard</span>}
+                                    </div>
+                                </MenuItem>
+                            </RouterLink>
+                        )}
 
+                        {/* Módulos dinámicos */}
                         {modules.map((module, index) => {
                             const { key, name, icon: ModuleIcon, submodules } = module;
-
+                            // Verifica permiso para el Módulo principal
                             const canAccessModule = !!permissions[key];
                             if (!canAccessModule) return null;
 
+                            const hasSubmodules = submodules && submodules.length > 0;
+                            const isMenuOpen = openMenus[index];
+
                             return (
-                                <div key={key}>
-                                    <MenuItem onClick={() => handleMenuClick(index)}>
+                                <React.Fragment key={key}>
+                                    <MenuItem
+                                        onMouseEnter={() => handleItemMouseEnter(index, hasSubmodules)}
+                                        onMouseLeave={() => handleItemMouseLeave(index, hasSubmodules)}
+                                        onClick={() => handleMenuClick(index)}
+                                    >
                                         <div tw="flex items-center">
                                             {ModuleIcon && <ModuleIcon tw="mr-2" />}
                                             {isOpen && <span>{name}</span>}
                                         </div>
-                                        {isOpen && (
-                                            openMenus[index] ? <ExpandLess /> : <ExpandMore />
+                                        {isOpen && hasSubmodules && (
+                                            isMenuOpen ? <ExpandLess /> : <ExpandMore />
                                         )}
                                     </MenuItem>
 
-                                    {isOpen && submodules && openMenus[index] && (
+                                    {/* Submenú inline cuando isOpen */}
+                                    {isOpen && hasSubmodules && isMenuOpen && (
                                         <div>
                                             {submodules.map((submodule) => {
                                                 const { key: subKey, name: subName, path } = submodule;
@@ -196,16 +273,52 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                             })}
                                         </div>
                                     )}
-                                </div>
+
+                                    {/* Popout (cuando isOpen=false) */}
+                                    {!isOpen && hasSubmodules && hoveredItem === index && (
+                                        <SubMenuPopout
+                                            popY={getPopoutPosition(index)}
+                                            onMouseEnter={handlePopoutMouseEnter}
+                                            onMouseLeave={handlePopoutMouseLeave}
+                                        >
+                                            <PopoutList>
+                                                {submodules.map((submodule) => {
+                                                    const { key: subKey, name: subName, path } = submodule;
+                                                    const canAccessSub = !!permissions[subKey];
+                                                    if (!canAccessSub) return null;
+
+                                                    return (
+                                                        <RouterLink
+                                                            to={`/admin/${path}`}
+                                                            key={subKey}
+                                                            style={{ textDecoration: 'none', color: 'inherit' }}
+                                                        >
+                                                            <PopoutItem>
+                                                                {subName}
+                                                            </PopoutItem>
+                                                        </RouterLink>
+                                                    );
+                                                })}
+                                            </PopoutList>
+                                        </SubMenuPopout>
+                                    )}
+                                </React.Fragment>
                             );
                         })}
                     </SidebarMenu>
                 </MainMenu>
 
+                {/* Roles & Permisos + Logout */}
                 <SidebarMenu tw="flex flex-col">
                     {(user.role === 'Administrador' || user.role === 'Gestor') && (
-                        <RouterLink to="/admin/roles-permisos" style={{ textDecoration: 'none', color: 'inherit' }}>
-                            <MenuItem>
+                        <RouterLink
+                            to="/admin/roles-permisos"
+                            style={{ textDecoration: 'none', color: 'inherit' }}
+                        >
+                            <MenuItem
+                                onMouseEnter={() => setHoveredItem(null)}
+                                onMouseLeave={() => setHoveredItem(null)}
+                            >
                                 <div tw="flex items-center">
                                     <Settings tw="mr-2" />
                                     {isOpen && <span>Roles y Permisos</span>}
@@ -214,29 +327,34 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         </RouterLink>
                     )}
 
-                    <LogoutItem onClick={handleLogout}>
+                    <LogoutItem
+                        onMouseEnter={() => setHoveredItem(null)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                        onClick={handleLogout}
+                    >
                         <div tw="flex items-center">
                             <LogoutIcon tw="mr-2" />
                             {isOpen && <span>Cerrar Sesión</span>}
                         </div>
                     </LogoutItem>
                 </SidebarMenu>
-
-                <ToggleTab onClick={toggleSidebar}>
-                    {isOpen ? (
-                        <CloseIcon style={{ color: 'white' }} />
-                    ) : (
-                        <MenuIcon style={{ color: 'white' }} />
-                    )}
-                </ToggleTab>
             </SidebarContainer>
 
+            <ToggleTab isOpen={isOpen} onClick={toggleSidebar}>
+                {isOpen ? (
+                    <CloseIcon style={{ color: 'white' }} />
+                ) : (
+                    <MenuIcon style={{ color: 'white' }} />
+                )}
+            </ToggleTab>
+
+            {/* Menú de notificaciones */}
             <div
                 style={{
                     position: 'fixed',
                     top: '10px',
                     right: '10px',
-                    zIndex: 40,
+                    zIndex: 999,
                 }}
             >
                 <NotificationsMenu authToken={auth.token} />
