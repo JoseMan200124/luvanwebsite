@@ -1,5 +1,4 @@
 // src/pages/SchoolsManagementPage.jsx
-
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -196,7 +195,10 @@ const SchoolsManagementPage = () => {
             contactPhone: '',
             transportFeeComplete: '',
             transportFeeHalf: '',
-            duePaymentDay: ''
+            duePaymentDay: '',
+            // NUEVO: Inicializamos los campos banco y cuenta
+            bankName: '',
+            bankAccount: ''
         });
         setSchoolSchedules([]);
         setSchoolGrades([]);
@@ -209,11 +211,18 @@ const SchoolsManagementPage = () => {
         const transportFeeHalfValue = school.transportFeeHalf ?? '';
         const duePaymentDayValue = school.duePaymentDay ?? '';
 
+        // NUEVO: Tomamos bankName y bankAccount, si no existen los ponemos en ''
+        const bankNameValue = school.bankName ?? '';
+        const bankAccountValue = school.bankAccount ?? '';
+
         setSelectedSchool({
             ...school,
             transportFeeComplete: transportFeeCompleteValue,
             transportFeeHalf: transportFeeHalfValue,
-            duePaymentDay: duePaymentDayValue
+            duePaymentDay: duePaymentDayValue,
+            // NUEVO
+            bankName: bankNameValue,
+            bankAccount: bankAccountValue
         });
 
         let parsedSchedules = [];
@@ -293,7 +302,7 @@ const SchoolsManagementPage = () => {
         }));
     };
 
-    // Horarios
+    // ────── Horarios ──────────────────────────────────────────
     const handleAddSchedule = () => {
         setSchoolSchedules((prev) => [...prev, { day: '', times: [''] }]);
     };
@@ -335,7 +344,7 @@ const SchoolsManagementPage = () => {
         });
     };
 
-    // Grados
+    // ────── Grados ────────────────────────────────────────────
     const handleAddGrade = () => {
         setSchoolGrades((prev) => [...prev, { name: '' }]);
     };
@@ -355,7 +364,7 @@ const SchoolsManagementPage = () => {
         });
     };
 
-    // Extra fields
+    // ────── Campos Extra ──────────────────────────────────────
     const handleAddExtraField = () => {
         setSchoolExtraFields((prev) => [
             ...prev,
@@ -419,10 +428,14 @@ const SchoolsManagementPage = () => {
                     Number(selectedSchool.transportFeeHalf) || 0.0,
                 duePaymentDay:
                     Number(selectedSchool.duePaymentDay) || 1,
-                extraEnrollmentFields: schoolExtraFields
+                extraEnrollmentFields: schoolExtraFields,
+                // NUEVO: agregamos estos dos
+                bankName: selectedSchool.bankName || '',
+                bankAccount: selectedSchool.bankAccount || ''
             };
 
             if (selectedSchool.id) {
+                // Actualizar
                 await api.put(`/schools/${selectedSchool.id}`, payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
@@ -432,6 +445,7 @@ const SchoolsManagementPage = () => {
                     severity: 'success'
                 });
             } else {
+                // Crear
                 await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
@@ -1023,6 +1037,28 @@ const SchoolsManagementPage = () => {
                         onChange={handleInputChange}
                         required
                         inputProps={{ min: '1', max: '31' }}
+                    />
+
+                    {/** NUEVO: Campos de Banco y Cuenta Bancaria */}
+                    <TextField
+                        margin="dense"
+                        name="bankName"
+                        label="Banco"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={selectedSchool ? selectedSchool.bankName : ''}
+                        onChange={handleInputChange}
+                    />
+                    <TextField
+                        margin="dense"
+                        name="bankAccount"
+                        label="Cuenta Bancaria"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={selectedSchool ? selectedSchool.bankAccount : ''}
+                        onChange={handleInputChange}
                     />
 
                     <Typography variant="h6" style={{ marginTop: '1rem' }}>
