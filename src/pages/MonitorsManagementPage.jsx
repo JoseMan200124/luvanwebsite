@@ -19,18 +19,22 @@ import {
     DialogActions,
     Button,
     IconButton,
-    Tooltip
+    Tooltip,
+    useTheme,
+    useMediaQuery,
+    Box
 } from '@mui/material';
 import styled from 'styled-components';
 import tw from 'twin.macro';
-
-import { AuthContext } from '../context/AuthProvider';
-import api from '../utils/axiosConfig';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 
+import { AuthContext } from '../context/AuthProvider';
+import api from '../utils/axiosConfig';
+
 moment.tz.setDefault('America/Guatemala');
 
+// Contenedor principal
 const MonitorsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 // Helper para agrupar por colegio (school)
@@ -46,8 +50,32 @@ const groupBySchool = (arr) => {
     return result;
 };
 
+// Componentes para la vista móvil (tarjetas)
+const MobileCard = styled(Paper)`
+  padding: 16px;
+  margin-bottom: 16px;
+`;
+
+const MobileField = styled(Box)`
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const MobileLabel = styled(Typography)`
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: #555;
+`;
+
+const MobileValue = styled(Typography)`
+  font-size: 1rem;
+`;
+
 const MonitorsManagementPage = () => {
     const { auth } = useContext(AuthContext);
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     const [monitors, setMonitors] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -124,8 +152,6 @@ const MonitorsManagementPage = () => {
 
     // Agrupar monitores por colegio
     const groupedData = groupBySchool(filteredMonitors);
-
-    // Convertir en un array para poder mapear
     const schoolKeys = Object.keys(groupedData);
 
     return (
@@ -135,19 +161,19 @@ const MonitorsManagementPage = () => {
             </Typography>
 
             {/* Búsqueda */}
-            <div tw="mb-4 flex">
+            <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap' }}>
                 <TextField
                     label="Buscar Monitores"
                     variant="outlined"
                     size="small"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    tw="w-1/3"
+                    style={{ width: isMobile ? '100%' : '33%' }}
                 />
             </div>
 
             {loading ? (
-                <div tw="flex justify-center p-4">
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
                     <CircularProgress />
                 </div>
             ) : (
@@ -163,88 +189,136 @@ const MonitorsManagementPage = () => {
                                         Colegio: {school}
                                     </Typography>
 
-                                    <TableContainer>
-                                        <Table>
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell>Nombre</TableCell>
-                                                    <TableCell>Email</TableCell>
-                                                    <TableCell>Teléfono</TableCell>
-                                                    <TableCell>Incidentes</TableCell>
-                                                    <TableCell>Emergencias</TableCell>
-                                                </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {/* Paginación por "colegio" */}
-                                                {data
-                                                    .slice(
-                                                        page * rowsPerPage,
-                                                        page * rowsPerPage + rowsPerPage
-                                                    )
-                                                    .map((monitor) => (
-                                                        <TableRow key={monitor.email}>
-                                                            <TableCell>{monitor.name}</TableCell>
-                                                            <TableCell>{monitor.email}</TableCell>
-                                                            <TableCell>
-                                                                {monitor.phoneNumber || '—'}
-                                                            </TableCell>
-                                                            <TableCell>
+                                    {isMobile ? (
+                                        // Vista móvil: tarjetas
+                                        <>
+                                            {data
+                                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                                .map((monitor) => (
+                                                    <MobileCard key={monitor.email}>
+                                                        <MobileField>
+                                                            <MobileLabel>Nombre</MobileLabel>
+                                                            <MobileValue>{monitor.name}</MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Email</MobileLabel>
+                                                            <MobileValue>{monitor.email}</MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Teléfono</MobileLabel>
+                                                            <MobileValue>{monitor.phoneNumber || '—'}</MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Incidentes</MobileLabel>
+                                                            <MobileValue style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                                                 <Tooltip title="Ver detalles de incidentes">
                                                                     <IconButton
-                                                                        onClick={() =>
-                                                                            handleViewIncidents(monitor)
-                                                                        }
-                                                                        color={
-                                                                            monitor.incidentsCount > 0
-                                                                                ? 'error'
-                                                                                : 'default'
-                                                                        }
+                                                                        onClick={() => handleViewIncidents(monitor)}
+                                                                        color={monitor.incidentsCount > 0 ? 'error' : 'default'}
+                                                                        size="small"
                                                                     >
-                                                                        <VisibilityIcon />
+                                                                        <VisibilityIcon fontSize="small" />
                                                                     </IconButton>
                                                                 </Tooltip>
                                                                 {monitor.incidentsCount || 0}
-                                                            </TableCell>
-                                                            <TableCell>
+                                                            </MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Emergencias</MobileLabel>
+                                                            <MobileValue style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                                                 <Tooltip title="Ver detalles de emergencias">
                                                                     <IconButton
-                                                                        onClick={() =>
-                                                                            handleViewEmergencies(monitor)
-                                                                        }
-                                                                        color={
-                                                                            monitor.emergenciesCount > 0
-                                                                                ? 'error'
-                                                                                : 'default'
-                                                                        }
+                                                                        onClick={() => handleViewEmergencies(monitor)}
+                                                                        color={monitor.emergenciesCount > 0 ? 'error' : 'default'}
+                                                                        size="small"
                                                                     >
-                                                                        <VisibilityIcon />
+                                                                        <VisibilityIcon fontSize="small" />
                                                                     </IconButton>
                                                                 </Tooltip>
                                                                 {monitor.emergenciesCount || 0}
-                                                            </TableCell>
+                                                            </MobileValue>
+                                                        </MobileField>
+                                                    </MobileCard>
+                                                ))}
+                                            <TablePagination
+                                                component="div"
+                                                count={data.length}
+                                                page={page}
+                                                onPageChange={handleChangePage}
+                                                rowsPerPage={rowsPerPage}
+                                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                                rowsPerPageOptions={[5, 10, 25]}
+                                                labelRowsPerPage="Filas por página"
+                                            />
+                                        </>
+                                    ) : (
+                                        // Vista desktop: tabla
+                                        <>
+                                            <TableContainer>
+                                                <Table>
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell>Nombre</TableCell>
+                                                            <TableCell>Email</TableCell>
+                                                            <TableCell>Teléfono</TableCell>
+                                                            <TableCell>Incidentes</TableCell>
+                                                            <TableCell>Emergencias</TableCell>
                                                         </TableRow>
-                                                    ))}
-                                                {data.length === 0 && (
-                                                    <TableRow>
-                                                        <TableCell colSpan={5} align="center">
-                                                            No se encontraron monitores para este colegio.
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
-                                    </TableContainer>
-                                    {/* Paginación al final de cada bloque por colegio */}
-                                    <TablePagination
-                                        component="div"
-                                        count={data.length}
-                                        page={page}
-                                        onPageChange={handleChangePage}
-                                        rowsPerPage={rowsPerPage}
-                                        onRowsPerPageChange={handleChangeRowsPerPage}
-                                        rowsPerPageOptions={[5, 10, 25]}
-                                        labelRowsPerPage="Filas por página"
-                                    />
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {data
+                                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                                            .map((monitor) => (
+                                                                <TableRow key={monitor.email}>
+                                                                    <TableCell>{monitor.name}</TableCell>
+                                                                    <TableCell>{monitor.email}</TableCell>
+                                                                    <TableCell>{monitor.phoneNumber || '—'}</TableCell>
+                                                                    <TableCell>
+                                                                        <Tooltip title="Ver detalles de incidentes">
+                                                                            <IconButton
+                                                                                onClick={() => handleViewIncidents(monitor)}
+                                                                                color={monitor.incidentsCount > 0 ? 'error' : 'default'}
+                                                                            >
+                                                                                <VisibilityIcon />
+                                                                            </IconButton>
+                                                                        </Tooltip>
+                                                                        {monitor.incidentsCount || 0}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Tooltip title="Ver detalles de emergencias">
+                                                                            <IconButton
+                                                                                onClick={() => handleViewEmergencies(monitor)}
+                                                                                color={monitor.emergenciesCount > 0 ? 'error' : 'default'}
+                                                                            >
+                                                                                <VisibilityIcon />
+                                                                            </IconButton>
+                                                                        </Tooltip>
+                                                                        {monitor.emergenciesCount || 0}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        {data.length === 0 && (
+                                                            <TableRow>
+                                                                <TableCell colSpan={5} align="center">
+                                                                    No se encontraron monitores para este colegio.
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                            <TablePagination
+                                                component="div"
+                                                count={data.length}
+                                                page={page}
+                                                onPageChange={handleChangePage}
+                                                rowsPerPage={rowsPerPage}
+                                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                                rowsPerPageOptions={[5, 10, 25]}
+                                                labelRowsPerPage="Filas por página"
+                                            />
+                                        </>
+                                    )}
                                 </Paper>
                             );
                         })

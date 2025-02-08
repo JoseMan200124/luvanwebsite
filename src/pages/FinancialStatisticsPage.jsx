@@ -10,6 +10,8 @@ import {
     CircularProgress,
     Snackbar,
     Alert,
+    useTheme,
+    useMediaQuery
 } from '@mui/material';
 import {
     LineChart,
@@ -29,16 +31,22 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import moment from 'moment-timezone';
 
-// Configuración de la zona horaria de Guatemala:
 moment.tz.setDefault('America/Guatemala');
 
+// Contenedor principal con twin.macro
+const PageContainer = tw.div`
+  p-8 w-full bg-gray-100 flex flex-col min-h-screen
+`;
+
 const FinancialStatisticsPage = () => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
     const [data, setData] = useState({
         revenue: [],
         outstandingPayments: [],
         latePayments: [],
     });
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const reportRef = useRef();
@@ -70,16 +78,14 @@ const FinancialStatisticsPage = () => {
         fetchData();
     }, []);
 
-    // Función para generar PDF con estilo mejorado
+    // Función para generar PDF sin modificar la lógica
     const generatePDF = async () => {
         const now = moment();
         const dateString = now.format('YYYY_MM_DD_HH_mm');
         const fileName = `estadisticas_financieras_${dateString}.pdf`.toLowerCase();
 
-        // Creamos una copia del contenido
         const printableArea = reportRef.current.cloneNode(true);
 
-        // Contenedor temporal
         const tempDiv = document.createElement('div');
         tempDiv.style.padding = '20px';
         tempDiv.style.backgroundColor = '#fff';
@@ -117,20 +123,19 @@ const FinancialStatisticsPage = () => {
     };
 
     return (
-        <div tw="p-8">
+        <PageContainer>
             <Typography variant="h4" gutterBottom>
                 Estadísticas Financieras
             </Typography>
 
-            {/* Botón para generar PDF (ya no hay Excel) */}
-            <div tw="flex space-x-4 mb-4">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
                 <Button variant="contained" color="primary" onClick={generatePDF}>
                     Generar PDF
                 </Button>
             </div>
 
             {loading ? (
-                <div tw="flex justify-center items-center h-64">
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '16rem' }}>
                     <CircularProgress />
                 </div>
             ) : error ? (
@@ -140,84 +145,173 @@ const FinancialStatisticsPage = () => {
                     </Alert>
                 </Snackbar>
             ) : (
-                <div ref={reportRef} style={{ backgroundColor: '#fff', padding: '16px' }}>
-                    <Grid container spacing={4}>
-                        {/* Gráfico de Ingresos */}
-                        <Grid item xs={12} md={6}>
+                <div ref={reportRef} style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
+                    {isMobile ? (
+                        // Vista móvil: mostrar 4 gráficas en tarjetas apiladas
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <Card>
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom>
                                         Ingresos Mensuales
                                     </Typography>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <LineChart data={data.revenue}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="month" />
-                                            <YAxis />
-                                            <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
-                                            <Legend />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="amount"
-                                                name="Ingresos"
-                                                stroke="#8884d8"
-                                                activeDot={{ r: 8 }}
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
+                                    <div style={{ width: '100%', height: 300 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={data.revenue}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="month" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                                <Legend />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="amount"
+                                                    name="Ingresos"
+                                                    stroke="#8884d8"
+                                                    activeDot={{ r: 8 }}
+                                                />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </CardContent>
                             </Card>
-                        </Grid>
 
-                        {/* Gráfico de Pagos Pendientes */}
-                        <Grid item xs={12} md={6}>
                             <Card>
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom>
                                         Pagos Pendientes
                                     </Typography>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={data.outstandingPayments}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="month" />
-                                            <YAxis />
-                                            <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
-                                            <Legend />
-                                            <Bar dataKey="amount" name="Pendientes" fill="#82ca9d" />
-                                        </BarChart>
-                                    </ResponsiveContainer>
+                                    <div style={{ width: '100%', height: 300 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={data.outstandingPayments}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="month" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                                <Legend />
+                                                <Bar dataKey="amount" name="Pendientes" fill="#82ca9d" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </CardContent>
                             </Card>
-                        </Grid>
 
-                        {/* Gráfico de Cobros por Mora */}
-                        <Grid item xs={12}>
                             <Card>
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom>
                                         Cobros por Mora
                                     </Typography>
-                                    <ResponsiveContainer width="100%" height={400}>
-                                        <BarChart data={data.latePayments}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="month" />
-                                            <YAxis />
-                                            <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
-                                            <Legend />
-                                            <Bar
-                                                dataKey="lateFees"
-                                                name="Cobros por Mora"
-                                                fill="#ffc658"
-                                            />
-                                        </BarChart>
-                                    </ResponsiveContainer>
+                                    <div style={{ width: '100%', height: 400 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={data.latePayments}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="month" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                                <Legend />
+                                                <Bar dataKey="lateFees" name="Cobros por Mora" fill="#ffc658" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </CardContent>
                             </Card>
+
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="h6" gutterBottom>
+                                        Reporte Extra (Ejemplo)
+                                    </Typography>
+                                    <div style={{ width: '100%', height: 300 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={data.latePayments}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="month" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                                <Legend />
+                                                <Bar dataKey="lateFees" name="Ejemplo" fill="#8884d8" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    ) : (
+                        // Vista en escritorio: mostrar 4 gráficas en un Grid de 2 columnas
+                        <Grid container spacing={4}>
+                            <Grid item xs={12} md={6}>
+                                <Card>
+                                    <CardContent>
+                                        <Typography variant="h6" gutterBottom>
+                                            Ingresos Mensuales
+                                        </Typography>
+                                        <div style={{ width: '100%', height: 300 }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <LineChart data={data.revenue}>
+                                                    <CartesianGrid strokeDasharray="3 3" />
+                                                    <XAxis dataKey="month" />
+                                                    <YAxis />
+                                                    <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                                    <Legend />
+                                                    <Line
+                                                        type="monotone"
+                                                        dataKey="amount"
+                                                        name="Ingresos"
+                                                        stroke="#8884d8"
+                                                        activeDot={{ r: 8 }}
+                                                    />
+                                                </LineChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                                <Card>
+                                    <CardContent>
+                                        <Typography variant="h6" gutterBottom>
+                                            Pagos Pendientes
+                                        </Typography>
+                                        <div style={{ width: '100%', height: 300 }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={data.outstandingPayments}>
+                                                    <CartesianGrid strokeDasharray="3 3" />
+                                                    <XAxis dataKey="month" />
+                                                    <YAxis />
+                                                    <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                                    <Legend />
+                                                    <Bar dataKey="amount" name="Pendientes" fill="#82ca9d" />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Card>
+                                    <CardContent>
+                                        <Typography variant="h6" gutterBottom>
+                                            Cobros por Mora
+                                        </Typography>
+                                        <div style={{ width: '100%', height: 400 }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={data.latePayments}>
+                                                    <CartesianGrid strokeDasharray="3 3" />
+                                                    <XAxis dataKey="month" />
+                                                    <YAxis />
+                                                    <Tooltip formatter={(value) => `Q ${value.toFixed(2)}`} />
+                                                    <Legend />
+                                                    <Bar dataKey="lateFees" name="Cobros por Mora" fill="#ffc658" />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
                         </Grid>
-                    </Grid>
+                    )}
                 </div>
             )}
-        </div>
+        </PageContainer>
     );
 };
 

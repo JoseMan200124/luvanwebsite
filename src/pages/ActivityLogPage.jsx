@@ -32,7 +32,10 @@ import {
     Select,
     MenuItem,
     Checkbox,
-    FormControlLabel
+    FormControlLabel,
+    useTheme,
+    useMediaQuery,
+    Box
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
@@ -52,7 +55,7 @@ import moment from 'moment-timezone';
 moment.tz.setDefault('America/Guatemala');
 
 // -------------
-// Formateos
+// Funciones de formateo
 // -------------
 const formatGuatemalaDatetime = (dateString) => {
     if (!dateString) return '—';
@@ -117,42 +120,54 @@ const TableHeaderCell = styled(TableCell)(() => [
 
 const FiltersRow = tw.div`flex gap-4 mb-4 items-center`;
 
+// Componentes para vista móvil (tarjetas)
+const MobileCard = styled(Paper)(() => [
+    tw`p-4 mb-4`,
+    { backgroundColor: '#fff' }
+]);
+const MobileField = styled(Box)(() => [
+    tw`mb-2`
+]);
+const MobileLabel = styled(Typography)(() => [
+    tw`font-bold text-sm`,
+    { color: '#555' }
+]);
+const MobileValue = styled(Typography)(() => [
+    tw`text-base`
+]);
+
 //
-// Componente principal
+// Componente Principal
 //
 const ActivityLogPage = () => {
     const { auth } = useContext(AuthContext);
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    // Asumiendo que roleId = 6 corresponde a "Supervisor"
+    // ---------------------
+    // Estados generales
+    // ---------------------
     const isSupervisor = auth?.user?.roleId === 6;
-
     const [loading, setLoading] = useState(false);
 
-    // Estado general
     const [buses, setBuses] = useState([]);
     const [incidents, setIncidents] = useState([]);
     const [emergencies, setEmergencies] = useState([]);
-
-    // Pagos (solo si NO es supervisor)
     const [payments, setPayments] = useState([]);
 
-    // Snackbar
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
         severity: 'info'
     });
 
-    // Diálogo Boletas
     const [openBoletasDialog, setOpenBoletasDialog] = useState(false);
     const [currentBoletas, setCurrentBoletas] = useState([]);
     const [currentParentName, setCurrentParentName] = useState('');
 
-    // Diálogo Mapa
     const [openMapDialog, setOpenMapDialog] = useState(false);
     const [selectedCoords, setSelectedCoords] = useState({ lat: null, lng: null });
 
-    // Diálogo Reportar Incidencia
     const [openIncidentDialog, setOpenIncidentDialog] = useState(false);
     const [incidentForm, setIncidentForm] = useState({
         busId: null,
@@ -162,7 +177,6 @@ const ActivityLogPage = () => {
         tipo: 'incidente'
     });
 
-    // Acordeones
     const [expanded, setExpanded] = useState(false);
 
     // ---------------------
@@ -190,7 +204,7 @@ const ActivityLogPage = () => {
     const [emePage, setEmePage] = useState(0);
     const [emeRowsPerPage, setEmeRowsPerPage] = useState(5);
 
-    // Pagos
+    // Pagos (solo si NO es supervisor)
     const [payDateFrom, setPayDateFrom] = useState('');
     const [payDateTo, setPayDateTo] = useState('');
     const [payBalanceMin, setPayBalanceMin] = useState('');
@@ -199,17 +213,15 @@ const ActivityLogPage = () => {
     const [payRowsPerPage, setPayRowsPerPage] = useState(5);
 
     // ---------------------
-    // Al montar el componente
+    // useEffect para cargar data
     // ---------------------
     useEffect(() => {
         fetchAllData();
     }, []);
 
-    // Cargar data desde el backend
     const fetchAllData = async () => {
         try {
             setLoading(true);
-
             // Buses
             const busResp = await api.get('/activity-logs');
             // Incidentes
@@ -287,7 +299,7 @@ const ActivityLogPage = () => {
     };
 
     // ---------------------
-    // Taller
+    // Taller (actualizar estado de bus)
     // ---------------------
     const handleToggleBusTaller = async (bus, newValue) => {
         try {
@@ -527,7 +539,6 @@ const ActivityLogPage = () => {
                 Registro de Actividades
             </Title>
 
-            {/* Spinner global si loading es true */}
             {loading ? (
                 <div tw="flex justify-center p-4">
                     <CircularProgress />
@@ -537,9 +548,7 @@ const ActivityLogPage = () => {
                     {/* Sección Buses */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
-                            <DirectionsBusIcon
-                                sx={{ mr: 1, verticalAlign: 'middle', color: '#1976D2' }}
-                            />
+                            <DirectionsBusIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#1976D2' }} />
                             Buses, Pilotos, Monitoras & Paradas
                         </SectionTitle>
 
@@ -574,131 +583,213 @@ const ActivityLogPage = () => {
                             </Typography>
                         ) : (
                             <>
-                                {busesPaginated.map((bus) => (
-                                    <AccordionStyled
-                                        key={bus.id}
-                                        expanded={expanded === `panel-${bus.id}`}
-                                        onChange={handleChangeAccordion(`panel-${bus.id}`)}
-                                    >
-                                        <AccordionSummaryStyled expandIcon={<ExpandMoreIcon />}>
-                                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                                                {bus.plate}
-                                            </Typography>
-                                            {bus.inWorkshop && (
-                                                <Chip
-                                                    label="En Taller"
-                                                    color="error"
-                                                    size="small"
-                                                    sx={{ ml: 2 }}
-                                                />
-                                            )}
-                                            <Chip
-                                                label={`Ocupación: ${
-                                                    bus.occupation ?? 0
-                                                }/${bus.capacity ?? '--'}`}
-                                                size="small"
-                                                color="success"
-                                                sx={{ ml: 2 }}
-                                            />
-                                        </AccordionSummaryStyled>
-
-                                        <AccordionDetails>
-                                            <Grid container spacing={2}>
-                                                <Grid item xs={12} md={6}>
-                                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                                        <strong>Piloto: </strong>
-                                                        {bus.pilot ? bus.pilot.name : '—'}
-                                                    </Typography>
-                                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                                        <strong>Monitora: </strong>
-                                                        {bus.monitora ? bus.monitora.name : '—'}
-                                                    </Typography>
-                                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                                        <strong>Número de ruta: </strong>
-                                                        {bus.routeNumber || '—'}
-                                                    </Typography>
-                                                    <Typography variant="body2">
-                                                        <strong>Descripción: </strong>
-                                                        {bus.description || '—'}
-                                                    </Typography>
-                                                </Grid>
-
-                                                <Grid item xs={12} md={6}>
+                                {isMobile ? (
+                                    // Vista móvil: cada bus como tarjeta
+                                    <>
+                                        {busesPaginated.map((bus) => (
+                                            <MobileCard key={bus.id}>
+                                                <MobileField>
+                                                    <MobileLabel>Placa:</MobileLabel>
+                                                    <MobileValue>{bus.plate}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Piloto:</MobileLabel>
+                                                    <MobileValue>{bus.pilot ? bus.pilot.name : '—'}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Monitora:</MobileLabel>
+                                                    <MobileValue>{bus.monitora ? bus.monitora.name : '—'}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Número de ruta:</MobileLabel>
+                                                    <MobileValue>{bus.routeNumber || '—'}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Descripción:</MobileLabel>
+                                                    <MobileValue>{bus.description || '—'}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Paradas:</MobileLabel>
                                                     {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
-                                                        <Table size="small">
-                                                            <TableHead>
-                                                                <TableRow>
-                                                                    <TableHeaderCell>Horario</TableHeaderCell>
-                                                                    <TableHeaderCell>Nota</TableHeaderCell>
-                                                                    <TableHeaderCell>Padre</TableHeaderCell>
-                                                                    <TableHeaderCell>Estudiantes</TableHeaderCell>
-                                                                </TableRow>
-                                                            </TableHead>
-                                                            <TableBody>
-                                                                {bus.stops.map((stop) => (
-                                                                    <TableRow key={stop.stopId}>
-                                                                        <TableCell>{stop.time}</TableCell>
-                                                                        <TableCell>{stop.note || ''}</TableCell>
-                                                                        <TableCell>{stop.parentName}</TableCell>
-                                                                        <TableCell>{stop.students}</TableCell>
-                                                                    </TableRow>
-                                                                ))}
-                                                            </TableBody>
-                                                        </Table>
+                                                        <>
+                                                            {bus.stops.map((stop) => (
+                                                                <MobileCard key={stop.stopId} sx={{ p: 2, mb: 1 }}>
+                                                                    <MobileField>
+                                                                        <MobileLabel>Horario:</MobileLabel>
+                                                                        <MobileValue>{stop.time}</MobileValue>
+                                                                    </MobileField>
+                                                                    <MobileField>
+                                                                        <MobileLabel>Nota:</MobileLabel>
+                                                                        <MobileValue>{stop.note || ''}</MobileValue>
+                                                                    </MobileField>
+                                                                    <MobileField>
+                                                                        <MobileLabel>Padre:</MobileLabel>
+                                                                        <MobileValue>{stop.parentName}</MobileValue>
+                                                                    </MobileField>
+                                                                    <MobileField>
+                                                                        <MobileLabel>Estudiantes:</MobileLabel>
+                                                                        <MobileValue>{stop.students}</MobileValue>
+                                                                    </MobileField>
+                                                                </MobileCard>
+                                                            ))}
+                                                        </>
                                                     ) : (
-                                                        <Typography variant="body2" color="textSecondary">
-                                                            No hay paradas registradas.
-                                                        </Typography>
+                                                        <MobileValue>No hay paradas registradas.</MobileValue>
                                                     )}
-                                                </Grid>
-                                            </Grid>
-                                        </AccordionDetails>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>ID Bus:</MobileLabel>
+                                                    <MobileValue>{bus.id}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Estado Taller:</MobileLabel>
+                                                    <MobileValue>{bus.inWorkshop ? 'En Taller' : 'Disponible'}</MobileValue>
+                                                </MobileField>
+                                                <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+                                                    {bus.inWorkshop ? (
+                                                        <Tooltip title="Marcar como Disponible">
+                                                            <IconButton color="primary" onClick={() => handleToggleBusTaller(bus, false)}>
+                                                                <BuildIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        <Tooltip title="Marcar bus en Taller">
+                                                            <IconButton color="primary" onClick={() => handleToggleBusTaller(bus, true)}>
+                                                                <BuildIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
+                                                    <Tooltip title="Reportar Incidencia">
+                                                        <IconButton color="warning" onClick={() => handleOpenIncidentDialog(bus)}>
+                                                            <ReportIcon />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </Box>
+                                            </MobileCard>
+                                        ))}
+                                        <TablePagination
+                                            component="div"
+                                            count={filteredBuses.length}
+                                            page={busPage}
+                                            onPageChange={handleChangeBusPage}
+                                            rowsPerPage={busRowsPerPage}
+                                            onRowsPerPageChange={handleChangeBusRowsPerPage}
+                                            labelRowsPerPage="Filas por página"
+                                        />
+                                    </>
+                                ) : (
+                                    // Vista desktop: tabla con acordeón
+                                    <>
+                                        {busesPaginated.map((bus) => (
+                                            <AccordionStyled
+                                                key={bus.id}
+                                                expanded={expanded === `panel-${bus.id}`}
+                                                onChange={handleChangeAccordion(`panel-${bus.id}`)}
+                                            >
+                                                <AccordionSummaryStyled expandIcon={<ExpandMoreIcon />}>
+                                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                                                        {bus.plate}
+                                                    </Typography>
+                                                    {bus.inWorkshop && (
+                                                        <Chip label="En Taller" color="error" size="small" sx={{ ml: 2 }} />
+                                                    )}
+                                                    <Chip
+                                                        label={`Ocupación: ${bus.occupation ?? 0}/${bus.capacity ?? '--'}`}
+                                                        size="small"
+                                                        color="success"
+                                                        sx={{ ml: 2 }}
+                                                    />
+                                                </AccordionSummaryStyled>
 
-                                        <Divider />
-                                        <AccordionActions>
-                                            <Typography variant="caption" color="textSecondary" sx={{ mr: 2 }}>
-                                                ID Bus: {bus.id}
-                                            </Typography>
-                                            {bus.inWorkshop ? (
-                                                <Tooltip title="Marcar como Disponible">
-                                                    <IconButton
-                                                        color="primary"
-                                                        onClick={() => handleToggleBusTaller(bus, false)}
-                                                    >
-                                                        <BuildIcon />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            ) : (
-                                                <Tooltip title="Marcar bus en Taller">
-                                                    <IconButton
-                                                        color="primary"
-                                                        onClick={() => handleToggleBusTaller(bus, true)}
-                                                    >
-                                                        <BuildIcon />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            )}
-                                            {/* Botón Reportar Incidente */}
-                                            <Tooltip title="Reportar Incidencia">
-                                                <IconButton
-                                                    color="warning"
-                                                    onClick={() => handleOpenIncidentDialog(bus)}
-                                                >
-                                                    <ReportIcon />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </AccordionActions>
-                                    </AccordionStyled>
-                                ))}
-                                <TablePagination
-                                    component="div"
-                                    count={filteredBuses.length}
-                                    page={busPage}
-                                    onPageChange={handleChangeBusPage}
-                                    rowsPerPage={busRowsPerPage}
-                                    onRowsPerPageChange={handleChangeBusRowsPerPage}
-                                    labelRowsPerPage="Filas por página"
-                                />
+                                                <AccordionDetails>
+                                                    <Grid container spacing={2}>
+                                                        <Grid item xs={12} md={6}>
+                                                            <Typography variant="body2" sx={{ mb: 1 }}>
+                                                                <strong>Piloto: </strong>
+                                                                {bus.pilot ? bus.pilot.name : '—'}
+                                                            </Typography>
+                                                            <Typography variant="body2" sx={{ mb: 1 }}>
+                                                                <strong>Monitora: </strong>
+                                                                {bus.monitora ? bus.monitora.name : '—'}
+                                                            </Typography>
+                                                            <Typography variant="body2" sx={{ mb: 1 }}>
+                                                                <strong>Número de ruta: </strong>
+                                                                {bus.routeNumber || '—'}
+                                                            </Typography>
+                                                            <Typography variant="body2">
+                                                                <strong>Descripción: </strong>
+                                                                {bus.description || '—'}
+                                                            </Typography>
+                                                        </Grid>
+
+                                                        <Grid item xs={12} md={6}>
+                                                            {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
+                                                                <Table size="small">
+                                                                    <TableHead>
+                                                                        <TableRow>
+                                                                            <TableHeaderCell>Horario</TableHeaderCell>
+                                                                            <TableHeaderCell>Nota</TableHeaderCell>
+                                                                            <TableHeaderCell>Padre</TableHeaderCell>
+                                                                            <TableHeaderCell>Estudiantes</TableHeaderCell>
+                                                                        </TableRow>
+                                                                    </TableHead>
+                                                                    <TableBody>
+                                                                        {bus.stops.map((stop) => (
+                                                                            <TableRow key={stop.stopId}>
+                                                                                <TableCell>{stop.time}</TableCell>
+                                                                                <TableCell>{stop.note || ''}</TableCell>
+                                                                                <TableCell>{stop.parentName}</TableCell>
+                                                                                <TableCell>{stop.students}</TableCell>
+                                                                            </TableRow>
+                                                                        ))}
+                                                                    </TableBody>
+                                                                </Table>
+                                                            ) : (
+                                                                <Typography variant="body2" color="textSecondary">
+                                                                    No hay paradas registradas.
+                                                                </Typography>
+                                                            )}
+                                                        </Grid>
+                                                    </Grid>
+                                                </AccordionDetails>
+
+                                                <Divider />
+                                                <AccordionActions>
+                                                    <Typography variant="caption" color="textSecondary" sx={{ mr: 2 }}>
+                                                        ID Bus: {bus.id}
+                                                    </Typography>
+                                                    {bus.inWorkshop ? (
+                                                        <Tooltip title="Marcar como Disponible">
+                                                            <IconButton color="primary" onClick={() => handleToggleBusTaller(bus, false)}>
+                                                                <BuildIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        <Tooltip title="Marcar bus en Taller">
+                                                            <IconButton color="primary" onClick={() => handleToggleBusTaller(bus, true)}>
+                                                                <BuildIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
+                                                    <Tooltip title="Reportar Incidencia">
+                                                        <IconButton color="warning" onClick={() => handleOpenIncidentDialog(bus)}>
+                                                            <ReportIcon />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </AccordionActions>
+                                            </AccordionStyled>
+                                        ))}
+                                        <TablePagination
+                                            component="div"
+                                            count={filteredBuses.length}
+                                            page={busPage}
+                                            onPageChange={handleChangeBusPage}
+                                            rowsPerPage={busRowsPerPage}
+                                            onRowsPerPageChange={handleChangeBusRowsPerPage}
+                                            labelRowsPerPage="Filas por página"
+                                        />
+                                    </>
+                                )}
                             </>
                         )}
                     </SectionPaper>
@@ -707,8 +798,7 @@ const ActivityLogPage = () => {
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
                             <WarningIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }} />
-                            Incidentes y{' '}
-                            <HospitalIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }} />
+                            Incidentes y <HospitalIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }} />
                             Emergencias
                         </SectionTitle>
 
@@ -756,6 +846,38 @@ const ActivityLogPage = () => {
                                     <Typography variant="body2" color="textSecondary">
                                         No hay incidentes reportados con esos filtros
                                     </Typography>
+                                ) : isMobile ? (
+                                    <>
+                                        {incPaginated.map((incident) => (
+                                            <MobileCard key={incident.id}>
+                                                <MobileField>
+                                                    <MobileLabel>Fecha:</MobileLabel>
+                                                    <MobileValue>{formatGuatemalaDatetime(incident.fecha)}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Piloto:</MobileLabel>
+                                                    <MobileValue>{incident.piloto ? incident.piloto.name : '—'}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Tipo:</MobileLabel>
+                                                    <MobileValue>{incident.tipo || '—'}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Descripción:</MobileLabel>
+                                                    <MobileValue>{incident.descripcion || '—'}</MobileValue>
+                                                </MobileField>
+                                            </MobileCard>
+                                        ))}
+                                        <TablePagination
+                                            component="div"
+                                            count={filteredIncidents.length}
+                                            page={incPage}
+                                            onPageChange={handleChangeIncPage}
+                                            rowsPerPage={incRowsPerPage}
+                                            onRowsPerPageChange={handleChangeIncRowsPerPage}
+                                            labelRowsPerPage="Filas por página"
+                                        />
+                                    </>
                                 ) : (
                                     <>
                                         <Table size="small">
@@ -770,12 +892,8 @@ const ActivityLogPage = () => {
                                             <TableBody>
                                                 {incPaginated.map((incident) => (
                                                     <TableRow key={incident.id} hover>
-                                                        <TableCell>
-                                                            {formatGuatemalaDatetime(incident.fecha)}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {incident.piloto ? incident.piloto.name : '—'}
-                                                        </TableCell>
+                                                        <TableCell>{formatGuatemalaDatetime(incident.fecha)}</TableCell>
+                                                        <TableCell>{incident.piloto ? incident.piloto.name : '—'}</TableCell>
                                                         <TableCell>{incident.tipo || '—'}</TableCell>
                                                         <TableCell>{incident.descripcion || '—'}</TableCell>
                                                     </TableRow>
@@ -831,6 +949,63 @@ const ActivityLogPage = () => {
                                     <Typography variant="body2" color="textSecondary">
                                         No hay emergencias registradas con esos filtros
                                     </Typography>
+                                ) : isMobile ? (
+                                    <>
+                                        {emePaginated.map((eme) => (
+                                            <MobileCard key={eme.id}>
+                                                <MobileField>
+                                                    <MobileLabel>Fecha:</MobileLabel>
+                                                    <MobileValue>{formatGuatemalaDatetime(eme.fecha)}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Piloto:</MobileLabel>
+                                                    <MobileValue>{eme.piloto ? eme.piloto.name : '—'}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Mensaje:</MobileLabel>
+                                                    <MobileValue>{eme.mensaje}</MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Ubicación:</MobileLabel>
+                                                    <MobileValue>
+                                                        {eme.latitud && eme.longitud ? (
+                                                            (() => {
+                                                                const lat = parseFloat(eme.latitud);
+                                                                const lng = parseFloat(eme.longitud);
+                                                                if (isNaN(lat) || isNaN(lng)) {
+                                                                    return `${eme.latitud}, ${eme.longitud}`;
+                                                                }
+                                                                return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                                                            })()
+                                                        ) : (
+                                                            '—'
+                                                        )}
+                                                    </MobileValue>
+                                                    {eme.latitud && eme.longitud && (
+                                                        <Tooltip title="Ver mapa">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={() =>
+                                                                    handleOpenMap(parseFloat(eme.latitud), parseFloat(eme.longitud))
+                                                                }
+                                                            >
+                                                                <LocationOnIcon color="primary" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
+                                                </MobileField>
+                                            </MobileCard>
+                                        ))}
+                                        <TablePagination
+                                            component="div"
+                                            count={filteredEmergencies.length}
+                                            page={emePage}
+                                            onPageChange={handleChangeEmePage}
+                                            rowsPerPage={emeRowsPerPage}
+                                            onRowsPerPageChange={handleChangeEmeRowsPerPage}
+                                            labelRowsPerPage="Filas por página"
+                                        />
+                                    </>
                                 ) : (
                                     <>
                                         <Table size="small">
@@ -845,47 +1020,18 @@ const ActivityLogPage = () => {
                                             <TableBody>
                                                 {emePaginated.map((eme) => (
                                                     <TableRow key={eme.id} hover>
-                                                        <TableCell>
-                                                            {formatGuatemalaDatetime(eme.fecha)}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {eme.piloto ? eme.piloto.name : '—'}
-                                                        </TableCell>
+                                                        <TableCell>{formatGuatemalaDatetime(eme.fecha)}</TableCell>
+                                                        <TableCell>{eme.piloto ? eme.piloto.name : '—'}</TableCell>
                                                         <TableCell>{eme.mensaje}</TableCell>
                                                         <TableCell>
                                                             {eme.latitud && eme.longitud ? (
                                                                 (() => {
                                                                     const lat = parseFloat(eme.latitud);
                                                                     const lng = parseFloat(eme.longitud);
-
                                                                     if (isNaN(lat) || isNaN(lng)) {
-                                                                        return (
-                                                                            <span>{`${eme.latitud}, ${eme.longitud}`}</span>
-                                                                        );
+                                                                        return `${eme.latitud}, ${eme.longitud}`;
                                                                     }
-
-                                                                    return (
-                                                                        <div
-                                                                            style={{
-                                                                                display: 'inline-flex',
-                                                                                alignItems: 'center',
-                                                                                gap: '0.5rem',
-                                                                                whiteSpace: 'nowrap'
-                                                                            }}
-                                                                        >
-                                                                            {`${lat.toFixed(6)}, ${lng.toFixed(6)}`}
-                                                                            <Tooltip title="Ver mapa">
-                                                                                <IconButton
-                                                                                    size="small"
-                                                                                    onClick={() =>
-                                                                                        handleOpenMap(lat, lng)
-                                                                                    }
-                                                                                >
-                                                                                    <LocationOnIcon color="primary" />
-                                                                                </IconButton>
-                                                                            </Tooltip>
-                                                                        </div>
-                                                                    );
+                                                                    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                                                                 })()
                                                             ) : (
                                                                 '—'
@@ -910,7 +1056,7 @@ const ActivityLogPage = () => {
                         </Grid>
                     </SectionPaper>
 
-                    {/* Pagos y Boletas (NO se muestra si es supervisor) */}
+                    {/* Sección Pagos y Boletas (solo si NO es supervisor) */}
                     {!isSupervisor && (
                         <SectionPaper>
                             <SectionTitle variant="h6" gutterBottom>
@@ -954,6 +1100,52 @@ const ActivityLogPage = () => {
                                 <Typography variant="body2" color="textSecondary">
                                     Aún no hay registros de pagos con esos filtros.
                                 </Typography>
+                            ) : isMobile ? (
+                                <>
+                                    {payPaginated.map((pay) => (
+                                        <MobileCard key={pay.id}>
+                                            <MobileField>
+                                                <MobileLabel>Padre (Usuario):</MobileLabel>
+                                                <MobileValue>{pay.User ? pay.User.name : '—'}</MobileValue>
+                                            </MobileField>
+                                            <MobileField>
+                                                <MobileLabel>Email:</MobileLabel>
+                                                <MobileValue>{pay.User ? pay.User.email : '—'}</MobileValue>
+                                            </MobileField>
+                                            <MobileField>
+                                                <MobileLabel>Estado:</MobileLabel>
+                                                <MobileValue>{pay.finalStatus || pay.status}</MobileValue>
+                                            </MobileField>
+                                            <MobileField>
+                                                <MobileLabel>Próximo Pago:</MobileLabel>
+                                                <MobileValue>{formatGuatemalaDate(pay.nextPaymentDate)}</MobileValue>
+                                            </MobileField>
+                                            <MobileField>
+                                                <MobileLabel>Saldo:</MobileLabel>
+                                                <MobileValue>Q {pay.leftover ?? 0}</MobileValue>
+                                            </MobileField>
+                                            <MobileField>
+                                                <MobileLabel>Acciones:</MobileLabel>
+                                                {pay.User && (
+                                                    <Tooltip title="Ver boletas de pago">
+                                                        <IconButton onClick={() => handleViewBoletas(pay.User.id, pay.User.name)}>
+                                                            <VisibilityIcon />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
+                                            </MobileField>
+                                        </MobileCard>
+                                    ))}
+                                    <TablePagination
+                                        component="div"
+                                        count={filteredPayments.length}
+                                        page={payPage}
+                                        onPageChange={handleChangePayPage}
+                                        rowsPerPage={payRowsPerPage}
+                                        onRowsPerPageChange={handleChangePayRowsPerPage}
+                                        labelRowsPerPage="Filas por página"
+                                    />
+                                </>
                             ) : (
                                 <>
                                     <Table size="small">
@@ -970,28 +1162,15 @@ const ActivityLogPage = () => {
                                         <TableBody>
                                             {payPaginated.map((pay) => (
                                                 <TableRow key={pay.id} hover>
-                                                    <TableCell>
-                                                        {pay.User ? pay.User.name : '—'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {pay.User ? pay.User.email : '—'}
-                                                    </TableCell>
+                                                    <TableCell>{pay.User ? pay.User.name : '—'}</TableCell>
+                                                    <TableCell>{pay.User ? pay.User.email : '—'}</TableCell>
                                                     <TableCell>{pay.finalStatus || pay.status}</TableCell>
-                                                    <TableCell>
-                                                        {formatGuatemalaDate(pay.nextPaymentDate)}
-                                                    </TableCell>
+                                                    <TableCell>{formatGuatemalaDate(pay.nextPaymentDate)}</TableCell>
                                                     <TableCell>Q {pay.leftover ?? 0}</TableCell>
                                                     <TableCell>
                                                         {pay.User && (
                                                             <Tooltip title="Ver boletas de pago">
-                                                                <IconButton
-                                                                    onClick={() =>
-                                                                        handleViewBoletas(
-                                                                            pay.User.id,
-                                                                            pay.User.name
-                                                                        )
-                                                                    }
-                                                                >
+                                                                <IconButton onClick={() => handleViewBoletas(pay.User.id, pay.User.name)}>
                                                                     <VisibilityIcon />
                                                                 </IconButton>
                                                             </Tooltip>
@@ -1019,12 +1198,7 @@ const ActivityLogPage = () => {
 
             {/* Dialog Boletas */}
             {!isSupervisor && (
-                <Dialog
-                    open={openBoletasDialog}
-                    onClose={handleCloseBoletasDialog}
-                    maxWidth="md"
-                    fullWidth
-                >
+                <Dialog open={openBoletasDialog} onClose={handleCloseBoletasDialog} maxWidth="md" fullWidth>
                     <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
                     <DialogContent dividers>
                         {loading ? (
@@ -1039,8 +1213,7 @@ const ActivityLogPage = () => {
                                     <Grid item xs={12} md={4} key={b.id}>
                                         <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
                                             <Typography variant="body2">
-                                                <strong>Subido el:</strong>{' '}
-                                                {formatGuatemalaDatetime(b.uploadedAt)}
+                                                <strong>Subido el:</strong> {formatGuatemalaDatetime(b.uploadedAt)}
                                             </Typography>
                                             <img
                                                 src={b.fileUrl}
@@ -1067,12 +1240,7 @@ const ActivityLogPage = () => {
             )}
 
             {/* Dialog ver Mapa */}
-            <Dialog
-                open={openMapDialog}
-                onClose={handleCloseMap}
-                maxWidth="md"
-                fullWidth
-            >
+            <Dialog open={openMapDialog} onClose={handleCloseMap} maxWidth="md" fullWidth>
                 <DialogTitle>Ubicación en Mapa</DialogTitle>
                 <DialogContent dividers>
                     {selectedCoords.lat && selectedCoords.lng ? (
@@ -1096,12 +1264,7 @@ const ActivityLogPage = () => {
             </Dialog>
 
             {/* Dialog Reportar Incidencia */}
-            <Dialog
-                open={openIncidentDialog}
-                onClose={handleCloseIncidentDialog}
-                maxWidth="sm"
-                fullWidth
-            >
+            <Dialog open={openIncidentDialog} onClose={handleCloseIncidentDialog} maxWidth="sm" fullWidth>
                 <DialogTitle>Reportar Incidente</DialogTitle>
                 <DialogContent dividers>
                     <Grid container spacing={2}>
@@ -1144,9 +1307,7 @@ const ActivityLogPage = () => {
                                 control={
                                     <Checkbox
                                         checked={incidentForm.impacto}
-                                        onChange={(e) =>
-                                            handleIncidentFormChange('impacto', e.target.checked)
-                                        }
+                                        onChange={(e) => handleIncidentFormChange('impacto', e.target.checked)}
                                     />
                                 }
                                 label="¿Hubo impacto?"
@@ -1170,12 +1331,7 @@ const ActivityLogPage = () => {
                     <Button variant="outlined" onClick={handleCloseIncidentDialog}>
                         Cancelar
                     </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleSubmitIncident}
-                        disabled={loading}
-                    >
+                    <Button variant="contained" color="primary" onClick={handleSubmitIncident} disabled={loading}>
                         Reportar
                     </Button>
                 </DialogActions>

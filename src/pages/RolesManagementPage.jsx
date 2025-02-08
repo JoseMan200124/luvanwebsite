@@ -30,13 +30,16 @@ import {
     Grid,
     Checkbox,
     Box,
-    Link
+    Link,
+    useMediaQuery,
+    useTheme
 } from '@mui/material';
 import { Edit, Delete, Add, FileUpload } from '@mui/icons-material';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
+import styled from 'styled-components';
 
 const RolesContainer = tw.div`
   p-8 bg-gray-100 min-h-screen w-full
@@ -77,7 +80,59 @@ const SupervisorPilotsList = memo(({ allPilots, selectedSupervisorPilots, onTogg
     );
 });
 
+/* ========= Responsive Table Styles (para desktop) ========= */
+const ResponsiveTableHead = styled(TableHead)`
+    @media (max-width: 600px) {
+        display: none;
+    }
+`;
+
+const ResponsiveTableCell = styled(TableCell)`
+  @media (max-width: 600px) {
+    display: block;
+    text-align: right;
+    position: relative;
+    padding-left: 50%;
+    white-space: nowrap;
+    &:before {
+      content: attr(data-label);
+      position: absolute;
+      left: 0;
+      width: 45%;
+      padding-left: 15px;
+      font-weight: bold;
+      text-align: left;
+      white-space: nowrap;
+    }
+  }
+`;
+
+/* ========= Styles para la vista móvil en formato "card" ========= */
+const MobileCard = styled(Paper)`
+    padding: 16px;
+    margin-bottom: 16px;
+`;
+
+const MobileField = styled(Box)`
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const MobileLabel = styled(Typography)`
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: #555;
+`;
+
+const MobileValue = styled(Typography)`
+  font-size: 1rem;
+`;
+
 const RolesManagementPage = () => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
     const { auth } = useContext(AuthContext);
 
     const [users, setUsers] = useState([]);
@@ -531,6 +586,13 @@ const RolesManagementPage = () => {
 
     const downloadFilename = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
 
+    // Función auxiliar para cerrar el sidebar en móviles al seleccionar una opción
+    const handleLinkClick = () => {
+        if (window.innerWidth < 768) {
+            // Aquí se podría agregar lógica para cerrar algún menú, en este caso se deja vacío.
+        }
+    };
+
     return (
         <RolesContainer>
             <Typography variant="h4" gutterBottom>
@@ -574,67 +636,135 @@ const RolesManagementPage = () => {
                     <CircularProgress />
                 </div>
             ) : (
-                <Paper sx={{ width: '100%', overflowX: 'auto' }}>
-                    <TableContainer
-                        sx={{
-                            maxHeight: { xs: 400, sm: 'none' },
-                            overflowX: 'auto'
-                        }}
-                    >
-                        <Table stickyHeader>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Nombre</TableCell>
-                                    <TableCell>Correo</TableCell>
-                                    <TableCell>Rol</TableCell>
-                                    <TableCell>Colegio</TableCell>
-                                    <TableCell align="center">Acciones</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((user) => (
-                                    <TableRow key={user.id}>
-                                        <TableCell>{user.name}</TableCell>
-                                        <TableCell>{user.email}</TableCell>
-                                        <TableCell>{user.Role ? user.Role.name : '—'}</TableCell>
-                                        <TableCell>{user.School ? user.School.name : '—'}</TableCell>
-                                        <TableCell align="center">
-                                            <Tooltip title="Editar">
-                                                <IconButton onClick={() => handleEditClick(user)}>
-                                                    <Edit />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Eliminar">
-                                                <IconButton onClick={() => handleDeleteClick(user.id)}>
-                                                    <Delete />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </TableCell>
-                                    </TableRow>
+                <>
+                    {isMobile ? (
+                        <>
+                            {filteredUsers
+                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                .map((user) => (
+                                    <MobileCard key={user.id} elevation={3}>
+                                        <Grid container spacing={1}>
+                                            <Grid item xs={12}>
+                                                <MobileField>
+                                                    <MobileLabel>Nombre</MobileLabel>
+                                                    <MobileValue>{user.name}</MobileValue>
+                                                </MobileField>
+                                            </Grid>
+                                            <Grid item xs={12}>
+                                                <MobileField>
+                                                    <MobileLabel>Correo</MobileLabel>
+                                                    <MobileValue>{user.email}</MobileValue>
+                                                </MobileField>
+                                            </Grid>
+                                            <Grid item xs={12}>
+                                                <MobileField>
+                                                    <MobileLabel>Rol</MobileLabel>
+                                                    <MobileValue>{user.Role ? user.Role.name : '—'}</MobileValue>
+                                                </MobileField>
+                                            </Grid>
+                                            <Grid item xs={12}>
+                                                <MobileField>
+                                                    <MobileLabel>Colegio</MobileLabel>
+                                                    <MobileValue>{user.School ? user.School.name : '—'}</MobileValue>
+                                                </MobileField>
+                                            </Grid>
+                                            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 1 }}>
+                                                <Tooltip title="Editar">
+                                                    <IconButton onClick={() => handleEditClick(user)}>
+                                                        <Edit />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Eliminar">
+                                                    <IconButton onClick={() => handleDeleteClick(user.id)}>
+                                                        <Delete />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </Grid>
+                                        </Grid>
+                                    </MobileCard>
                                 ))}
-                                {filteredUsers.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={5} align="center">
-                                            No se encontraron usuarios.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                    <TablePagination
-                        component="div"
-                        count={filteredUsers.length}
-                        page={page}
-                        onPageChange={handleChangePage}
-                        rowsPerPage={rowsPerPage}
-                        onRowsPerPageChange={handleChangeRowsPerPage}
-                        rowsPerPageOptions={[5, 10, 25]}
-                        labelRowsPerPage="Filas por página"
-                    />
-                </Paper>
+                            <TablePagination
+                                component="div"
+                                count={filteredUsers.length}
+                                page={page}
+                                onPageChange={handleChangePage}
+                                rowsPerPage={rowsPerPage}
+                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                rowsPerPageOptions={[5, 10, 25]}
+                                labelRowsPerPage="Filas por página"
+                            />
+                        </>
+                    ) : (
+                        <Paper sx={{ width: '100%', overflowX: 'auto' }}>
+                            <TableContainer
+                                sx={{
+                                    maxHeight: { xs: 400, sm: 'none' },
+                                    overflowX: 'auto'
+                                }}
+                            >
+                                <Table stickyHeader>
+                                    <ResponsiveTableHead>
+                                        <TableRow>
+                                            <TableCell>Nombre</TableCell>
+                                            <TableCell>Correo</TableCell>
+                                            <TableCell>Rol</TableCell>
+                                            <TableCell>Colegio</TableCell>
+                                            <TableCell align="center">Acciones</TableCell>
+                                        </TableRow>
+                                    </ResponsiveTableHead>
+                                    <TableBody>
+                                        {filteredUsers
+                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                            .map((user) => (
+                                                <TableRow key={user.id}>
+                                                    <ResponsiveTableCell data-label="Nombre">{user.name}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Correo">{user.email}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Rol">
+                                                        {user.Role ? user.Role.name : '—'}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Colegio">
+                                                        {user.School ? user.School.name : '—'}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Acciones" align="center">
+                                                        <Tooltip title="Editar">
+                                                            <IconButton onClick={() => handleEditClick(user)}>
+                                                                <Edit />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Eliminar">
+                                                            <IconButton onClick={() => handleDeleteClick(user.id)}>
+                                                                <Delete />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </ResponsiveTableCell>
+                                                </TableRow>
+                                            ))}
+                                        {filteredUsers.length === 0 && (
+                                            <TableRow>
+                                                <ResponsiveTableCell colSpan={5} align="center">
+                                                    No se encontraron usuarios.
+                                                </ResponsiveTableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                            <TablePagination
+                                component="div"
+                                count={filteredUsers.length}
+                                page={page}
+                                onPageChange={handleChangePage}
+                                rowsPerPage={rowsPerPage}
+                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                rowsPerPageOptions={[5, 10, 25]}
+                                labelRowsPerPage="Filas por página"
+                            />
+                        </Paper>
+                    )}
+                </>
             )}
 
+            {/* Diálogo para editar/agregar usuario */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
                 <DialogTitle>{selectedUser?.id ? 'Editar Usuario' : 'Añadir Usuario'}</DialogTitle>
                 <DialogContent>

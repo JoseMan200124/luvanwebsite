@@ -27,7 +27,10 @@ import {
     FormControl,
     Badge,
     Checkbox,
-    FormControlLabel
+    FormControlLabel,
+    useTheme,
+    useMediaQuery,
+    Box
 } from '@mui/material';
 import {
     Send as SendIcon,
@@ -37,16 +40,41 @@ import {
     ZoomOut as ZoomOutIcon,
     Payment as PaymentIcon
 } from '@mui/icons-material';
-
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
+import styled from 'styled-components';
 import { getSocket } from '../services/socketService';
 
+// Contenedor principal con Twin.Macro
 const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
+
+// Componentes para la vista móvil (tarjetas)
+const MobileCard = styled(Paper)`
+    padding: 16px;
+    margin-bottom: 16px;
+`;
+
+const MobileField = styled(Box)`
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+`;
+
+const MobileLabel = styled(Typography)`
+    font-weight: bold;
+    font-size: 0.875rem;
+    color: #555;
+`;
+
+const MobileValue = styled(Typography)`
+    font-size: 1rem;
+`;
 
 const PaymentsManagementPage = () => {
     const { auth } = useContext(AuthContext);
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     // Estados
     const [payments, setPayments] = useState([]);
@@ -549,11 +577,25 @@ const PaymentsManagementPage = () => {
 
     return (
         <Container>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+            {/* Encabezado y sección de mora/leyenda */}
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    justifyContent: 'space-between',
+                    marginBottom: '16px'
+                }}
+            >
                 <Typography variant="h4" gutterBottom>
                     Gestión de Pagos
                 </Typography>
-                <div style={{ display: 'flex', gap: '16px' }}>
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: isMobile ? 'column' : 'row',
+                        gap: '16px'
+                    }}
+                >
                     <div
                         style={{
                             background: '#fff',
@@ -624,16 +666,23 @@ const PaymentsManagementPage = () => {
             </div>
 
             {/* Filtros */}
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: '16px',
+                    marginBottom: '16px'
+                }}
+            >
                 <TextField
                     label="Buscar por nombre o email"
                     variant="outlined"
                     size="small"
                     value={searchQuery}
                     onChange={handleSearchChange}
-                    style={{ width: '220px' }}
+                    style={{ width: isMobile ? '100%' : '220px' }}
                 />
-                <FormControl variant="outlined" size="small" style={{ width: '150px' }}>
+                <FormControl variant="outlined" size="small" style={{ width: isMobile ? '100%' : '150px' }}>
                     <InputLabel>Estado</InputLabel>
                     <Select label="Estado" value={statusFilter} onChange={handleStatusFilterChange}>
                         <MenuItem value="">Todos</MenuItem>
@@ -642,7 +691,7 @@ const PaymentsManagementPage = () => {
                         <MenuItem value="MORA">Mora</MenuItem>
                     </Select>
                 </FormControl>
-                <FormControl variant="outlined" size="small" style={{ width: '200px' }}>
+                <FormControl variant="outlined" size="small" style={{ width: isMobile ? '100%' : '200px' }}>
                     <InputLabel>Colegio</InputLabel>
                     <Select label="Colegio" value={schoolFilter} onChange={handleSchoolFilterChange}>
                         <MenuItem value="">Todos</MenuItem>
@@ -663,95 +712,153 @@ const PaymentsManagementPage = () => {
                         <Typography variant="h5" style={{ marginBottom: '16px' }}>
                             {schoolName}
                         </Typography>
-                        <Paper>
-                            <TableContainer>
-                                <Table>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Padre (Usuario)</TableCell>
-                                            <TableCell>Email</TableCell>
-                                            <TableCell>Estado</TableCell>
-                                            <TableCell>Próximo Pago</TableCell>
-                                            <TableCell>Último Pago</TableCell>
-                                            <TableCell>Monto Total</TableCell>
-                                            <TableCell>Saldo</TableCell>
-                                            <TableCell>Multa Acum.</TableCell>
-                                            <TableCell>Total a Pagar</TableCell>
-                                            <TableCell>Crédito Extra</TableCell>
-                                            <TableCell>Usuario Activo</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {payArr
-                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                            .map((payment) => {
-                                                const fatherId = payment.User?.id;
-                                                const hasUnread = fatherId ? unreadReceiptsMap[fatherId] === true : false;
+                        {isMobile ? (
+                            // Vista móvil: tarjetas
+                            payArr.map((payment) => (
+                                <MobileCard key={payment.id}>
+                                    <MobileField>
+                                        <MobileLabel>Padre (Usuario)</MobileLabel>
+                                        <MobileValue>{payment.User?.name}</MobileValue>
+                                    </MobileField>
+                                    <MobileField>
+                                        <MobileLabel>Email</MobileLabel>
+                                        <MobileValue>{payment.User?.email}</MobileValue>
+                                    </MobileField>
+                                    <MobileField>
+                                        <MobileLabel>Estado</MobileLabel>
+                                        <MobileValue>{payment.finalStatus}</MobileValue>
+                                    </MobileField>
+                                    <MobileField>
+                                        <MobileLabel>Próximo Pago</MobileLabel>
+                                        <MobileValue>
+                                            {payment.nextPaymentDate
+                                                ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
+                                                : '—'}
+                                        </MobileValue>
+                                    </MobileField>
+                                    <MobileField>
+                                        <MobileLabel>Último Pago</MobileLabel>
+                                        <MobileValue>
+                                            {payment.lastPaymentDate
+                                                ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
+                                                : '—'}
+                                        </MobileValue>
+                                    </MobileField>
+                                    {/* Puedes agregar más campos relevantes aquí */}
+                                    <Box
+                                        sx={{
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            gap: 1,
+                                            marginTop: 1
+                                        }}
+                                    >
+                                        <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
+                                            <SendIcon />
+                                        </IconButton>
+                                        <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
+                                            <EditIcon />
+                                        </IconButton>
+                                        <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
+                                            <Badge color="primary" variant="dot" overlap="circular" invisible={!payment.User || !unreadReceiptsMap[payment.User.id]}>
+                                                <ReceiptIcon />
+                                            </Badge>
+                                        </IconButton>
+                                        <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
+                                            <PaymentIcon />
+                                        </IconButton>
+                                    </Box>
+                                </MobileCard>
+                            ))
+                        ) : (
+                            // Vista desktop: tabla
+                            <Paper>
+                                <TableContainer>
+                                    <Table>
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell>Padre (Usuario)</TableCell>
+                                                <TableCell>Email</TableCell>
+                                                <TableCell>Estado</TableCell>
+                                                <TableCell>Próximo Pago</TableCell>
+                                                <TableCell>Último Pago</TableCell>
+                                                <TableCell>Monto Total</TableCell>
+                                                <TableCell>Saldo</TableCell>
+                                                <TableCell>Multa Acum.</TableCell>
+                                                <TableCell>Total a Pagar</TableCell>
+                                                <TableCell>Crédito Extra</TableCell>
+                                                <TableCell>Usuario Activo</TableCell>
+                                                <TableCell align="center">Acciones</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {payArr
+                                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                                .map((payment) => {
+                                                    const fatherId = payment.User?.id;
+                                                    const hasUnread = fatherId ? unreadReceiptsMap[fatherId] === true : false;
 
-                                                const mt = parseFloat(payment.montoTotal) || 0;
-                                                const lo = parseFloat(payment.leftover) || 0;
-                                                const pen = parseFloat(payment.accumulatedPenalty) || 0;
-                                                const td = parseFloat(payment.totalDue) || 0;
-                                                const cb = parseFloat(payment.creditBalance) || 0;
+                                                    const mt = parseFloat(payment.montoTotal) || 0;
+                                                    const lo = parseFloat(payment.leftover) || 0;
+                                                    const pen = parseFloat(payment.accumulatedPenalty) || 0;
+                                                    const td = parseFloat(payment.totalDue) || 0;
+                                                    const cb = parseFloat(payment.creditBalance) || 0;
 
-                                                return (
-                                                    <TableRow
-                                                        key={payment.id}
-                                                        style={{ backgroundColor: getRowColor(payment) }}
-                                                    >
-                                                        <TableCell>{payment.User?.name}</TableCell>
-                                                        <TableCell>{payment.User?.email}</TableCell>
-                                                        <TableCell>{payment.finalStatus}</TableCell>
-                                                        <TableCell>
-                                                            {payment.nextPaymentDate
-                                                                ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
-                                                                : '—'}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {payment.lastPaymentDate
-                                                                ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
-                                                                : '—'}
-                                                        </TableCell>
-                                                        <TableCell>Q {mt.toFixed(2)}</TableCell>
-                                                        <TableCell>Q {lo.toFixed(2)}</TableCell>
-                                                        <TableCell>Q {pen.toFixed(2)}</TableCell>
-                                                        <TableCell>Q {td.toFixed(2)}</TableCell>
-                                                        <TableCell>Q {cb.toFixed(2)}</TableCell>
-                                                        <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
-                                                        <TableCell align="center">
-                                                            <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
-                                                                <SendIcon />
-                                                            </IconButton>
-                                                            <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
-                                                                <EditIcon />
-                                                            </IconButton>
-                                                            <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
-                                                                <Badge color="primary" variant="dot" overlap="circular" invisible={!hasUnread}>
-                                                                    <ReceiptIcon />
-                                                                </Badge>
-                                                            </IconButton>
-                                                            <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
-                                                                <PaymentIcon />
-                                                            </IconButton>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={payArr.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
-                        </Paper>
+                                                    return (
+                                                        <TableRow key={payment.id} style={{ backgroundColor: getRowColor(payment) }}>
+                                                            <TableCell>{payment.User?.name}</TableCell>
+                                                            <TableCell>{payment.User?.email}</TableCell>
+                                                            <TableCell>{payment.finalStatus}</TableCell>
+                                                            <TableCell>
+                                                                {payment.nextPaymentDate
+                                                                    ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
+                                                                    : '—'}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {payment.lastPaymentDate
+                                                                    ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
+                                                                    : '—'}
+                                                            </TableCell>
+                                                            <TableCell>Q {mt.toFixed(2)}</TableCell>
+                                                            <TableCell>Q {lo.toFixed(2)}</TableCell>
+                                                            <TableCell>Q {pen.toFixed(2)}</TableCell>
+                                                            <TableCell>Q {td.toFixed(2)}</TableCell>
+                                                            <TableCell>Q {cb.toFixed(2)}</TableCell>
+                                                            <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
+                                                            <TableCell align="center">
+                                                                <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
+                                                                    <SendIcon />
+                                                                </IconButton>
+                                                                <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
+                                                                    <EditIcon />
+                                                                </IconButton>
+                                                                <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
+                                                                    <Badge color="primary" variant="dot" overlap="circular" invisible={!hasUnread}>
+                                                                        <ReceiptIcon />
+                                                                    </Badge>
+                                                                </IconButton>
+                                                                <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
+                                                                    <PaymentIcon />
+                                                                </IconButton>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                                <TablePagination
+                                    component="div"
+                                    count={payArr.length}
+                                    page={page}
+                                    onPageChange={handleChangePage}
+                                    rowsPerPage={rowsPerPage}
+                                    onRowsPerPageChange={handleChangeRowsPerPage}
+                                    rowsPerPageOptions={[5, 10, 25]}
+                                    labelRowsPerPage="Filas por página"
+                                />
+                            </Paper>
+                        )}
                     </div>
                 );
             })}

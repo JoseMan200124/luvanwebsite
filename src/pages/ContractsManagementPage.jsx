@@ -1,3 +1,4 @@
+// src/pages/ContractsManagementPage.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Button,
@@ -17,7 +18,9 @@ import {
     Pagination,
     CircularProgress,
     Box,
-    DialogActions
+    DialogActions,
+    useTheme,
+    useMediaQuery
 } from '@mui/material';
 import {
     Delete as DeleteIcon,
@@ -36,8 +39,53 @@ import parse from 'html-react-parser';
 import SignatureCanvas from 'react-signature-canvas';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import styled from 'styled-components';
 
+// Contenedor principal responsive
+const Container = styled.div`
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  @media (max-width: 600px) {
+    padding: 10px;
+  }
+`;
+
+// Mobile view: Tarjeta para contrato (contratos originales)
+const MobileContractCard = styled(Box)`
+  padding: 16px;
+  margin-bottom: 12px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+`;
+
+// Mobile view: Tarjeta para contrato llenado
+const MobileFilledContractCard = styled(Box)`
+  padding: 16px;
+  margin-bottom: 12px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+`;
+
+// Opcionales: estilos para separar títulos y valores en mobile
+const MobileLabel = styled(Typography)`
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: #555;
+`;
+const MobileValue = styled(Typography)`
+  font-size: 1rem;
+`;
+
+// El componente principal
 const ContractsManagementPage = () => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const navigate = useNavigate();
+
+    // Estados para contratos (originales)
     const [contracts, setContracts] = useState([]);
     const [snackbar, setSnackbar] = useState({
         open: false,
@@ -45,19 +93,17 @@ const ContractsManagementPage = () => {
         severity: 'success'
     });
 
-    // Crear/Editar
+    // Estados para crear/editar contrato
     const [openEditor, setOpenEditor] = useState(false);
     const [currentContract, setCurrentContract] = useState(null);
     const [contractTitle, setContractTitle] = useState('');
     const [editorData, setEditorData] = useState('');
 
-    // Manejo de placeholders en vista previa
+    // Para placeholders y firmas
     const signatureRefs = useRef({});
     const [formValues, setFormValues] = useState({});
 
-    const navigate = useNavigate();
-
-    // Contratos Llenados (paginación, búsqueda)
+    // Contratos llenados (con paginación y búsqueda)
     const [filledContracts, setFilledContracts] = useState([]);
     const [filledContractsLoading, setFilledContractsLoading] = useState(false);
     const [filledContractsPage, setFilledContractsPage] = useState(1);
@@ -65,7 +111,13 @@ const ContractsManagementPage = () => {
     const [filledContractsTotalPages, setFilledContractsTotalPages] = useState(1);
     const [filledContractsSearch, setFilledContractsSearch] = useState('');
 
-    // Cargar lista de contratos
+    // Diálogo de confirmación para eliminar contrato llenado
+    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+    const [filledContractToDelete, setFilledContractToDelete] = useState(null);
+
+    // ---------------------------
+    // useEffect para cargar contratos
+    // ---------------------------
     useEffect(() => {
         const fetchContracts = async () => {
             try {
@@ -83,7 +135,9 @@ const ContractsManagementPage = () => {
         fetchContracts();
     }, []);
 
-    // Cargar lista de contratos llenos (paginados)
+    // ---------------------------
+    // useEffect para cargar contratos llenados (paginados)
+    // ---------------------------
     useEffect(() => {
         const fetchFilledContracts = async () => {
             setFilledContractsLoading(true);
@@ -110,7 +164,9 @@ const ContractsManagementPage = () => {
         fetchFilledContracts();
     }, [filledContractsPage, filledContractsLimit]);
 
-    // Subir archivo Word y convertirlo a HTML
+    // ---------------------------
+    // Función para subir archivo Word y convertirlo a HTML
+    // ---------------------------
     const handleWordUpload = async (event) => {
         const file = event.target.files[0];
         if (file && file.name.endsWith('.docx')) {
@@ -136,7 +192,9 @@ const ContractsManagementPage = () => {
         event.target.value = null;
     };
 
-    // Crear o actualizar un contrato
+    // ---------------------------
+    // Función para crear o actualizar contrato
+    // ---------------------------
     const handleSaveOrUpdate = async () => {
         if (!contractTitle.trim()) {
             setSnackbar({
@@ -172,7 +230,6 @@ const ContractsManagementPage = () => {
             };
 
             if (currentContract) {
-                // Actualizamos en la lista
                 setContracts((prev) =>
                     prev.map((c) => (c.id === currentContract.id ? savedContract : c))
                 );
@@ -182,7 +239,6 @@ const ContractsManagementPage = () => {
                     severity: 'success'
                 });
             } else {
-                // Agregamos al final
                 setContracts((prev) => [...prev, savedContract]);
                 setSnackbar({
                     open: true,
@@ -202,7 +258,9 @@ const ContractsManagementPage = () => {
         }
     };
 
-    // Editar
+    // ---------------------------
+    // Funciones para editar, eliminar y copiar enlace
+    // ---------------------------
     const handleEdit = (contract) => {
         setCurrentContract(contract);
         setContractTitle(contract.title);
@@ -210,7 +268,6 @@ const ContractsManagementPage = () => {
         setOpenEditor(true);
     };
 
-    // Eliminar
     const handleDelete = async (uuid) => {
         if (!window.confirm('¿Está seguro de que desea eliminar este contrato?')) return;
         try {
@@ -231,17 +288,6 @@ const ContractsManagementPage = () => {
         }
     };
 
-    // Cerrar el diálogo de creación/edición
-    const handleCloseEditor = () => {
-        setOpenEditor(false);
-        setCurrentContract(null);
-        setContractTitle('');
-        setEditorData('');
-        signatureRefs.current = {};
-        setFormValues({});
-    };
-
-    // Copiar link de un contrato
     const handleCopyLink = async (url) => {
         try {
             await navigator.clipboard.writeText(url);
@@ -260,7 +306,13 @@ const ContractsManagementPage = () => {
         }
     };
 
-    // Extraer placeholders (text|signature|date|number)
+    const handleViewContract = (contract) => {
+        navigate(`/admin/contratos/${contract.uuid}`);
+    };
+
+    // ---------------------------
+    // Función para extraer placeholders
+    // ---------------------------
     const extractPlaceholders = (content) => {
         const regex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
         const out = [];
@@ -269,7 +321,6 @@ const ContractsManagementPage = () => {
             const nameTrim = match[1].trim();
             out.push({ name: nameTrim, type: match[2] });
         }
-        // Elimina duplicados
         return Array.from(new Set(out.map(JSON.stringify))).map(JSON.parse);
     };
 
@@ -281,15 +332,11 @@ const ContractsManagementPage = () => {
         signatureRefs.current[name] = ref;
     };
 
-    // Ir a la vista de un contrato en particular
-    const handleViewContract = (contract) => {
-        navigate(`/admin/contratos/${contract.uuid}`);
-    };
-
-    // Renderizar contenido con placeholders
+    // ---------------------------
+    // Función para renderizar contenido con placeholders
+    // ---------------------------
     const renderContent = (html) => {
         const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
-
         return parse(html, {
             replace: (domNode) => {
                 if (domNode.type === 'text') {
@@ -297,24 +344,16 @@ const ContractsManagementPage = () => {
                     const segments = [];
                     let lastIndex = 0;
                     let match;
-
                     while ((match = placeholderRegex.exec(txt)) !== null) {
                         const [fullMatch, rawName, type] = match;
                         const nameTrim = rawName.trim();
-
-                        // Texto antes del placeholder
                         const beforeText = txt.slice(lastIndex, match.index);
                         if (beforeText) segments.push(beforeText);
-
                         if (type === 'signature') {
                             segments.push(
                                 <div
                                     key={`sig-${nameTrim}-${match.index}`}
-                                    style={{
-                                        display: 'block',
-                                        margin: '20px 0',
-                                        clear: 'both'
-                                    }}
+                                    style={{ display: 'block', margin: '20px 0', clear: 'both' }}
                                 >
                                     <Typography variant="subtitle1" gutterBottom>
                                         {nameTrim}
@@ -347,13 +386,7 @@ const ContractsManagementPage = () => {
                                 <input
                                     key={`inp-${nameTrim}-${match.index}`}
                                     placeholder={nameTrim}
-                                    type={
-                                        type === 'date'
-                                            ? 'date'
-                                            : type === 'number'
-                                                ? 'number'
-                                                : 'text'
-                                    }
+                                    type={type === 'date' ? 'date' : type === 'number' ? 'number' : 'text'}
                                     value={formValues[nameTrim] || ''}
                                     onChange={(e) => handleChange(nameTrim, e.target.value)}
                                     style={{
@@ -369,30 +402,21 @@ const ContractsManagementPage = () => {
                                 />
                             );
                         }
-
                         lastIndex = match.index + fullMatch.length;
                     }
-
-                    // Resto del texto después del placeholder
                     const remainder = txt.slice(lastIndex);
                     if (remainder) segments.push(remainder);
-
                     if (segments.length > 0) {
-                        return (
-                            <React.Fragment key={`fragment-${domNode.key}`}>
-                                {segments}
-                            </React.Fragment>
-                        );
+                        return <React.Fragment key={`fragment-${domNode.key}`}>{segments}</React.Fragment>;
                     }
                 }
             }
         });
     };
 
-    // Eliminar un contrato llenado
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-    const [filledContractToDelete, setFilledContractToDelete] = useState(null);
-
+    // ---------------------------
+    // Funciones para eliminar contrato llenado
+    // ---------------------------
     const handleOpenDeleteDialog = (filledContract) => {
         setFilledContractToDelete(filledContract);
         setOpenDeleteDialog(true);
@@ -427,7 +451,9 @@ const ContractsManagementPage = () => {
         }
     };
 
-    // Generar PDF de la vista previa (lo que hay en editorData + placeholders)
+    // ---------------------------
+    // Función para generar PDF
+    // ---------------------------
     const handleGeneratePDF = async () => {
         if (!editorData) {
             setSnackbar({
@@ -440,8 +466,6 @@ const ContractsManagementPage = () => {
 
         let filledContent = editorData;
         const placeholders = extractPlaceholders(editorData);
-
-        // Reemplazamos placeholders con firmas o texto
         placeholders.forEach((ph) => {
             if (ph.type === 'signature') {
                 const sigPad = signatureRefs.current[ph.name];
@@ -452,14 +476,12 @@ const ContractsManagementPage = () => {
                         `<img src="${dataUrl}" alt="Firma" style="width:200px; height:100px;" />`
                     );
                 } else {
-                    // Placeholder vacío => lo borramos
                     filledContent = filledContent.replace(
                         new RegExp(`{{\\s*${ph.name}\\s*:\\s*signature\\s*}}`, 'g'),
                         ''
                     );
                 }
             } else {
-                // text|date|number
                 filledContent = filledContent.replace(
                     new RegExp(`{{\\s*${ph.name}\\s*:\\s*${ph.type}\\s*}}`, 'g'),
                     formValues[ph.name] || ''
@@ -467,7 +489,6 @@ const ContractsManagementPage = () => {
             }
         });
 
-        // Crear div temporal y generar PDF
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = filledContent;
         tempDiv.style.width = '210mm';
@@ -486,10 +507,8 @@ const ContractsManagementPage = () => {
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const imgProps = pdf.getImageProperties(imgData);
             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
             pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
             pdf.save(`${contractTitle || 'Contrato'}.pdf`);
-
             setSnackbar({
                 open: true,
                 message: 'PDF generado exitosamente.',
@@ -503,16 +522,28 @@ const ContractsManagementPage = () => {
                 severity: 'error'
             });
         }
-
         document.body.removeChild(tempDiv);
     };
 
+    // ---------------------------
+    // Cerrar el diálogo de creación/edición
+    // ---------------------------
+    const handleCloseEditor = () => {
+        setOpenEditor(false);
+        setCurrentContract(null);
+        setContractTitle('');
+        setEditorData('');
+        signatureRefs.current = {};
+        setFormValues({});
+    };
+
     return (
-        <div style={{ padding: '20px' }}>
+        <Container>
             <Typography variant="h4" gutterBottom>
                 Gestión de Contratos
             </Typography>
 
+            {/* Botón para crear contrato */}
             <Button
                 variant="contained"
                 color="primary"
@@ -524,47 +555,75 @@ const ContractsManagementPage = () => {
             </Button>
 
             {/* Lista de contratos */}
-            <List>
-                {contracts.map((contract) => (
-                    <ListItem key={contract.id} divider>
-                        <ListItemText
-                            primary={contract.title}
-                            secondary={
-                                <>
-                                    <Typography variant="body2" color="textSecondary">
-                                        Link para compartir:
-                                    </Typography>
-                                    <Typography variant="body2" color="textPrimary">
-                                        {contract.url}
-                                    </Typography>
-                                </>
-                            }
-                        />
-                        <IconButton edge="end" onClick={() => handleEdit(contract)}>
-                            <EditIcon />
-                        </IconButton>
-                        <IconButton edge="end" onClick={() => handleDelete(contract.uuid)}>
-                            <DeleteIcon />
-                        </IconButton>
-                        <Button
-                            variant="outlined"
-                            color="secondary"
-                            onClick={() => handleViewContract(contract)}
-                            startIcon={<VisibilityIcon />}
-                            style={{ marginLeft: '10px' }}
-                        >
-                            Vista Previa
-                        </Button>
-                        <IconButton
-                            edge="end"
-                            onClick={() => handleCopyLink(contract.url)}
-                            style={{ marginLeft: '10px' }}
-                        >
-                            <ContentCopyIcon />
-                        </IconButton>
-                    </ListItem>
-                ))}
-            </List>
+            {isMobile ? (
+                <Box>
+                    {contracts.map((contract) => (
+                        <MobileContractCard key={contract.id}>
+                            <Typography variant="h6">{contract.title}</Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                Link para compartir: {contract.url}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                                <IconButton onClick={() => handleEdit(contract)}>
+                                    <EditIcon />
+                                </IconButton>
+                                <IconButton onClick={() => handleDelete(contract.uuid)}>
+                                    <DeleteIcon />
+                                </IconButton>
+                                <Button
+                                    variant="outlined"
+                                    color="secondary"
+                                    onClick={() => handleViewContract(contract)}
+                                    startIcon={<VisibilityIcon />}
+                                >
+                                    Vista Previa
+                                </Button>
+                                <IconButton onClick={() => handleCopyLink(contract.url)}>
+                                    <ContentCopyIcon />
+                                </IconButton>
+                            </Box>
+                        </MobileContractCard>
+                    ))}
+                </Box>
+            ) : (
+                <List>
+                    {contracts.map((contract) => (
+                        <ListItem key={contract.id} divider>
+                            <ListItemText
+                                primary={contract.title}
+                                secondary={
+                                    <>
+                                        <Typography variant="body2" color="textSecondary">
+                                            Link para compartir:
+                                        </Typography>
+                                        <Typography variant="body2" color="textPrimary">
+                                            {contract.url}
+                                        </Typography>
+                                    </>
+                                }
+                            />
+                            <IconButton edge="end" onClick={() => handleEdit(contract)}>
+                                <EditIcon />
+                            </IconButton>
+                            <IconButton edge="end" onClick={() => handleDelete(contract.uuid)}>
+                                <DeleteIcon />
+                            </IconButton>
+                            <Button
+                                variant="outlined"
+                                color="secondary"
+                                onClick={() => handleViewContract(contract)}
+                                startIcon={<VisibilityIcon />}
+                                style={{ marginLeft: '10px' }}
+                            >
+                                Vista Previa
+                            </Button>
+                            <IconButton edge="end" onClick={() => handleCopyLink(contract.url)} style={{ marginLeft: '10px' }}>
+                                <ContentCopyIcon />
+                            </IconButton>
+                        </ListItem>
+                    ))}
+                </List>
+            )}
 
             <Divider style={{ margin: '40px 0' }} />
             <Typography variant="h5" gutterBottom>
@@ -578,7 +637,7 @@ const ContractsManagementPage = () => {
                     size="small"
                     value={filledContractsSearch}
                     onChange={(e) => setFilledContractsSearch(e.target.value)}
-                    style={{ width: '300px' }}
+                    style={{ width: isMobile ? '100%' : '300px' }}
                 />
             </Box>
 
@@ -586,12 +645,69 @@ const ContractsManagementPage = () => {
                 <div style={{ textAlign: 'center', marginTop: '20px' }}>
                     <CircularProgress />
                 </div>
+            ) : isMobile ? (
+                <Box>
+                    {filledContracts.length === 0 ? (
+                        <Typography variant="body1">No se encontraron contratos llenados.</Typography>
+                    ) : (
+                        filledContracts
+                            .filter((fc) => {
+                                const s = filledContractsSearch.toLowerCase();
+                                return (
+                                    fc.title.toLowerCase().includes(s) ||
+                                    fc.contract.title.toLowerCase().includes(s)
+                                );
+                            })
+                            .map((filledContract) => (
+                                <MobileFilledContractCard key={filledContract.id}>
+                                    <Typography variant="h6">{filledContract.title}</Typography>
+                                    <Typography variant="body2" color="textSecondary">
+                                        Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary">
+                                        Contrato Original: {filledContract.contract.title}
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                                        <Button
+                                            variant="outlined"
+                                            color="primary"
+                                            onClick={() =>
+                                                navigate(`/admin/contratos-llenados/${filledContract.uuid}`)
+                                            }
+                                            startIcon={<VisibilityIcon />}
+                                        >
+                                            Ver Detalles
+                                        </Button>
+                                        <Button
+                                            variant="outlined"
+                                            color="secondary"
+                                            onClick={() => window.open(filledContract.pdfUrl, '_blank')}
+                                            startIcon={<VisibilityIcon />}
+                                        >
+                                            Descargar PDF
+                                        </Button>
+                                        <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
+                                            <DeleteIcon />
+                                        </IconButton>
+                                    </Box>
+                                </MobileFilledContractCard>
+                            ))
+                    )}
+                    {filledContractsTotalPages > 1 && (
+                        <Box display="flex" justifyContent="center" mt={2}>
+                            <Pagination
+                                count={filledContractsTotalPages}
+                                page={filledContractsPage}
+                                onChange={(event, value) => setFilledContractsPage(value)}
+                                color="primary"
+                            />
+                        </Box>
+                    )}
+                </Box>
             ) : (
                 <List>
                     {filledContracts.length === 0 ? (
-                        <Typography variant="body1">
-                            No se encontraron contratos llenados.
-                        </Typography>
+                        <Typography variant="body1">No se encontraron contratos llenados.</Typography>
                     ) : (
                         filledContracts
                             .filter((fc) => {
@@ -608,12 +724,10 @@ const ContractsManagementPage = () => {
                                         secondary={
                                             <>
                                                 <Typography variant="body2" color="textSecondary">
-                                                    Fecha de Creación:{' '}
-                                                    {new Date(filledContract.createdAt).toLocaleString()}
+                                                    Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
                                                 </Typography>
                                                 <Typography variant="body2" color="textSecondary">
-                                                    Contrato Original:{' '}
-                                                    {filledContract.contract.title}
+                                                    Contrato Original: {filledContract.contract.title}
                                                 </Typography>
                                             </>
                                         }
@@ -638,35 +752,28 @@ const ContractsManagementPage = () => {
                                     >
                                         Descargar PDF
                                     </Button>
-                                    <IconButton
-                                        edge="end"
-                                        onClick={() => handleOpenDeleteDialog(filledContract)}
-                                    >
+                                    <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
                                         <DeleteIcon />
                                     </IconButton>
                                 </ListItem>
                             ))
                     )}
+                    {filledContractsTotalPages > 1 && (
+                        <Box display="flex" justifyContent="center" mt={2}>
+                            <Pagination
+                                count={filledContractsTotalPages}
+                                page={filledContractsPage}
+                                onChange={(event, value) => setFilledContractsPage(value)}
+                                color="primary"
+                            />
+                        </Box>
+                    )}
                 </List>
-            )}
-
-            {/* Paginación si hay varias páginas */}
-            {filledContractsTotalPages > 1 && (
-                <Box display="flex" justifyContent="center" mt={2}>
-                    <Pagination
-                        count={filledContractsTotalPages}
-                        page={filledContractsPage}
-                        onChange={(event, value) => setFilledContractsPage(value)}
-                        color="primary"
-                    />
-                </Box>
             )}
 
             {/* Diálogo Crear/Editar Contrato */}
             <Dialog open={openEditor} onClose={handleCloseEditor} maxWidth="lg" fullWidth>
-                <DialogTitle>
-                    {currentContract ? 'Editar Contrato' : 'Crear Contrato'}
-                </DialogTitle>
+                <DialogTitle>{currentContract ? 'Editar Contrato' : 'Crear Contrato'}</DialogTitle>
                 <DialogContent>
                     <Grid container spacing={2}>
                         <Grid item xs={12} md={6} style={{ position: 'relative' }}>
@@ -698,10 +805,7 @@ const ContractsManagementPage = () => {
                             </div>
 
                             <ErrorBoundary>
-                                <SimpleEditor
-                                    editorData={editorData}
-                                    setEditorData={setEditorData}
-                                />
+                                <SimpleEditor editorData={editorData} setEditorData={setEditorData} />
                             </ErrorBoundary>
                         </Grid>
                         <Grid item xs={12} md={6}>
@@ -729,11 +833,7 @@ const ContractsManagementPage = () => {
                         <Button variant="contained" color="primary" onClick={handleSaveOrUpdate}>
                             {currentContract ? 'Actualizar Contrato' : 'Guardar Contrato'}
                         </Button>
-                        <Button
-                            variant="contained"
-                            style={{ marginLeft: '10px' }}
-                            onClick={handleCloseEditor}
-                        >
+                        <Button variant="contained" style={{ marginLeft: '10px' }} onClick={handleCloseEditor}>
                             Cancelar
                         </Button>
                         <Button
@@ -766,6 +866,7 @@ const ContractsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
+            {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
@@ -780,7 +881,7 @@ const ContractsManagementPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
-        </div>
+        </Container>
     );
 };
 

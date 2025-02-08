@@ -1,3 +1,5 @@
+// src/pages/BusesManagementPage.jsx
+
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -31,7 +33,9 @@ import {
     Link,
     Box,
     FormControlLabel,
-    Switch
+    Switch,
+    useTheme,
+    useMediaQuery
 } from '@mui/material';
 import {
     Edit,
@@ -44,7 +48,9 @@ import {
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
+import styled from 'styled-components';
 
+// Estilo general del contenedor
 const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 /**
@@ -61,7 +67,66 @@ const getFormattedDateTime = () => {
     return `${year}${month}${day}_${hours}${minutes}${seconds}`;
 };
 
+// ========================
+// Estilos para vista desktop (tabla)
+// ========================
+const ResponsiveTableHead = styled(TableHead)`
+  @media (max-width: 600px) {
+    display: none;
+  }
+`;
+
+const ResponsiveTableCell = styled(TableCell)`
+  @media (max-width: 600px) {
+    display: block;
+    text-align: right;
+    position: relative;
+    padding-left: 50%;
+    white-space: nowrap;
+    &:before {
+      content: attr(data-label);
+      position: absolute;
+      left: 0;
+      width: 45%;
+      padding-left: 15px;
+      font-weight: bold;
+      text-align: left;
+      white-space: nowrap;
+    }
+  }
+`;
+
+// ========================
+// Estilos para vista móvil (tarjetas)
+// ========================
+const MobileCard = styled(Paper)`
+  padding: 16px;
+  margin-bottom: 16px;
+`;
+
+const MobileField = styled(Box)`
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const MobileLabel = styled(Typography)`
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: #555;
+`;
+
+const MobileValue = styled(Typography)`
+  font-size: 1rem;
+`;
+
+// ───────────────────────────────
+// Componente Principal
+// ───────────────────────────────
 const BusesManagementPage = () => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
     const { auth } = useContext(AuthContext);
 
     const [buses, setBuses] = useState([]);
@@ -78,12 +143,11 @@ const BusesManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // Pilotos disponibles
+    // Pilotos y Monitores disponibles
     const [availablePilots, setAvailablePilots] = useState([]);
-    // Monitores disponibles
     const [availableMonitors, setAvailableMonitors] = useState([]);
 
-    // ==== CARGA MASIVA ====
+    // Carga masiva
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
@@ -226,7 +290,6 @@ const BusesManagementPage = () => {
 
     /**
      * Manejar archivos subidos (para crear/editar un bus)
-     * Validamos que ningún archivo supere 5MB antes de setearlo.
      */
     const handleFileChange = (e) => {
         const files = e.target.files;
@@ -264,7 +327,6 @@ const BusesManagementPage = () => {
             formData.append('capacity', selectedBus.capacity);
             formData.append('description', selectedBus.description);
             formData.append('routeNumber', selectedBus.routeNumber);
-            // Agregamos el nuevo campo inWorkshop
             formData.append('inWorkshop', selectedBus.inWorkshop);
 
             if (selectedBus.pilotId) {
@@ -276,7 +338,6 @@ const BusesManagementPage = () => {
 
             if (selectedBus.files && selectedBus.files.length > 0) {
                 Array.from(selectedBus.files).forEach((file) => {
-                    // Solo adjuntamos los nuevos (sin id)
                     if (!file.id) {
                         formData.append('files', file);
                     }
@@ -284,7 +345,6 @@ const BusesManagementPage = () => {
             }
 
             if (selectedBus.id) {
-                // Actualizar
                 await api.put(`/buses/${selectedBus.id}`, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
@@ -297,7 +357,6 @@ const BusesManagementPage = () => {
                     severity: 'success'
                 });
             } else {
-                // Crear
                 await api.post('/buses', formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
@@ -410,7 +469,6 @@ const BusesManagementPage = () => {
                 message: `El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`,
                 severity: 'error'
             });
-            // Limpiamos el input
             e.target.value = null;
             return;
         }
@@ -454,7 +512,15 @@ const BusesManagementPage = () => {
                 Gestión de Buses
             </Typography>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <Box
+                sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    marginBottom: '16px',
+                    gap: '8px'
+                }}
+            >
                 <TextField
                     label="Buscar buses"
                     variant="outlined"
@@ -482,46 +548,51 @@ const BusesManagementPage = () => {
                         Añadir Bus
                     </Button>
                 </div>
-            </div>
+            </Box>
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
                     <CircularProgress />
                 </div>
             ) : (
-                <Paper>
-                    <TableContainer>
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Placa</TableCell>
-                                    <TableCell>Capacidad</TableCell>
-                                    <TableCell>Número de Ruta</TableCell>
-                                    <TableCell>Ocupación</TableCell>
-                                    <TableCell>Descripción</TableCell>
-                                    <TableCell>Piloto (Email)</TableCell>
-                                    <TableCell>Monitora (Email)</TableCell>
-                                    <TableCell>Estado</TableCell>
-                                    <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
-                                    <TableCell align="center">Acciones</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {filteredBuses
-                                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                    .map((bus) => (
-                                        <TableRow key={bus.id}>
-                                            <TableCell>{bus.plate}</TableCell>
-                                            <TableCell>{bus.capacity}</TableCell>
-                                            <TableCell>{bus.routeNumber || 'N/A'}</TableCell>
-                                            <TableCell>{bus.occupation || 0}</TableCell>
-                                            <TableCell>{bus.description}</TableCell>
-                                            <TableCell>{bus.pilot ? bus.pilot.email : ''}</TableCell>
-                                            <TableCell>
-                                                {bus.monitora ? bus.monitora.email : ''}
-                                            </TableCell>
-                                            {/* Leyenda en rojo si el bus está en taller */}
-                                            <TableCell>
+                <>
+                    {isMobile ? (
+                        <>
+                            {filteredBuses
+                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                .map((bus) => (
+                                    <MobileCard key={bus.id} elevation={3}>
+                                        <MobileField>
+                                            <MobileLabel>Placa</MobileLabel>
+                                            <MobileValue>{bus.plate}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Capacidad</MobileLabel>
+                                            <MobileValue>{bus.capacity}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Número de Ruta</MobileLabel>
+                                            <MobileValue>{bus.routeNumber || 'N/A'}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Ocupación</MobileLabel>
+                                            <MobileValue>{bus.occupation || 0}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Descripción</MobileLabel>
+                                            <MobileValue>{bus.description}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Piloto (Email)</MobileLabel>
+                                            <MobileValue>{bus.pilot ? bus.pilot.email : ''}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Monitora (Email)</MobileLabel>
+                                            <MobileValue>{bus.monitora ? bus.monitora.email : ''}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Estado</MobileLabel>
+                                            <MobileValue>
                                                 {bus.inWorkshop ? (
                                                     <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
                                                         EN TALLER
@@ -529,107 +600,190 @@ const BusesManagementPage = () => {
                                                 ) : (
                                                     'Disponible'
                                                 )}
-                                            </TableCell>
-                                            <TableCell sx={{ maxWidth: 200, verticalAlign: 'top' }}>
-                                                <List disablePadding>
-                                                    {bus.files.map((file) => {
-                                                        const fileLabel = file.fileName.split('/').pop();
-
-                                                        return (
-                                                            <ListItem
-                                                                key={file.id}
-                                                                disableGutters
-                                                                sx={{ paddingTop: 0, paddingBottom: 0 }}
-                                                            >
-                                                                {file.fileType === 'application/pdf' ? (
-                                                                    <InsertDriveFile sx={{ marginRight: 1 }} />
-                                                                ) : (
-                                                                    <ImageIcon sx={{ marginRight: 1 }} />
-                                                                )}
-                                                                <Tooltip title={fileLabel}>
-                                                                    <ListItemText
-                                                                        primary={
-                                                                            <Link
-                                                                                href={file.fileUrl}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                            >
-                                                                                {fileLabel}
-                                                                            </Link>
-                                                                        }
-                                                                        primaryTypographyProps={{
-                                                                            noWrap: true,
-                                                                            sx: {
-                                                                                overflow: 'hidden',
-                                                                                textOverflow: 'ellipsis',
-                                                                                maxWidth: '140px'
-                                                                            }
-                                                                        }}
-                                                                    />
-                                                                </Tooltip>
-
-                                                                <ListItemSecondaryAction>
-                                                                    <Tooltip title="Eliminar Archivo">
-                                                                        <IconButton
-                                                                            edge="end"
-                                                                            onClick={() =>
-                                                                                handleDeleteFile(bus.id, file.id)
-                                                                            }
-                                                                        >
-                                                                            <Delete />
-                                                                        </IconButton>
-                                                                    </Tooltip>
-                                                                </ListItemSecondaryAction>
-                                                            </ListItem>
-                                                        );
-                                                    })}
-                                                    {bus.files.length === 0 && (
-                                                        <Typography
-                                                            variant="body2"
-                                                            color="textSecondary"
-                                                            sx={{ fontStyle: 'italic' }}
-                                                        >
-                                                            No hay archivos.
-                                                        </Typography>
-                                                    )}
-                                                </List>
-                                            </TableCell>
-
-                                            <TableCell align="center">
-                                                <Tooltip title="Editar">
-                                                    <IconButton onClick={() => handleEditClick(bus)}>
-                                                        <Edit />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <Tooltip title="Eliminar">
-                                                    <IconButton onClick={() => handleDeleteClick(bus.id)}>
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </TableCell>
+                                            </MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Archivos</MobileLabel>
+                                            <MobileValue>
+                                                {bus.files && bus.files.length > 0 ? (
+                                                    <List disablePadding>
+                                                        {bus.files.map((file) => {
+                                                            const fileLabel = file.fileName.split('/').pop();
+                                                            return (
+                                                                <ListItem key={file.id} disableGutters sx={{ p: 0 }}>
+                                                                    {file.fileType === 'application/pdf' ? (
+                                                                        <InsertDriveFile sx={{ mr: 1 }} />
+                                                                    ) : (
+                                                                        <ImageIcon sx={{ mr: 1 }} />
+                                                                    )}
+                                                                    <Link
+                                                                        href={file.fileUrl}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        underline="hover"
+                                                                        variant="body2"
+                                                                    >
+                                                                        {fileLabel}
+                                                                    </Link>
+                                                                </ListItem>
+                                                            );
+                                                        })}
+                                                    </List>
+                                                ) : (
+                                                    'No hay archivos.'
+                                                )}
+                                            </MobileValue>
+                                        </MobileField>
+                                        <Box
+                                            sx={{
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                gap: 1,
+                                                marginTop: 1
+                                            }}
+                                        >
+                                            <Tooltip title="Editar">
+                                                <IconButton onClick={() => handleEditClick(bus)}>
+                                                    <Edit />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Eliminar">
+                                                <IconButton onClick={() => handleDeleteClick(bus.id)}>
+                                                    <Delete />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
+                                    </MobileCard>
+                                ))}
+                            <TablePagination
+                                component="div"
+                                count={filteredBuses.length}
+                                page={page}
+                                onPageChange={handleChangePage}
+                                rowsPerPage={rowsPerPage}
+                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                rowsPerPageOptions={[5, 10, 25]}
+                                labelRowsPerPage="Filas por página"
+                            />
+                        </>
+                    ) : (
+                        <Paper>
+                            <TableContainer sx={{ overflowX: 'auto' }}>
+                                <Table stickyHeader>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>Placa</TableCell>
+                                            <TableCell>Capacidad</TableCell>
+                                            <TableCell>Número de Ruta</TableCell>
+                                            <TableCell>Ocupación</TableCell>
+                                            <TableCell>Descripción</TableCell>
+                                            <TableCell>Piloto (Email)</TableCell>
+                                            <TableCell>Monitora (Email)</TableCell>
+                                            <TableCell>Estado</TableCell>
+                                            <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
+                                            <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
-                                    ))}
-                                {filteredBuses.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={10} align="center">
-                                            No se encontraron buses.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                    <TablePagination
-                        component="div"
-                        count={filteredBuses.length}
-                        page={page}
-                        onPageChange={handleChangePage}
-                        rowsPerPage={rowsPerPage}
-                        onRowsPerPageChange={handleChangeRowsPerPage}
-                        rowsPerPageOptions={[5, 10, 25]}
-                        labelRowsPerPage="Filas por página"
-                    />
-                </Paper>
+                                    </TableHead>
+                                    <TableBody>
+                                        {filteredBuses
+                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                            .map((bus) => (
+                                                <TableRow key={bus.id}>
+                                                    <ResponsiveTableCell data-label="Placa">{bus.plate}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Capacidad">{bus.capacity}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Número de Ruta">{bus.routeNumber || 'N/A'}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Ocupación">{bus.occupation || 0}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Descripción">{bus.description}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Piloto (Email)">{bus.pilot ? bus.pilot.email : ''}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Monitora (Email)">{bus.monitora ? bus.monitora.email : ''}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Estado">
+                                                        {bus.inWorkshop ? (
+                                                            <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
+                                                                EN TALLER
+                                                            </Typography>
+                                                        ) : (
+                                                            'Disponible'
+                                                        )}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Archivos" sx={{ maxWidth: 200, verticalAlign: 'top' }}>
+                                                        <List disablePadding>
+                                                            {bus.files.map((file) => {
+                                                                const fileLabel = file.fileName.split('/').pop();
+                                                                return (
+                                                                    <ListItem key={file.id} disableGutters sx={{ p: 0 }}>
+                                                                        {file.fileType === 'application/pdf' ? (
+                                                                            <InsertDriveFile sx={{ mr: 1 }} />
+                                                                        ) : (
+                                                                            <ImageIcon sx={{ mr: 1 }} />
+                                                                        )}
+                                                                        <Tooltip title={fileLabel}>
+                                                                            <ListItemText
+                                                                                primary={
+                                                                                    <Link
+                                                                                        href={file.fileUrl}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                    >
+                                                                                        {fileLabel}
+                                                                                    </Link>
+                                                                                }
+                                                                                primaryTypographyProps={{
+                                                                                    noWrap: true,
+                                                                                    sx: {
+                                                                                        overflow: 'hidden',
+                                                                                        textOverflow: 'ellipsis',
+                                                                                        maxWidth: '140px'
+                                                                                    }
+                                                                                }}
+                                                                            />
+                                                                        </Tooltip>
+                                                                    </ListItem>
+                                                                );
+                                                            })}
+                                                            {bus.files.length === 0 && (
+                                                                <Typography variant="body2" color="textSecondary" sx={{ fontStyle: 'italic' }}>
+                                                                    No hay archivos.
+                                                                </Typography>
+                                                            )}
+                                                        </List>
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Acciones" align="center">
+                                                        <Tooltip title="Editar">
+                                                            <IconButton onClick={() => handleEditClick(bus)}>
+                                                                <Edit />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Eliminar">
+                                                            <IconButton onClick={() => handleDeleteClick(bus.id)}>
+                                                                <Delete />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </ResponsiveTableCell>
+                                                </TableRow>
+                                            ))}
+                                        {filteredBuses.length === 0 && (
+                                            <TableRow>
+                                                <ResponsiveTableCell colSpan={10} align="center">
+                                                    No se encontraron buses.
+                                                </ResponsiveTableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                            <TablePagination
+                                component="div"
+                                count={filteredBuses.length}
+                                page={page}
+                                onPageChange={handleChangePage}
+                                rowsPerPage={rowsPerPage}
+                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                rowsPerPageOptions={[5, 10, 25]}
+                                labelRowsPerPage="Filas por página"
+                            />
+                        </Paper>
+                    )}
+                </>
             )}
 
             {/* Diálogo para crear/editar un bus */}
@@ -756,12 +910,7 @@ const BusesManagementPage = () => {
                         onChange={handleFileChange}
                     />
                     <label htmlFor="file-input">
-                        <Button
-                            variant="outlined"
-                            color="primary"
-                            component="span"
-                            style={{ marginTop: '16px' }}
-                        >
+                        <Button variant="outlined" color="primary" component="span" sx={{ mt: 2 }}>
                             Subir Archivos
                         </Button>
                     </label>
@@ -770,9 +919,8 @@ const BusesManagementPage = () => {
                         <List sx={{ mt: 2 }}>
                             {[...selectedBus.files].map((file, index) => {
                                 if (file.id) {
-                                    // Archivos ya existentes en el bus
                                     return (
-                                        <ListItem key={file.id}>
+                                        <ListItem key={file.id} disableGutters>
                                             {file.fileType === 'application/pdf' ? (
                                                 <InsertDriveFile />
                                             ) : (
@@ -786,9 +934,8 @@ const BusesManagementPage = () => {
                                         </ListItem>
                                     );
                                 } else {
-                                    // Archivos nuevos que el usuario acaba de subir
                                     return (
-                                        <ListItem key={index}>
+                                        <ListItem key={index} disableGutters>
                                             {file.type === 'application/pdf' ? (
                                                 <InsertDriveFile />
                                             ) : (
@@ -897,11 +1044,7 @@ const BusesManagementPage = () => {
                 onClose={handleSnackbarClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert
-                    onClose={handleSnackbarClose}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
+                <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
                     {snackbar.message}
                 </Alert>
             </Snackbar>

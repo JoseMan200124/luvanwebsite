@@ -2,57 +2,46 @@
 
 import React, { useState, useEffect } from 'react';
 import tw, { styled } from 'twin.macro';
-import { HashLink } from 'react-router-hash-link'; // Importar HashLink
+import { HashLink } from 'react-router-hash-link';
 import { Menu as MenuIcon, Close as CloseIcon } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-// Contenedor del Navbar con estilos dinámicos según el scroll
 const NavbarContainer = styled.nav`
     ${tw`fixed top-0 left-0 w-full z-50 transition duration-300 ease-in-out`}
     background-color: ${({ scrolled }) => (scrolled ? '#FFFFFF' : 'transparent')};
     box-shadow: ${({ scrolled }) => (scrolled ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none')};
 `;
 
-// Contenedor interno para alinear contenido
 const NavContent = tw.div`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8`;
-
-// Wrapper para el logo y los enlaces
 const NavWrapper = tw.div`flex items-center justify-between h-16`;
 
-// Sección del logo
 const Logo = tw.div`flex-shrink-0`;
 
-// Enlace del logo con color dinámico
 const LogoLink = styled.a`
     ${tw`text-2xl font-bold cursor-pointer`}
     color: ${({ scrolled }) => (scrolled ? '#000000' : '#FFFFFF')};
     transition: color 0.3s ease-in-out;
 `;
 
-// Botón para el menú móvil con color dinámico
 const MenuIconButton = styled.button`
     ${tw`inline-flex items-center justify-center p-2 rounded-md focus:outline-none sm:hidden transition duration-300 ease-in-out`}
     color: ${({ scrolled }) => (scrolled ? '#000000' : '#FFFFFF')};
 `;
 
-// Contenedor de enlaces para escritorio con color dinámico
 const MenuLinks = styled.div`
     ${tw`hidden sm:flex items-center space-x-4`}
 `;
 
-// Menú desplegable para móviles con fondo blanco fijo
 const MobileMenu = styled.div`
     ${tw`sm:hidden absolute top-16 left-0 w-full transition-all duration-300 ease-in-out`}
-    background-color: #FFFFFF; /* Fondo blanco fijo para móviles */
+    background-color: #FFFFFF;
     box-shadow: ${({ scrolled }) => (scrolled ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none')};
     max-height: ${({ open }) => (open ? '500px' : '0')};
     overflow: hidden;
 `;
 
-// Contenedor de enlaces dentro del menú móvil
 const MobileMenuLinks = tw.div`flex flex-col px-4 py-6 space-y-4`;
 
-// Estilo para enlaces del Navbar con animación de subrayado y color dinámico
 const NavLink = styled(HashLink)`
     ${tw`relative px-3 py-2 rounded-md text-sm font-medium cursor-pointer`}
     text-decoration: none;
@@ -70,15 +59,14 @@ const NavLink = styled(HashLink)`
     }
 
     &:hover {
-        color: #144CCC;
+        color: #144ccc;
     }
 `;
 
-// Estilo para enlaces del menú móvil con animación de subrayado y color fijo
 const MobileNavLink = styled(HashLink)`
     ${tw`relative block px-3 py-2 rounded-md text-base font-medium cursor-pointer`}
     text-decoration: none;
-    color: #000000; /* Texto negro fijo para el menú móvil */
+    color: #000000;
     transition: color 0.3s ease-in-out;
 
     &::after {
@@ -92,11 +80,10 @@ const MobileNavLink = styled(HashLink)`
     }
 
     &:hover {
-        color: #144CCC;
+        color: #144ccc;
     }
 `;
 
-// Botón para "Iniciar Sesión" en escritorio
 const LoginButton = styled.button`
     ${tw`ml-4 px-4 py-2 rounded-full font-semibold transition duration-300 ease-in-out`}
     background-color: #2D966C;
@@ -106,7 +93,6 @@ const LoginButton = styled.button`
     }
 `;
 
-// Botón para "Iniciar Sesión" en móvil
 const MobileLoginButton = styled.button`
     ${tw`w-full text-center px-4 py-2 rounded-full font-semibold transition duration-300 ease-in-out`}
     background-color: #2D966C;
@@ -117,17 +103,15 @@ const MobileLoginButton = styled.button`
 `;
 
 const Navbar = () => {
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Estado para el menú móvil
-    const [scrolled, setScrolled] = useState(false); // Estado para cambiar estilos al hacer scroll
-    const navigate = useNavigate(); // Hook para navegación programática
-    const location = useLocation(); // Hook para detectar cambios de ruta
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
+    const navigate = useNavigate();
+    const location = useLocation();
 
-    // Función para alternar el menú móvil
     const handleMobileMenuToggle = () => {
         setMobileMenuOpen(!mobileMenuOpen);
     };
 
-    // Función para manejar el cambio de scroll
     const handleScroll = () => {
         const offset = window.scrollY;
         if (offset > 50) {
@@ -137,23 +121,18 @@ const Navbar = () => {
         }
     };
 
-    // Función para manejar el clic en "Iniciar Sesión"
     const handleLoginClick = () => {
         navigate('/login');
     };
 
     useEffect(() => {
-        // Añadir listener para scroll
         window.addEventListener('scroll', handleScroll);
-        // Cerrar el menú móvil al cambiar de ruta
         setMobileMenuOpen(false);
-
         return () => {
             window.removeEventListener('scroll', handleScroll);
         };
     }, [location]);
 
-    // Función para cerrar el menú móvil
     const closeMobileMenu = () => {
         setMobileMenuOpen(false);
     };
@@ -167,7 +146,8 @@ const Navbar = () => {
                             Transportes Luvan
                         </LogoLink>
                     </Logo>
-                    {/* Menú Desktop */}
+
+                    {/* Menú de escritorio */}
                     <MenuLinks>
                         <NavLink
                             scrolled={scrolled}
@@ -203,12 +183,14 @@ const Navbar = () => {
                         </NavLink>
                         <LoginButton onClick={handleLoginClick}>Iniciar Sesión</LoginButton>
                     </MenuLinks>
-                    {/* Botón del Menú Móvil */}
+
+                    {/* Botón Menú Móvil */}
                     <MenuIconButton onClick={handleMobileMenuToggle} aria-label="Menu" scrolled={scrolled}>
                         {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
                     </MenuIconButton>
                 </NavWrapper>
             </NavContent>
+
             {/* Menú Móvil */}
             <MobileMenu open={mobileMenuOpen} scrolled={scrolled}>
                 <MobileMenuLinks>
@@ -244,7 +226,12 @@ const Navbar = () => {
                     >
                         Contacto
                     </MobileNavLink>
-                    <MobileLoginButton onClick={() => { closeMobileMenu(); handleLoginClick(); }}>
+                    <MobileLoginButton
+                        onClick={() => {
+                            closeMobileMenu();
+                            handleLoginClick();
+                        }}
+                    >
                         Iniciar Sesión
                     </MobileLoginButton>
                 </MobileMenuLinks>

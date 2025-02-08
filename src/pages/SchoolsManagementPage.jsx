@@ -1,4 +1,5 @@
 // src/pages/SchoolsManagementPage.jsx
+
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -33,7 +34,9 @@ import {
     Card,
     CardContent,
     CardActions,
-    DialogContentText
+    DialogContentText,
+    useTheme,
+    useMediaQuery
 } from '@mui/material';
 import {
     Edit,
@@ -46,7 +49,7 @@ import {
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
-
+import styled from 'styled-components';
 import {
     PieChart,
     Pie,
@@ -59,16 +62,17 @@ import {
     YAxis,
     CartesianGrid
 } from 'recharts';
-
 import SubmissionPreview from './SubmissionPreview';
 
-// Ajustes de contenedor responsivo con tw.macro
+// ───────────────────────────────
+// Estilos generales
+// ───────────────────────────────
 const SchoolsContainer = tw.div`
   p-8 bg-gray-100 min-h-screen w-full
 `;
 
 /**
- * Función para formatear fecha/hora (p.e. para nombre de plantillas).
+ * Función para formatear fecha/hora (para nombres de plantillas, etc.).
  */
 const getFormattedDateTime = () => {
     const currentDate = new Date();
@@ -81,7 +85,66 @@ const getFormattedDateTime = () => {
     return `${year}${month}${day}_${hours}${minutes}${seconds}`;
 };
 
+// ───────────────────────────────
+// Estilos para la tabla en desktop (vista tradicional)
+// ───────────────────────────────
+const ResponsiveTableHead = styled(TableHead)`
+  @media (max-width: 600px) {
+    display: none;
+  }
+`;
+
+const ResponsiveTableCell = styled(TableCell)`
+  @media (max-width: 600px) {
+    display: block;
+    text-align: right;
+    position: relative;
+    padding-left: 50%;
+    white-space: nowrap;
+    &:before {
+      content: attr(data-label);
+      position: absolute;
+      left: 0;
+      width: 45%;
+      padding-left: 15px;
+      font-weight: bold;
+      text-align: left;
+      white-space: nowrap;
+    }
+  }
+`;
+
+// ───────────────────────────────
+// Estilos para la vista móvil (tarjetas)
+// ───────────────────────────────
+const MobileCard = styled(Paper)`
+  padding: 16px;
+  margin-bottom: 16px;
+`;
+
+const MobileField = styled(Box)`
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const MobileLabel = styled(Typography)`
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: #555;
+`;
+
+const MobileValue = styled(Typography)`
+  font-size: 1rem;
+`;
+
+// ───────────────────────────────
+// Componente Principal
+// ───────────────────────────────
 const SchoolsManagementPage = () => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
     const { auth } = useContext(AuthContext);
 
     const [schools, setSchools] = useState([]);
@@ -111,6 +174,11 @@ const SchoolsManagementPage = () => {
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissionDetail, setSubmissionDetail] = useState(null);
 
+    const downloadFilename = `colegios_template_${getFormattedDateTime()}.xlsx`;
+
+    // ───────────────────────────────
+    // Función para obtener colegios
+    // ───────────────────────────────
     const fetchSchools = async () => {
         setLoading(true);
         try {
@@ -120,7 +188,6 @@ const SchoolsManagementPage = () => {
             let fetchedSchools = Array.isArray(response.data.schools)
                 ? response.data.schools
                 : [];
-
             fetchedSchools = fetchedSchools.map((school) => {
                 let parsedSchedules = [];
                 if (typeof school.schedules === 'string' && school.schedules.trim()) {
@@ -132,7 +199,6 @@ const SchoolsManagementPage = () => {
                 } else if (Array.isArray(school.schedules)) {
                     parsedSchedules = school.schedules;
                 }
-
                 let parsedGrades = [];
                 if (typeof school.grades === 'string' && school.grades.trim()) {
                     try {
@@ -143,7 +209,6 @@ const SchoolsManagementPage = () => {
                 } else if (Array.isArray(school.grades)) {
                     parsedGrades = school.grades;
                 }
-
                 let parsedExtraFields = [];
                 if (
                     typeof school.extraEnrollmentFields === 'string' &&
@@ -157,7 +222,6 @@ const SchoolsManagementPage = () => {
                 } else if (Array.isArray(school.extraEnrollmentFields)) {
                     parsedExtraFields = school.extraEnrollmentFields;
                 }
-
                 return {
                     ...school,
                     schedules: parsedSchedules,
@@ -165,7 +229,6 @@ const SchoolsManagementPage = () => {
                     extraEnrollmentFields: parsedExtraFields
                 };
             });
-
             setSchools(fetchedSchools);
             setLoading(false);
         } catch (err) {
@@ -184,6 +247,9 @@ const SchoolsManagementPage = () => {
         // eslint-disable-next-line
     }, [auth.token]);
 
+    // ───────────────────────────────
+    // Funciones para agregar/editar colegio
+    // ───────────────────────────────
     const handleAddSchool = () => {
         setSelectedSchool({
             id: null,
@@ -196,7 +262,6 @@ const SchoolsManagementPage = () => {
             transportFeeComplete: '',
             transportFeeHalf: '',
             duePaymentDay: '',
-            // NUEVO: Inicializamos los campos banco y cuenta
             bankName: '',
             bankAccount: ''
         });
@@ -210,8 +275,6 @@ const SchoolsManagementPage = () => {
         const transportFeeCompleteValue = school.transportFeeComplete ?? '';
         const transportFeeHalfValue = school.transportFeeHalf ?? '';
         const duePaymentDayValue = school.duePaymentDay ?? '';
-
-        // NUEVO: Tomamos bankName y bankAccount, si no existen los ponemos en ''
         const bankNameValue = school.bankName ?? '';
         const bankAccountValue = school.bankAccount ?? '';
 
@@ -220,7 +283,6 @@ const SchoolsManagementPage = () => {
             transportFeeComplete: transportFeeCompleteValue,
             transportFeeHalf: transportFeeHalfValue,
             duePaymentDay: duePaymentDayValue,
-            // NUEVO
             bankName: bankNameValue,
             bankAccount: bankAccountValue
         });
@@ -429,13 +491,11 @@ const SchoolsManagementPage = () => {
                 duePaymentDay:
                     Number(selectedSchool.duePaymentDay) || 1,
                 extraEnrollmentFields: schoolExtraFields,
-                // NUEVO: agregamos estos dos
                 bankName: selectedSchool.bankName || '',
                 bankAccount: selectedSchool.bankAccount || ''
             };
 
             if (selectedSchool.id) {
-                // Actualizar
                 await api.put(`/schools/${selectedSchool.id}`, payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
@@ -445,7 +505,6 @@ const SchoolsManagementPage = () => {
                     severity: 'success'
                 });
             } else {
-                // Crear
                 await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
@@ -471,6 +530,7 @@ const SchoolsManagementPage = () => {
     const handleSnackbarClose = () => {
         setSnackbar({ ...snackbar, open: false });
     };
+
     const handleSearchChange = (e) => setSearchQuery(e.target.value);
     const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => {
@@ -486,7 +546,6 @@ const SchoolsManagementPage = () => {
     const handleCopyLink = (schoolId) => {
         const baseUrl = window.location.origin;
         const link = `${baseUrl}/schools/enroll/${schoolId}`;
-
         navigator.clipboard.writeText(link)
             .then(() => {
                 setSnackbar({
@@ -528,7 +587,6 @@ const SchoolsManagementPage = () => {
         const file = e.target.files[0];
         setBulkFile(file);
     };
-
     const handleUploadBulk = async () => {
         if (!bulkFile) return;
         setBulkLoading(true);
@@ -557,8 +615,7 @@ const SchoolsManagementPage = () => {
         setBulkLoading(false);
     };
 
-    const downloadFilename = `colegios_template_${getFormattedDateTime()}.xlsx`;
-
+    // Función auxiliar para ver formularios de inscripción de un colegio
     const handleViewSubmissions = async (school) => {
         setSelectedSchoolForSubmissions(school);
         setSubmissions([]);
@@ -567,7 +624,6 @@ const SchoolsManagementPage = () => {
             const resp = await api.get(`/schools/${school.id}/submissions`, {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-
             let rawSubmissions = resp.data.submissions || [];
             const parsedSubmissions = rawSubmissions.map((sub) => {
                 let parsedData;
@@ -585,7 +641,6 @@ const SchoolsManagementPage = () => {
                     data: parsedData
                 };
             });
-
             setSubmissions(parsedSubmissions);
         } catch (error) {
             console.error('Error al obtener inscripciones:', error);
@@ -624,14 +679,12 @@ const SchoolsManagementPage = () => {
     const getGradeCounts = () => {
         if (!selectedSchoolForSubmissions) return [];
         if (!Array.isArray(selectedSchoolForSubmissions.grades)) return [];
-
         const counts = {};
         selectedSchoolForSubmissions.grades.forEach((g) => {
             if (g.name) {
                 counts[g.name] = 0;
             }
         });
-
         submissions.forEach((sub) => {
             if (Array.isArray(sub.data.students)) {
                 sub.data.students.forEach((st) => {
@@ -642,7 +695,6 @@ const SchoolsManagementPage = () => {
                 });
             }
         });
-
         return Object.entries(counts).map(([gradeName, count]) => ({
             name: gradeName,
             value: count
@@ -657,8 +709,8 @@ const SchoolsManagementPage = () => {
                 Gestión de Colegios
             </Typography>
 
-            <div
-                style={{
+            <Box
+                sx={{
                     display: 'flex',
                     flexWrap: 'wrap',
                     justifyContent: 'space-between',
@@ -693,230 +745,243 @@ const SchoolsManagementPage = () => {
                         Añadir Colegio
                     </Button>
                 </div>
-            </div>
+            </Box>
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
                     <CircularProgress />
                 </div>
             ) : (
-                <Paper sx={{ width: '100%', overflowX: 'auto' }}>
-                    <TableContainer
-                        sx={{
-                            // Forzamos scroll horizontal en pantallas más pequeñas
-                            overflowX: 'auto',
-                            maxHeight: { xs: 400, sm: 'none' },
-                        }}
-                    >
-                        <Table stickyHeader>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Nombre</TableCell>
-                                    <TableCell>Ciudad</TableCell>
-                                    <TableCell>Dirección</TableCell>
-                                    <TableCell>Contacto</TableCell>
-                                    <TableCell>Teléfono</TableCell>
-                                    <TableCell>Email</TableCell>
-                                    <TableCell>Grados</TableCell>
-                                    <TableCell align="center">Formulario</TableCell>
-                                    <TableCell align="center">Acciones</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {filteredSchools
-                                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                    .map((school) => {
-                                        const maxVisibleGrades = 3;
-                                        const visibleGrades = school.grades.slice(0, maxVisibleGrades);
-                                        const remainingGrades = school.grades.length - maxVisibleGrades;
-
-                                        return (
-                                            <TableRow key={school.id}>
-                                                <TableCell>{school.name}</TableCell>
-                                                <TableCell>{school.city}</TableCell>
-                                                <TableCell>{school.address}</TableCell>
-                                                <TableCell>{school.contactPerson}</TableCell>
-                                                <TableCell>{school.contactPhone}</TableCell>
-                                                <TableCell>{school.contactEmail}</TableCell>
-                                                <TableCell>
-                                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                                        {visibleGrades.map((grade, index) => (
-                                                            <Chip
-                                                                key={index}
-                                                                label={grade.name}
-                                                                size="small"
-                                                                color="primary"
-                                                            />
-                                                        ))}
-                                                        {remainingGrades > 0 && (
-                                                            <Chip
-                                                                label={`+${remainingGrades} más`}
-                                                                size="small"
-                                                                onClick={(e) =>
-                                                                    handlePopoverOpen(e, school.grades.slice(maxVisibleGrades))
-                                                                }
-                                                                clickable
-                                                                color="secondary"
-                                                            />
-                                                        )}
-                                                    </Box>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Tooltip title="Copiar enlace">
-                                                        <IconButton onClick={() => handleCopyLink(school.id)}>
-                                                            <ContentCopy />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Tooltip title="Editar">
-                                                        <IconButton onClick={() => handleEditClick(school)}>
-                                                            <Edit />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Eliminar">
-                                                        <IconButton onClick={() => handleDeleteClick(school.id)}>
-                                                            <Delete />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Ver Formularios Llenados">
-                                                        <IconButton onClick={() => handleViewSubmissions(school)}>
-                                                            <Visibility />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </TableCell>
+                <>
+                    {isMobile ? (
+                        <>
+                            {filteredSchools
+                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                .map((school) => (
+                                    <MobileCard key={school.id} elevation={3}>
+                                        <MobileField>
+                                            <MobileLabel>Nombre</MobileLabel>
+                                            <MobileValue>{school.name}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Ciudad</MobileLabel>
+                                            <MobileValue>{school.city}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Dirección</MobileLabel>
+                                            <MobileValue>{school.address}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Contacto</MobileLabel>
+                                            <MobileValue>{school.contactPerson}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Teléfono</MobileLabel>
+                                            <MobileValue>{school.contactPhone}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Email</MobileLabel>
+                                            <MobileValue>{school.contactEmail}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Grados</MobileLabel>
+                                            <MobileValue>
+                                                {school.grades && school.grades.length > 0
+                                                    ? school.grades.map((g, idx) => (
+                                                        <Chip
+                                                            key={idx}
+                                                            label={g.name}
+                                                            size="small"
+                                                            color="primary"
+                                                            style={{ marginRight: 4, marginBottom: 4 }}
+                                                        />
+                                                    ))
+                                                    : '—'}
+                                            </MobileValue>
+                                        </MobileField>
+                                        <Box
+                                            sx={{
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                gap: 1,
+                                                marginTop: 1
+                                            }}
+                                        >
+                                            <Tooltip title="Copiar enlace">
+                                                <IconButton onClick={() => handleCopyLink(school.id)}>
+                                                    <ContentCopy />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Editar">
+                                                <IconButton onClick={() => handleEditClick(school)}>
+                                                    <Edit />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Eliminar">
+                                                <IconButton onClick={() => handleDeleteClick(school.id)}>
+                                                    <Delete />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Ver Formularios Llenados">
+                                                <IconButton onClick={() => handleViewSubmissions(school)}>
+                                                    <Visibility />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
+                                    </MobileCard>
+                                ))}
+                            <TablePagination
+                                component="div"
+                                count={filteredSchools.length}
+                                page={page}
+                                onPageChange={handleChangePage}
+                                rowsPerPage={rowsPerPage}
+                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                rowsPerPageOptions={[5, 10, 25]}
+                                labelRowsPerPage="Filas por página"
+                            />
+                        </>
+                    ) : (
+                        <Paper sx={{ width: '100%', overflowX: 'auto' }}>
+                            <TableContainer
+                                sx={{
+                                    overflowX: 'auto',
+                                    maxHeight: { xs: 400, sm: 'none' },
+                                }}
+                            >
+                                <Table stickyHeader>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>Nombre</TableCell>
+                                            <TableCell>Ciudad</TableCell>
+                                            <TableCell>Dirección</TableCell>
+                                            <TableCell>Contacto</TableCell>
+                                            <TableCell>Teléfono</TableCell>
+                                            <TableCell>Email</TableCell>
+                                            <TableCell>Grados</TableCell>
+                                            <TableCell align="center">Formulario</TableCell>
+                                            <TableCell align="center">Acciones</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {filteredSchools
+                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                            .map((school) => {
+                                                const maxVisibleGrades = 3;
+                                                const visibleGrades = school.grades.slice(0, maxVisibleGrades);
+                                                const remainingGrades = school.grades.length - maxVisibleGrades;
+                                                return (
+                                                    <TableRow key={school.id}>
+                                                        <ResponsiveTableCell data-label="Nombre">{school.name}</ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Ciudad">{school.city}</ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Dirección">{school.address}</ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Contacto">{school.contactPerson}</ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Teléfono">{school.contactPhone}</ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Email">{school.contactEmail}</ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Grados">
+                                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                                                {visibleGrades.map((grade, index) => (
+                                                                    <Chip
+                                                                        key={index}
+                                                                        label={grade.name}
+                                                                        size="small"
+                                                                        color="primary"
+                                                                    />
+                                                                ))}
+                                                                {remainingGrades > 0 && (
+                                                                    <Chip
+                                                                        label={`+${remainingGrades} más`}
+                                                                        size="small"
+                                                                        onClick={(e) =>
+                                                                            handlePopoverOpen(e, school.grades.slice(maxVisibleGrades))
+                                                                        }
+                                                                        clickable
+                                                                        color="secondary"
+                                                                    />
+                                                                )}
+                                                            </Box>
+                                                        </ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Formulario" align="center">
+                                                            <Tooltip title="Copiar enlace">
+                                                                <IconButton onClick={() => handleCopyLink(school.id)}>
+                                                                    <ContentCopy />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Acciones" align="center">
+                                                            <Tooltip title="Editar">
+                                                                <IconButton onClick={() => handleEditClick(school)}>
+                                                                    <Edit />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                            <Tooltip title="Eliminar">
+                                                                <IconButton onClick={() => handleDeleteClick(school.id)}>
+                                                                    <Delete />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                            <Tooltip title="Ver Formularios Llenados">
+                                                                <IconButton onClick={() => handleViewSubmissions(school)}>
+                                                                    <Visibility />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </ResponsiveTableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        {filteredSchools.length === 0 && (
+                                            <TableRow>
+                                                <ResponsiveTableCell colSpan={9} align="center">
+                                                    No se encontraron colegios.
+                                                </ResponsiveTableCell>
                                             </TableRow>
-                                        );
-                                    })}
-                                {filteredSchools.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={9} align="center">
-                                            No se encontraron colegios.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                    <TablePagination
-                        component="div"
-                        count={filteredSchools.length}
-                        page={page}
-                        onPageChange={handleChangePage}
-                        rowsPerPage={rowsPerPage}
-                        onRowsPerPageChange={handleChangeRowsPerPage}
-                        rowsPerPageOptions={[5, 10, 25]}
-                        labelRowsPerPage="Filas por página"
-                    />
-                </Paper>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                            <TablePagination
+                                component="div"
+                                count={filteredSchools.length}
+                                page={page}
+                                onPageChange={handleChangePage}
+                                rowsPerPage={rowsPerPage}
+                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                rowsPerPageOptions={[5, 10, 25]}
+                                labelRowsPerPage="Filas por página"
+                            />
+                        </Paper>
+                    )}
+                </>
             )}
 
-            {selectedSchoolForSubmissions && (
-                <Box sx={{ mt: 4 }}>
-                    <Typography variant="h5">
-                        Formularios llenados para: {selectedSchoolForSubmissions.name}
-                    </Typography>
-
-                    <Box
-                        sx={{
-                            display: 'flex',
-                            gap: 3,
-                            mt: 2,
-                            flexWrap: 'wrap',
-                        }}
-                    >
-                        <Box>
-                            <Typography variant="subtitle1">Tipos de Ruta (Gráfica)</Typography>
-                            <PieChart width={300} height={300}>
-                                <Pie
-                                    data={getRouteTypeStats()}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    cx="50%"
-                                    cy="50%"
-                                    outerRadius={80}
-                                    label
-                                >
-                                    {getRouteTypeStats().map((entry, index) => (
-                                        <Cell
-                                            key={`cell-rt-${index}`}
-                                            fill={COLORS[index % COLORS.length]}
-                                        />
-                                    ))}
-                                </Pie>
-                                <ReTooltip />
-                                <Legend />
-                            </PieChart>
-                        </Box>
-
-                        <Box>
-                            <Typography variant="subtitle1">
-                                Cantidad de Alumnos por Grado
-                            </Typography>
-                            <BarChart width={400} height={300} data={getGradeCounts()}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" />
-                                <YAxis />
-                                <ReTooltip />
-                                <Legend />
-                                <Bar dataKey="value" fill="#8884d8" />
-                            </BarChart>
-                        </Box>
-
-                        <Box>
-                            <Typography variant="subtitle1">
-                                Total de Formularios: {submissions.length}
-                            </Typography>
-                            <Typography variant="subtitle1">
-                                Total de Alumnos: {totalAlumnos}
-                            </Typography>
-                        </Box>
-                    </Box>
-
-                    <Box
-                        sx={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                            gap: 2,
-                            mt: 2
-                        }}
-                    >
-                        {submissions.map((sub) => (
-                            <Card key={sub.id} sx={{ border: '1px solid #ccc' }}>
-                                <CardContent>
-                                    <Typography variant="h6">
-                                        {sub.data.familyLastName || 'Sin Apellido Familiar'}
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary">
-                                        Ruta: {sub.data.routeType || 'Desconocido'}
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary">
-                                        Cant. Alumnos: {sub.data.studentsCount || 0}
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary">
-                                        Fecha de envío: {new Date(sub.createdAt).toLocaleString()}
-                                    </Typography>
-                                </CardContent>
-                                <CardActions>
-                                    <Button
-                                        size="small"
-                                        onClick={() => handleOpenSubmissionDialog(sub)}
-                                    >
-                                        VER DETALLES
-                                    </Button>
-                                </CardActions>
-                            </Card>
-                        ))}
-                    </Box>
-                </Box>
-            )}
-
-            <Dialog
-                open={openSubmissionDialog}
-                onClose={handleCloseSubmissionDialog}
-                maxWidth="md"
-                fullWidth
+            <Popover
+                id={popoverId}
+                open={openPopover}
+                anchorEl={anchorEl}
+                onClose={handlePopoverClose}
+                anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'left',
+                }}
+                transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'left',
+                }}
             >
+                <Box sx={{ p: 2 }}>
+                    <Typography variant="subtitle1">Grados Adicionales:</Typography>
+                    {popoverGrades.map((grade, index) => (
+                        <Chip
+                            key={index}
+                            label={grade.name}
+                            size="small"
+                            color="primary"
+                            sx={{ m: 0.5 }}
+                        />
+                    ))}
+                </Box>
+            </Popover>
+
+            <Dialog open={openSubmissionDialog} onClose={handleCloseSubmissionDialog} maxWidth="md" fullWidth>
                 <DialogTitle>Detalle del Formulario</DialogTitle>
                 <DialogContent>
                     {submissionDetail ? (
@@ -933,9 +998,7 @@ const SchoolsManagementPage = () => {
             </Dialog>
 
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
-                <DialogTitle>
-                    {selectedSchool?.id ? 'Editar Colegio' : 'Añadir Colegio'}
-                </DialogTitle>
+                <DialogTitle>{selectedSchool?.id ? 'Editar Colegio' : 'Añadir Colegio'}</DialogTitle>
                 <DialogContent>
                     <TextField
                         autoFocus
@@ -1039,7 +1102,7 @@ const SchoolsManagementPage = () => {
                         inputProps={{ min: '1', max: '31' }}
                     />
 
-                    {/** NUEVO: Campos de Banco y Cuenta Bancaria */}
+                    {/* Campos nuevos: Banco y Cuenta */}
                     <TextField
                         margin="dense"
                         name="bankName"
@@ -1241,43 +1304,11 @@ const SchoolsManagementPage = () => {
                     <Button onClick={handleDialogClose} color="primary">
                         Cancelar
                     </Button>
-                    <Button
-                        onClick={handleSave}
-                        color="primary"
-                        variant="contained"
-                    >
+                    <Button onClick={handleSave} color="primary" variant="contained">
                         {selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio'}
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            <Popover
-                id={popoverId}
-                open={openPopover}
-                anchorEl={anchorEl}
-                onClose={handlePopoverClose}
-                anchorOrigin={{
-                    vertical: 'bottom',
-                    horizontal: 'left',
-                }}
-                transformOrigin={{
-                    vertical: 'top',
-                    horizontal: 'left',
-                }}
-            >
-                <Box sx={{ p: 2 }}>
-                    <Typography variant="subtitle1">Grados Adicionales:</Typography>
-                    {popoverGrades.map((grade, index) => (
-                        <Chip
-                            key={index}
-                            label={grade.name}
-                            size="small"
-                            color="primary"
-                            sx={{ m: 0.5 }}
-                        />
-                    ))}
-                </Box>
-            </Popover>
 
             <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
                 <DialogTitle>Carga Masiva de Colegios</DialogTitle>
@@ -1285,12 +1316,9 @@ const SchoolsManagementPage = () => {
                     <Typography variant="body1" sx={{ mb: 1 }}>
                         Sube un archivo Excel/CSV con las columnas necesarias.
                         <br />
-                        <strong>¡No necesitas usar JSON!</strong> <br />
-                        Para <em>Horarios</em> puedes escribir algo como:
-                        <br />
+                        Para <em>Horarios</em> puedes escribir algo como: <br />
                         <code>Lunes=08:00,09:00;Martes=07:00,09:30</code> <br />
-                        Para <em>Grados</em>:
-                        <br />
+                        Para <em>Grados</em>: <br />
                         <code>Kinder,Primero,Segundo</code>
                     </Typography>
                     <Button
@@ -1302,7 +1330,6 @@ const SchoolsManagementPage = () => {
                     >
                         Descargar Plantilla
                     </Button>
-
                     <Button variant="outlined" component="label" startIcon={<FileUpload />}>
                         Seleccionar Archivo
                         <input
@@ -1317,7 +1344,6 @@ const SchoolsManagementPage = () => {
                             {bulkFile.name}
                         </Typography>
                     )}
-
                     {bulkLoading && (
                         <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
                             <CircularProgress size={24} />
@@ -1326,7 +1352,6 @@ const SchoolsManagementPage = () => {
                             </Typography>
                         </Box>
                     )}
-
                     {bulkResults && (
                         <Box sx={{ mt: 2 }}>
                             <Alert severity="info">

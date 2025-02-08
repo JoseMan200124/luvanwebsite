@@ -28,12 +28,13 @@ const SidebarContainer = styled.div`
     overflow: hidden;
 
     @media (max-width: 768px) {
-        width: ${({ isOpen }) => (isOpen ? '250px' : '0')};
+        /* En móviles, el sidebar ocupa todo el ancho al estar abierto */
+        width: ${({ isOpen }) => (isOpen ? '100%' : '0')};
     }
 `;
 
 const SidebarHeader = styled.div`
-    ${tw`flex items-center justify-between p-4 bg-gray-900 rounded-t-lg`}
+    ${tw`flex items-center justify-between p-4 bg-gray-900 rounded-t-lg relative`}
 `;
 
 const ProfileInfo = tw.div`flex items-center`;
@@ -67,22 +68,27 @@ const LogoutItem = styled.li`
     transition: background-color 0.2s ease;
 `;
 
+/*
+  ToggleTab:
+  - En ordenadores se usa la posición original (usando left:
+    • Si el sidebar está abierto: left: 250px
+    • Si está cerrado: left: 60px)
+  - En móviles (max-width: 768px) se reubica el botón usando right: 60px,
+    de modo que quede a la par del ícono de notificaciones (ubicado en right: 10px).
+*/
 const ToggleTab = styled.div`
-    ${tw`bg-red-500 rounded-r-md cursor-pointer`}
+    ${tw`bg-red-500 cursor-pointer flex items-center justify-center shadow-md`}
+    width: 40px;
+    height: 40px;
+    z-index: 1000; /* Asegura prioridad en el apilamiento */
+    transition: all 0.3s ease;
     position: fixed;
     top: 10px;
     left: ${({ isOpen }) => (isOpen ? '250px' : '60px')};
-    width: 40px;
-    height: 40px;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: left 0.3s ease;
-    box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
 
     @media (max-width: 768px) {
-        left: ${({ isOpen }) => (isOpen ? '250px' : '0')};
+        left: auto;
+        right: 60px;
     }
 `;
 
@@ -142,6 +148,13 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     const handleLogout = () => {
         logout();
         navigate('/login');
+    };
+
+    // Función auxiliar para cerrar el sidebar al seleccionar una opción (por ejemplo, en móviles)
+    const handleLinkClick = () => {
+        if (window.innerWidth < 768) {
+            toggleSidebar();
+        }
     };
 
     if (!auth.user) {
@@ -211,6 +224,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         {canAccessDashboard && (
                             <RouterLink
                                 to="/admin/dashboard"
+                                onClick={handleLinkClick}
                                 style={{ textDecoration: 'none', color: 'inherit' }}
                             >
                                 <MenuItem
@@ -228,7 +242,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         {/* Módulos dinámicos */}
                         {modules.map((module, index) => {
                             const { key, name, icon: ModuleIcon, submodules } = module;
-                            // Verifica permiso para el Módulo principal
                             const canAccessModule = !!permissions[key];
                             if (!canAccessModule) return null;
 
@@ -251,7 +264,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                         )}
                                     </MenuItem>
 
-                                    {/* Submenú inline cuando isOpen */}
+                                    {/* Submenú inline cuando el sidebar está expandido */}
                                     {isOpen && hasSubmodules && isMenuOpen && (
                                         <div>
                                             {submodules.map((submodule) => {
@@ -262,6 +275,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                                 return (
                                                     <RouterLink
                                                         to={`/admin/${path}`}
+                                                        onClick={handleLinkClick}
                                                         key={subKey}
                                                         style={{ textDecoration: 'none', color: 'inherit' }}
                                                     >
@@ -274,7 +288,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                         </div>
                                     )}
 
-                                    {/* Popout (cuando isOpen=false) */}
+                                    {/* Popout (cuando el sidebar está cerrado) */}
                                     {!isOpen && hasSubmodules && hoveredItem === index && (
                                         <SubMenuPopout
                                             popY={getPopoutPosition(index)}
@@ -290,12 +304,11 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                                     return (
                                                         <RouterLink
                                                             to={`/admin/${path}`}
+                                                            onClick={handleLinkClick}
                                                             key={subKey}
                                                             style={{ textDecoration: 'none', color: 'inherit' }}
                                                         >
-                                                            <PopoutItem>
-                                                                {subName}
-                                                            </PopoutItem>
+                                                            <PopoutItem>{subName}</PopoutItem>
                                                         </RouterLink>
                                                     );
                                                 })}
@@ -313,6 +326,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     {(user.role === 'Administrador' || user.role === 'Gestor') && (
                         <RouterLink
                             to="/admin/roles-permisos"
+                            onClick={handleLinkClick}
                             style={{ textDecoration: 'none', color: 'inherit' }}
                         >
                             <MenuItem
@@ -330,7 +344,10 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     <LogoutItem
                         onMouseEnter={() => setHoveredItem(null)}
                         onMouseLeave={() => setHoveredItem(null)}
-                        onClick={handleLogout}
+                        onClick={() => {
+                            handleLogout();
+                            handleLinkClick();
+                        }}
                     >
                         <div tw="flex items-center">
                             <LogoutIcon tw="mr-2" />

@@ -6,7 +6,6 @@ import { Typography, Container, Grid, IconButton, Link } from '@mui/material';
 import { Facebook, Twitter, Instagram } from '@mui/icons-material';
 import { keyframes } from 'styled-components';
 
-// Animación de FadeIn para el Footer (opcional)
 const fadeIn = keyframes`
     from {
         opacity: 0;
@@ -18,7 +17,6 @@ const fadeIn = keyframes`
     }
 `;
 
-// Contenedor del Footer con animación
 const FooterContainer = styled.footer`
     ${tw`bg-gray-800 text-white py-6`}
     animation: ${fadeIn} 0.5s ease-out;
@@ -44,20 +42,35 @@ const Footer = () => {
                             Síguenos
                         </Typography>
                         <SocialIcons>
-                            <IconButton href="#" target="_blank" style={{ color: '#FFFFFF' }} aria-label="Facebook">
+                            <IconButton
+                                href="#"
+                                target="_blank"
+                                style={{ color: '#FFFFFF' }}
+                                aria-label="Facebook"
+                            >
                                 <Facebook />
                             </IconButton>
-                            <IconButton href="#" target="_blank" style={{ color: '#FFFFFF' }} aria-label="Twitter">
+                            <IconButton
+                                href="#"
+                                target="_blank"
+                                style={{ color: '#FFFFFF' }}
+                                aria-label="Twitter"
+                            >
                                 <Twitter />
                             </IconButton>
-                            <IconButton href="#" target="_blank" style={{ color: '#FFFFFF' }} aria-label="Instagram">
+                            <IconButton
+                                href="#"
+                                target="_blank"
+                                style={{ color: '#FFFFFF' }}
+                                aria-label="Instagram"
+                            >
                                 <Instagram />
                             </IconButton>
                         </SocialIcons>
                     </Grid>
                 </Grid>
-                {/* Bloque Modificado */}
-                <Typography variant="h8" align="center" tw="mt-8 text-lg md:text-xl">
+
+                <Typography variant="body2" align="center" tw="mt-8">
                     Desarrollado por{' '}
                     <Link
                         href="https://www.haricode.com"

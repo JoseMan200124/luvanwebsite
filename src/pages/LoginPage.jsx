@@ -34,21 +34,26 @@ const moveUp = keyframes`
 `;
 
 const fadeIn = keyframes`
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 `;
 
+// Contenedor principal que se adapta al alto de la pantalla
 const LoginContainer = tw.div`flex flex-col md:flex-row flex-grow min-h-screen`;
 
+// En desktop se muestra la sección izquierda, en móviles se oculta para centrar el formulario.
 const LeftSection = styled.div`
-    ${tw`flex flex-col items-center justify-center bg-gray-800 text-white md:w-1/2 p-8 relative overflow-hidden`}
+    ${tw`hidden md:flex flex-col items-center justify-center bg-gray-800 text-white md:w-1/2 p-8 relative overflow-hidden`}
 `;
 
-const RightSection = tw.div`flex flex-col items-center justify-center bg-[rgb(31,29,29)] md:w-1/2 p-8`;
+// La sección derecha contendrá el formulario de inicio y se adapta ocupando todo el ancho en móviles.
+const RightSection = styled.div`
+    ${tw`flex flex-col items-center justify-center bg-[rgb(31,29,29)] md:w-1/2 p-8 flex-grow`}
+`;
 
 const Title = styled(Typography)`
     ${tw`text-center font-bold mb-2`}
@@ -61,7 +66,7 @@ const Slogan = styled(Typography)`
 `;
 
 const Logo = styled.img`
-  ${tw`h-20 w-auto mb-4`}
+    ${tw`h-20 w-auto mb-4`}
 `;
 
 const LoginFormContainer = styled.div`
@@ -95,15 +100,14 @@ const LoginButton = styled(Button)`
 `;
 
 const ErrorMessage = styled(Typography)`
-  ${tw`mb-4 text-center text-red-600`}
+    ${tw`mb-4 text-center text-red-600`}
 `;
 
 const AnimatedSnackbar = styled(Snackbar)`
-  & .MuiAlert-root {
-    animation: ${fadeIn} 0.5s ease-out;
-  }
+    & .MuiAlert-root {
+        animation: ${fadeIn} 0.5s ease-out;
+    }
 `;
-
 
 const LoginPage = () => {
     const { login } = useContext(AuthContext);
@@ -211,6 +215,7 @@ const LoginPage = () => {
             <Navbar />
 
             <LoginContainer>
+                {/* Se muestra solo en desktop para una mejor experiencia en móviles */}
                 <LeftSection>
                     <Title variant="h4">Transportes Luvan</Title>
                     <Slogan variant="subtitle1">

@@ -19,7 +19,10 @@ import {
     DialogActions,
     Button,
     IconButton,
-    Tooltip
+    Tooltip,
+    useTheme,
+    useMediaQuery,
+    Box
 } from '@mui/material';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -33,6 +36,7 @@ moment.tz.setDefault('America/Guatemala');
 
 const PilotsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
+// Helper para agrupar por colegio
 const groupBySchool = (arr) => {
     const result = {};
     arr.forEach((item) => {
@@ -45,8 +49,29 @@ const groupBySchool = (arr) => {
     return result;
 };
 
+// Componentes para vista móvil (tarjetas)
+const MobileCard = styled(Paper)`
+  padding: 16px;
+  margin-bottom: 16px;
+`;
+const MobileField = styled(Box)`
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+`;
+const MobileLabel = styled(Typography)`
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: #555;
+`;
+const MobileValue = styled(Typography)`
+  font-size: 1rem;
+`;
+
 const PilotsManagementPage = () => {
     const { auth } = useContext(AuthContext);
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     const [pilots, setPilots] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -119,7 +144,7 @@ const PilotsManagementPage = () => {
         setEmergenciesList([]);
     };
 
-    // Agrupar por colegio
+    // Agrupar pilotos por colegio
     const groupedPilots = groupBySchool(filteredPilots);
     const schoolKeys = Object.keys(groupedPilots);
 
@@ -130,19 +155,19 @@ const PilotsManagementPage = () => {
             </Typography>
 
             {/* Búsqueda */}
-            <div tw="mb-4 flex">
+            <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap' }}>
                 <TextField
                     label="Buscar Pilotos"
                     variant="outlined"
                     size="small"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    tw="w-1/3"
+                    style={{ width: isMobile ? '100%' : '33%' }}
                 />
             </div>
 
             {loading ? (
-                <div tw="flex justify-center p-4">
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
                     <CircularProgress />
                 </div>
             ) : (
@@ -157,90 +182,152 @@ const PilotsManagementPage = () => {
                                     <Typography variant="h6" sx={{ mb: 2 }}>
                                         Colegio: {school}
                                     </Typography>
-                                    <TableContainer>
-                                        <Table>
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell>Nombre</TableCell>
-                                                    <TableCell>Email</TableCell>
-                                                    <TableCell>Incidentes</TableCell>
-                                                    <TableCell>Emergencias</TableCell>
-                                                    <TableCell>Kilometraje</TableCell>
-                                                    <TableCell>Rutas</TableCell>
-                                                </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {data
-                                                    .slice(
-                                                        page * rowsPerPage,
-                                                        page * rowsPerPage + rowsPerPage
-                                                    )
-                                                    .map((pilot) => (
-                                                        <TableRow key={pilot.email}>
-                                                            <TableCell>{pilot.name}</TableCell>
-                                                            <TableCell>{pilot.email}</TableCell>
-                                                            <TableCell>
+                                    {isMobile ? (
+                                        // Vista móvil: tarjetas
+                                        <>
+                                            {data
+                                                .slice(
+                                                    page * rowsPerPage,
+                                                    page * rowsPerPage + rowsPerPage
+                                                )
+                                                .map((pilot) => (
+                                                    <MobileCard key={pilot.email}>
+                                                        <MobileField>
+                                                            <MobileLabel>Nombre</MobileLabel>
+                                                            <MobileValue>{pilot.name}</MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Email</MobileLabel>
+                                                            <MobileValue>{pilot.email}</MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Incidentes</MobileLabel>
+                                                            <MobileValue
+                                                                sx={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                                            >
                                                                 <Tooltip title="Ver detalles de incidentes">
                                                                     <IconButton
-                                                                        onClick={() =>
-                                                                            handleViewIncidents(pilot)
-                                                                        }
-                                                                        color={
-                                                                            pilot.incidentsCount > 0
-                                                                                ? 'error'
-                                                                                : 'default'
-                                                                        }
+                                                                        onClick={() => handleViewIncidents(pilot)}
+                                                                        color={pilot.incidentsCount > 0 ? 'error' : 'default'}
+                                                                        size="small"
                                                                     >
-                                                                        <VisibilityIcon />
+                                                                        <VisibilityIcon fontSize="small" />
                                                                     </IconButton>
                                                                 </Tooltip>
                                                                 {pilot.incidentsCount || 0}
-                                                            </TableCell>
-                                                            <TableCell>
+                                                            </MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Emergencias</MobileLabel>
+                                                            <MobileValue
+                                                                sx={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                                            >
                                                                 <Tooltip title="Ver detalles de emergencias">
                                                                     <IconButton
-                                                                        onClick={() =>
-                                                                            handleViewEmergencies(pilot)
-                                                                        }
-                                                                        color={
-                                                                            pilot.emergenciesCount > 0
-                                                                                ? 'error'
-                                                                                : 'default'
-                                                                        }
+                                                                        onClick={() => handleViewEmergencies(pilot)}
+                                                                        color={pilot.emergenciesCount > 0 ? 'error' : 'default'}
+                                                                        size="small"
                                                                     >
-                                                                        <VisibilityIcon />
+                                                                        <VisibilityIcon fontSize="small" />
                                                                     </IconButton>
                                                                 </Tooltip>
                                                                 {pilot.emergenciesCount || 0}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {pilot.kmTraveled ?? 0} km
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {pilot.routesCount ?? 0}
-                                                            </TableCell>
+                                                            </MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Kilometraje</MobileLabel>
+                                                            <MobileValue>{pilot.kmTraveled ?? 0} km</MobileValue>
+                                                        </MobileField>
+                                                        <MobileField>
+                                                            <MobileLabel>Rutas</MobileLabel>
+                                                            <MobileValue>{pilot.routesCount ?? 0}</MobileValue>
+                                                        </MobileField>
+                                                    </MobileCard>
+                                                ))}
+                                            <TablePagination
+                                                component="div"
+                                                count={data.length}
+                                                page={page}
+                                                onPageChange={handleChangePage}
+                                                rowsPerPage={rowsPerPage}
+                                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                                rowsPerPageOptions={[5, 10, 25]}
+                                                labelRowsPerPage="Filas por página"
+                                            />
+                                        </>
+                                    ) : (
+                                        // Vista desktop: tabla
+                                        <>
+                                            <TableContainer>
+                                                <Table>
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell>Nombre</TableCell>
+                                                            <TableCell>Email</TableCell>
+                                                            <TableCell>Incidentes</TableCell>
+                                                            <TableCell>Emergencias</TableCell>
+                                                            <TableCell>Kilometraje</TableCell>
+                                                            <TableCell>Rutas</TableCell>
                                                         </TableRow>
-                                                    ))}
-                                                {data.length === 0 && (
-                                                    <TableRow>
-                                                        <TableCell colSpan={6} align="center">
-                                                            No se encontraron pilotos para este colegio.
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
-                                    </TableContainer>
-                                    <TablePagination
-                                        component="div"
-                                        count={data.length}
-                                        page={page}
-                                        onPageChange={handleChangePage}
-                                        rowsPerPage={rowsPerPage}
-                                        onRowsPerPageChange={handleChangeRowsPerPage}
-                                        rowsPerPageOptions={[5, 10, 25]}
-                                        labelRowsPerPage="Filas por página"
-                                    />
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {data
+                                                            .slice(
+                                                                page * rowsPerPage,
+                                                                page * rowsPerPage + rowsPerPage
+                                                            )
+                                                            .map((pilot) => (
+                                                                <TableRow key={pilot.email}>
+                                                                    <TableCell>{pilot.name}</TableCell>
+                                                                    <TableCell>{pilot.email}</TableCell>
+                                                                    <TableCell>
+                                                                        <Tooltip title="Ver detalles de incidentes">
+                                                                            <IconButton
+                                                                                onClick={() => handleViewIncidents(pilot)}
+                                                                                color={pilot.incidentsCount > 0 ? 'error' : 'default'}
+                                                                            >
+                                                                                <VisibilityIcon />
+                                                                            </IconButton>
+                                                                        </Tooltip>
+                                                                        {pilot.incidentsCount || 0}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Tooltip title="Ver detalles de emergencias">
+                                                                            <IconButton
+                                                                                onClick={() => handleViewEmergencies(pilot)}
+                                                                                color={pilot.emergenciesCount > 0 ? 'error' : 'default'}
+                                                                            >
+                                                                                <VisibilityIcon />
+                                                                            </IconButton>
+                                                                        </Tooltip>
+                                                                        {pilot.emergenciesCount || 0}
+                                                                    </TableCell>
+                                                                    <TableCell>{pilot.kmTraveled ?? 0} km</TableCell>
+                                                                    <TableCell>{pilot.routesCount ?? 0}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        {data.length === 0 && (
+                                                            <TableRow>
+                                                                <TableCell colSpan={6} align="center">
+                                                                    No se encontraron pilotos para este colegio.
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                            <TablePagination
+                                                component="div"
+                                                count={data.length}
+                                                page={page}
+                                                onPageChange={handleChangePage}
+                                                rowsPerPage={rowsPerPage}
+                                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                                rowsPerPageOptions={[5, 10, 25]}
+                                                labelRowsPerPage="Filas por página"
+                                            />
+                                        </>
+                                    )}
                                 </Paper>
                             );
                         })

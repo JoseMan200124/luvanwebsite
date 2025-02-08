@@ -2,13 +2,27 @@
 
 import React from 'react';
 import tw, { styled } from 'twin.macro';
-import { Typography, Container, Grid, TextField, Button, IconButton, Snackbar, Alert } from '@mui/material';
-import { Phone, Email, AccessTime, LocationOn, Facebook, Twitter, Instagram, Group } from '@mui/icons-material';
+import {
+    Typography,
+    Container,
+    Grid,
+    TextField,
+    Button,
+    Snackbar,
+    Alert
+} from '@mui/material';
+import {
+    Phone,
+    Email,
+    AccessTime
+} from '@mui/icons-material';
+
 import Navbar from '../components/Navbar';
-import ServiceCard from '../components/ServiceCard'; // Importar el nuevo ServiceCard
-import Footer from '../components/Footer'; // Importar el nuevo Footer
+import ServiceCard from '../components/ServiceCard';
+import Footer from '../components/Footer';
+
 import landingBg from '../assets/img/school-bus.jpg';
-import logoLuvan from '../assets/img/logo-luvan.jpg';
+import logoLuvan from '../assets/img/logo-luvan.jpg'; // Opcional
 
 // Sección Hero con fondo de imagen y contenido centrado
 const HeroSection = styled.section`
@@ -25,14 +39,14 @@ const HeroContent = styled.div`
 // Sección de Servicios
 const ServicesSection = tw.section`py-20 bg-gray-100`;
 
+// Sección de "Sobre Nosotros"
 const AboutSection = tw.section`py-20`;
 
+// Sección de Contacto
 const ContactSection = styled.section`
     ${tw`py-20 bg-gray-100`}
     scroll-margin-top: 100px;
 `;
-
-const SocialIcons = tw.div`flex space-x-4 mt-4`;
 
 const LandingPage = () => {
     const [openSnackbar, setOpenSnackbar] = React.useState(false);
@@ -41,13 +55,9 @@ const LandingPage = () => {
 
     const handleFormSubmit = (e) => {
         e.preventDefault();
-        // Aquí puedes manejar el envío del formulario de contacto
-        // Por ejemplo, enviar los datos a una API
-        // Para este ejemplo, simplemente mostramos una Snackbar
         setSnackbarMessage('¡Mensaje enviado exitosamente!');
         setSnackbarSeverity('success');
         setOpenSnackbar(true);
-        // Resetear el formulario si es necesario
         e.target.reset();
     };
 
@@ -55,41 +65,57 @@ const LandingPage = () => {
         setOpenSnackbar(false);
     };
 
-    // Datos de Servicios
+    /**
+     * Cartas de servicio centradas
+     */
     const services = [
         {
-            icon: LocationOn,
-            title: 'Transporte Seguro',
-            description: 'Flota de buses modernos con todas las medidas de seguridad para garantizar un viaje seguro.',
+            // https://mui.com/material-ui/material-icons/?query=security
+            iconName: 'Security',
+            title: 'Seguridad',
+            description:
+                'Vehículos equipados y procesos diseñados para proteger a cada pasajero.'
         },
         {
-            icon: AccessTime,
-            title: 'Horarios Flexibles',
-            description: 'Horarios adaptados a las necesidades de cada colegio y familia para mayor comodidad.',
+            // https://mui.com/material-ui/material-icons/?query=alarm
+            iconName: 'AlarmOn',
+            title: 'Puntualidad',
+            description:
+                'Compromiso con el cumplimiento de horarios para garantizar la calidad de nuestro servicio.'
         },
         {
-            icon: Group,
-            title: 'Conductores Capacitados',
-            description: 'Conductores profesionales y capacitados para brindar el mejor servicio y atención.',
-        },
-        // Puedes añadir más servicios aquí
+            // https://mui.com/material-ui/material-icons/?query=groups
+            iconName: 'Groups',
+            title: 'Atención personalizada',
+            description:
+                'Adaptamos nuestros servicios a las necesidades de cada institución.'
+        }
     ];
 
     return (
         <div tw="flex flex-col min-h-screen">
-            {/* Navbar */}
             <Navbar />
 
             {/* Hero Section */}
             <HeroSection id="inicio">
                 <Overlay />
                 <HeroContent>
-                    <Typography variant="h2" tw="font-bold mb-6 text-4xl md:text-5xl lg:text-6xl" style={{ lineHeight: '1.2' }}>
-                        Soluciones de Transporte Escolar Seguras y Confiables
+                    <Typography
+                        variant="h2"
+                        tw="font-bold mb-4 text-4xl md:text-5xl lg:text-6xl"
+                        style={{ lineHeight: '1.2' }}
+                    >
+                        Transportes Luvan
                     </Typography>
-                    <Typography variant="h6" tw="mb-8 text-lg md:text-xl lg:text-2xl">
-                        Transportes Luvan ofrece servicios de transporte escolar para garantizar la seguridad y comodidad de tus hijos.
+
+                    <Typography
+                        variant="h6"
+                        tw="mb-8 text-lg md:text-xl lg:text-2xl"
+                        style={{ maxWidth: '800px', margin: '0 auto' }}
+                    >
+                        Más de 10 años garantizando la seguridad y confianza en el transporte escolar y empresarial.
                     </Typography>
+
                     <div tw="space-x-4">
                         <Button
                             variant="contained"
@@ -108,7 +134,7 @@ const LandingPage = () => {
                 </HeroContent>
             </HeroSection>
 
-            {/* Servicios */}
+            {/* Sección de Servicios */}
             <ServicesSection id="servicios">
                 <Container>
                     <Typography variant="h4" tw="text-center mb-12">
@@ -116,9 +142,9 @@ const LandingPage = () => {
                     </Typography>
                     <Grid container spacing={6} justifyContent="center">
                         {services.map((service, index) => (
-                            <Grid item xs={12} sm={6} md={4} key={index} tw="flex">
+                            <Grid item xs={12} sm={6} md={4} key={index} tw="flex justify-center">
                                 <ServiceCard
-                                    icon={service.icon}
+                                    iconName={service.iconName}
                                     title={service.title}
                                     description={service.description}
                                 />
@@ -128,26 +154,35 @@ const LandingPage = () => {
                 </Container>
             </ServicesSection>
 
-            {/* Sobre Nosotros */}
+            {/* Sección "Sobre Nosotros" */}
             <AboutSection id="nosotros">
                 <Container>
                     <Typography variant="h4" tw="text-center mb-12">
-                        Sobre Transportes Luvan
+                        Sobre Nosotros
                     </Typography>
                     <Grid container spacing={6} alignItems="center">
                         <Grid item xs={12} md={6}>
                             <Typography variant="body1" tw="text-lg mb-6">
-                                En Transportes Luvan, nos dedicamos a ofrecer servicios de transporte escolar de alta calidad, garantizando la seguridad y bienestar de los estudiantes. Con años de experiencia en el sector, hemos consolidado una flota moderna y conductores altamente capacitados para brindar el mejor servicio a nuestros clientes.
+                                Contamos con un equipo profesional y unidades de diversas capacidades para garantizar
+                                un servicio eficiente y confiable. Nos enorgullece ser el aliado estratégico de las
+                                instituciones educativas, superando expectativas en cada trayecto.
+                            </Typography>
+                            <Typography variant="body1" tw="text-lg italic">
+                                ¡Confía en nosotros para la logística de transporte!
                             </Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                            <img src={logoLuvan} alt="Transporte Escolar" tw="rounded-lg shadow-lg w-full h-auto object-cover" />
+                            <img
+                                src={logoLuvan}
+                                alt="Transportes Luvan"
+                                tw="rounded-lg shadow-lg w-full h-auto object-cover"
+                            />
                         </Grid>
                     </Grid>
                 </Container>
             </AboutSection>
 
-            {/* Contacto */}
+            {/* Sección de Contacto */}
             <ContactSection id="contacto">
                 <Container>
                     <Typography variant="h4" tw="text-center mb-12">
@@ -160,9 +195,7 @@ const LandingPage = () => {
                             </Typography>
                             <div tw="flex items-center mb-4">
                                 <Phone style={{ marginRight: '8px', color: '#2D966C' }} />
-                                <Typography variant="body1">
-                                    502 23600026
-                                </Typography>
+                                <Typography variant="body1">502 23600026</Typography>
                             </div>
                             <div tw="flex items-center mb-4">
                                 <Email style={{ marginRight: '8px', color: '#2D966C' }} />
@@ -220,8 +253,12 @@ const LandingPage = () => {
                                         />
                                     </Grid>
                                     <Grid item xs={12}>
-                                        <Button type="submit" variant="contained" fullWidth
-                                                style={{ backgroundColor: '#2D966C', color: '#FFFFFF' }}>
+                                        <Button
+                                            type="submit"
+                                            variant="contained"
+                                            fullWidth
+                                            style={{ backgroundColor: '#2D966C', color: '#FFFFFF' }}
+                                        >
                                             Enviar Mensaje
                                         </Button>
                                     </Grid>
@@ -235,20 +272,23 @@ const LandingPage = () => {
             {/* Footer */}
             <Footer />
 
-            {/* Snackbar para retroalimentación */}
+            {/* Snackbar */}
             <Snackbar
                 open={openSnackbar}
                 autoHideDuration={6000}
                 onClose={handleSnackbarClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                <Alert
+                    onClose={handleSnackbarClose}
+                    severity={snackbarSeverity}
+                    sx={{ width: '100%' }}
+                >
                     {snackbarMessage}
                 </Alert>
             </Snackbar>
         </div>
     );
-
 };
 
 export default LandingPage;
