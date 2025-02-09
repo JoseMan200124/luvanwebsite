@@ -89,53 +89,53 @@ const getFormattedDateTime = () => {
 // Estilos para la tabla en desktop (vista tradicional)
 // ───────────────────────────────
 const ResponsiveTableHead = styled(TableHead)`
-  @media (max-width: 600px) {
-    display: none;
-  }
+    @media (max-width: 600px) {
+        display: none;
+    }
 `;
 
 const ResponsiveTableCell = styled(TableCell)`
-  @media (max-width: 600px) {
-    display: block;
-    text-align: right;
-    position: relative;
-    padding-left: 50%;
-    white-space: nowrap;
-    &:before {
-      content: attr(data-label);
-      position: absolute;
-      left: 0;
-      width: 45%;
-      padding-left: 15px;
-      font-weight: bold;
-      text-align: left;
-      white-space: nowrap;
+    @media (max-width: 600px) {
+        display: block;
+        text-align: right;
+        position: relative;
+        padding-left: 50%;
+        white-space: nowrap;
+        &:before {
+            content: attr(data-label);
+            position: absolute;
+            left: 0;
+            width: 45%;
+            padding-left: 15px;
+            font-weight: bold;
+            text-align: left;
+            white-space: nowrap;
+        }
     }
-  }
 `;
 
 // ───────────────────────────────
 // Estilos para la vista móvil (tarjetas)
 // ───────────────────────────────
 const MobileCard = styled(Paper)`
-  padding: 16px;
-  margin-bottom: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
 `;
 
 const MobileField = styled(Box)`
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
 `;
 
 const MobileLabel = styled(Typography)`
-  font-weight: bold;
-  font-size: 0.875rem;
-  color: #555;
+    font-weight: bold;
+    font-size: 0.875rem;
+    color: #555;
 `;
 
 const MobileValue = styled(Typography)`
-  font-size: 1rem;
+    font-size: 1rem;
 `;
 
 // ───────────────────────────────
@@ -1010,7 +1010,6 @@ const SchoolsManagementPage = () => {
                         variant="outlined"
                         value={selectedSchool ? selectedSchool.name : ''}
                         onChange={handleInputChange}
-                        required
                     />
                     <TextField
                         margin="dense"
@@ -1021,7 +1020,6 @@ const SchoolsManagementPage = () => {
                         variant="outlined"
                         value={selectedSchool ? selectedSchool.city : ''}
                         onChange={handleInputChange}
-                        required
                     />
                     <TextField
                         margin="dense"
@@ -1032,7 +1030,6 @@ const SchoolsManagementPage = () => {
                         variant="outlined"
                         value={selectedSchool ? selectedSchool.address : ''}
                         onChange={handleInputChange}
-                        required
                     />
                     <TextField
                         margin="dense"
@@ -1074,7 +1071,6 @@ const SchoolsManagementPage = () => {
                         variant="outlined"
                         value={selectedSchool ? selectedSchool.transportFeeComplete : ''}
                         onChange={handleInputChange}
-                        required
                         inputProps={{ min: '0', step: '0.01' }}
                     />
                     <TextField
@@ -1086,7 +1082,6 @@ const SchoolsManagementPage = () => {
                         variant="outlined"
                         value={selectedSchool ? selectedSchool.transportFeeHalf : ''}
                         onChange={handleInputChange}
-                        required
                         inputProps={{ min: '0', step: '0.01' }}
                     />
                     <TextField
@@ -1098,7 +1093,6 @@ const SchoolsManagementPage = () => {
                         variant="outlined"
                         value={selectedSchool ? selectedSchool.duePaymentDay : ''}
                         onChange={handleInputChange}
-                        required
                         inputProps={{ min: '1', max: '31' }}
                     />
 
@@ -1150,7 +1144,6 @@ const SchoolsManagementPage = () => {
                                 variant="outlined"
                                 value={sch.day}
                                 onChange={(e) => handleScheduleDayChange(e, scheduleIndex)}
-                                required
                             />
                             <Typography variant="subtitle2" style={{ marginTop: '0.5rem' }}>
                                 Horas
@@ -1174,7 +1167,6 @@ const SchoolsManagementPage = () => {
                                         InputLabelProps={{
                                             shrink: true,
                                         }}
-                                        required
                                     />
                                     <IconButton
                                         onClick={() => handleRemoveTime(scheduleIndex, timeIndex)}
@@ -1229,7 +1221,6 @@ const SchoolsManagementPage = () => {
                                 variant="outlined"
                                 value={grade.name}
                                 onChange={(e) => handleGradeChange(e, gradeIndex)}
-                                required
                             />
                         </Paper>
                     ))}
@@ -1266,7 +1257,6 @@ const SchoolsManagementPage = () => {
                                 fullWidth
                                 value={field.fieldName || ''}
                                 onChange={(e) => handleChangeExtraField(idx, 'fieldName', e.target.value)}
-                                required
                             />
                             <FormControl fullWidth margin="dense">
                                 <InputLabel>Tipo</InputLabel>
