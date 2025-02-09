@@ -966,20 +966,11 @@ const ActivityLogPage = () => {
                                                     <MobileValue>{eme.mensaje}</MobileValue>
                                                 </MobileField>
                                                 <MobileField>
-                                                    <MobileLabel>Ubicación:</MobileLabel>
+                                                    <MobileLabel>Ubicación (Lat,Lng):</MobileLabel>
                                                     <MobileValue>
-                                                        {eme.latitud && eme.longitud ? (
-                                                            (() => {
-                                                                const lat = parseFloat(eme.latitud);
-                                                                const lng = parseFloat(eme.longitud);
-                                                                if (isNaN(lat) || isNaN(lng)) {
-                                                                    return `${eme.latitud}, ${eme.longitud}`;
-                                                                }
-                                                                return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                                                            })()
-                                                        ) : (
-                                                            '—'
-                                                        )}
+                                                        {eme.latitud && eme.longitud
+                                                            ? `${parseFloat(eme.latitud).toFixed(6)}, ${parseFloat(eme.longitud).toFixed(6)}`
+                                                            : '—'}
                                                     </MobileValue>
                                                     {eme.latitud && eme.longitud && (
                                                         <Tooltip title="Ver mapa">
@@ -1014,7 +1005,7 @@ const ActivityLogPage = () => {
                                                     <TableHeaderCell>Fecha</TableHeaderCell>
                                                     <TableHeaderCell>Piloto</TableHeaderCell>
                                                     <TableHeaderCell>Mensaje</TableHeaderCell>
-                                                    <TableHeaderCell>Ubicación</TableHeaderCell>
+                                                    <TableHeaderCell>Ubicación (Lat,Lng)</TableHeaderCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
@@ -1025,14 +1016,23 @@ const ActivityLogPage = () => {
                                                         <TableCell>{eme.mensaje}</TableCell>
                                                         <TableCell>
                                                             {eme.latitud && eme.longitud ? (
-                                                                (() => {
-                                                                    const lat = parseFloat(eme.latitud);
-                                                                    const lng = parseFloat(eme.longitud);
-                                                                    if (isNaN(lat) || isNaN(lng)) {
-                                                                        return `${eme.latitud}, ${eme.longitud}`;
-                                                                    }
-                                                                    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                                                                })()
+                                                                <>
+                                                                    {parseFloat(eme.latitud).toFixed(6)},{' '}
+                                                                    {parseFloat(eme.longitud).toFixed(6)}
+                                                                    <Tooltip title="Ver mapa" sx={{ ml: 1 }}>
+                                                                        <IconButton
+                                                                            size="small"
+                                                                            onClick={() =>
+                                                                                handleOpenMap(
+                                                                                    parseFloat(eme.latitud),
+                                                                                    parseFloat(eme.longitud)
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            <LocationOnIcon color="primary" />
+                                                                        </IconButton>
+                                                                    </Tooltip>
+                                                                </>
                                                             ) : (
                                                                 '—'
                                                             )}
