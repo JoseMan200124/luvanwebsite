@@ -35,11 +35,11 @@ import {
     useTheme
 } from '@mui/material';
 import { Edit, Delete, Add, FileUpload } from '@mui/icons-material';
-
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import styled from 'styled-components';
+import CircularMasivaModal from '../components/CircularMasivaModal';
 
 const RolesContainer = tw.div`
   p-8 bg-gray-100 min-h-screen w-full
@@ -88,23 +88,23 @@ const ResponsiveTableHead = styled(TableHead)`
 `;
 
 const ResponsiveTableCell = styled(TableCell)`
-  @media (max-width: 600px) {
-    display: block;
-    text-align: right;
-    position: relative;
-    padding-left: 50%;
-    white-space: nowrap;
-    &:before {
-      content: attr(data-label);
-      position: absolute;
-      left: 0;
-      width: 45%;
-      padding-left: 15px;
-      font-weight: bold;
-      text-align: left;
-      white-space: nowrap;
+    @media (max-width: 600px) {
+        display: block;
+        text-align: right;
+        position: relative;
+        padding-left: 50%;
+        white-space: nowrap;
+        &:before {
+            content: attr(data-label);
+            position: absolute;
+            left: 0;
+            width: 45%;
+            padding-left: 15px;
+            font-weight: bold;
+            text-align: left;
+            white-space: nowrap;
+        }
     }
-  }
 `;
 
 /* ========= Styles para la vista móvil en formato "card" ========= */
@@ -114,25 +114,24 @@ const MobileCard = styled(Paper)`
 `;
 
 const MobileField = styled(Box)`
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
 `;
 
 const MobileLabel = styled(Typography)`
-  font-weight: bold;
-  font-size: 0.875rem;
-  color: #555;
+    font-weight: bold;
+    font-size: 0.875rem;
+    color: #555;
 `;
 
 const MobileValue = styled(Typography)`
-  font-size: 1rem;
+    font-size: 1rem;
 `;
 
 const RolesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
     const { auth } = useContext(AuthContext);
 
     const [users, setUsers] = useState([]);
@@ -185,6 +184,9 @@ const RolesManagementPage = () => {
     const [bulkLoading, setBulkLoading] = useState(false);
 
     const [schoolGrades, setSchoolGrades] = useState([]);
+
+    // NUEVA FUNCIONALIDAD: Estado para Circular Masiva
+    const [openCircularModal, setOpenCircularModal] = useState(false);
 
     useEffect(() => {
         fetchUsers();
@@ -586,10 +588,9 @@ const RolesManagementPage = () => {
 
     const downloadFilename = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
 
-    // Función auxiliar para cerrar el sidebar en móviles al seleccionar una opción
     const handleLinkClick = () => {
         if (window.innerWidth < 768) {
-            // Aquí se podría agregar lógica para cerrar algún menú, en este caso se deja vacío.
+            // Lógica para cerrar sidebar en móviles si se requiere.
         }
     };
 
@@ -627,6 +628,14 @@ const RolesManagementPage = () => {
                     </Button>
                     <Button variant="contained" color="primary" startIcon={<Add />} onClick={handleAddUser}>
                         Añadir Usuario
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        startIcon={<FileUpload />}
+                        onClick={() => setOpenCircularModal(true)}
+                    >
+                        Enviar Circular Masiva
                     </Button>
                 </div>
             </Box>
@@ -858,7 +867,6 @@ const RolesManagementPage = () => {
                                     onChange={async (e) => {
                                         const newSchoolId = e.target.value;
                                         setSelectedUser(prev => ({ ...prev, school: newSchoolId }));
-
                                         if (Number(selectedUser?.roleId) === 5) {
                                             if (newSchoolId) {
                                                 await fetchSchedulesForSchool(newSchoolId);
@@ -890,323 +898,282 @@ const RolesManagementPage = () => {
                         </Grid>
 
                         {Number(selectedUser?.roleId) === 3 && (
-                            <Grid item xs={12} md={6}>
-                                <FormControl variant="outlined" fullWidth>
-                                    <InputLabel>Bus Asignado</InputLabel>
-                                    <Select
-                                        name="busId"
-                                        value={selectedUser.busId || ''}
-                                        onChange={handleBusChange}
-                                        label="Bus Asignado"
-                                    >
-                                        <MenuItem value="">
-                                            <em>Ninguno</em>
-                                        </MenuItem>
-                                        {buses.map((bus) => (
-                                            <MenuItem key={bus.id} value={bus.id}>
-                                                {bus.plate}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-                        )}
-
-                        {Number(selectedUser?.roleId) === 4 && (
-                            <Grid item xs={12} md={6}>
-                                <TextField
-                                    name="phoneNumber"
-                                    label="Teléfono de la Monitora"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedUser?.phoneNumber || ''}
-                                    onChange={handleUserChange}
-                                />
-                            </Grid>
-                        )}
-                    </Grid>
-
-                    {/* Rol Padre */}
-                    {Number(selectedUser?.roleId) === 3 && (
-                        <>
-                            <Typography variant="h6" sx={{ mt: 3 }}>
-                                Seleccionar Contrato para enviar al Padre
-                            </Typography>
-                            <FormControl fullWidth margin="dense">
-                                <InputLabel>Contrato</InputLabel>
-                                <Select
-                                    value={selectedContractUuid}
-                                    onChange={(e) => setSelectedContractUuid(e.target.value)}
-                                    label="Contrato"
-                                >
-                                    <MenuItem value="">
-                                        <em>Ninguno</em>
-                                    </MenuItem>
-                                    {contracts.map((c) => (
-                                        <MenuItem key={c.uuid} value={c.uuid}>
-                                            {c.title}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-
-                            <Typography variant="h6" sx={{ mt: 3 }}>
-                                Datos de la Familia (Padre)
-                            </Typography>
-                            <Grid container spacing={2} sx={{ mt: 1 }}>
-                                <Grid item xs={12} md={4}>
-                                    <TextField
-                                        name="motherName"
-                                        label="Nombre de la Madre"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.motherName}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={4}>
-                                    <TextField
-                                        name="motherCellphone"
-                                        label="Celular de la Madre"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.motherCellphone}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={4}>
-                                    <TextField
-                                        name="motherEmail"
-                                        label="Correo de la Madre"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.motherEmail}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={4}>
-                                    <TextField
-                                        name="fatherName"
-                                        label="Nombre del Padre"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.fatherName}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={4}>
-                                    <TextField
-                                        name="fatherCellphone"
-                                        label="Celular del Padre"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.fatherCellphone}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={4}>
-                                    <TextField
-                                        name="fatherEmail"
-                                        label="Correo del Padre"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.fatherEmail}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
+                            <>
                                 <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="razonSocial"
-                                        label="Razón Social"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.razonSocial}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="nit"
-                                        label="NIT"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.nit}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="mainAddress"
-                                        label="Dirección Principal"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.mainAddress}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="alternativeAddress"
-                                        label="Dirección Alterna"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.alternativeAddress}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="specialFee"
-                                        label="Descuento Especial (monto fijo)"
-                                        type="number"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={familyDetail.specialFee}
-                                        onChange={handleFamilyDetailChange}
-                                    />
-                                </Grid>
-                            </Grid>
-
-                            <Typography variant="h6" sx={{ mt: 3 }}>
-                                Alumnos
-                            </Typography>
-                            <Grid container spacing={2}>
-                                {familyDetail.students.map((st, idx) => (
-                                    <Grid item xs={12} key={idx}>
-                                        <Typography variant="body2" sx={{ ml: 2 }}>
-                                            • {st.fullName} ({st.grade})
-                                        </Typography>
-                                    </Grid>
-                                ))}
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="fullName"
-                                        label="Nombre Completo del Alumno"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={newStudent.fullName}
-                                        onChange={(e) => setNewStudent({ ...newStudent, fullName: e.target.value })}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={4}>
-                                    <FormControl fullWidth>
-                                        <InputLabel>Grado</InputLabel>
+                                    <FormControl variant="outlined" fullWidth>
+                                        <InputLabel>Contrato</InputLabel>
                                         <Select
-                                            value={newStudent.grade}
-                                            label="Grado"
-                                            onChange={(e) => setNewStudent({ ...newStudent, grade: e.target.value })}
+                                            value={selectedContractUuid}
+                                            onChange={(e) => setSelectedContractUuid(e.target.value)}
+                                            label="Contrato"
                                         >
                                             <MenuItem value="">
-                                                <em>Seleccione un grado</em>
+                                                <em>Ninguno</em>
                                             </MenuItem>
-                                            {schoolGrades.map((grade, idx) => (
-                                                <MenuItem key={idx} value={grade.name}>
-                                                    {grade.name}
+                                            {contracts.map((c) => (
+                                                <MenuItem key={c.uuid} value={c.uuid}>
+                                                    {c.title}
                                                 </MenuItem>
                                             ))}
                                         </Select>
                                     </FormControl>
                                 </Grid>
-                                <Grid item xs={12} md={2} display="flex" alignItems="center">
-                                    <Button variant="outlined" onClick={handleAddStudent} sx={{ mt: 1 }}>
-                                        Agregar
-                                    </Button>
-                                </Grid>
-                            </Grid>
 
-                            <Typography variant="h6" sx={{ mt: 3 }}>
-                                Horarios de Parada
-                            </Typography>
-                            <Grid container spacing={2}>
-                                {familyDetail.scheduleSlots.map((slot, idx) => (
-                                    <Grid item xs={12} key={idx}>
-                                        <Typography variant="body2" sx={{ ml: 2 }}>
-                                            • {slot.time} {slot.note && `(${slot.note})`}
-                                        </Typography>
-                                    </Grid>
-                                ))}
-                                <Grid item xs={12} md={4}>
-                                    <TextField
-                                        name="time"
-                                        label="Hora (HH:MM)"
-                                        type="time"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={newSlot.time}
-                                        onChange={(e) => setNewSlot({ ...newSlot, time: e.target.value })}
-                                        InputLabelProps={{ shrink: true }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="note"
-                                        label="Nota / Parada"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={newSlot.note}
-                                        onChange={(e) => setNewSlot({ ...newSlot, note: e.target.value })}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={2} display="flex" alignItems="center">
-                                    <Button variant="outlined" onClick={handleAddSlot} sx={{ mt: 1 }}>
-                                        Agregar
-                                    </Button>
-                                </Grid>
-                            </Grid>
-                        </>
-                    )}
-
-                    {/* Rol Piloto */}
-                    {Number(selectedUser?.roleId) === 5 && (
-                        <>
-                            <Typography variant="h6" sx={{ mt: 3 }}>
-                                Horarios Disponibles del Colegio
-                            </Typography>
-                            {availablePilotSchedules.length === 0 ? (
-                                <Typography variant="body2" color="textSecondary">
-                                    No hay horarios disponibles o no se han cargado.
+                                <Typography variant="h6" sx={{ mt: 3 }}>
+                                    Datos de la Familia (Padre)
                                 </Typography>
-                            ) : (
-                                <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
-                                    {availablePilotSchedules.map((slot, idx) => {
-                                        const checked = !!selectedPilotSchedules.find(
-                                            s => s.day === slot.day && s.time === slot.time
-                                        );
-                                        return (
-                                            <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
-                                                <Checkbox
-                                                    checked={checked}
-                                                    onChange={() => {
-                                                        handleTogglePilotSchedule(slot.day, slot.time);
-                                                    }}
-                                                    color="primary"
-                                                />
-                                                <span>{`${slot.day} - ${slot.time}`}</span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </>
-                    )}
+                                <Grid container spacing={2} sx={{ mt: 1 }}>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="motherName"
+                                            label="Nombre de la Madre"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.motherName}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="motherCellphone"
+                                            label="Celular de la Madre"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.motherCellphone}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="motherEmail"
+                                            label="Correo de la Madre"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.motherEmail}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="fatherName"
+                                            label="Nombre del Padre"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.fatherName}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="fatherCellphone"
+                                            label="Celular del Padre"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.fatherCellphone}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="fatherEmail"
+                                            label="Correo del Padre"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.fatherEmail}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            name="razonSocial"
+                                            label="Razón Social"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.razonSocial}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            name="nit"
+                                            label="NIT"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.nit}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            name="mainAddress"
+                                            label="Dirección Principal"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.mainAddress}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            name="alternativeAddress"
+                                            label="Dirección Alterna"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.alternativeAddress}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            name="specialFee"
+                                            label="Descuento Especial (monto fijo)"
+                                            type="number"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.specialFee}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                </Grid>
 
-                    {/* Rol Supervisor */}
-                    {Number(selectedUser?.roleId) === 6 && (
-                        <>
-                            <Typography variant="h6" sx={{ mt: 3 }}>
-                                Pilotos a cargo
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                                Selecciona uno o más pilotos que estarán a cargo de este Supervisor.
-                            </Typography>
-                            <SupervisorPilotsList
-                                allPilots={allPilots}
-                                selectedSupervisorPilots={selectedSupervisorPilots}
-                                onToggle={handleToggleSupervisorPilot}
-                            />
-                        </>
-                    )}
+                                <Typography variant="h6" sx={{ mt: 3 }}>
+                                    Alumnos
+                                </Typography>
+                                <Grid container spacing={2}>
+                                    {familyDetail.students.map((st, idx) => (
+                                        <Grid item xs={12} key={idx}>
+                                            <Typography variant="body2" sx={{ ml: 2 }}>
+                                                • {st.fullName} ({st.grade})
+                                            </Typography>
+                                        </Grid>
+                                    ))}
+                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            name="fullName"
+                                            label="Nombre Completo del Alumno"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={newStudent.fullName}
+                                            onChange={(e) => setNewStudent({ ...newStudent, fullName: e.target.value })}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <FormControl fullWidth>
+                                            <InputLabel>Grado</InputLabel>
+                                            <Select
+                                                value={newStudent.grade}
+                                                label="Grado"
+                                                onChange={(e) => setNewStudent({ ...newStudent, grade: e.target.value })}
+                                            >
+                                                <MenuItem value="">
+                                                    <em>Seleccione un grado</em>
+                                                </MenuItem>
+                                                {schoolGrades.map((grade, idx) => (
+                                                    <MenuItem key={idx} value={grade.name}>
+                                                        {grade.name}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+                                    <Grid item xs={12} md={2} display="flex" alignItems="center">
+                                        <Button variant="outlined" onClick={handleAddStudent} sx={{ mt: 1 }}>
+                                            Agregar
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+
+                                <Typography variant="h6" sx={{ mt: 3 }}>
+                                    Horarios de Parada
+                                </Typography>
+                                <Grid container spacing={2}>
+                                    {familyDetail.scheduleSlots.map((slot, idx) => (
+                                        <Grid item xs={12} key={idx}>
+                                            <Typography variant="body2" sx={{ ml: 2 }}>
+                                                • {slot.time} {slot.note && `(${slot.note})`}
+                                            </Typography>
+                                        </Grid>
+                                    ))}
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="time"
+                                            label="Hora (HH:MM)"
+                                            type="time"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={newSlot.time}
+                                            onChange={(e) => setNewSlot({ ...newSlot, time: e.target.value })}
+                                            InputLabelProps={{ shrink: true }}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            name="note"
+                                            label="Nota / Parada"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={newSlot.note}
+                                            onChange={(e) => setNewSlot({ ...newSlot, note: e.target.value })}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={2} display="flex" alignItems="center">
+                                        <Button variant="outlined" onClick={handleAddSlot} sx={{ mt: 1 }}>
+                                            Agregar
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </>
+                        )}
+
+                        {Number(selectedUser?.roleId) === 5 && (
+                            <>
+                                <Typography variant="h6" sx={{ mt: 3 }}>
+                                    Horarios Disponibles del Colegio
+                                </Typography>
+                                {availablePilotSchedules.length === 0 ? (
+                                    <Typography variant="body2" color="textSecondary">
+                                        No hay horarios disponibles o no se han cargado.
+                                    </Typography>
+                                ) : (
+                                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
+                                        {availablePilotSchedules.map((slot, idx) => {
+                                            const checked = !!selectedPilotSchedules.find(
+                                                s => s.day === slot.day && s.time === slot.time
+                                            );
+                                            return (
+                                                <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <Checkbox
+                                                        checked={checked}
+                                                        onChange={() => {
+                                                            handleTogglePilotSchedule(slot.day, slot.time);
+                                                        }}
+                                                        color="primary"
+                                                    />
+                                                    <span>{`${slot.day} - ${slot.time}`}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {Number(selectedUser?.roleId) === 6 && (
+                            <>
+                                <Typography variant="h6" sx={{ mt: 3 }}>
+                                    Pilotos a cargo
+                                </Typography>
+                                <Typography variant="body2" color="textSecondary">
+                                    Selecciona uno o más pilotos que estarán a cargo de este Supervisor.
+                                </Typography>
+                                <SupervisorPilotsList
+                                    allPilots={allPilots}
+                                    selectedSupervisorPilots={selectedSupervisorPilots}
+                                    onToggle={handleToggleSupervisorPilot}
+                                />
+                            </>
+                        )}
+                    </Grid>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleDialogClose} color="primary">
@@ -1292,6 +1259,16 @@ const RolesManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* NUEVA: Modal para enviar Circular Masiva */}
+            <CircularMasivaModal
+                open={openCircularModal}
+                onClose={() => setOpenCircularModal(false)}
+                schools={schools}
+                onSuccess={() => {
+                    // Opcional: acciones tras enviar la circular
+                }}
+            />
 
             <Snackbar
                 open={snackbar.open}

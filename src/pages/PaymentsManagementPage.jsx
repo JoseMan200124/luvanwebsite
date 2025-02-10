@@ -76,7 +76,9 @@ const PaymentsManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
+    // ==============================
     // Estados
+    // ==============================
     const [payments, setPayments] = useState([]);
     const [schools, setSchools] = useState([]);
     const [filteredPayments, setFilteredPayments] = useState([]);
@@ -110,7 +112,7 @@ const PaymentsManagementPage = () => {
     const [fatherReceipts, setFatherReceipts] = useState([]);
     const [fatherName, setFatherName] = useState('');
 
-    // Zoom/Pan
+    // Zoom/Pan para boletas
     const [openImageDialog, setOpenImageDialog] = useState(false);
     const [selectedImageUrl, setSelectedImageUrl] = useState('');
     const [zoomScale, setZoomScale] = useState(1);
@@ -141,7 +143,7 @@ const PaymentsManagementPage = () => {
     });
 
     // ==============================
-    // 1) Carga Data (acá se hará el recálculo en el backend)
+    // 1) Cargar data (recalcular mora en el backend)
     // ==============================
     const fetchPayments = async () => {
         try {
@@ -347,21 +349,24 @@ const PaymentsManagementPage = () => {
     };
 
     // ==============================
-    // 6) Leyenda de colores
+    // 6) Leyenda de colores (tabla)
     // ==============================
     const getRowColor = (pay) => {
         const st = (pay.finalStatus || '').toUpperCase();
         if (st === 'PAGADO') {
-            return '#bbf7d0'; // verde
+            // Verde
+            return '#bbf7d0';
         }
         if (st === 'MORA') {
-            return '#fca5a5'; // rojo
+            // Rojo
+            return '#fca5a5';
         }
-        return '#fde68a'; // amarillo
+        // Amarillo
+        return '#fde68a';
     };
 
     // ==============================
-    // 7) Agrupar por colegio
+    // 7) Agrupar pagos por colegio
     // ==============================
     const paymentsBySchool = {};
     filteredPayments.forEach((p) => {
@@ -385,6 +390,7 @@ const PaymentsManagementPage = () => {
                 setFatherReceipts([]);
             }
             setOpenReceiptsDialog(true);
+            // Marcamos que ya no tiene boletas no vistas
             setUnreadReceiptsMap((prev) => ({ ...prev, [fatherId]: false }));
         } catch (err) {
             setSnackbar({ open: true, message: 'Error al obtener boletas', severity: 'error' });
@@ -397,7 +403,7 @@ const PaymentsManagementPage = () => {
     };
 
     // ==============================
-    // 9) Zoom/Pan Boleta
+    // 9) Zoom/Pan de la Boleta
     // ==============================
     const handleImageClick = (url) => {
         setSelectedImageUrl(url);
@@ -433,6 +439,7 @@ const PaymentsManagementPage = () => {
         let newX = e.clientX - dragStart.x;
         let newY = e.clientY - dragStart.y;
 
+        // Limites horizontales
         if (scaledW <= containerWidth) {
             newX = (containerWidth - scaledW) / 2;
         } else {
@@ -440,6 +447,7 @@ const PaymentsManagementPage = () => {
             if (newX < minX) newX = minX;
             if (newX > 0) newX = 0;
         }
+        // Limites verticales
         if (scaledH <= containerHeight) {
             newY = (containerHeight - scaledH) / 2;
         } else {
@@ -461,9 +469,6 @@ const PaymentsManagementPage = () => {
         setZoomScale(newS);
     };
 
-    // ==============================
-    // 10) Registrar Pago (Modal)
-    // ==============================
     const handleOpenRegisterPayDialog = (pay) => {
         setRegisterPaySelected(pay);
         setRegisterPaymentData({
@@ -487,6 +492,7 @@ const PaymentsManagementPage = () => {
         });
     };
 
+    // Manejo de checkboxes en el modal de pago
     const handleSelectMultipleMonths = (checked) => {
         if (!registerPaySelected) return;
         const newData = { ...registerPaymentData };
@@ -552,7 +558,7 @@ const PaymentsManagementPage = () => {
             });
             setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
             handleCloseRegisterPayDialog();
-            // Refrescamos la data
+            // Recargamos data
             fetchPayments();
         } catch (err) {
             setSnackbar({ open: true, message: 'Error al registrar pago', severity: 'error' });
@@ -564,9 +570,7 @@ const PaymentsManagementPage = () => {
     // ==============================
     useEffect(() => {
         const socket = getSocket();
-        if (!socket) {
-            return;
-        }
+        if (!socket) return;
         socket.on('receipt-uploaded', ({ fatherId }) => {
             setUnreadReceiptsMap(prev => ({ ...prev, [fatherId]: true }));
         });
@@ -575,6 +579,9 @@ const PaymentsManagementPage = () => {
         };
     }, []);
 
+    // ==============================
+    // Render principal
+    // ==============================
     return (
         <Container>
             {/* Encabezado y sección de mora/leyenda */}
@@ -744,7 +751,7 @@ const PaymentsManagementPage = () => {
                                                 : '—'}
                                         </MobileValue>
                                     </MobileField>
-                                    {/* Puedes agregar más campos relevantes aquí */}
+                                    {/* Botones de acciones */}
                                     <Box
                                         sx={{
                                             display: 'flex',
@@ -760,7 +767,12 @@ const PaymentsManagementPage = () => {
                                             <EditIcon />
                                         </IconButton>
                                         <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
-                                            <Badge color="primary" variant="dot" overlap="circular" invisible={!payment.User || !unreadReceiptsMap[payment.User.id]}>
+                                            <Badge
+                                                color="primary"
+                                                variant="dot"
+                                                overlap="circular"
+                                                invisible={!payment.User || !unreadReceiptsMap[payment.User.id]}
+                                            >
                                                 <ReceiptIcon />
                                             </Badge>
                                         </IconButton>
@@ -796,7 +808,9 @@ const PaymentsManagementPage = () => {
                                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                                 .map((payment) => {
                                                     const fatherId = payment.User?.id;
-                                                    const hasUnread = fatherId ? unreadReceiptsMap[fatherId] === true : false;
+                                                    const hasUnread = fatherId
+                                                        ? unreadReceiptsMap[fatherId] === true
+                                                        : false;
 
                                                     const mt = parseFloat(payment.montoTotal) || 0;
                                                     const lo = parseFloat(payment.leftover) || 0;
@@ -805,7 +819,10 @@ const PaymentsManagementPage = () => {
                                                     const cb = parseFloat(payment.creditBalance) || 0;
 
                                                     return (
-                                                        <TableRow key={payment.id} style={{ backgroundColor: getRowColor(payment) }}>
+                                                        <TableRow
+                                                            key={payment.id}
+                                                            style={{ backgroundColor: getRowColor(payment) }}
+                                                        >
                                                             <TableCell>{payment.User?.name}</TableCell>
                                                             <TableCell>{payment.User?.email}</TableCell>
                                                             <TableCell>{payment.finalStatus}</TableCell>
@@ -824,20 +841,39 @@ const PaymentsManagementPage = () => {
                                                             <TableCell>Q {pen.toFixed(2)}</TableCell>
                                                             <TableCell>Q {td.toFixed(2)}</TableCell>
                                                             <TableCell>Q {cb.toFixed(2)}</TableCell>
-                                                            <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
+                                                            <TableCell>
+                                                                {payment.User?.state === 1 ? 'Sí' : 'No'}
+                                                            </TableCell>
                                                             <TableCell align="center">
-                                                                <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
+                                                                <IconButton
+                                                                    title="Enviar Correo"
+                                                                    onClick={() => handleOpenEmailDialog(payment)}
+                                                                >
                                                                     <SendIcon />
                                                                 </IconButton>
-                                                                <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
+                                                                <IconButton
+                                                                    title="Editar"
+                                                                    onClick={() => handleOpenEditDialog(payment)}
+                                                                >
                                                                     <EditIcon />
                                                                 </IconButton>
-                                                                <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
-                                                                    <Badge color="primary" variant="dot" overlap="circular" invisible={!hasUnread}>
+                                                                <IconButton
+                                                                    title="Ver Boletas"
+                                                                    onClick={() => handleShowReceipts(payment)}
+                                                                >
+                                                                    <Badge
+                                                                        color="primary"
+                                                                        variant="dot"
+                                                                        overlap="circular"
+                                                                        invisible={!hasUnread}
+                                                                    >
                                                                         <ReceiptIcon />
                                                                     </Badge>
                                                                 </IconButton>
-                                                                <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
+                                                                <IconButton
+                                                                    title="Registrar Pago"
+                                                                    onClick={() => handleOpenRegisterPayDialog(payment)}
+                                                                >
                                                                     <PaymentIcon />
                                                                 </IconButton>
                                                             </TableCell>
@@ -983,7 +1019,11 @@ const PaymentsManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
-                        value={editPayment.nextPaymentDate ? moment(editPayment.nextPaymentDate).format('YYYY-MM-DD') : ''}
+                        value={
+                            editPayment.nextPaymentDate
+                                ? moment(editPayment.nextPaymentDate).format('YYYY-MM-DD')
+                                : ''
+                        }
                         disabled
                     />
                     <TextField
@@ -993,7 +1033,11 @@ const PaymentsManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
-                        value={editPayment.lastPaymentDate ? moment(editPayment.lastPaymentDate).format('YYYY-MM-DD') : ''}
+                        value={
+                            editPayment.lastPaymentDate
+                                ? moment(editPayment.lastPaymentDate).format('YYYY-MM-DD')
+                                : ''
+                        }
                         onChange={(e) => {
                             setEditPayment({ ...editPayment, lastPaymentDate: e.target.value });
                         }}
@@ -1100,10 +1144,16 @@ const PaymentsManagementPage = () => {
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <IconButton onClick={() => setZoomScale((z) => Math.max(0.3, z - 0.1))} title="Zoom Out">
+                    <IconButton
+                        onClick={() => setZoomScale((z) => Math.max(0.3, z - 0.1))}
+                        title="Zoom Out"
+                    >
                         <ZoomOutIcon />
                     </IconButton>
-                    <IconButton onClick={() => setZoomScale((z) => Math.min(4, z + 0.1))} title="Zoom In">
+                    <IconButton
+                        onClick={() => setZoomScale((z) => Math.min(4, z + 0.1))}
+                        title="Zoom In"
+                    >
                         <ZoomInIcon />
                     </IconButton>
                     <Button onClick={handleCloseImageDialog}>Cerrar</Button>
@@ -1174,6 +1224,7 @@ const PaymentsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
+            {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}

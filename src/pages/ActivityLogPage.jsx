@@ -150,17 +150,20 @@ const ActivityLogPage = () => {
     const isSupervisor = auth?.user?.roleId === 6;
     const [loading, setLoading] = useState(false);
 
+    // DATOS
     const [buses, setBuses] = useState([]);
     const [incidents, setIncidents] = useState([]);
     const [emergencies, setEmergencies] = useState([]);
     const [payments, setPayments] = useState([]);
 
+    // SNACKBAR
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
         severity: 'info'
     });
 
+    // Dialogs
     const [openBoletasDialog, setOpenBoletasDialog] = useState(false);
     const [currentBoletas, setCurrentBoletas] = useState([]);
     const [currentParentName, setCurrentParentName] = useState('');
@@ -182,14 +185,15 @@ const ActivityLogPage = () => {
     // ---------------------
     // Filtros & Paginación
     // ---------------------
-    // Buses
+
+    // -- BUSES --
     const [busPilotFilter, setBusPilotFilter] = useState('');
     const [busMonitoraFilter, setBusMonitoraFilter] = useState('');
     const [busDescriptionFilter, setBusDescriptionFilter] = useState('');
     const [busPage, setBusPage] = useState(0);
     const [busRowsPerPage, setBusRowsPerPage] = useState(5);
 
-    // Incidentes
+    // -- INCIDENTES --
     const [incDateFrom, setIncDateFrom] = useState('');
     const [incDateTo, setIncDateTo] = useState('');
     const [incPilotFilter, setIncPilotFilter] = useState('');
@@ -197,14 +201,14 @@ const ActivityLogPage = () => {
     const [incPage, setIncPage] = useState(0);
     const [incRowsPerPage, setIncRowsPerPage] = useState(5);
 
-    // Emergencias
+    // -- EMERGENCIAS --
     const [emeDateFrom, setEmeDateFrom] = useState('');
     const [emeDateTo, setEmeDateTo] = useState('');
     const [emePilotFilter, setEmePilotFilter] = useState('');
     const [emePage, setEmePage] = useState(0);
     const [emeRowsPerPage, setEmeRowsPerPage] = useState(5);
 
-    // Pagos (solo si NO es supervisor)
+    // -- PAGOS --
     const [payDateFrom, setPayDateFrom] = useState('');
     const [payDateTo, setPayDateTo] = useState('');
     const [payBalanceMin, setPayBalanceMin] = useState('');
@@ -263,6 +267,8 @@ const ActivityLogPage = () => {
     const handleViewBoletas = async (fatherId, fatherName) => {
         try {
             setLoading(true);
+            // Ejemplo de endpoint para obtener boletas de un padre en particular
+            // (Dependerá de cómo tengas implementado tu backend)
             const resp = await api.get(`/parents/${fatherId}/receipts`);
             const boletas = resp.data.receipts || [];
             setCurrentBoletas(boletas);
@@ -402,6 +408,7 @@ const ActivityLogPage = () => {
     // ---------------------
     // Filtrado & Paginación
     // ---------------------
+
     // Buses
     const filteredBuses = buses.filter((b) => {
         if (busPilotFilter) {
@@ -430,7 +437,7 @@ const ActivityLogPage = () => {
         setBusPage(0);
     };
 
-    // Incidentes
+    // Incidentes => filtrado + paginación
     const filteredIncidents = incidents.filter((inc) => {
         if (incDateFrom) {
             const from = moment(incDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -464,7 +471,7 @@ const ActivityLogPage = () => {
         setIncPage(0);
     };
 
-    // Emergencias
+    // Emergencias => filtrado + paginación
     const filteredEmergencies = emergencies.filter((eme) => {
         if (emeDateFrom) {
             const from = moment(emeDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -494,7 +501,7 @@ const ActivityLogPage = () => {
         setEmePage(0);
     };
 
-    // Pagos (solo si NO es supervisor)
+    // Pagos => filtrado + paginación (si no es supervisor)
     const filteredPayments = payments.filter((pay) => {
         if (payDateFrom) {
             const from = moment(payDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -548,7 +555,9 @@ const ActivityLogPage = () => {
                     {/* Sección Buses */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
-                            <DirectionsBusIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#1976D2' }} />
+                            <DirectionsBusIcon
+                                sx={{ mr: 1, verticalAlign: 'middle', color: '#1976D2' }}
+                            />
                             Buses, Pilotos, Monitoras & Paradas
                         </SectionTitle>
 
@@ -594,11 +603,15 @@ const ActivityLogPage = () => {
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>{bus.pilot ? bus.pilot.name : '—'}</MobileValue>
+                                                    <MobileValue>
+                                                        {bus.pilot ? bus.pilot.name : '—'}
+                                                    </MobileValue>
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Monitora:</MobileLabel>
-                                                    <MobileValue>{bus.monitora ? bus.monitora.name : '—'}</MobileValue>
+                                                    <MobileValue>
+                                                        {bus.monitora ? bus.monitora.name : '—'}
+                                                    </MobileValue>
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Número de ruta:</MobileLabel>
@@ -608,33 +621,71 @@ const ActivityLogPage = () => {
                                                     <MobileLabel>Descripción:</MobileLabel>
                                                     <MobileValue>{bus.description || '—'}</MobileValue>
                                                 </MobileField>
+
+                                                {/* Mostrar estado de la ruta con bus.currentRoute */}
+                                                <MobileField>
+                                                    <MobileLabel>Estado de Ruta:</MobileLabel>
+                                                    {bus.currentRoute ? (
+                                                        !bus.currentRoute.endTime ? (
+                                                            <MobileValue>
+                                                                En Ruta (Inicio:{' '}
+                                                                {formatGuatemalaDatetime(
+                                                                    bus.currentRoute.startTime
+                                                                )}
+                                                                )
+                                                            </MobileValue>
+                                                        ) : (
+                                                            <MobileValue>
+                                                                Ruta Finalizada a las{' '}
+                                                                {formatGuatemalaDatetime(
+                                                                    bus.currentRoute.endTime
+                                                                )}
+                                                            </MobileValue>
+                                                        )
+                                                    ) : (
+                                                        <MobileValue>Sin ruta activa</MobileValue>
+                                                    )}
+                                                </MobileField>
+
                                                 <MobileField>
                                                     <MobileLabel>Paradas:</MobileLabel>
-                                                    {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
+                                                    {Array.isArray(bus.stops) &&
+                                                    bus.stops.length > 0 ? (
                                                         <>
                                                             {bus.stops.map((stop) => (
-                                                                <MobileCard key={stop.stopId} sx={{ p: 2, mb: 1 }}>
+                                                                <MobileCard
+                                                                    key={stop.stopId}
+                                                                    sx={{ p: 2, mb: 1 }}
+                                                                >
                                                                     <MobileField>
                                                                         <MobileLabel>Horario:</MobileLabel>
                                                                         <MobileValue>{stop.time}</MobileValue>
                                                                     </MobileField>
                                                                     <MobileField>
                                                                         <MobileLabel>Nota:</MobileLabel>
-                                                                        <MobileValue>{stop.note || ''}</MobileValue>
+                                                                        <MobileValue>
+                                                                            {stop.note || ''}
+                                                                        </MobileValue>
                                                                     </MobileField>
                                                                     <MobileField>
                                                                         <MobileLabel>Padre:</MobileLabel>
-                                                                        <MobileValue>{stop.parentName}</MobileValue>
+                                                                        <MobileValue>
+                                                                            {stop.parentName}
+                                                                        </MobileValue>
                                                                     </MobileField>
                                                                     <MobileField>
                                                                         <MobileLabel>Estudiantes:</MobileLabel>
-                                                                        <MobileValue>{stop.students}</MobileValue>
+                                                                        <MobileValue>
+                                                                            {stop.students}
+                                                                        </MobileValue>
                                                                     </MobileField>
                                                                 </MobileCard>
                                                             ))}
                                                         </>
                                                     ) : (
-                                                        <MobileValue>No hay paradas registradas.</MobileValue>
+                                                        <MobileValue>
+                                                            No hay paradas registradas.
+                                                        </MobileValue>
                                                     )}
                                                 </MobileField>
                                                 <MobileField>
@@ -643,24 +694,40 @@ const ActivityLogPage = () => {
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Estado Taller:</MobileLabel>
-                                                    <MobileValue>{bus.inWorkshop ? 'En Taller' : 'Disponible'}</MobileValue>
+                                                    <MobileValue>
+                                                        {bus.inWorkshop ? 'En Taller' : 'Disponible'}
+                                                    </MobileValue>
                                                 </MobileField>
+
                                                 <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
                                                     {bus.inWorkshop ? (
                                                         <Tooltip title="Marcar como Disponible">
-                                                            <IconButton color="primary" onClick={() => handleToggleBusTaller(bus, false)}>
+                                                            <IconButton
+                                                                color="primary"
+                                                                onClick={() =>
+                                                                    handleToggleBusTaller(bus, false)
+                                                                }
+                                                            >
                                                                 <BuildIcon />
                                                             </IconButton>
                                                         </Tooltip>
                                                     ) : (
                                                         <Tooltip title="Marcar bus en Taller">
-                                                            <IconButton color="primary" onClick={() => handleToggleBusTaller(bus, true)}>
+                                                            <IconButton
+                                                                color="primary"
+                                                                onClick={() =>
+                                                                    handleToggleBusTaller(bus, true)
+                                                                }
+                                                            >
                                                                 <BuildIcon />
                                                             </IconButton>
                                                         </Tooltip>
                                                     )}
                                                     <Tooltip title="Reportar Incidencia">
-                                                        <IconButton color="warning" onClick={() => handleOpenIncidentDialog(bus)}>
+                                                        <IconButton
+                                                            color="warning"
+                                                            onClick={() => handleOpenIncidentDialog(bus)}
+                                                        >
                                                             <ReportIcon />
                                                         </IconButton>
                                                     </Tooltip>
@@ -687,18 +754,57 @@ const ActivityLogPage = () => {
                                                 onChange={handleChangeAccordion(`panel-${bus.id}`)}
                                             >
                                                 <AccordionSummaryStyled expandIcon={<ExpandMoreIcon />}>
-                                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                                                    <Typography
+                                                        variant="subtitle1"
+                                                        sx={{ fontWeight: 'bold' }}
+                                                    >
                                                         {bus.plate}
                                                     </Typography>
                                                     {bus.inWorkshop && (
-                                                        <Chip label="En Taller" color="error" size="small" sx={{ ml: 2 }} />
+                                                        <Chip
+                                                            label="En Taller"
+                                                            color="error"
+                                                            size="small"
+                                                            sx={{ ml: 2 }}
+                                                        />
                                                     )}
                                                     <Chip
-                                                        label={`Ocupación: ${bus.occupation ?? 0}/${bus.capacity ?? '--'}`}
+                                                        label={`Ocupación: ${bus.occupation ?? 0}/${
+                                                            bus.capacity ?? '--'
+                                                        }`}
                                                         size="small"
                                                         color="success"
                                                         sx={{ ml: 2 }}
                                                     />
+                                                    {/* Mostrar estado de ruta */}
+                                                    {bus.currentRoute ? (
+                                                        !bus.currentRoute.endTime ? (
+                                                            <Chip
+                                                                label={`En Ruta (Inicio: ${formatGuatemalaDatetime(
+                                                                    bus.currentRoute.startTime
+                                                                )})`}
+                                                                color="primary"
+                                                                size="small"
+                                                                sx={{ ml: 2 }}
+                                                            />
+                                                        ) : (
+                                                            <Chip
+                                                                label={`Finalizada a las ${formatGuatemalaDatetime(
+                                                                    bus.currentRoute.endTime
+                                                                )}`}
+                                                                color="secondary"
+                                                                size="small"
+                                                                sx={{ ml: 2 }}
+                                                            />
+                                                        )
+                                                    ) : (
+                                                        <Chip
+                                                            label="Sin ruta activa"
+                                                            color="default"
+                                                            size="small"
+                                                            sx={{ ml: 2 }}
+                                                        />
+                                                    )}
                                                 </AccordionSummaryStyled>
 
                                                 <AccordionDetails>
@@ -723,29 +829,51 @@ const ActivityLogPage = () => {
                                                         </Grid>
 
                                                         <Grid item xs={12} md={6}>
-                                                            {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
+                                                            {Array.isArray(bus.stops) &&
+                                                            bus.stops.length > 0 ? (
                                                                 <Table size="small">
                                                                     <TableHead>
                                                                         <TableRow>
-                                                                            <TableHeaderCell>Horario</TableHeaderCell>
-                                                                            <TableHeaderCell>Nota</TableHeaderCell>
-                                                                            <TableHeaderCell>Padre</TableHeaderCell>
-                                                                            <TableHeaderCell>Estudiantes</TableHeaderCell>
+                                                                            <TableHeaderCell>
+                                                                                Horario
+                                                                            </TableHeaderCell>
+                                                                            <TableHeaderCell>
+                                                                                Nota
+                                                                            </TableHeaderCell>
+                                                                            <TableHeaderCell>
+                                                                                Padre
+                                                                            </TableHeaderCell>
+                                                                            <TableHeaderCell>
+                                                                                Estudiantes
+                                                                            </TableHeaderCell>
                                                                         </TableRow>
                                                                     </TableHead>
                                                                     <TableBody>
                                                                         {bus.stops.map((stop) => (
-                                                                            <TableRow key={stop.stopId}>
-                                                                                <TableCell>{stop.time}</TableCell>
-                                                                                <TableCell>{stop.note || ''}</TableCell>
-                                                                                <TableCell>{stop.parentName}</TableCell>
-                                                                                <TableCell>{stop.students}</TableCell>
+                                                                            <TableRow
+                                                                                key={stop.stopId}
+                                                                            >
+                                                                                <TableCell>
+                                                                                    {stop.time}
+                                                                                </TableCell>
+                                                                                <TableCell>
+                                                                                    {stop.note || ''}
+                                                                                </TableCell>
+                                                                                <TableCell>
+                                                                                    {stop.parentName}
+                                                                                </TableCell>
+                                                                                <TableCell>
+                                                                                    {stop.students}
+                                                                                </TableCell>
                                                                             </TableRow>
                                                                         ))}
                                                                     </TableBody>
                                                                 </Table>
                                                             ) : (
-                                                                <Typography variant="body2" color="textSecondary">
+                                                                <Typography
+                                                                    variant="body2"
+                                                                    color="textSecondary"
+                                                                >
                                                                     No hay paradas registradas.
                                                                 </Typography>
                                                             )}
@@ -755,24 +883,41 @@ const ActivityLogPage = () => {
 
                                                 <Divider />
                                                 <AccordionActions>
-                                                    <Typography variant="caption" color="textSecondary" sx={{ mr: 2 }}>
+                                                    <Typography
+                                                        variant="caption"
+                                                        color="textSecondary"
+                                                        sx={{ mr: 2 }}
+                                                    >
                                                         ID Bus: {bus.id}
                                                     </Typography>
                                                     {bus.inWorkshop ? (
                                                         <Tooltip title="Marcar como Disponible">
-                                                            <IconButton color="primary" onClick={() => handleToggleBusTaller(bus, false)}>
+                                                            <IconButton
+                                                                color="primary"
+                                                                onClick={() =>
+                                                                    handleToggleBusTaller(bus, false)
+                                                                }
+                                                            >
                                                                 <BuildIcon />
                                                             </IconButton>
                                                         </Tooltip>
                                                     ) : (
                                                         <Tooltip title="Marcar bus en Taller">
-                                                            <IconButton color="primary" onClick={() => handleToggleBusTaller(bus, true)}>
+                                                            <IconButton
+                                                                color="primary"
+                                                                onClick={() =>
+                                                                    handleToggleBusTaller(bus, true)
+                                                                }
+                                                            >
                                                                 <BuildIcon />
                                                             </IconButton>
                                                         </Tooltip>
                                                     )}
                                                     <Tooltip title="Reportar Incidencia">
-                                                        <IconButton color="warning" onClick={() => handleOpenIncidentDialog(bus)}>
+                                                        <IconButton
+                                                            color="warning"
+                                                            onClick={() => handleOpenIncidentDialog(bus)}
+                                                        >
                                                             <ReportIcon />
                                                         </IconButton>
                                                     </Tooltip>
@@ -797,15 +942,24 @@ const ActivityLogPage = () => {
                     {/* Sección Incidentes y Emergencias */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
-                            <WarningIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }} />
-                            Incidentes y <HospitalIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }} />
+                            <WarningIcon
+                                sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }}
+                            />
+                            Incidentes y{' '}
+                            <HospitalIcon
+                                sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }}
+                            />
                             Emergencias
                         </SectionTitle>
 
                         <Grid container spacing={2} mt={1}>
                             {/* Incidentes */}
                             <Grid item xs={12} md={6}>
-                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
+                                <Typography
+                                    variant="subtitle1"
+                                    gutterBottom
+                                    sx={{ fontWeight: 'bold', mb: 2 }}
+                                >
                                     Incidentes
                                 </Typography>
 
@@ -852,11 +1006,15 @@ const ActivityLogPage = () => {
                                             <MobileCard key={incident.id}>
                                                 <MobileField>
                                                     <MobileLabel>Fecha:</MobileLabel>
-                                                    <MobileValue>{formatGuatemalaDatetime(incident.fecha)}</MobileValue>
+                                                    <MobileValue>
+                                                        {formatGuatemalaDatetime(incident.fecha)}
+                                                    </MobileValue>
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>{incident.piloto ? incident.piloto.name : '—'}</MobileValue>
+                                                    <MobileValue>
+                                                        {incident.piloto ? incident.piloto.name : '—'}
+                                                    </MobileValue>
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Tipo:</MobileLabel>
@@ -864,7 +1022,9 @@ const ActivityLogPage = () => {
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Descripción:</MobileLabel>
-                                                    <MobileValue>{incident.descripcion || '—'}</MobileValue>
+                                                    <MobileValue>
+                                                        {incident.descripcion || '—'}
+                                                    </MobileValue>
                                                 </MobileField>
                                             </MobileCard>
                                         ))}
@@ -892,10 +1052,18 @@ const ActivityLogPage = () => {
                                             <TableBody>
                                                 {incPaginated.map((incident) => (
                                                     <TableRow key={incident.id} hover>
-                                                        <TableCell>{formatGuatemalaDatetime(incident.fecha)}</TableCell>
-                                                        <TableCell>{incident.piloto ? incident.piloto.name : '—'}</TableCell>
+                                                        <TableCell>
+                                                            {formatGuatemalaDatetime(incident.fecha)}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {incident.piloto
+                                                                ? incident.piloto.name
+                                                                : '—'}
+                                                        </TableCell>
                                                         <TableCell>{incident.tipo || '—'}</TableCell>
-                                                        <TableCell>{incident.descripcion || '—'}</TableCell>
+                                                        <TableCell>
+                                                            {incident.descripcion || '—'}
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
@@ -915,7 +1083,11 @@ const ActivityLogPage = () => {
 
                             {/* Emergencias */}
                             <Grid item xs={12} md={6}>
-                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
+                                <Typography
+                                    variant="subtitle1"
+                                    gutterBottom
+                                    sx={{ fontWeight: 'bold', mb: 2 }}
+                                >
                                     Emergencias
                                 </Typography>
 
@@ -955,11 +1127,15 @@ const ActivityLogPage = () => {
                                             <MobileCard key={eme.id}>
                                                 <MobileField>
                                                     <MobileLabel>Fecha:</MobileLabel>
-                                                    <MobileValue>{formatGuatemalaDatetime(eme.fecha)}</MobileValue>
+                                                    <MobileValue>
+                                                        {formatGuatemalaDatetime(eme.fecha)}
+                                                    </MobileValue>
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>{eme.piloto ? eme.piloto.name : '—'}</MobileValue>
+                                                    <MobileValue>
+                                                        {eme.piloto ? eme.piloto.name : '—'}
+                                                    </MobileValue>
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Mensaje:</MobileLabel>
@@ -969,7 +1145,9 @@ const ActivityLogPage = () => {
                                                     <MobileLabel>Ubicación (Lat,Lng):</MobileLabel>
                                                     <MobileValue>
                                                         {eme.latitud && eme.longitud
-                                                            ? `${parseFloat(eme.latitud).toFixed(6)}, ${parseFloat(eme.longitud).toFixed(6)}`
+                                                            ? `${parseFloat(eme.latitud).toFixed(
+                                                                6
+                                                            )}, ${parseFloat(eme.longitud).toFixed(6)}`
                                                             : '—'}
                                                     </MobileValue>
                                                     {eme.latitud && eme.longitud && (
@@ -977,7 +1155,10 @@ const ActivityLogPage = () => {
                                                             <IconButton
                                                                 size="small"
                                                                 onClick={() =>
-                                                                    handleOpenMap(parseFloat(eme.latitud), parseFloat(eme.longitud))
+                                                                    handleOpenMap(
+                                                                        parseFloat(eme.latitud),
+                                                                        parseFloat(eme.longitud)
+                                                                    )
                                                                 }
                                                             >
                                                                 <LocationOnIcon color="primary" />
@@ -1011,25 +1192,43 @@ const ActivityLogPage = () => {
                                             <TableBody>
                                                 {emePaginated.map((eme) => (
                                                     <TableRow key={eme.id} hover>
-                                                        <TableCell>{formatGuatemalaDatetime(eme.fecha)}</TableCell>
-                                                        <TableCell>{eme.piloto ? eme.piloto.name : '—'}</TableCell>
+                                                        <TableCell>
+                                                            {formatGuatemalaDatetime(eme.fecha)}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {eme.piloto ? eme.piloto.name : '—'}
+                                                        </TableCell>
                                                         <TableCell>{eme.mensaje}</TableCell>
                                                         <TableCell>
                                                             {eme.latitud && eme.longitud ? (
                                                                 <>
-                                                                    {parseFloat(eme.latitud).toFixed(6)},{' '}
-                                                                    {parseFloat(eme.longitud).toFixed(6)}
-                                                                    <Tooltip title="Ver mapa" sx={{ ml: 1 }}>
+                                                                    {parseFloat(eme.latitud).toFixed(
+                                                                        6
+                                                                    )}
+                                                                    ,{' '}
+                                                                    {parseFloat(eme.longitud).toFixed(
+                                                                        6
+                                                                    )}
+                                                                    <Tooltip
+                                                                        title="Ver mapa"
+                                                                        sx={{ ml: 1 }}
+                                                                    >
                                                                         <IconButton
                                                                             size="small"
                                                                             onClick={() =>
                                                                                 handleOpenMap(
-                                                                                    parseFloat(eme.latitud),
-                                                                                    parseFloat(eme.longitud)
+                                                                                    parseFloat(
+                                                                                        eme.latitud
+                                                                                    ),
+                                                                                    parseFloat(
+                                                                                        eme.longitud
+                                                                                    )
                                                                                 )
                                                                             }
                                                                         >
-                                                                            <LocationOnIcon color="primary" />
+                                                                            <LocationOnIcon
+                                                                                color="primary"
+                                                                            />
                                                                         </IconButton>
                                                                     </Tooltip>
                                                                 </>
@@ -1106,19 +1305,27 @@ const ActivityLogPage = () => {
                                         <MobileCard key={pay.id}>
                                             <MobileField>
                                                 <MobileLabel>Padre (Usuario):</MobileLabel>
-                                                <MobileValue>{pay.User ? pay.User.name : '—'}</MobileValue>
+                                                <MobileValue>
+                                                    {pay.User ? pay.User.name : '—'}
+                                                </MobileValue>
                                             </MobileField>
                                             <MobileField>
                                                 <MobileLabel>Email:</MobileLabel>
-                                                <MobileValue>{pay.User ? pay.User.email : '—'}</MobileValue>
+                                                <MobileValue>
+                                                    {pay.User ? pay.User.email : '—'}
+                                                </MobileValue>
                                             </MobileField>
                                             <MobileField>
                                                 <MobileLabel>Estado:</MobileLabel>
-                                                <MobileValue>{pay.finalStatus || pay.status}</MobileValue>
+                                                <MobileValue>
+                                                    {pay.finalStatus || pay.status}
+                                                </MobileValue>
                                             </MobileField>
                                             <MobileField>
                                                 <MobileLabel>Próximo Pago:</MobileLabel>
-                                                <MobileValue>{formatGuatemalaDate(pay.nextPaymentDate)}</MobileValue>
+                                                <MobileValue>
+                                                    {formatGuatemalaDate(pay.nextPaymentDate)}
+                                                </MobileValue>
                                             </MobileField>
                                             <MobileField>
                                                 <MobileLabel>Saldo:</MobileLabel>
@@ -1128,7 +1335,11 @@ const ActivityLogPage = () => {
                                                 <MobileLabel>Acciones:</MobileLabel>
                                                 {pay.User && (
                                                     <Tooltip title="Ver boletas de pago">
-                                                        <IconButton onClick={() => handleViewBoletas(pay.User.id, pay.User.name)}>
+                                                        <IconButton
+                                                            onClick={() =>
+                                                                handleViewBoletas(pay.User.id, pay.User.name)
+                                                            }
+                                                        >
                                                             <VisibilityIcon />
                                                         </IconButton>
                                                     </Tooltip>
@@ -1162,15 +1373,30 @@ const ActivityLogPage = () => {
                                         <TableBody>
                                             {payPaginated.map((pay) => (
                                                 <TableRow key={pay.id} hover>
-                                                    <TableCell>{pay.User ? pay.User.name : '—'}</TableCell>
-                                                    <TableCell>{pay.User ? pay.User.email : '—'}</TableCell>
-                                                    <TableCell>{pay.finalStatus || pay.status}</TableCell>
-                                                    <TableCell>{formatGuatemalaDate(pay.nextPaymentDate)}</TableCell>
+                                                    <TableCell>
+                                                        {pay.User ? pay.User.name : '—'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {pay.User ? pay.User.email : '—'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {pay.finalStatus || pay.status}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {formatGuatemalaDate(pay.nextPaymentDate)}
+                                                    </TableCell>
                                                     <TableCell>Q {pay.leftover ?? 0}</TableCell>
                                                     <TableCell>
                                                         {pay.User && (
                                                             <Tooltip title="Ver boletas de pago">
-                                                                <IconButton onClick={() => handleViewBoletas(pay.User.id, pay.User.name)}>
+                                                                <IconButton
+                                                                    onClick={() =>
+                                                                        handleViewBoletas(
+                                                                            pay.User.id,
+                                                                            pay.User.name
+                                                                        )
+                                                                    }
+                                                                >
                                                                     <VisibilityIcon />
                                                                 </IconButton>
                                                             </Tooltip>
@@ -1198,7 +1424,12 @@ const ActivityLogPage = () => {
 
             {/* Dialog Boletas */}
             {!isSupervisor && (
-                <Dialog open={openBoletasDialog} onClose={handleCloseBoletasDialog} maxWidth="md" fullWidth>
+                <Dialog
+                    open={openBoletasDialog}
+                    onClose={handleCloseBoletasDialog}
+                    maxWidth="md"
+                    fullWidth
+                >
                     <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
                     <DialogContent dividers>
                         {loading ? (
@@ -1213,7 +1444,8 @@ const ActivityLogPage = () => {
                                     <Grid item xs={12} md={4} key={b.id}>
                                         <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
                                             <Typography variant="body2">
-                                                <strong>Subido el:</strong> {formatGuatemalaDatetime(b.uploadedAt)}
+                                                <strong>Subido el:</strong>{' '}
+                                                {formatGuatemalaDatetime(b.uploadedAt)}
                                             </Typography>
                                             <img
                                                 src={b.fileUrl}
@@ -1263,8 +1495,13 @@ const ActivityLogPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Dialog Reportar Incidencia */}
-            <Dialog open={openIncidentDialog} onClose={handleCloseIncidentDialog} maxWidth="sm" fullWidth>
+            {/* Dialog Reportar Incidente */}
+            <Dialog
+                open={openIncidentDialog}
+                onClose={handleCloseIncidentDialog}
+                maxWidth="sm"
+                fullWidth
+            >
                 <DialogTitle>Reportar Incidente</DialogTitle>
                 <DialogContent dividers>
                     <Grid container spacing={2}>
@@ -1276,7 +1513,9 @@ const ActivityLogPage = () => {
                                     labelId="tipo-falla-label"
                                     label="Tipo de Falla"
                                     value={incidentForm.tipoFalla}
-                                    onChange={(e) => handleIncidentFormChange('tipoFalla', e.target.value)}
+                                    onChange={(e) =>
+                                        handleIncidentFormChange('tipoFalla', e.target.value)
+                                    }
                                 >
                                     <MenuItem value="mecánico">Mecánico</MenuItem>
                                     <MenuItem value="eléctrico">Eléctrico</MenuItem>
@@ -1293,7 +1532,9 @@ const ActivityLogPage = () => {
                                     labelId="tipo-incidente-label"
                                     label="Tipo de Incidente"
                                     value={incidentForm.tipo}
-                                    onChange={(e) => handleIncidentFormChange('tipo', e.target.value)}
+                                    onChange={(e) =>
+                                        handleIncidentFormChange('tipo', e.target.value)
+                                    }
                                 >
                                     <MenuItem value="incidente">Incidente</MenuItem>
                                     <MenuItem value="accidente">Accidente</MenuItem>
@@ -1307,7 +1548,9 @@ const ActivityLogPage = () => {
                                 control={
                                     <Checkbox
                                         checked={incidentForm.impacto}
-                                        onChange={(e) => handleIncidentFormChange('impacto', e.target.checked)}
+                                        onChange={(e) =>
+                                            handleIncidentFormChange('impacto', e.target.checked)
+                                        }
                                     />
                                 }
                                 label="¿Hubo impacto?"
@@ -1331,7 +1574,12 @@ const ActivityLogPage = () => {
                     <Button variant="outlined" onClick={handleCloseIncidentDialog}>
                         Cancelar
                     </Button>
-                    <Button variant="contained" color="primary" onClick={handleSubmitIncident} disabled={loading}>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleSubmitIncident}
+                        disabled={loading}
+                    >
                         Reportar
                     </Button>
                 </DialogActions>
