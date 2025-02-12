@@ -2,8 +2,7 @@
 
 import React from 'react';
 import tw, { styled } from 'twin.macro';
-import { Typography, Container, Grid, IconButton, Link } from '@mui/material';
-import { Facebook, Twitter, Instagram } from '@mui/icons-material';
+import { Typography, Container, Grid, Link } from '@mui/material';
 import { keyframes } from 'styled-components';
 
 const fadeIn = keyframes`
@@ -22,51 +21,18 @@ const FooterContainer = styled.footer`
     animation: ${fadeIn} 0.5s ease-out;
 `;
 
-const SocialIcons = tw.div`flex space-x-4 mt-4`;
-
 const Footer = () => {
     return (
         <FooterContainer>
             <Container>
-                <Grid container spacing={6} alignItems="center">
-                    <Grid item xs={12} md={6}>
-                        <Typography variant="h6" tw="mb-2">
+                <Grid container spacing={6} alignItems="center" justifyContent="center">
+                    <Grid item xs={12}>
+                        <Typography variant="h6" align="center" tw="mb-2">
                             Transportes Luvan
                         </Typography>
-                        <Typography variant="body2">
+                        <Typography variant="body2" align="center">
                             © {new Date().getFullYear()} Transportes Luvan. Todos los derechos reservados.
                         </Typography>
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                        <Typography variant="h6" tw="mb-2">
-                            Síguenos
-                        </Typography>
-                        <SocialIcons>
-                            <IconButton
-                                href="#"
-                                target="_blank"
-                                style={{ color: '#FFFFFF' }}
-                                aria-label="Facebook"
-                            >
-                                <Facebook />
-                            </IconButton>
-                            <IconButton
-                                href="#"
-                                target="_blank"
-                                style={{ color: '#FFFFFF' }}
-                                aria-label="Twitter"
-                            >
-                                <Twitter />
-                            </IconButton>
-                            <IconButton
-                                href="#"
-                                target="_blank"
-                                style={{ color: '#FFFFFF' }}
-                                aria-label="Instagram"
-                            >
-                                <Instagram />
-                            </IconButton>
-                        </SocialIcons>
                     </Grid>
                 </Grid>
 

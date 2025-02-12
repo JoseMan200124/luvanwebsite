@@ -1,5 +1,3 @@
-// src/pages/LandingPage.jsx
-
 import React from 'react';
 import tw, { styled } from 'twin.macro';
 import {
@@ -14,7 +12,8 @@ import {
 import {
     Phone,
     Email,
-    AccessTime
+    AccessTime,
+    WhatsApp
 } from '@mui/icons-material';
 
 import Navbar from '../components/Navbar';
@@ -22,7 +21,7 @@ import ServiceCard from '../components/ServiceCard';
 import Footer from '../components/Footer';
 
 import landingBg from '../assets/img/school-bus.jpg';
-import logoLuvan from '../assets/img/logo-luvan.jpg'; // Opcional
+import logoLuvan from '../assets/img/logo-luvan.jpg';
 
 // Sección Hero con fondo de imagen y contenido centrado
 const HeroSection = styled.section`
@@ -35,6 +34,9 @@ const Overlay = tw.div`bg-black bg-opacity-50 w-full h-full absolute top-0 left-
 const HeroContent = styled.div`
     ${tw`relative z-10 text-center text-white max-w-4xl px-4`}
 `;
+
+// Sección de "¿Por qué elegirnos?" (Key Points)
+const KeyPointsSection = tw.section`py-20`;
 
 // Sección de Servicios
 const ServicesSection = tw.section`py-20 bg-gray-100`;
@@ -65,44 +67,65 @@ const LandingPage = () => {
         setOpenSnackbar(false);
     };
 
-    /**
-     * Cartas de servicio centradas
-     */
-    const services = [
+    // Arreglo de Key Points (puntos clave)
+    const keyPoints = [
         {
-            // https://mui.com/material-ui/material-icons/?query=security
             iconName: 'Security',
             title: 'Seguridad',
-            description:
-                'Vehículos equipados y procesos diseñados para proteger a cada pasajero.'
+            description: 'Vehículos equipados y procesos diseñados para proteger a cada pasajero.'
         },
         {
-            // https://mui.com/material-ui/material-icons/?query=alarm
             iconName: 'AlarmOn',
             title: 'Puntualidad',
-            description:
-                'Compromiso con el cumplimiento de horarios para garantizar la calidad de nuestro servicio.'
+            description: 'Compromiso con el cumplimiento de horarios en cada trayecto.'
         },
         {
-            // https://mui.com/material-ui/material-icons/?query=groups
-            iconName: 'Groups',
-            title: 'Atención personalizada',
-            description:
-                'Adaptamos nuestros servicios a las necesidades de cada institución.'
+            iconName: 'SupportAgent',
+            title: 'Atención Personalizada',
+            description: 'Adaptamos nuestros servicios a las necesidades de cada cliente.'
         }
     ];
+
+    // Arreglo de Servicios
+    const services = [
+        {
+            iconName: 'DirectionsBus',
+            title: 'Transporte Escolar',
+            description: 'Servicio de transporte seguro y confiable para estudiantes.'
+        },
+        {
+            iconName: 'TravelExplore',
+            title: 'Excursiones',
+            description: 'Organización y coordinación de excursiones para colegios y grupos.'
+        },
+        {
+            iconName: 'Event',
+            title: 'Eventos Privados',
+            description: 'Shuttle service para eventos, garantizando comodidad y puntualidad.'
+        },
+        {
+            iconName: 'Groups',
+            title: 'Rutas para Empleados',
+            description: 'Rutas diseñadas para facilitar el traslado de empleados en call centers.'
+        }
+    ];
+
+    // Número de contacto y mensaje por default para WhatsApp
+    const phoneNumber = "50237481552";
+    const defaultMessage = "Hola, quisiera obtener más información sobre sus servicios.";
+    const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(defaultMessage)}`;
 
     return (
         <div tw="flex flex-col min-h-screen">
             <Navbar />
 
-            {/* Hero Section */}
+            {/* Sección Hero */}
             <HeroSection id="inicio">
                 <Overlay />
                 <HeroContent>
                     <Typography
                         variant="h2"
-                        tw="font-bold mb-4 text-4xl md:text-5xl lg:text-6xl"
+                        tw="font-bold mb-4 text-center text-4xl md:text-5xl lg:text-6xl"
                         style={{ lineHeight: '1.2' }}
                     >
                         Transportes Luvan
@@ -110,7 +133,7 @@ const LandingPage = () => {
 
                     <Typography
                         variant="h6"
-                        tw="mb-8 text-lg md:text-xl lg:text-2xl"
+                        tw="mb-8 text-center text-lg md:text-xl lg:text-2xl"
                         style={{ maxWidth: '800px', margin: '0 auto' }}
                     >
                         Más de 10 años garantizando la seguridad y confianza en el transporte escolar y empresarial.
@@ -134,15 +157,35 @@ const LandingPage = () => {
                 </HeroContent>
             </HeroSection>
 
+            {/* Sección "¿Por qué elegirnos?" */}
+            <KeyPointsSection id="porque-elegirnos">
+                <Container>
+                    <Typography variant="h4" align="center" sx={{ mb: '50px' }}>
+                        ¿Por qué elegirnos?
+                    </Typography>
+                    <Grid container spacing={6} justifyContent="center">
+                        {keyPoints.map((point, index) => (
+                            <Grid item xs={12} sm={6} md={4} key={index}>
+                                <ServiceCard
+                                    iconName={point.iconName}
+                                    title={point.title}
+                                    description={point.description}
+                                />
+                            </Grid>
+                        ))}
+                    </Grid>
+                </Container>
+            </KeyPointsSection>
+
             {/* Sección de Servicios */}
             <ServicesSection id="servicios">
                 <Container>
-                    <Typography variant="h4" tw="text-center mb-12">
+                    <Typography variant="h4" align="center" sx={{ mb: '50px' }}>
                         Nuestros Servicios
                     </Typography>
                     <Grid container spacing={6} justifyContent="center">
                         {services.map((service, index) => (
-                            <Grid item xs={12} sm={6} md={4} key={index} tw="flex justify-center">
+                            <Grid item xs={12} sm={6} md={3} key={index}>
                                 <ServiceCard
                                     iconName={service.iconName}
                                     title={service.title}
@@ -162,12 +205,18 @@ const LandingPage = () => {
                     </Typography>
                     <Grid container spacing={6} alignItems="center">
                         <Grid item xs={12} md={6}>
-                            <Typography variant="body1" tw="text-lg mb-6">
+                            <Typography
+                                variant="body1"
+                                sx={{ textAlign: 'justify', fontSize: '1rem', pt: 2, mb: 2 }}
+                            >
                                 Contamos con un equipo profesional y unidades de diversas capacidades para garantizar
                                 un servicio eficiente y confiable. Nos enorgullece ser el aliado estratégico de las
-                                instituciones educativas, superando expectativas en cada trayecto.
+                                instituciones educativas y empresariales, superando expectativas en cada trayecto.
                             </Typography>
-                            <Typography variant="body1" tw="text-lg italic">
+                            <Typography
+                                variant="body1"
+                                sx={{ textAlign: 'justify', fontSize: '1rem', pt: 2, fontStyle: 'italic' }}
+                            >
                                 ¡Confía en nosotros para la logística de transporte!
                             </Typography>
                         </Grid>
@@ -195,7 +244,7 @@ const LandingPage = () => {
                             </Typography>
                             <div tw="flex items-center mb-4">
                                 <Phone style={{ marginRight: '8px', color: '#2D966C' }} />
-                                <Typography variant="body1">502 23600026</Typography>
+                                <Typography variant="body1">3748-1552</Typography>
                             </div>
                             <div tw="flex items-center mb-4">
                                 <Email style={{ marginRight: '8px', color: '#2D966C' }} />
@@ -203,11 +252,22 @@ const LandingPage = () => {
                                     administracion@transportesluvan.com
                                 </Typography>
                             </div>
-                            <div tw="flex items-center">
+                            <div tw="flex items-center mb-4">
                                 <AccessTime style={{ marginRight: '8px', color: '#2D966C' }} />
                                 <Typography variant="body1">
                                     Horario de Atención: 8AM - 5PM
                                 </Typography>
+                            </div>
+                            <div tw="flex items-center">
+                                <WhatsApp style={{ marginRight: '8px', color: '#25D366' }} />
+                                <a
+                                    href={whatsappLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ textDecoration: 'none', color: 'inherit' }}
+                                >
+                                    <Typography variant="body1">Chat en WhatsApp</Typography>
+                                </a>
                             </div>
                         </Grid>
                         <Grid item xs={12} md={6}>
@@ -272,6 +332,25 @@ const LandingPage = () => {
             {/* Footer */}
             <Footer />
 
+            {/* Botón flotante de WhatsApp */}
+            <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                    position: 'fixed',
+                    bottom: '20px',
+                    right: '20px',
+                    backgroundColor: '#25D366',
+                    borderRadius: '50%',
+                    padding: '12px',
+                    zIndex: 1000,
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
+                }}
+            >
+                <WhatsApp style={{ color: '#fff', fontSize: '2rem' }} />
+            </a>
+
             {/* Snackbar */}
             <Snackbar
                 open={openSnackbar}
@@ -279,11 +358,7 @@ const LandingPage = () => {
                 onClose={handleSnackbarClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert
-                    onClose={handleSnackbarClose}
-                    severity={snackbarSeverity}
-                    sx={{ width: '100%' }}
-                >
+                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
                     {snackbarMessage}
                 </Alert>
             </Snackbar>

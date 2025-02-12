@@ -1,36 +1,37 @@
-// src/components/ServiceCard.jsx
 import React from 'react';
 import tw, { styled } from 'twin.macro';
-import { Typography, Paper, Box } from '@mui/material';
+import { Card, CardContent, Typography } from '@mui/material';
 import * as Icons from '@mui/icons-material';
 
-const CardContainer = styled(Paper)`
-  ${tw`flex flex-col items-center p-6 rounded-lg shadow-md bg-white`}
-  text-align: center;
-  transition: transform 0.3s;
-
-  &:hover {
-    transform: translateY(-4px);
-  }
+const StyledCard = styled(Card)`
+    ${tw`w-full h-full flex flex-col items-center justify-center p-6`}
 `;
 
-const IconWrapper = tw.div`mb-4 flex justify-center`;
-
 const ServiceCard = ({ iconName, title, description }) => {
-    const IconComponent = Icons[iconName] || Icons.Info;
-
+    const IconComponent = Icons[iconName] || Icons['HelpOutline'];
     return (
-        <CardContainer>
-            <IconWrapper>
-                <IconComponent style={{ fontSize: '3rem', color: '#2D966C' }} />
-            </IconWrapper>
-            <Typography variant="h6" tw="mb-2 font-semibold">
-                {title}
-            </Typography>
-            <Box>
-                <Typography variant="body2">{description}</Typography>
-            </Box>
-        </CardContainer>
+        <StyledCard elevation={3}>
+            {IconComponent && <IconComponent style={{ fontSize: '3rem', color: '#2D966C' }} />}
+            <CardContent tw="w-full">
+                <Typography
+                    variant="h6"
+                    align="center"
+                    sx={{ fontWeight: 'bold', mt: 4, mb: 2 }}
+                >
+                    {title}
+                </Typography>
+                <Typography
+                    variant="body2"
+                    sx={{
+                        textAlign: 'justify',
+                        pt: 2,
+                        fontSize: '0.875rem'
+                    }}
+                >
+                    {description}
+                </Typography>
+            </CardContent>
+        </StyledCard>
     );
 };
 

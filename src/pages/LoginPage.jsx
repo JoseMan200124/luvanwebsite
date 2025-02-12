@@ -24,6 +24,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { modules } from '../modules';
 
+// Animaciones
 const moveUp = keyframes`
     0% {
         background-position: center bottom;
@@ -65,12 +66,15 @@ const Slogan = styled(Typography)`
     color: #ffffff;
 `;
 
+// Ajusta el alto o el margen si necesitas que se vea más grande o separado
 const Logo = styled.img`
-    ${tw`h-20 w-auto mb-4`}
+    ${tw`h-20 w-auto my-4`}
 `;
 
+// Contenedor del formulario
+// Importante: le damos pt-12 para que el "tab" no cubra el contenido
 const LoginFormContainer = styled.div`
-    ${tw`relative bg-gray-50 rounded-lg p-8 shadow-lg w-full max-w-md mx-auto flex flex-col items-center`}
+    ${tw`relative bg-gray-50 rounded-lg shadow-lg w-full max-w-md mx-auto flex flex-col items-center pt-12 pb-8 px-8`}
 `;
 
 const FormTitleTab = styled.div`
@@ -129,6 +133,7 @@ const LoginPage = () => {
         e.preventDefault();
         setIsModalOpen(true);
     };
+
     const handleCloseModal = () => {
         setIsModalOpen(false);
     };
@@ -154,7 +159,6 @@ const LoginPage = () => {
         setSnackbarSeverity('success');
 
         const trimmedEmail = formData.email.trim();
-
         if (!trimmedEmail || !formData.password) {
             setError('Por favor, completa todos los campos.');
             return;
@@ -180,7 +184,6 @@ const LoginPage = () => {
                 setSnackbarMessage('¡Inicio de sesión exitoso!');
                 setSnackbarSeverity('success');
                 setOpenSnackbar(true);
-
                 navigate('/admin/dashboard');
             } else {
                 let fallbackPath = '/admin';
@@ -198,7 +201,6 @@ const LoginPage = () => {
                 setSnackbarMessage('¡Inicio de sesión exitoso!');
                 setSnackbarSeverity('success');
                 setOpenSnackbar(true);
-
                 navigate(fallbackPath);
             }
         } catch (err) {
@@ -229,6 +231,7 @@ const LoginPage = () => {
                             <FormTitle variant="h6">Iniciar Sesión</FormTitle>
                         </FormTitleTab>
 
+                        {/* Logo aparece justo debajo del título */}
                         <Logo src={logoLuvan} alt="Transportes Luvan" />
 
                         {error && (
