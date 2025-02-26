@@ -29,7 +29,6 @@ import {
     List,
     ListItem,
     ListItemText,
-    ListItemSecondaryAction,
     Link,
     Box,
     FormControlLabel,
@@ -71,53 +70,53 @@ const getFormattedDateTime = () => {
 // Estilos para vista desktop (tabla)
 // ========================
 const ResponsiveTableHead = styled(TableHead)`
-  @media (max-width: 600px) {
-    display: none;
-  }
+    @media (max-width: 600px) {
+        display: none;
+    }
 `;
 
 const ResponsiveTableCell = styled(TableCell)`
-  @media (max-width: 600px) {
-    display: block;
-    text-align: right;
-    position: relative;
-    padding-left: 50%;
-    white-space: nowrap;
-    &:before {
-      content: attr(data-label);
-      position: absolute;
-      left: 0;
-      width: 45%;
-      padding-left: 15px;
-      font-weight: bold;
-      text-align: left;
-      white-space: nowrap;
+    @media (max-width: 600px) {
+        display: block;
+        text-align: right;
+        position: relative;
+        padding-left: 50%;
+        white-space: nowrap;
+        &:before {
+            content: attr(data-label);
+            position: absolute;
+            left: 0;
+            width: 45%;
+            padding-left: 15px;
+            font-weight: bold;
+            text-align: left;
+            white-space: nowrap;
+        }
     }
-  }
 `;
 
 // ========================
 // Estilos para vista móvil (tarjetas)
 // ========================
 const MobileCard = styled(Paper)`
-  padding: 16px;
-  margin-bottom: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
 `;
 
 const MobileField = styled(Box)`
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
 `;
 
 const MobileLabel = styled(Typography)`
-  font-weight: bold;
-  font-size: 0.875rem;
-  color: #555;
+    font-weight: bold;
+    font-size: 0.875rem;
+    color: #555;
 `;
 
 const MobileValue = styled(Typography)`
-  font-size: 1rem;
+    font-size: 1rem;
 `;
 
 // ───────────────────────────────
@@ -146,6 +145,9 @@ const BusesManagementPage = () => {
     // Pilotos y Monitores disponibles
     const [availablePilots, setAvailablePilots] = useState([]);
     const [availableMonitors, setAvailableMonitors] = useState([]);
+
+    // Horarios del colegio (según el piloto seleccionado)
+    const [availableSchedules, setAvailableSchedules] = useState([]);
 
     // Carga masiva
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
@@ -209,6 +211,39 @@ const BusesManagementPage = () => {
     }, [auth.token]);
 
     /**
+     * Obtiene los horarios del colegio (school) asignado a un piloto específico
+     * pilot.school puede venir como string, así que lo parseamos a número si existe.
+     */
+    const fetchSchedulesByPilot = async (pilotId) => {
+        try {
+            // Buscamos el piloto en la lista de pilotos para ver su "school"
+            const pilot = availablePilots.find((p) => p.id === pilotId);
+            if (!pilot || !pilot.school) {
+                setAvailableSchedules([]);
+                return;
+            }
+            // Aseguramos que sea un entero (o un string válido)
+            const schoolId = parseInt(pilot.school, 10);
+            if (!schoolId) {
+                setAvailableSchedules([]);
+                return;
+            }
+
+            const resp = await api.get(`/schools/${schoolId}/schedules`, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            if (resp.data && Array.isArray(resp.data.schedules)) {
+                setAvailableSchedules(resp.data.schedules);
+            } else {
+                setAvailableSchedules([]);
+            }
+        } catch (error) {
+            console.error('Error fetching schedules:', error);
+            setAvailableSchedules([]);
+        }
+    };
+
+    /**
      * Abrir diálogo para crear un nuevo bus
      */
     const handleAddBus = () => {
@@ -220,8 +255,10 @@ const BusesManagementPage = () => {
             monitoraId: '',
             routeNumber: '',
             files: [],
-            inWorkshop: false
+            inWorkshop: false,
+            schedule: null
         });
+        setAvailableSchedules([]); // reseteamos horarios
         setOpenDialog(true);
     };
 
@@ -238,8 +275,15 @@ const BusesManagementPage = () => {
             monitoraId: bus.monitoraId || '',
             routeNumber: bus.routeNumber || '',
             files: bus.files || [],
-            inWorkshop: bus.inWorkshop || false
+            inWorkshop: bus.inWorkshop || false,
+            schedule: bus.schedule || null
         });
+        // Cargar horarios del colegio asociado al piloto de este bus (si aplica)
+        if (bus.pilotId) {
+            fetchSchedulesByPilot(bus.pilotId);
+        } else {
+            setAvailableSchedules([]);
+        }
         setOpenDialog(true);
     };
 
@@ -289,6 +333,39 @@ const BusesManagementPage = () => {
     };
 
     /**
+     * Manejar cambio específico del piloto para cargar horarios del colegio
+     */
+    const handlePilotChange = async (e) => {
+        const pilotId = e.target.value ? parseInt(e.target.value, 10) : '';
+        setSelectedBus((prev) => ({
+            ...prev,
+            pilotId,
+            schedule: null
+        }));
+        if (pilotId) {
+            await fetchSchedulesByPilot(pilotId);
+        } else {
+            setAvailableSchedules([]);
+        }
+    };
+
+    /**
+     * Manejar selección del horario
+     */
+    const handleScheduleChange = (e) => {
+        const value = e.target.value;
+        if (!value) {
+            setSelectedBus((prev) => ({ ...prev, schedule: null }));
+            return;
+        }
+        // Buscamos la coincidencia en availableSchedules
+        const selected = availableSchedules.find((sch) => {
+            return `${sch.day}-${(sch.times || []).join(',')}` === value;
+        });
+        setSelectedBus((prev) => ({ ...prev, schedule: selected || null }));
+    };
+
+    /**
      * Manejar archivos subidos (para crear/editar un bus)
      */
     const handleFileChange = (e) => {
@@ -310,7 +387,6 @@ const BusesManagementPage = () => {
             }
         }
 
-        // Si todos los archivos son válidos, los guardamos en el estado
         setSelectedBus((prev) => ({
             ...prev,
             files
@@ -336,6 +412,10 @@ const BusesManagementPage = () => {
                 formData.append('monitoraId', selectedBus.monitoraId);
             }
 
+            if (selectedBus.schedule) {
+                formData.append('schedule', JSON.stringify(selectedBus.schedule));
+            }
+
             if (selectedBus.files && selectedBus.files.length > 0) {
                 Array.from(selectedBus.files).forEach((file) => {
                     if (!file.id) {
@@ -345,6 +425,7 @@ const BusesManagementPage = () => {
             }
 
             if (selectedBus.id) {
+                // UPDATE
                 await api.put(`/buses/${selectedBus.id}`, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
@@ -357,6 +438,7 @@ const BusesManagementPage = () => {
                     severity: 'success'
                 });
             } else {
+                // CREATE
                 await api.post('/buses', formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
@@ -456,9 +538,6 @@ const BusesManagementPage = () => {
         setOpenBulkDialog(false);
     };
 
-    /**
-     * Validar el tamaño del archivo de carga masiva
-     */
     const handleBulkFileChange = (e) => {
         const file = e.target.files[0];
         const maxSize = 5 * 1024 * 1024; // 5 MB
@@ -689,13 +768,27 @@ const BusesManagementPage = () => {
                                             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                             .map((bus) => (
                                                 <TableRow key={bus.id}>
-                                                    <ResponsiveTableCell data-label="Placa">{bus.plate}</ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Capacidad">{bus.capacity}</ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Número de Ruta">{bus.routeNumber || 'N/A'}</ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Ocupación">{bus.occupation || 0}</ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Descripción">{bus.description}</ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Piloto (Email)">{bus.pilot ? bus.pilot.email : ''}</ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Monitora (Email)">{bus.monitora ? bus.monitora.email : ''}</ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Placa">
+                                                        {bus.plate}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Capacidad">
+                                                        {bus.capacity}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Número de Ruta">
+                                                        {bus.routeNumber || 'N/A'}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Ocupación">
+                                                        {bus.occupation || 0}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Descripción">
+                                                        {bus.description}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Piloto (Email)">
+                                                        {bus.pilot ? bus.pilot.email : ''}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Monitora (Email)">
+                                                        {bus.monitora ? bus.monitora.email : ''}
+                                                    </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Estado">
                                                         {bus.inWorkshop ? (
                                                             <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
@@ -705,12 +798,19 @@ const BusesManagementPage = () => {
                                                             'Disponible'
                                                         )}
                                                     </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Archivos" sx={{ maxWidth: 200, verticalAlign: 'top' }}>
+                                                    <ResponsiveTableCell
+                                                        data-label="Archivos"
+                                                        sx={{ maxWidth: 200, verticalAlign: 'top' }}
+                                                    >
                                                         <List disablePadding>
                                                             {bus.files.map((file) => {
                                                                 const fileLabel = file.fileName.split('/').pop();
                                                                 return (
-                                                                    <ListItem key={file.id} disableGutters sx={{ p: 0 }}>
+                                                                    <ListItem
+                                                                        key={file.id}
+                                                                        disableGutters
+                                                                        sx={{ p: 0 }}
+                                                                    >
                                                                         {file.fileType === 'application/pdf' ? (
                                                                             <InsertDriveFile sx={{ mr: 1 }} />
                                                                         ) : (
@@ -741,7 +841,11 @@ const BusesManagementPage = () => {
                                                                 );
                                                             })}
                                                             {bus.files.length === 0 && (
-                                                                <Typography variant="body2" color="textSecondary" sx={{ fontStyle: 'italic' }}>
+                                                                <Typography
+                                                                    variant="body2"
+                                                                    color="textSecondary"
+                                                                    sx={{ fontStyle: 'italic' }}
+                                                                >
                                                                     No hay archivos.
                                                                 </Typography>
                                                             )}
@@ -841,12 +945,7 @@ const BusesManagementPage = () => {
                         <Select
                             name="pilotId"
                             value={selectedBus ? selectedBus.pilotId || '' : ''}
-                            onChange={(e) =>
-                                setSelectedBus((prev) => ({
-                                    ...prev,
-                                    pilotId: e.target.value ? parseInt(e.target.value, 10) : null
-                                }))
-                            }
+                            onChange={handlePilotChange}
                         >
                             <MenuItem value="">
                                 <em>Ninguno</em>
@@ -880,6 +979,33 @@ const BusesManagementPage = () => {
                                     {monitor.email}
                                 </MenuItem>
                             ))}
+                        </Select>
+                    </FormControl>
+
+                    {/* Selección del horario (siempre se muestra) */}
+                    <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
+                        <InputLabel>Horario</InputLabel>
+                        <Select
+                            name="schedule"
+                            value={
+                                selectedBus?.schedule
+                                    ? `${selectedBus.schedule.day}-${(selectedBus.schedule.times || []).join(',')}`
+                                    : ''
+                            }
+                            onChange={handleScheduleChange}
+                        >
+                            <MenuItem value="">
+                                <em>Ninguno</em>
+                            </MenuItem>
+                            {availableSchedules.map((sch, idx) => {
+                                const valueKey = `${sch.day}-${(sch.times || []).join(',')}`;
+                                const label = `${sch.day} - ${(sch.times || []).join(', ')}`;
+                                return (
+                                    <MenuItem key={idx} value={valueKey}>
+                                        {label}
+                                    </MenuItem>
+                                );
+                            })}
                         </Select>
                     </FormControl>
 

@@ -22,7 +22,9 @@ import logoLuvan from '../assets/img/logo-sin-fondo.png';
 const SchoolEnrollmentPage = () => {
     const { schoolId } = useParams();
 
+    // Usamos 'loading' aquí y en la parte final del efecto
     const [loading, setLoading] = useState(true);
+
     const [grades, setGrades] = useState([]);
     const [extraFields, setExtraFields] = useState([]);
 
@@ -121,6 +123,7 @@ const SchoolEnrollmentPage = () => {
                 severity: 'success'
             });
 
+            // Limpiar formulario
             setFamilyLastName('');
             setServiceAddress('');
             setZoneOrSector('');
@@ -186,6 +189,7 @@ const SchoolEnrollmentPage = () => {
                     severity: 'error'
                 });
             } finally {
+                // Al terminar de cargar
                 setLoading(false);
             }
         };
@@ -211,7 +215,6 @@ const SchoolEnrollmentPage = () => {
     }
 
     return (
-        // Contenedor principal responsivo
         <Box
             sx={{
                 backgroundColor: '#f7f7f7',
@@ -234,7 +237,6 @@ const SchoolEnrollmentPage = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     minHeight: '80vh',
-                    // Ajustes para pantallas más pequeñas
                     '@media (max-width: 480px)': {
                         padding: '20px',
                         minHeight: 'auto',
@@ -469,6 +471,12 @@ const SchoolEnrollmentPage = () => {
                     >
                         Campos para creación de usuario
                     </Typography>
+
+                    <Typography variant="body2" sx={{ mb: 2, color: '#333' }}>
+                        Un usuario por familia. No se puede crear más de un usuario familiar,
+                        por lo que se solicita ingresar el dato de quien estará a cargo del portal.
+                    </Typography>
+
                     <TextField
                         label="Nombre completo de persona a cargo"
                         fullWidth
@@ -603,7 +611,14 @@ const SchoolEnrollmentPage = () => {
                         Todos los derechos reservados a Transportes Luvan
                     </Typography>
                     <Typography variant="body2">
-                        Desarrollado por <a href="https://haricode.com" target="_blank" rel="noopener noreferrer">haricode.com</a>
+                        Desarrollado por{' '}
+                        <a
+                            href="https://haricode.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            haricode.com
+                        </a>
                     </Typography>
                 </Box>
 

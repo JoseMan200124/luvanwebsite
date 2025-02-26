@@ -1,4 +1,3 @@
-// src/pages/ActivityLogPage.jsx
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
@@ -31,8 +30,8 @@ import {
     InputLabel,
     Select,
     MenuItem,
-    Checkbox,
     FormControlLabel,
+    Switch,
     useTheme,
     useMediaQuery,
     Box
@@ -47,6 +46,21 @@ import {
     LocationOn as LocationOnIcon,
     Report as ReportIcon
 } from '@mui/icons-material';
+
+// -- Importar componentes Recharts para análisis
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    PieChart,
+    Pie,
+    Tooltip as RechartsTooltip,
+    Legend,
+    Cell
+} from 'recharts';
+
 import tw, { styled } from 'twin.macro';
 import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
@@ -68,9 +82,13 @@ const formatGuatemalaDate = (dateString) => {
 };
 
 // -------------
-// Estilos con Twin.macro
+// Estilos con twin.macro
 // -------------
-const PageContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
+const PageContainer = tw.div`
+    p-8
+    bg-gray-100
+    min-h-screen
+`;
 
 const Title = styled(Typography)(() => [
     tw`text-3xl font-bold mb-4`,
@@ -118,9 +136,13 @@ const TableHeaderCell = styled(TableCell)(() => [
     }
 ]);
 
-const FiltersRow = tw.div`flex gap-4 mb-4 items-center`;
+const FiltersRow = tw.div`
+    flex 
+    gap-4 
+    mb-4 
+    items-center
+`;
 
-// Componentes para vista móvil (tarjetas)
 const MobileCard = styled(Paper)(() => [
     tw`p-4 mb-4`,
     { backgroundColor: '#fff' }
@@ -136,27 +158,22 @@ const MobileValue = styled(Typography)(() => [
     tw`text-base`
 ]);
 
-//
-// Componente Principal
-//
 const ActivityLogPage = () => {
     const { auth } = useContext(AuthContext);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    // ---------------------
-    // Estados generales
-    // ---------------------
+    // Rol Supervisor
     const isSupervisor = auth?.user?.roleId === 6;
     const [loading, setLoading] = useState(false);
 
-    // DATOS
+    // Datos
     const [buses, setBuses] = useState([]);
     const [incidents, setIncidents] = useState([]);
     const [emergencies, setEmergencies] = useState([]);
     const [payments, setPayments] = useState([]);
 
-    // SNACKBAR
+    // Snackbar
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
@@ -171,29 +188,28 @@ const ActivityLogPage = () => {
     const [openMapDialog, setOpenMapDialog] = useState(false);
     const [selectedCoords, setSelectedCoords] = useState({ lat: null, lng: null });
 
+    // Dialog para incidente
     const [openIncidentDialog, setOpenIncidentDialog] = useState(false);
+    // Añadimos "otroFallaDetalle" cuando tipoFalla === 'otro'.
     const [incidentForm, setIncidentForm] = useState({
         busId: null,
         tipoFalla: 'mecánico',
-        impacto: false,
+        tipo: 'incidente',
         descripcion: '',
-        tipo: 'incidente'
+        pudoContinuarRuta: false,
+        seUtilizoBusSuplente: false,
+        otroFallaDetalle: '' // solo se llena si tipoFalla = 'otro'
     });
 
     const [expanded, setExpanded] = useState(false);
 
-    // ---------------------
     // Filtros & Paginación
-    // ---------------------
-
-    // -- BUSES --
     const [busPilotFilter, setBusPilotFilter] = useState('');
     const [busMonitoraFilter, setBusMonitoraFilter] = useState('');
     const [busDescriptionFilter, setBusDescriptionFilter] = useState('');
     const [busPage, setBusPage] = useState(0);
     const [busRowsPerPage, setBusRowsPerPage] = useState(5);
 
-    // -- INCIDENTES --
     const [incDateFrom, setIncDateFrom] = useState('');
     const [incDateTo, setIncDateTo] = useState('');
     const [incPilotFilter, setIncPilotFilter] = useState('');
@@ -201,14 +217,12 @@ const ActivityLogPage = () => {
     const [incPage, setIncPage] = useState(0);
     const [incRowsPerPage, setIncRowsPerPage] = useState(5);
 
-    // -- EMERGENCIAS --
     const [emeDateFrom, setEmeDateFrom] = useState('');
     const [emeDateTo, setEmeDateTo] = useState('');
     const [emePilotFilter, setEmePilotFilter] = useState('');
     const [emePage, setEmePage] = useState(0);
     const [emeRowsPerPage, setEmeRowsPerPage] = useState(5);
 
-    // -- PAGOS --
     const [payDateFrom, setPayDateFrom] = useState('');
     const [payDateTo, setPayDateTo] = useState('');
     const [payBalanceMin, setPayBalanceMin] = useState('');
@@ -216,28 +230,22 @@ const ActivityLogPage = () => {
     const [payPage, setPayPage] = useState(0);
     const [payRowsPerPage, setPayRowsPerPage] = useState(5);
 
-    // ---------------------
-    // useEffect para cargar data
-    // ---------------------
     useEffect(() => {
         fetchAllData();
+        // eslint-disable-next-line
     }, []);
 
     const fetchAllData = async () => {
         try {
             setLoading(true);
-            // Buses
             const busResp = await api.get('/activity-logs');
-            // Incidentes
             const incResp = await api.get('/activity-logs/incidents');
-            // Emergencias
             const emeResp = await api.get('/activity-logs/emergencies');
 
             setBuses(busResp.data || []);
             setIncidents(incResp.data.incidents || []);
             setEmergencies(emeResp.data.emergencies || []);
 
-            // Pagos, solo si NO es supervisor
             if (!isSupervisor) {
                 const payResp = await api.get('/payments');
                 setPayments(payResp.data.payments || []);
@@ -254,21 +262,13 @@ const ActivityLogPage = () => {
         }
     };
 
-    // ---------------------
-    // Manejo Acordeón
-    // ---------------------
     const handleChangeAccordion = (panel) => (event, isExpanded) => {
         setExpanded(isExpanded ? panel : false);
     };
 
-    // ---------------------
-    // Ver Boletas
-    // ---------------------
     const handleViewBoletas = async (fatherId, fatherName) => {
         try {
             setLoading(true);
-            // Ejemplo de endpoint para obtener boletas de un padre en particular
-            // (Dependerá de cómo tengas implementado tu backend)
             const resp = await api.get(`/parents/${fatherId}/receipts`);
             const boletas = resp.data.receipts || [];
             setCurrentBoletas(boletas);
@@ -285,16 +285,12 @@ const ActivityLogPage = () => {
             setLoading(false);
         }
     };
-
     const handleCloseBoletasDialog = () => {
         setOpenBoletasDialog(false);
         setCurrentBoletas([]);
         setCurrentParentName('');
     };
 
-    // ---------------------
-    // Mapa
-    // ---------------------
     const handleOpenMap = (lat, lng) => {
         setSelectedCoords({ lat, lng });
         setOpenMapDialog(true);
@@ -304,9 +300,6 @@ const ActivityLogPage = () => {
         setSelectedCoords({ lat: null, lng: null });
     };
 
-    // ---------------------
-    // Taller (actualizar estado de bus)
-    // ---------------------
     const handleToggleBusTaller = async (bus, newValue) => {
         try {
             setLoading(true);
@@ -331,16 +324,16 @@ const ActivityLogPage = () => {
         }
     };
 
-    // ---------------------
-    // Reportar Incidente
-    // ---------------------
+    // Reportar Incidente (Novedad)
     const handleOpenIncidentDialog = (bus) => {
         setIncidentForm({
             busId: bus.id,
             tipoFalla: 'mecánico',
-            impacto: false,
+            tipo: 'incidente',
             descripcion: '',
-            tipo: 'incidente'
+            pudoContinuarRuta: false,
+            seUtilizoBusSuplente: false,
+            otroFallaDetalle: ''
         });
         setOpenIncidentDialog(true);
     };
@@ -379,9 +372,14 @@ const ActivityLogPage = () => {
             await api.post('/activity-logs/incidents', {
                 busId: incidentForm.busId,
                 tipoFalla: incidentForm.tipoFalla,
-                impacto: incidentForm.impacto,
+                tipo: incidentForm.tipo,
                 descripcion: incidentForm.descripcion,
-                tipo: incidentForm.tipo
+                pudoContinuarRuta: incidentForm.pudoContinuarRuta,
+                seUtilizoBusSuplente: incidentForm.seUtilizoBusSuplente,
+                // Enviamos la descripción extra si es "otro"
+                otroFallaDetalle: incidentForm.tipoFalla === 'otro'
+                    ? incidentForm.otroFallaDetalle
+                    : ''
             });
             setSnackbar({
                 open: true,
@@ -405,11 +403,7 @@ const ActivityLogPage = () => {
         }
     };
 
-    // ---------------------
-    // Filtrado & Paginación
-    // ---------------------
-
-    // Buses
+    // Filtrado Buses
     const filteredBuses = buses.filter((b) => {
         if (busPilotFilter) {
             const pilotName = b?.pilot?.name?.toLowerCase() || '';
@@ -437,7 +431,7 @@ const ActivityLogPage = () => {
         setBusPage(0);
     };
 
-    // Incidentes => filtrado + paginación
+    // Filtrado Incidentes
     const filteredIncidents = incidents.filter((inc) => {
         if (incDateFrom) {
             const from = moment(incDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -471,7 +465,7 @@ const ActivityLogPage = () => {
         setIncPage(0);
     };
 
-    // Emergencias => filtrado + paginación
+    // Filtrado Emergencias
     const filteredEmergencies = emergencies.filter((eme) => {
         if (emeDateFrom) {
             const from = moment(emeDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -501,7 +495,7 @@ const ActivityLogPage = () => {
         setEmePage(0);
     };
 
-    // Pagos => filtrado + paginación (si no es supervisor)
+    // Filtrado Pagos (si no es supervisor)
     const filteredPayments = payments.filter((pay) => {
         if (payDateFrom) {
             const from = moment(payDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -537,9 +531,35 @@ const ActivityLogPage = () => {
         setPayPage(0);
     };
 
-    // ---------------------
-    // Render
-    // ---------------------
+    // Análisis de pagos (Recharts)
+    const totalPayments = payments.length;
+    const totalPaidCount = payments.filter((p) => p.finalStatus === 'PAGADO').length;
+    const totalPendingCount = payments.filter((p) => p.finalStatus === 'PENDIENTE').length;
+    const totalMoraCount = payments.filter((p) => p.finalStatus === 'MORA').length;
+
+    const totalLeftover = payments.reduce((acc, p) => acc + parseFloat(p.leftover), 0);
+    const totalDue = payments.reduce((acc, p) => acc + parseFloat(p.totalDue), 0);
+    const totalPenalty = payments.reduce(
+        (acc, p) => acc + parseFloat(p.accumulatedPenalty),
+        0
+    );
+
+    const statusData = [
+        { name: 'PAGADO', value: totalPaidCount },
+        { name: 'PENDIENTE', value: totalPendingCount },
+        { name: 'MORA', value: totalMoraCount }
+    ];
+    const COLORS = ['#4CAF50', '#FFC107', '#F44336']; // Verde, Amarillo, Rojo
+
+    const barData = [
+        {
+            name: 'Totales',
+            'Deuda Pendiente (totalDue)': totalDue,
+            'Saldo (leftover)': totalLeftover,
+            'Multas (penalty)': totalPenalty
+        }
+    ];
+
     return (
         <PageContainer>
             <Title variant="h4" gutterBottom>
@@ -593,10 +613,11 @@ const ActivityLogPage = () => {
                         ) : (
                             <>
                                 {isMobile ? (
-                                    // Vista móvil: cada bus como tarjeta
+                                    // Vista móvil
                                     <>
                                         {busesPaginated.map((bus) => (
                                             <MobileCard key={bus.id}>
+                                                {/* ... Lógica previa ... */}
                                                 <MobileField>
                                                     <MobileLabel>Placa:</MobileLabel>
                                                     <MobileValue>{bus.plate}</MobileValue>
@@ -622,24 +643,18 @@ const ActivityLogPage = () => {
                                                     <MobileValue>{bus.description || '—'}</MobileValue>
                                                 </MobileField>
 
-                                                {/* Mostrar estado de la ruta con bus.currentRoute */}
                                                 <MobileField>
                                                     <MobileLabel>Estado de Ruta:</MobileLabel>
                                                     {bus.currentRoute ? (
                                                         !bus.currentRoute.endTime ? (
                                                             <MobileValue>
                                                                 En Ruta (Inicio:{' '}
-                                                                {formatGuatemalaDatetime(
-                                                                    bus.currentRoute.startTime
-                                                                )}
-                                                                )
+                                                                {formatGuatemalaDatetime(bus.currentRoute.startTime)})
                                                             </MobileValue>
                                                         ) : (
                                                             <MobileValue>
-                                                                Ruta Finalizada a las{' '}
-                                                                {formatGuatemalaDatetime(
-                                                                    bus.currentRoute.endTime
-                                                                )}
+                                                                Finalizada a las{' '}
+                                                                {formatGuatemalaDatetime(bus.currentRoute.endTime)}
                                                             </MobileValue>
                                                         )
                                                     ) : (
@@ -649,8 +664,7 @@ const ActivityLogPage = () => {
 
                                                 <MobileField>
                                                     <MobileLabel>Paradas:</MobileLabel>
-                                                    {Array.isArray(bus.stops) &&
-                                                    bus.stops.length > 0 ? (
+                                                    {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
                                                         <>
                                                             {bus.stops.map((stop) => (
                                                                 <MobileCard
@@ -683,9 +697,7 @@ const ActivityLogPage = () => {
                                                             ))}
                                                         </>
                                                     ) : (
-                                                        <MobileValue>
-                                                            No hay paradas registradas.
-                                                        </MobileValue>
+                                                        <MobileValue>No hay paradas registradas.</MobileValue>
                                                     )}
                                                 </MobileField>
                                                 <MobileField>
@@ -745,7 +757,7 @@ const ActivityLogPage = () => {
                                         />
                                     </>
                                 ) : (
-                                    // Vista desktop: tabla con acordeón
+                                    // Vista desktop
                                     <>
                                         {busesPaginated.map((bus) => (
                                             <AccordionStyled
@@ -754,10 +766,7 @@ const ActivityLogPage = () => {
                                                 onChange={handleChangeAccordion(`panel-${bus.id}`)}
                                             >
                                                 <AccordionSummaryStyled expandIcon={<ExpandMoreIcon />}>
-                                                    <Typography
-                                                        variant="subtitle1"
-                                                        sx={{ fontWeight: 'bold' }}
-                                                    >
+                                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                                                         {bus.plate}
                                                     </Typography>
                                                     {bus.inWorkshop && (
@@ -769,14 +778,11 @@ const ActivityLogPage = () => {
                                                         />
                                                     )}
                                                     <Chip
-                                                        label={`Ocupación: ${bus.occupation ?? 0}/${
-                                                            bus.capacity ?? '--'
-                                                        }`}
+                                                        label={`Ocupación: ${bus.occupation ?? 0}/${bus.capacity ?? '--'}`}
                                                         size="small"
                                                         color="success"
                                                         sx={{ ml: 2 }}
                                                     />
-                                                    {/* Mostrar estado de ruta */}
                                                     {bus.currentRoute ? (
                                                         !bus.currentRoute.endTime ? (
                                                             <Chip
@@ -827,53 +833,30 @@ const ActivityLogPage = () => {
                                                                 {bus.description || '—'}
                                                             </Typography>
                                                         </Grid>
-
                                                         <Grid item xs={12} md={6}>
-                                                            {Array.isArray(bus.stops) &&
-                                                            bus.stops.length > 0 ? (
+                                                            {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
                                                                 <Table size="small">
                                                                     <TableHead>
                                                                         <TableRow>
-                                                                            <TableHeaderCell>
-                                                                                Horario
-                                                                            </TableHeaderCell>
-                                                                            <TableHeaderCell>
-                                                                                Nota
-                                                                            </TableHeaderCell>
-                                                                            <TableHeaderCell>
-                                                                                Padre
-                                                                            </TableHeaderCell>
-                                                                            <TableHeaderCell>
-                                                                                Estudiantes
-                                                                            </TableHeaderCell>
+                                                                            <TableHeaderCell>Horario</TableHeaderCell>
+                                                                            <TableHeaderCell>Nota</TableHeaderCell>
+                                                                            <TableHeaderCell>Padre</TableHeaderCell>
+                                                                            <TableHeaderCell>Estudiantes</TableHeaderCell>
                                                                         </TableRow>
                                                                     </TableHead>
                                                                     <TableBody>
                                                                         {bus.stops.map((stop) => (
-                                                                            <TableRow
-                                                                                key={stop.stopId}
-                                                                            >
-                                                                                <TableCell>
-                                                                                    {stop.time}
-                                                                                </TableCell>
-                                                                                <TableCell>
-                                                                                    {stop.note || ''}
-                                                                                </TableCell>
-                                                                                <TableCell>
-                                                                                    {stop.parentName}
-                                                                                </TableCell>
-                                                                                <TableCell>
-                                                                                    {stop.students}
-                                                                                </TableCell>
+                                                                            <TableRow key={stop.stopId}>
+                                                                                <TableCell>{stop.time}</TableCell>
+                                                                                <TableCell>{stop.note || ''}</TableCell>
+                                                                                <TableCell>{stop.parentName}</TableCell>
+                                                                                <TableCell>{stop.students}</TableCell>
                                                                             </TableRow>
                                                                         ))}
                                                                     </TableBody>
                                                                 </Table>
                                                             ) : (
-                                                                <Typography
-                                                                    variant="body2"
-                                                                    color="textSecondary"
-                                                                >
+                                                                <Typography variant="body2" color="textSecondary">
                                                                     No hay paradas registradas.
                                                                 </Typography>
                                                             )}
@@ -883,20 +866,14 @@ const ActivityLogPage = () => {
 
                                                 <Divider />
                                                 <AccordionActions>
-                                                    <Typography
-                                                        variant="caption"
-                                                        color="textSecondary"
-                                                        sx={{ mr: 2 }}
-                                                    >
+                                                    <Typography variant="caption" color="textSecondary" sx={{ mr: 2 }}>
                                                         ID Bus: {bus.id}
                                                     </Typography>
                                                     {bus.inWorkshop ? (
                                                         <Tooltip title="Marcar como Disponible">
                                                             <IconButton
                                                                 color="primary"
-                                                                onClick={() =>
-                                                                    handleToggleBusTaller(bus, false)
-                                                                }
+                                                                onClick={() => handleToggleBusTaller(bus, false)}
                                                             >
                                                                 <BuildIcon />
                                                             </IconButton>
@@ -905,9 +882,7 @@ const ActivityLogPage = () => {
                                                         <Tooltip title="Marcar bus en Taller">
                                                             <IconButton
                                                                 color="primary"
-                                                                onClick={() =>
-                                                                    handleToggleBusTaller(bus, true)
-                                                                }
+                                                                onClick={() => handleToggleBusTaller(bus, true)}
                                                             >
                                                                 <BuildIcon />
                                                             </IconButton>
@@ -942,13 +917,9 @@ const ActivityLogPage = () => {
                     {/* Sección Incidentes y Emergencias */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
-                            <WarningIcon
-                                sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }}
-                            />
+                            <WarningIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }} />
                             Incidentes y{' '}
-                            <HospitalIcon
-                                sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }}
-                            />
+                            <HospitalIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#D32F2F' }} />
                             Emergencias
                         </SectionTitle>
 
@@ -1017,13 +988,42 @@ const ActivityLogPage = () => {
                                                     </MobileValue>
                                                 </MobileField>
                                                 <MobileField>
-                                                    <MobileLabel>Tipo:</MobileLabel>
-                                                    <MobileValue>{incident.tipo || '—'}</MobileValue>
+                                                    <MobileLabel>Tipo (Gravedad):</MobileLabel>
+                                                    <MobileValue>
+                                                        {incident.tipo === 'incidente'
+                                                            ? 'Problema menor'
+                                                            : 'Problema mayor'}
+                                                    </MobileValue>
                                                 </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>Tipo de Falla:</MobileLabel>
+                                                    <MobileValue>
+                                                        {incident.tipoFalla || '—'}
+                                                    </MobileValue>
+                                                </MobileField>
+                                                {/* Si la falla es "otro", mostrar su detalle */}
+                                                {incident.tipoFalla === 'otro' && incident.otroFallaDetalle && (
+                                                    <MobileField>
+                                                        <MobileLabel>Otro (Detalle):</MobileLabel>
+                                                        <MobileValue>{incident.otroFallaDetalle}</MobileValue>
+                                                    </MobileField>
+                                                )}
                                                 <MobileField>
                                                     <MobileLabel>Descripción:</MobileLabel>
                                                     <MobileValue>
                                                         {incident.descripcion || '—'}
+                                                    </MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>¿Pudo continuar la ruta?</MobileLabel>
+                                                    <MobileValue>
+                                                        {incident.pudoContinuarRuta ? 'Sí' : 'No'}
+                                                    </MobileValue>
+                                                </MobileField>
+                                                <MobileField>
+                                                    <MobileLabel>¿Bus Suplente?</MobileLabel>
+                                                    <MobileValue>
+                                                        {incident.seUtilizoBusSuplente ? 'Sí' : 'No'}
                                                     </MobileValue>
                                                 </MobileField>
                                             </MobileCard>
@@ -1045,8 +1045,11 @@ const ActivityLogPage = () => {
                                                 <TableRow>
                                                     <TableHeaderCell>Fecha</TableHeaderCell>
                                                     <TableHeaderCell>Piloto</TableHeaderCell>
-                                                    <TableHeaderCell>Tipo</TableHeaderCell>
+                                                    <TableHeaderCell>Tipo (Gravedad)</TableHeaderCell>
+                                                    <TableHeaderCell>Tipo de Falla</TableHeaderCell>
                                                     <TableHeaderCell>Descripción</TableHeaderCell>
+                                                    <TableHeaderCell>¿Continuó?</TableHeaderCell>
+                                                    <TableHeaderCell>¿Bus Suplente?</TableHeaderCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
@@ -1056,13 +1059,26 @@ const ActivityLogPage = () => {
                                                             {formatGuatemalaDatetime(incident.fecha)}
                                                         </TableCell>
                                                         <TableCell>
-                                                            {incident.piloto
-                                                                ? incident.piloto.name
-                                                                : '—'}
+                                                            {incident.piloto ? incident.piloto.name : '—'}
                                                         </TableCell>
-                                                        <TableCell>{incident.tipo || '—'}</TableCell>
                                                         <TableCell>
-                                                            {incident.descripcion || '—'}
+                                                            {incident.tipo === 'incidente'
+                                                                ? 'Problema menor'
+                                                                : 'Problema mayor'}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {incident.tipoFalla}
+                                                            {incident.tipoFalla === 'otro' &&
+                                                            incident.otroFallaDetalle
+                                                                ? ` (${incident.otroFallaDetalle})`
+                                                                : ''}
+                                                        </TableCell>
+                                                        <TableCell>{incident.descripcion || '—'}</TableCell>
+                                                        <TableCell>
+                                                            {incident.pudoContinuarRuta ? 'Sí' : 'No'}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {incident.seUtilizoBusSuplente ? 'Sí' : 'No'}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
@@ -1145,9 +1161,7 @@ const ActivityLogPage = () => {
                                                     <MobileLabel>Ubicación (Lat,Lng):</MobileLabel>
                                                     <MobileValue>
                                                         {eme.latitud && eme.longitud
-                                                            ? `${parseFloat(eme.latitud).toFixed(
-                                                                6
-                                                            )}, ${parseFloat(eme.longitud).toFixed(6)}`
+                                                            ? `${parseFloat(eme.latitud).toFixed(6)}, ${parseFloat(eme.longitud).toFixed(6)}`
                                                             : '—'}
                                                     </MobileValue>
                                                     {eme.latitud && eme.longitud && (
@@ -1202,33 +1216,19 @@ const ActivityLogPage = () => {
                                                         <TableCell>
                                                             {eme.latitud && eme.longitud ? (
                                                                 <>
-                                                                    {parseFloat(eme.latitud).toFixed(
-                                                                        6
-                                                                    )}
-                                                                    ,{' '}
-                                                                    {parseFloat(eme.longitud).toFixed(
-                                                                        6
-                                                                    )}
-                                                                    <Tooltip
-                                                                        title="Ver mapa"
-                                                                        sx={{ ml: 1 }}
-                                                                    >
+                                                                    {parseFloat(eme.latitud).toFixed(6)},{' '}
+                                                                    {parseFloat(eme.longitud).toFixed(6)}
+                                                                    <Tooltip title="Ver mapa" sx={{ ml: 1 }}>
                                                                         <IconButton
                                                                             size="small"
                                                                             onClick={() =>
                                                                                 handleOpenMap(
-                                                                                    parseFloat(
-                                                                                        eme.latitud
-                                                                                    ),
-                                                                                    parseFloat(
-                                                                                        eme.longitud
-                                                                                    )
+                                                                                    parseFloat(eme.latitud),
+                                                                                    parseFloat(eme.longitud)
                                                                                 )
                                                                             }
                                                                         >
-                                                                            <LocationOnIcon
-                                                                                color="primary"
-                                                                            />
+                                                                            <LocationOnIcon color="primary" />
                                                                         </IconButton>
                                                                     </Tooltip>
                                                                 </>
@@ -1259,7 +1259,7 @@ const ActivityLogPage = () => {
                     {!isSupervisor && (
                         <SectionPaper>
                             <SectionTitle variant="h6" gutterBottom>
-                                Pagos y Boletas
+                                Gestión de pagos
                             </SectionTitle>
 
                             <FiltersRow>
@@ -1337,7 +1337,10 @@ const ActivityLogPage = () => {
                                                     <Tooltip title="Ver boletas de pago">
                                                         <IconButton
                                                             onClick={() =>
-                                                                handleViewBoletas(pay.User.id, pay.User.name)
+                                                                handleViewBoletas(
+                                                                    pay.User.id,
+                                                                    pay.User.name
+                                                                )
                                                             }
                                                         >
                                                             <VisibilityIcon />
@@ -1417,6 +1420,95 @@ const ActivityLogPage = () => {
                                     />
                                 </>
                             )}
+
+                            {/* Sección Análisis (Recharts) */}
+                            <SectionTitle variant="h6" gutterBottom sx={{ mt: 4 }}>
+                                Análisis general de Pagos
+                            </SectionTitle>
+                            <Grid container spacing={4}>
+                                <Grid item xs={12} md={4}>
+                                    <Paper elevation={2} sx={{ p: 2 }}>
+                                        <Typography variant="subtitle2" gutterBottom>
+                                            Total de registros de pago
+                                        </Typography>
+                                        <Typography variant="h5" color="primary">
+                                            {totalPayments}
+                                        </Typography>
+                                    </Paper>
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <Paper elevation={2} sx={{ p: 2 }}>
+                                        <Typography variant="subtitle2" gutterBottom>
+                                            Pagos completados
+                                        </Typography>
+                                        <Typography variant="h5" color="success.main">
+                                            {totalPaidCount}
+                                        </Typography>
+                                    </Paper>
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <Paper elevation={2} sx={{ p: 2 }}>
+                                        <Typography variant="subtitle2" gutterBottom>
+                                            Pagos en Mora
+                                        </Typography>
+                                        <Typography variant="h5" color="error">
+                                            {totalMoraCount}
+                                        </Typography>
+                                    </Paper>
+                                </Grid>
+                            </Grid>
+
+                            <Grid container spacing={4} sx={{ mt: 2 }}>
+                                <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        Distribución por Estatus
+                                    </Typography>
+                                    <PieChart width={350} height={300}>
+                                        <Pie
+                                            data={statusData}
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={80}
+                                            label
+                                            dataKey="value"
+                                        >
+                                            {statusData.map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={COLORS[index % COLORS.length]}
+                                                />
+                                            ))}
+                                        </Pie>
+                                        <RechartsTooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        Montos Globales
+                                    </Typography>
+                                    <BarChart
+                                        width={350}
+                                        height={300}
+                                        data={barData}
+                                        margin={{
+                                            top: 20,
+                                            right: 20,
+                                            left: 10,
+                                            bottom: 5
+                                        }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="name" />
+                                        <YAxis />
+                                        <RechartsTooltip />
+                                        <Legend />
+                                        <Bar dataKey="Deuda Pendiente (totalDue)" fill="#8884d8" />
+                                        <Bar dataKey="Saldo (leftover)" fill="#82ca9d" />
+                                        <Bar dataKey="Multas (penalty)" fill="#ffc658" />
+                                    </BarChart>
+                                </Grid>
+                            </Grid>
                         </SectionPaper>
                     )}
                 </div>
@@ -1492,6 +1584,45 @@ const ActivityLogPage = () => {
                     <Button variant="outlined" onClick={handleCloseMap}>
                         Cerrar
                     </Button>
+                    {selectedCoords.lat && selectedCoords.lng && (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={() => {
+                                if (navigator.geolocation) {
+                                    navigator.geolocation.getCurrentPosition(
+                                        (pos) => {
+                                            const userLat = pos.coords.latitude;
+                                            const userLng = pos.coords.longitude;
+                                            window.open(
+                                                `https://www.google.com/maps/dir/?api=1&origin=${userLat},${userLng}&destination=${selectedCoords.lat},${selectedCoords.lng}`,
+                                                '_blank'
+                                            );
+                                        },
+                                        (err) => {
+                                            console.error('No se pudo obtener geolocalización =>', err);
+                                            window.open(
+                                                `https://www.google.com/maps/dir/?api=1&destination=${selectedCoords.lat},${selectedCoords.lng}`,
+                                                '_blank'
+                                            );
+                                        },
+                                        {
+                                            enableHighAccuracy: true,
+                                            timeout: 10000,
+                                            maximumAge: 0
+                                        }
+                                    );
+                                } else {
+                                    window.open(
+                                        `https://www.google.com/maps/dir/?api=1&destination=${selectedCoords.lat},${selectedCoords.lng}`,
+                                        '_blank'
+                                    );
+                                }
+                            }}
+                        >
+                            Trazar ruta
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 
@@ -1513,13 +1644,12 @@ const ActivityLogPage = () => {
                                     labelId="tipo-falla-label"
                                     label="Tipo de Falla"
                                     value={incidentForm.tipoFalla}
-                                    onChange={(e) =>
-                                        handleIncidentFormChange('tipoFalla', e.target.value)
-                                    }
+                                    onChange={(e) => handleIncidentFormChange('tipoFalla', e.target.value)}
                                 >
                                     <MenuItem value="mecánico">Mecánico</MenuItem>
                                     <MenuItem value="eléctrico">Eléctrico</MenuItem>
                                     <MenuItem value="choque">Choque</MenuItem>
+                                    <MenuItem value="otro">Otro</MenuItem>
                                 </Select>
                             </FormControl>
                         </Grid>
@@ -1532,28 +1662,53 @@ const ActivityLogPage = () => {
                                     labelId="tipo-incidente-label"
                                     label="Tipo de Incidente"
                                     value={incidentForm.tipo}
-                                    onChange={(e) =>
-                                        handleIncidentFormChange('tipo', e.target.value)
-                                    }
+                                    onChange={(e) => handleIncidentFormChange('tipo', e.target.value)}
                                 >
-                                    <MenuItem value="incidente">Incidente</MenuItem>
-                                    <MenuItem value="accidente">Accidente</MenuItem>
+                                    <MenuItem value="incidente">Problema menor</MenuItem>
+                                    <MenuItem value="accidente">Problema mayor</MenuItem>
                                 </Select>
                             </FormControl>
                         </Grid>
 
-                        {/* ¿Hubo impacto? */}
+                        {/* Solo mostrar campo "otroFallaDetalle" si es "otro" */}
+                        {incidentForm.tipoFalla === 'otro' && (
+                            <Grid item xs={12}>
+                                <TextField
+                                    label="Detalle de la Falla (Otro)"
+                                    value={incidentForm.otroFallaDetalle}
+                                    onChange={(e) => handleIncidentFormChange('otroFallaDetalle', e.target.value)}
+                                    fullWidth
+                                />
+                            </Grid>
+                        )}
+
+                        {/* ¿Pudo continuar la ruta? */}
                         <Grid item xs={12}>
                             <FormControlLabel
                                 control={
-                                    <Checkbox
-                                        checked={incidentForm.impacto}
+                                    <Switch
+                                        checked={incidentForm.pudoContinuarRuta}
                                         onChange={(e) =>
-                                            handleIncidentFormChange('impacto', e.target.checked)
+                                            handleIncidentFormChange('pudoContinuarRuta', e.target.checked)
                                         }
                                     />
                                 }
-                                label="¿Hubo impacto?"
+                                label="¿Pudo continuar la ruta?"
+                            />
+                        </Grid>
+
+                        {/* ¿Se utilizó bus suplente? */}
+                        <Grid item xs={12}>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={incidentForm.seUtilizoBusSuplente}
+                                        onChange={(e) =>
+                                            handleIncidentFormChange('seUtilizoBusSuplente', e.target.checked)
+                                        }
+                                    />
+                                }
+                                label="¿Se utilizó bus suplente?"
                             />
                         </Grid>
 
