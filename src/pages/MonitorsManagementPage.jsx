@@ -22,7 +22,8 @@ import {
     Tooltip,
     useTheme,
     useMediaQuery,
-    Box
+    Box,
+    TableSortLabel
 } from '@mui/material';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -52,25 +53,77 @@ const groupBySchool = (arr) => {
 
 // Componentes para la vista móvil (tarjetas)
 const MobileCard = styled(Paper)`
-  padding: 16px;
-  margin-bottom: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
 `;
 
 const MobileField = styled(Box)`
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
 `;
 
 const MobileLabel = styled(Typography)`
-  font-weight: bold;
-  font-size: 0.875rem;
-  color: #555;
+    font-weight: bold;
+    font-size: 0.875rem;
+    color: #555;
 `;
 
 const MobileValue = styled(Typography)`
-  font-size: 1rem;
+    font-size: 1rem;
 `;
+
+/* ========== Código para ordenamiento ========== */
+function descendingComparator(a, b, orderBy) {
+    const aValue = getFieldValue(a, orderBy);
+    const bValue = getFieldValue(b, orderBy);
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return bValue.localeCompare(aValue);
+    }
+    if (bValue < aValue) return -1;
+    if (bValue > aValue) return 1;
+    return 0;
+}
+
+function getComparator(order, orderBy) {
+    return order === 'desc'
+        ? (a, b) => descendingComparator(a, b, orderBy)
+        : (a, b) => -descendingComparator(a, b, orderBy);
+}
+
+function stableSort(array, comparator) {
+    const stabilizedThis = array.map((el, index) => [el, index]);
+    stabilizedThis.sort((a, b) => {
+        const order = comparator(a[0], b[0]);
+        if (order !== 0) return order;
+        return a[1] - b[1];
+    });
+    return stabilizedThis.map((el) => el[0]);
+}
+
+/**
+ * Extrae el valor a ordenar a partir de un monitor según la columna.
+ */
+function getFieldValue(monitor, field) {
+    switch (field) {
+        case 'name':
+            return monitor.name;
+        case 'email':
+            return monitor.email;
+        case 'phoneNumber':
+            return monitor.phoneNumber || '';
+        case 'incidentsCount':
+            return monitor.incidentsCount || 0;
+        case 'emergenciesCount':
+            return monitor.emergenciesCount || 0;
+        default:
+            return '';
+    }
+}
+/* ========== Fin código para ordenamiento ========== */
 
 const MonitorsManagementPage = () => {
     const { auth } = useContext(AuthContext);
@@ -84,6 +137,16 @@ const MonitorsManagementPage = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+
+    // Estados para ordenamiento (agregados)
+    const [order, setOrder] = useState('asc');
+    const [orderBy, setOrderBy] = useState('');
+
+    const handleRequestSort = (property) => {
+        const isAsc = orderBy === property && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(property);
+    };
 
     // Diálogos para ver detalles de incidentes/emergencias
     const [openIncidentsDialog, setOpenIncidentsDialog] = useState(false);
@@ -183,6 +246,8 @@ const MonitorsManagementPage = () => {
                     ) : (
                         schoolKeys.map((school) => {
                             const data = groupedData[school];
+                            // Aplicar ordenamiento a los monitores del grupo
+                            const sortedData = stableSort(data, getComparator(order, orderBy));
                             return (
                                 <Paper key={school} sx={{ mb: 4, p: 2 }}>
                                     <Typography variant="h6" sx={{ mb: 2 }}>
@@ -192,7 +257,7 @@ const MonitorsManagementPage = () => {
                                     {isMobile ? (
                                         // Vista móvil: tarjetas
                                         <>
-                                            {data
+                                            {sortedData
                                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                                 .map((monitor) => (
                                                     <MobileCard key={monitor.email}>
@@ -242,7 +307,7 @@ const MonitorsManagementPage = () => {
                                                 ))}
                                             <TablePagination
                                                 component="div"
-                                                count={data.length}
+                                                count={sortedData.length}
                                                 page={page}
                                                 onPageChange={handleChangePage}
                                                 rowsPerPage={rowsPerPage}
@@ -258,15 +323,65 @@ const MonitorsManagementPage = () => {
                                                 <Table>
                                                     <TableHead>
                                                         <TableRow>
-                                                            <TableCell>Nombre</TableCell>
-                                                            <TableCell>Email</TableCell>
-                                                            <TableCell>Teléfono</TableCell>
-                                                            <TableCell>Incidentes</TableCell>
-                                                            <TableCell>Emergencias</TableCell>
+                                                            <TableCell sortDirection={orderBy === 'name' ? order : false}>
+                                                                <TableSortLabel
+                                                                    active={orderBy === 'name'}
+                                                                    direction={orderBy === 'name' ? order : 'asc'}
+                                                                    onClick={() => handleRequestSort('name')}
+                                                                    hideSortIcon={false}
+                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                                >
+                                                                    Nombre
+                                                                </TableSortLabel>
+                                                            </TableCell>
+                                                            <TableCell sortDirection={orderBy === 'email' ? order : false}>
+                                                                <TableSortLabel
+                                                                    active={orderBy === 'email'}
+                                                                    direction={orderBy === 'email' ? order : 'asc'}
+                                                                    onClick={() => handleRequestSort('email')}
+                                                                    hideSortIcon={false}
+                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                                >
+                                                                    Email
+                                                                </TableSortLabel>
+                                                            </TableCell>
+                                                            <TableCell sortDirection={orderBy === 'phoneNumber' ? order : false}>
+                                                                <TableSortLabel
+                                                                    active={orderBy === 'phoneNumber'}
+                                                                    direction={orderBy === 'phoneNumber' ? order : 'asc'}
+                                                                    onClick={() => handleRequestSort('phoneNumber')}
+                                                                    hideSortIcon={false}
+                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                                >
+                                                                    Teléfono
+                                                                </TableSortLabel>
+                                                            </TableCell>
+                                                            <TableCell sortDirection={orderBy === 'incidentsCount' ? order : false}>
+                                                                <TableSortLabel
+                                                                    active={orderBy === 'incidentsCount'}
+                                                                    direction={orderBy === 'incidentsCount' ? order : 'asc'}
+                                                                    onClick={() => handleRequestSort('incidentsCount')}
+                                                                    hideSortIcon={false}
+                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                                >
+                                                                    Incidentes
+                                                                </TableSortLabel>
+                                                            </TableCell>
+                                                            <TableCell sortDirection={orderBy === 'emergenciesCount' ? order : false}>
+                                                                <TableSortLabel
+                                                                    active={orderBy === 'emergenciesCount'}
+                                                                    direction={orderBy === 'emergenciesCount' ? order : 'asc'}
+                                                                    onClick={() => handleRequestSort('emergenciesCount')}
+                                                                    hideSortIcon={false}
+                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                                >
+                                                                    Emergencias
+                                                                </TableSortLabel>
+                                                            </TableCell>
                                                         </TableRow>
                                                     </TableHead>
                                                     <TableBody>
-                                                        {data
+                                                        {stableSort(sortedData, getComparator(order, orderBy))
                                                             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                                             .map((monitor) => (
                                                                 <TableRow key={monitor.email}>
@@ -297,19 +412,12 @@ const MonitorsManagementPage = () => {
                                                                     </TableCell>
                                                                 </TableRow>
                                                             ))}
-                                                        {data.length === 0 && (
-                                                            <TableRow>
-                                                                <TableCell colSpan={5} align="center">
-                                                                    No se encontraron monitores para este colegio.
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )}
                                                     </TableBody>
                                                 </Table>
                                             </TableContainer>
                                             <TablePagination
                                                 component="div"
-                                                count={data.length}
+                                                count={sortedData.length}
                                                 page={page}
                                                 onPageChange={handleChangePage}
                                                 rowsPerPage={rowsPerPage}

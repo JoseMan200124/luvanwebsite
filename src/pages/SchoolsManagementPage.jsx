@@ -36,7 +36,8 @@ import {
     CardActions,
     DialogContentText,
     useTheme,
-    useMediaQuery
+    useMediaQuery,
+    TableSortLabel
 } from '@mui/material';
 import {
     Edit,
@@ -138,9 +139,59 @@ const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
 
-// ───────────────────────────────
-// Componente Principal
-// ───────────────────────────────
+/* =================== Código para ordenamiento =================== */
+function descendingComparator(a, b, orderBy) {
+    const aValue = getFieldValue(a, orderBy);
+    const bValue = getFieldValue(b, orderBy);
+
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return bValue.localeCompare(aValue);
+    }
+    if (bValue < aValue) return -1;
+    if (bValue > aValue) return 1;
+    return 0;
+}
+
+function getComparator(order, orderBy) {
+    return order === 'desc'
+        ? (a, b) => descendingComparator(a, b, orderBy)
+        : (a, b) => -descendingComparator(a, b, orderBy);
+}
+
+function stableSort(array, comparator) {
+    const stabilizedThis = array.map((el, index) => [el, index]);
+    stabilizedThis.sort((a, b) => {
+        const order = comparator(a[0], b[0]);
+        if (order !== 0) return order;
+        return a[1] - b[1];
+    });
+    return stabilizedThis.map((el) => el[0]);
+}
+
+function getFieldValue(school, field) {
+    switch (field) {
+        case 'name':
+            return school.name;
+        case 'city':
+            return school.city;
+        case 'address':
+            return school.address;
+        case 'contactPerson':
+            return school.contactPerson;
+        case 'contactPhone':
+            return school.contactPhone;
+        case 'contactEmail':
+            return school.contactEmail;
+        default:
+            return '';
+    }
+}
+/* =================== Fin código para ordenamiento =================== */
+
 const SchoolsManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -175,6 +226,16 @@ const SchoolsManagementPage = () => {
     const [submissionDetail, setSubmissionDetail] = useState(null);
 
     const downloadFilename = `colegios_template_${getFormattedDateTime()}.xlsx`;
+
+    // =================== Estados para ordenamiento ===================
+    const [order, setOrder] = useState('asc');
+    const [orderBy, setOrderBy] = useState('');
+
+    const handleRequestSort = (property) => {
+        const isAsc = orderBy === property && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(property);
+    };
 
     // ───────────────────────────────
     // Función para obtener colegios
@@ -543,6 +604,9 @@ const SchoolsManagementPage = () => {
         (sch.city || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Aplicamos el ordenamiento a la lista filtrada
+    const sortedSchools = stableSort(filteredSchools, getComparator(order, orderBy));
+
     const handleCopyLink = (schoolId) => {
         const baseUrl = window.location.origin;
         const link = `${baseUrl}/schools/enroll/${schoolId}`;
@@ -755,7 +819,7 @@ const SchoolsManagementPage = () => {
                 <>
                     {isMobile ? (
                         <>
-                            {filteredSchools
+                            {sortedSchools
                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                 .map((school) => (
                                     <MobileCard key={school.id} elevation={3}>
@@ -832,7 +896,7 @@ const SchoolsManagementPage = () => {
                                 ))}
                             <TablePagination
                                 component="div"
-                                count={filteredSchools.length}
+                                count={sortedSchools.length}
                                 page={page}
                                 onPageChange={handleChangePage}
                                 rowsPerPage={rowsPerPage}
@@ -852,19 +916,79 @@ const SchoolsManagementPage = () => {
                                 <Table stickyHeader>
                                     <TableHead>
                                         <TableRow>
-                                            <TableCell>Nombre</TableCell>
-                                            <TableCell>Ciudad</TableCell>
-                                            <TableCell>Dirección</TableCell>
-                                            <TableCell>Contacto</TableCell>
-                                            <TableCell>Teléfono</TableCell>
-                                            <TableCell>Email</TableCell>
+                                            <TableCell sortDirection={orderBy === 'name' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'name'}
+                                                    direction={orderBy === 'name' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('name')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Nombre
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'city' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'city'}
+                                                    direction={orderBy === 'city' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('city')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Ciudad
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'address' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'address'}
+                                                    direction={orderBy === 'address' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('address')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Dirección
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'contactPerson' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'contactPerson'}
+                                                    direction={orderBy === 'contactPerson' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('contactPerson')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Contacto
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'contactPhone' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'contactPhone'}
+                                                    direction={orderBy === 'contactPhone' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('contactPhone')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Teléfono
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'contactEmail' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'contactEmail'}
+                                                    direction={orderBy === 'contactEmail' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('contactEmail')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Email
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell>Grados</TableCell>
                                             <TableCell align="center">Formulario</TableCell>
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {filteredSchools
+                                        {sortedSchools
                                             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                             .map((school) => {
                                                 const maxVisibleGrades = 3;
@@ -928,7 +1052,7 @@ const SchoolsManagementPage = () => {
                                                     </TableRow>
                                                 );
                                             })}
-                                        {filteredSchools.length === 0 && (
+                                        {sortedSchools.length === 0 && (
                                             <TableRow>
                                                 <ResponsiveTableCell colSpan={9} align="center">
                                                     No se encontraron colegios.
@@ -940,7 +1064,7 @@ const SchoolsManagementPage = () => {
                             </TableContainer>
                             <TablePagination
                                 component="div"
-                                count={filteredSchools.length}
+                                count={sortedSchools.length}
                                 page={page}
                                 onPageChange={handleChangePage}
                                 rowsPerPage={rowsPerPage}

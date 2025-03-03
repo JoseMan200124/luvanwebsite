@@ -34,7 +34,9 @@ import {
     Switch,
     useTheme,
     useMediaQuery,
-    Box
+    Box,
+    TableSortLabel,
+    TableContainer
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
@@ -47,7 +49,6 @@ import {
     Report as ReportIcon
 } from '@mui/icons-material';
 
-// -- Importar componentes Recharts para análisis
 import {
     BarChart,
     Bar,
@@ -158,29 +159,120 @@ const MobileValue = styled(Typography)(() => [
     tw`text-base`
 ]);
 
+// =================== Código para ordenamiento ===================
+function descendingComparator(a, b, orderBy, type) {
+    const aValue = getFieldValue(a, orderBy, type);
+    const bValue = getFieldValue(b, orderBy, type);
+
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return bValue.localeCompare(aValue);
+    }
+    if (bValue < aValue) return -1;
+    if (bValue > aValue) return 1;
+    return 0;
+}
+
+function getComparator(order, orderBy, type) {
+    return order === 'desc'
+        ? (a, b) => descendingComparator(a, b, orderBy, type)
+        : (a, b) => -descendingComparator(a, b, orderBy, type);
+}
+
+function stableSort(array, comparator) {
+    const stabilizedThis = array.map((el, index) => [el, index]);
+    stabilizedThis.sort((a, b) => {
+        const order = comparator(a[0], b[0]);
+        if (order !== 0) return order;
+        return a[1] - b[1];
+    });
+    return stabilizedThis.map((el) => el[0]);
+}
+
+function getFieldValue(item, field, type) {
+    if (type === 'buses') {
+        switch (field) {
+            case 'plate':
+                return item?.plate || '';
+            case 'pilot':
+                return item?.pilot?.name || '';
+            case 'monitora':
+                return item?.monitora?.name || '';
+            case 'description':
+                return item?.description || '';
+            default:
+                return '';
+        }
+    } else if (type === 'incidents') {
+        switch (field) {
+            case 'fecha':
+                return item.fecha
+                    ? moment.utc(item.fecha).tz('America/Guatemala').valueOf()
+                    : null;
+            case 'piloto':
+                return item?.piloto?.name || '';
+            case 'tipoFalla':
+                return item?.tipoFalla || '';
+            case 'descripcion':
+                return item?.descripcion || '';
+            default:
+                return '';
+        }
+    } else if (type === 'emergencies') {
+        switch (field) {
+            case 'fecha':
+                return item.fecha
+                    ? moment.utc(item.fecha).tz('America/Guatemala').valueOf()
+                    : null;
+            case 'piloto':
+                return item?.piloto?.name || '';
+            default:
+                return '';
+        }
+    } else if (type === 'payments') {
+        switch (field) {
+            case 'userName':
+                return item?.User?.name || '';
+            case 'userEmail':
+                return item?.User?.email || '';
+            case 'finalStatus':
+                return item?.finalStatus || item?.status || '';
+            case 'nextPaymentDate':
+                return item.nextPaymentDate
+                    ? moment.utc(item.nextPaymentDate).tz('America/Guatemala').valueOf()
+                    : null;
+            case 'leftover':
+                return item.leftover ?? 0;
+            default:
+                return '';
+        }
+    }
+    return '';
+}
+// =================== Fin código para ordenamiento ===================
+
 const ActivityLogPage = () => {
     const { auth } = useContext(AuthContext);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    // Rol Supervisor
     const isSupervisor = auth?.user?.roleId === 6;
     const [loading, setLoading] = useState(false);
 
-    // Datos
     const [buses, setBuses] = useState([]);
     const [incidents, setIncidents] = useState([]);
     const [emergencies, setEmergencies] = useState([]);
     const [payments, setPayments] = useState([]);
 
-    // Snackbar
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
         severity: 'info'
     });
 
-    // Dialogs
     const [openBoletasDialog, setOpenBoletasDialog] = useState(false);
     const [currentBoletas, setCurrentBoletas] = useState([]);
     const [currentParentName, setCurrentParentName] = useState('');
@@ -188,9 +280,7 @@ const ActivityLogPage = () => {
     const [openMapDialog, setOpenMapDialog] = useState(false);
     const [selectedCoords, setSelectedCoords] = useState({ lat: null, lng: null });
 
-    // Dialog para incidente
     const [openIncidentDialog, setOpenIncidentDialog] = useState(false);
-    // Añadimos "otroFallaDetalle" cuando tipoFalla === 'otro'.
     const [incidentForm, setIncidentForm] = useState({
         busId: null,
         tipoFalla: 'mecánico',
@@ -198,7 +288,7 @@ const ActivityLogPage = () => {
         descripcion: '',
         pudoContinuarRuta: false,
         seUtilizoBusSuplente: false,
-        otroFallaDetalle: '' // solo se llena si tipoFalla = 'otro'
+        otroFallaDetalle: ''
     });
 
     const [expanded, setExpanded] = useState(false);
@@ -229,6 +319,42 @@ const ActivityLogPage = () => {
     const [payBalanceMax, setPayBalanceMax] = useState('');
     const [payPage, setPayPage] = useState(0);
     const [payRowsPerPage, setPayRowsPerPage] = useState(5);
+
+    // Orden Buses
+    const [busOrder, setBusOrder] = useState('asc');
+    const [busOrderBy, setBusOrderBy] = useState('plate');
+    const handleRequestBusSort = (property) => {
+        const isAsc = busOrderBy === property && busOrder === 'asc';
+        setBusOrder(isAsc ? 'desc' : 'asc');
+        setBusOrderBy(property);
+    };
+
+    // Orden Incidentes
+    const [incOrder, setIncOrder] = useState('asc');
+    const [incOrderBy, setIncOrderBy] = useState('');
+    const handleRequestIncSort = (property) => {
+        const isAsc = incOrderBy === property && incOrder === 'asc';
+        setIncOrder(isAsc ? 'desc' : 'asc');
+        setIncOrderBy(property);
+    };
+
+    // Orden Emergencias
+    const [emeOrder, setEmeOrder] = useState('asc');
+    const [emeOrderBy, setEmeOrderBy] = useState('');
+    const handleRequestEmeSort = (property) => {
+        const isAsc = emeOrderBy === property && emeOrder === 'asc';
+        setEmeOrder(isAsc ? 'desc' : 'asc');
+        setEmeOrderBy(property);
+    };
+
+    // Orden Pagos
+    const [payOrder, setPayOrder] = useState('asc');
+    const [payOrderBy, setPayOrderBy] = useState('');
+    const handleRequestPaySort = (property) => {
+        const isAsc = payOrderBy === property && payOrder === 'asc';
+        setPayOrder(isAsc ? 'desc' : 'asc');
+        setPayOrderBy(property);
+    };
 
     useEffect(() => {
         fetchAllData();
@@ -324,7 +450,6 @@ const ActivityLogPage = () => {
         }
     };
 
-    // Reportar Incidente (Novedad)
     const handleOpenIncidentDialog = (bus) => {
         setIncidentForm({
             busId: bus.id,
@@ -376,10 +501,10 @@ const ActivityLogPage = () => {
                 descripcion: incidentForm.descripcion,
                 pudoContinuarRuta: incidentForm.pudoContinuarRuta,
                 seUtilizoBusSuplente: incidentForm.seUtilizoBusSuplente,
-                // Enviamos la descripción extra si es "otro"
-                otroFallaDetalle: incidentForm.tipoFalla === 'otro'
-                    ? incidentForm.otroFallaDetalle
-                    : ''
+                otroFallaDetalle:
+                    incidentForm.tipoFalla === 'otro'
+                        ? incidentForm.otroFallaDetalle
+                        : ''
             });
             setSnackbar({
                 open: true,
@@ -388,7 +513,6 @@ const ActivityLogPage = () => {
             });
             setOpenIncidentDialog(false);
 
-            // Refrescar incidentes
             const incResp = await api.get('/activity-logs/incidents');
             setIncidents(incResp.data.incidents || []);
         } catch (error) {
@@ -403,7 +527,7 @@ const ActivityLogPage = () => {
         }
     };
 
-    // Filtrado Buses
+    // === Filtrado y Ordenamiento Buses ===
     const filteredBuses = buses.filter((b) => {
         if (busPilotFilter) {
             const pilotName = b?.pilot?.name?.toLowerCase() || '';
@@ -419,10 +543,15 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const busesPaginated = filteredBuses.slice(
+    const sortedBuses = stableSort(
+        filteredBuses,
+        getComparator(busOrder, busOrderBy, 'buses')
+    );
+    const busesPaginated = sortedBuses.slice(
         busPage * busRowsPerPage,
         busPage * busRowsPerPage + busRowsPerPage
     );
+
     const handleChangeBusPage = (event, newPage) => {
         setBusPage(newPage);
     };
@@ -431,7 +560,7 @@ const ActivityLogPage = () => {
         setBusPage(0);
     };
 
-    // Filtrado Incidentes
+    // === Filtrado y Ordenamiento Incidentes ===
     const filteredIncidents = incidents.filter((inc) => {
         if (incDateFrom) {
             const from = moment(incDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -453,7 +582,11 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const incPaginated = filteredIncidents.slice(
+    const sortedIncidents = stableSort(
+        filteredIncidents,
+        getComparator(incOrder, incOrderBy, 'incidents')
+    );
+    const incPaginated = sortedIncidents.slice(
         incPage * incRowsPerPage,
         incPage * incRowsPerPage + incRowsPerPage
     );
@@ -465,7 +598,7 @@ const ActivityLogPage = () => {
         setIncPage(0);
     };
 
-    // Filtrado Emergencias
+    // === Filtrado y Ordenamiento Emergencias ===
     const filteredEmergencies = emergencies.filter((eme) => {
         if (emeDateFrom) {
             const from = moment(emeDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -483,7 +616,11 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const emePaginated = filteredEmergencies.slice(
+    const sortedEmergencies = stableSort(
+        filteredEmergencies,
+        getComparator(emeOrder, emeOrderBy, 'emergencies')
+    );
+    const emePaginated = sortedEmergencies.slice(
         emePage * emeRowsPerPage,
         emePage * emeRowsPerPage + emeRowsPerPage
     );
@@ -495,7 +632,7 @@ const ActivityLogPage = () => {
         setEmePage(0);
     };
 
-    // Filtrado Pagos (si no es supervisor)
+    // === Filtrado y Ordenamiento Pagos (no supervisor) ===
     const filteredPayments = payments.filter((pay) => {
         if (payDateFrom) {
             const from = moment(payDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
@@ -519,7 +656,11 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const payPaginated = filteredPayments.slice(
+    const sortedPayments = stableSort(
+        filteredPayments,
+        getComparator(payOrder, payOrderBy, 'payments')
+    );
+    const payPaginated = sortedPayments.slice(
         payPage * payRowsPerPage,
         payPage * payRowsPerPage + payRowsPerPage
     );
@@ -531,7 +672,7 @@ const ActivityLogPage = () => {
         setPayPage(0);
     };
 
-    // Análisis de pagos (Recharts)
+    // Análisis de pagos
     const totalPayments = payments.length;
     const totalPaidCount = payments.filter((p) => p.finalStatus === 'PAGADO').length;
     const totalPendingCount = payments.filter((p) => p.finalStatus === 'PENDIENTE').length;
@@ -549,7 +690,7 @@ const ActivityLogPage = () => {
         { name: 'PENDIENTE', value: totalPendingCount },
         { name: 'MORA', value: totalMoraCount }
     ];
-    const COLORS = ['#4CAF50', '#FFC107', '#F44336']; // Verde, Amarillo, Rojo
+    const COLORS = ['#4CAF50', '#FFC107', '#F44336'];
 
     const barData = [
         {
@@ -606,6 +747,59 @@ const ActivityLogPage = () => {
                             />
                         </FiltersRow>
 
+                        {!isMobile && filteredBuses.length > 0 && (
+                            <Table size="small" sx={{ mb: 2 }}>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableHeaderCell sortDirection={busOrderBy === 'plate' ? busOrder : false}>
+                                            <TableSortLabel
+                                                active={busOrderBy === 'plate'}
+                                                direction={busOrderBy === 'plate' ? busOrder : 'asc'}
+                                                onClick={() => handleRequestBusSort('plate')}
+                                                hideSortIcon={false}
+                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                            >
+                                                Placa
+                                            </TableSortLabel>
+                                        </TableHeaderCell>
+                                        <TableHeaderCell sortDirection={busOrderBy === 'pilot' ? busOrder : false}>
+                                            <TableSortLabel
+                                                active={busOrderBy === 'pilot'}
+                                                direction={busOrderBy === 'pilot' ? busOrder : 'asc'}
+                                                onClick={() => handleRequestBusSort('pilot')}
+                                                hideSortIcon={false}
+                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                            >
+                                                Piloto
+                                            </TableSortLabel>
+                                        </TableHeaderCell>
+                                        <TableHeaderCell sortDirection={busOrderBy === 'monitora' ? busOrder : false}>
+                                            <TableSortLabel
+                                                active={busOrderBy === 'monitora'}
+                                                direction={busOrderBy === 'monitora' ? busOrder : 'asc'}
+                                                onClick={() => handleRequestBusSort('monitora')}
+                                                hideSortIcon={false}
+                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                            >
+                                                Monitora
+                                            </TableSortLabel>
+                                        </TableHeaderCell>
+                                        <TableHeaderCell sortDirection={busOrderBy === 'description' ? busOrder : false}>
+                                            <TableSortLabel
+                                                active={busOrderBy === 'description'}
+                                                direction={busOrderBy === 'description' ? busOrder : 'asc'}
+                                                onClick={() => handleRequestBusSort('description')}
+                                                hideSortIcon={false}
+                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                            >
+                                                Descripción
+                                            </TableSortLabel>
+                                        </TableHeaderCell>
+                                    </TableRow>
+                                </TableHead>
+                            </Table>
+                        )}
+
                         {filteredBuses.length === 0 ? (
                             <Typography variant="body2" color="textSecondary">
                                 No hay buses registrados con esos filtros.
@@ -613,11 +807,9 @@ const ActivityLogPage = () => {
                         ) : (
                             <>
                                 {isMobile ? (
-                                    // Vista móvil
                                     <>
                                         {busesPaginated.map((bus) => (
                                             <MobileCard key={bus.id}>
-                                                {/* ... Lógica previa ... */}
                                                 <MobileField>
                                                     <MobileLabel>Placa:</MobileLabel>
                                                     <MobileValue>{bus.plate}</MobileValue>
@@ -642,7 +834,6 @@ const ActivityLogPage = () => {
                                                     <MobileLabel>Descripción:</MobileLabel>
                                                     <MobileValue>{bus.description || '—'}</MobileValue>
                                                 </MobileField>
-
                                                 <MobileField>
                                                     <MobileLabel>Estado de Ruta:</MobileLabel>
                                                     {bus.currentRoute ? (
@@ -661,7 +852,6 @@ const ActivityLogPage = () => {
                                                         <MobileValue>Sin ruta activa</MobileValue>
                                                     )}
                                                 </MobileField>
-
                                                 <MobileField>
                                                     <MobileLabel>Paradas:</MobileLabel>
                                                     {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
@@ -757,7 +947,6 @@ const ActivityLogPage = () => {
                                         />
                                     </>
                                 ) : (
-                                    // Vista desktop
                                     <>
                                         {busesPaginated.map((bus) => (
                                             <AccordionStyled
@@ -914,7 +1103,7 @@ const ActivityLogPage = () => {
                         )}
                     </SectionPaper>
 
-                    {/* Sección Incidentes y Emergencias */}
+                    {/* Incidentes & Emergencias */}
                     <SectionPaper>
                         <SectionTitle variant="h6" gutterBottom>
                             <WarningIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#ED6C02' }} />
@@ -1001,7 +1190,6 @@ const ActivityLogPage = () => {
                                                         {incident.tipoFalla || '—'}
                                                     </MobileValue>
                                                 </MobileField>
-                                                {/* Si la falla es "otro", mostrar su detalle */}
                                                 {incident.tipoFalla === 'otro' && incident.otroFallaDetalle && (
                                                     <MobileField>
                                                         <MobileLabel>Otro (Detalle):</MobileLabel>
@@ -1039,15 +1227,55 @@ const ActivityLogPage = () => {
                                         />
                                     </>
                                 ) : (
-                                    <>
+                                    <TableContainer sx={{ overflowX: 'auto' }}>
                                         <Table size="small">
                                             <TableHead>
                                                 <TableRow>
-                                                    <TableHeaderCell>Fecha</TableHeaderCell>
-                                                    <TableHeaderCell>Piloto</TableHeaderCell>
+                                                    <TableHeaderCell sortDirection={incOrderBy === 'fecha' ? incOrder : false}>
+                                                        <TableSortLabel
+                                                            active={incOrderBy === 'fecha'}
+                                                            direction={incOrderBy === 'fecha' ? incOrder : 'asc'}
+                                                            onClick={() => handleRequestIncSort('fecha')}
+                                                            hideSortIcon={false}
+                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                        >
+                                                            Fecha
+                                                        </TableSortLabel>
+                                                    </TableHeaderCell>
+                                                    <TableHeaderCell sortDirection={incOrderBy === 'piloto' ? incOrder : false}>
+                                                        <TableSortLabel
+                                                            active={incOrderBy === 'piloto'}
+                                                            direction={incOrderBy === 'piloto' ? incOrder : 'asc'}
+                                                            onClick={() => handleRequestIncSort('piloto')}
+                                                            hideSortIcon={false}
+                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                        >
+                                                            Piloto
+                                                        </TableSortLabel>
+                                                    </TableHeaderCell>
                                                     <TableHeaderCell>Tipo (Gravedad)</TableHeaderCell>
-                                                    <TableHeaderCell>Tipo de Falla</TableHeaderCell>
-                                                    <TableHeaderCell>Descripción</TableHeaderCell>
+                                                    <TableHeaderCell sortDirection={incOrderBy === 'tipoFalla' ? incOrder : false}>
+                                                        <TableSortLabel
+                                                            active={incOrderBy === 'tipoFalla'}
+                                                            direction={incOrderBy === 'tipoFalla' ? incOrder : 'asc'}
+                                                            onClick={() => handleRequestIncSort('tipoFalla')}
+                                                            hideSortIcon={false}
+                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                        >
+                                                            Tipo de Falla
+                                                        </TableSortLabel>
+                                                    </TableHeaderCell>
+                                                    <TableHeaderCell sortDirection={incOrderBy === 'descripcion' ? incOrder : false}>
+                                                        <TableSortLabel
+                                                            active={incOrderBy === 'descripcion'}
+                                                            direction={incOrderBy === 'descripcion' ? incOrder : 'asc'}
+                                                            onClick={() => handleRequestIncSort('descripcion')}
+                                                            hideSortIcon={false}
+                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                        >
+                                                            Descripción
+                                                        </TableSortLabel>
+                                                    </TableHeaderCell>
                                                     <TableHeaderCell>¿Continuó?</TableHeaderCell>
                                                     <TableHeaderCell>¿Bus Suplente?</TableHeaderCell>
                                                 </TableRow>
@@ -1084,16 +1312,7 @@ const ActivityLogPage = () => {
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredIncidents.length}
-                                            page={incPage}
-                                            onPageChange={handleChangeIncPage}
-                                            rowsPerPage={incRowsPerPage}
-                                            onRowsPerPageChange={handleChangeIncRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
-                                    </>
+                                    </TableContainer>
                                 )}
                             </Grid>
 
@@ -1193,12 +1412,32 @@ const ActivityLogPage = () => {
                                         />
                                     </>
                                 ) : (
-                                    <>
+                                    <TableContainer sx={{ overflowX: 'auto' }}>
                                         <Table size="small">
                                             <TableHead>
                                                 <TableRow>
-                                                    <TableHeaderCell>Fecha</TableHeaderCell>
-                                                    <TableHeaderCell>Piloto</TableHeaderCell>
+                                                    <TableHeaderCell sortDirection={emeOrderBy === 'fecha' ? emeOrder : false}>
+                                                        <TableSortLabel
+                                                            active={emeOrderBy === 'fecha'}
+                                                            direction={emeOrderBy === 'fecha' ? emeOrder : 'asc'}
+                                                            onClick={() => handleRequestEmeSort('fecha')}
+                                                            hideSortIcon={false}
+                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                        >
+                                                            Fecha
+                                                        </TableSortLabel>
+                                                    </TableHeaderCell>
+                                                    <TableHeaderCell sortDirection={emeOrderBy === 'piloto' ? emeOrder : false}>
+                                                        <TableSortLabel
+                                                            active={emeOrderBy === 'piloto'}
+                                                            direction={emeOrderBy === 'piloto' ? emeOrder : 'asc'}
+                                                            onClick={() => handleRequestEmeSort('piloto')}
+                                                            hideSortIcon={false}
+                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                        >
+                                                            Piloto
+                                                        </TableSortLabel>
+                                                    </TableHeaderCell>
                                                     <TableHeaderCell>Mensaje</TableHeaderCell>
                                                     <TableHeaderCell>Ubicación (Lat,Lng)</TableHeaderCell>
                                                 </TableRow>
@@ -1216,7 +1455,8 @@ const ActivityLogPage = () => {
                                                         <TableCell>
                                                             {eme.latitud && eme.longitud ? (
                                                                 <>
-                                                                    {parseFloat(eme.latitud).toFixed(6)},{' '}
+                                                                    {parseFloat(eme.latitud).toFixed(6)},
+                                                                    {' '}
                                                                     {parseFloat(eme.longitud).toFixed(6)}
                                                                     <Tooltip title="Ver mapa" sx={{ ml: 1 }}>
                                                                         <IconButton
@@ -1240,22 +1480,13 @@ const ActivityLogPage = () => {
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredEmergencies.length}
-                                            page={emePage}
-                                            onPageChange={handleChangeEmePage}
-                                            rowsPerPage={emeRowsPerPage}
-                                            onRowsPerPageChange={handleChangeEmeRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
-                                    </>
+                                    </TableContainer>
                                 )}
                             </Grid>
                         </Grid>
                     </SectionPaper>
 
-                    {/* Sección Pagos y Boletas (solo si NO es supervisor) */}
+                    {/* Sección Pagos (no supervisor) */}
                     {!isSupervisor && (
                         <SectionPaper>
                             <SectionTitle variant="h6" gutterBottom>
@@ -1365,11 +1596,61 @@ const ActivityLogPage = () => {
                                     <Table size="small">
                                         <TableHead>
                                             <TableRow>
-                                                <TableHeaderCell>Padre (Usuario)</TableHeaderCell>
-                                                <TableHeaderCell>Email</TableHeaderCell>
-                                                <TableHeaderCell>Estado</TableHeaderCell>
-                                                <TableHeaderCell>Próximo Pago</TableHeaderCell>
-                                                <TableHeaderCell>Saldo</TableHeaderCell>
+                                                <TableHeaderCell sortDirection={payOrderBy === 'userName' ? payOrder : false}>
+                                                    <TableSortLabel
+                                                        active={payOrderBy === 'userName'}
+                                                        direction={payOrderBy === 'userName' ? payOrder : 'asc'}
+                                                        onClick={() => handleRequestPaySort('userName')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Padre (Usuario)
+                                                    </TableSortLabel>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell sortDirection={payOrderBy === 'userEmail' ? payOrder : false}>
+                                                    <TableSortLabel
+                                                        active={payOrderBy === 'userEmail'}
+                                                        direction={payOrderBy === 'userEmail' ? payOrder : 'asc'}
+                                                        onClick={() => handleRequestPaySort('userEmail')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Email
+                                                    </TableSortLabel>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell sortDirection={payOrderBy === 'finalStatus' ? payOrder : false}>
+                                                    <TableSortLabel
+                                                        active={payOrderBy === 'finalStatus'}
+                                                        direction={payOrderBy === 'finalStatus' ? payOrder : 'asc'}
+                                                        onClick={() => handleRequestPaySort('finalStatus')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Estado
+                                                    </TableSortLabel>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell sortDirection={payOrderBy === 'nextPaymentDate' ? payOrder : false}>
+                                                    <TableSortLabel
+                                                        active={payOrderBy === 'nextPaymentDate'}
+                                                        direction={payOrderBy === 'nextPaymentDate' ? payOrder : 'asc'}
+                                                        onClick={() => handleRequestPaySort('nextPaymentDate')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Próximo Pago
+                                                    </TableSortLabel>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell sortDirection={payOrderBy === 'leftover' ? payOrder : false}>
+                                                    <TableSortLabel
+                                                        active={payOrderBy === 'leftover'}
+                                                        direction={payOrderBy === 'leftover' ? payOrder : 'asc'}
+                                                        onClick={() => handleRequestPaySort('leftover')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Saldo
+                                                    </TableSortLabel>
+                                                </TableHeaderCell>
                                                 <TableHeaderCell>Acciones</TableHeaderCell>
                                             </TableRow>
                                         </TableHead>
@@ -1421,7 +1702,6 @@ const ActivityLogPage = () => {
                                 </>
                             )}
 
-                            {/* Sección Análisis (Recharts) */}
                             <SectionTitle variant="h6" gutterBottom sx={{ mt: 4 }}>
                                 Análisis general de Pagos
                             </SectionTitle>
@@ -1636,7 +1916,6 @@ const ActivityLogPage = () => {
                 <DialogTitle>Reportar Incidente</DialogTitle>
                 <DialogContent dividers>
                     <Grid container spacing={2}>
-                        {/* Tipo de Falla */}
                         <Grid item xs={12} sm={6}>
                             <FormControl fullWidth margin="normal">
                                 <InputLabel id="tipo-falla-label">Tipo de Falla</InputLabel>
@@ -1654,7 +1933,6 @@ const ActivityLogPage = () => {
                             </FormControl>
                         </Grid>
 
-                        {/* Tipo de Incidente */}
                         <Grid item xs={12} sm={6}>
                             <FormControl fullWidth margin="normal">
                                 <InputLabel id="tipo-incidente-label">Tipo de Incidente</InputLabel>
@@ -1670,7 +1948,6 @@ const ActivityLogPage = () => {
                             </FormControl>
                         </Grid>
 
-                        {/* Solo mostrar campo "otroFallaDetalle" si es "otro" */}
                         {incidentForm.tipoFalla === 'otro' && (
                             <Grid item xs={12}>
                                 <TextField
@@ -1682,7 +1959,6 @@ const ActivityLogPage = () => {
                             </Grid>
                         )}
 
-                        {/* ¿Pudo continuar la ruta? */}
                         <Grid item xs={12}>
                             <FormControlLabel
                                 control={
@@ -1697,7 +1973,6 @@ const ActivityLogPage = () => {
                             />
                         </Grid>
 
-                        {/* ¿Se utilizó bus suplente? */}
                         <Grid item xs={12}>
                             <FormControlLabel
                                 control={
@@ -1712,7 +1987,6 @@ const ActivityLogPage = () => {
                             />
                         </Grid>
 
-                        {/* Descripción */}
                         <Grid item xs={12}>
                             <TextField
                                 label="Descripción"
@@ -1740,7 +2014,6 @@ const ActivityLogPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={5000}

@@ -33,7 +33,8 @@ import {
     Link,
     useMediaQuery,
     useTheme,
-    Chip
+    Chip,
+    TableSortLabel
 } from '@mui/material';
 import { Edit, Delete, Add, FileUpload } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
@@ -146,6 +147,76 @@ function isUserNew(user) {
     return diffDays <= 14;
 }
 
+/* =========================================================
+   ==============   CÓDIGO NUEVO PARA ORDENAR   =============
+   ========================================================= */
+
+// Estado y funciones para manejar el ordenamiento
+function descendingComparator(a, b, orderBy) {
+    const aValue = getFieldValue(a, orderBy);
+    const bValue = getFieldValue(b, orderBy);
+
+    // Manejo de null/undefined
+    if (aValue == null && bValue == null) {
+        return 0;
+    } else if (aValue == null) {
+        return 1;
+    } else if (bValue == null) {
+        return -1;
+    }
+
+    // Si son strings, comparamos de forma local
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return bValue.localeCompare(aValue);
+    }
+    // Si no, comparamos de forma genérica
+    if (bValue < aValue) {
+        return -1;
+    }
+    if (bValue > aValue) {
+        return 1;
+    }
+    return 0;
+}
+
+function getComparator(order, orderBy) {
+    return order === 'desc'
+        ? (a, b) => descendingComparator(a, b, orderBy)
+        : (a, b) => -descendingComparator(a, b, orderBy);
+}
+
+function stableSort(array, comparator) {
+    const stabilizedThis = array.map((el, index) => [el, index]);
+    stabilizedThis.sort((a, b) => {
+        const order = comparator(a[0], b[0]);
+        if (order !== 0) return order;
+        return a[1] - b[1];
+    });
+    return stabilizedThis.map((el) => el[0]);
+}
+
+/**
+ * Dado un usuario y el campo por el que se va a ordenar,
+ * retornamos el valor apropiado (nombre, correo, rol, colegio, etc.)
+ */
+function getFieldValue(user, field) {
+    switch (field) {
+        case 'name':
+            return user.name;
+        case 'email':
+            return user.email;
+        case 'role':
+            return user.Role ? user.Role.name : '';
+        case 'school':
+            return user.School ? user.School.name : '';
+        default:
+            return '';
+    }
+}
+/* =========================================================
+   =========   FIN DE CÓDIGO NUEVO PARA ORDENAR   ==========
+   ========================================================= */
+
 const RolesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -215,6 +286,17 @@ const RolesManagementPage = () => {
     // Filtro por Rol / Colegio
     const [roleFilter, setRoleFilter] = useState('');
     const [schoolFilter, setSchoolFilter] = useState('');
+
+    // =================== ADICIÓN: Estados para ordenamiento ===================
+    const [order, setOrder] = useState('asc');
+    const [orderBy, setOrderBy] = useState('');
+
+    // Función para cuando se hace clic en el encabezado
+    const handleRequestSort = (property) => {
+        const isAsc = orderBy === property && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(property);
+    };
 
     // =================== useEffects ===================
     useEffect(() => {
@@ -599,6 +681,9 @@ const RolesManagementPage = () => {
         return true;
     });
 
+    // === Aquí aplicamos el ordenamiento a la lista filtrada antes de paginar ===
+    const sortedUsers = stableSort(filteredUsers, getComparator(order, orderBy));
+
     // =================== Paginación ===================
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -607,6 +692,9 @@ const RolesManagementPage = () => {
         setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
     };
+
+    // Tomamos los usuarios ya ordenados y aplicamos la paginación
+    const displayedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
     // =================== Carga Masiva ===================
     const handleOpenBulkDialog = () => {
@@ -681,7 +769,7 @@ const RolesManagementPage = () => {
             "NIT",
             "Dirección Principal",
             "Dirección Alterna",
-            "Descuenta especial",
+            "Descuento especial",
             "Alumnos",
             "Pilotos a Cargo"
         ];
@@ -738,25 +826,25 @@ const RolesManagementPage = () => {
             const password = "";
 
             const row = [
-                u.name || "",          // Nombre
-                u.email || "",         // Correo electrónico
-                password,              // Contraseña
-                roleName,              // Rol
-                schoolName,            // Colegio
-                busPlate,              // Placa de Bus
-                motherName,            // Nombre de la Madre
-                motherCell,            // Celular de la Madre
-                motherEmail,           // Correo de la Madre
-                fatherName,            // Nombre del Padre
-                fatherCell,            // Celular del Padre
-                fatherEmail,           // Correo del Padre
-                razonSocial,           // Razón social
-                nit,                   // NIT
-                mainAddr,              // Dirección Principal
-                altAddr,               // Dirección Alterna
-                String(specialFee),    // Descuenta especial
-                alumnosStr,            // Alumnos
-                pilotosACargoStr       // Pilotos a Cargo
+                u.name || "",           // Nombre
+                u.email || "",          // Correo electrónico
+                password,               // Contraseña
+                roleName,               // Rol
+                schoolName,             // Colegio
+                busPlate,               // Placa de Bus
+                motherName,             // Nombre de la Madre
+                motherCell,             // Celular de la Madre
+                motherEmail,            // Correo de la Madre
+                fatherName,             // Nombre del Padre
+                fatherCell,             // Celular del Padre
+                fatherEmail,            // Correo del Padre
+                razonSocial,            // Razón social
+                nit,                    // NIT
+                mainAddr,               // Dirección Principal
+                altAddr,                // Dirección Alterna
+                String(specialFee),     // Descuento especial
+                alumnosStr,             // Alumnos
+                pilotosACargoStr        // Pilotos a Cargo
             ];
 
             data.push(row);
@@ -912,63 +1000,61 @@ const RolesManagementPage = () => {
                     {isMobile ? (
                         // ======= Modo Móvil =======
                         <>
-                            {filteredUsers
-                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                .map((user) => (
-                                    <MobileCard key={user.id} elevation={3}>
-                                        <Grid container spacing={1}>
-                                            <Grid item xs={12}>
-                                                <MobileField>
-                                                    <MobileLabel>Nombre</MobileLabel>
-                                                    <MobileValue>
-                                                        {user.name}{' '}
-                                                        {isUserNew(user) && (
-                                                            <Chip
-                                                                label="NUEVO"
-                                                                color="success"
-                                                                size="small"
-                                                                sx={{ ml: 1 }}
-                                                            />
-                                                        )}
-                                                    </MobileValue>
-                                                </MobileField>
-                                            </Grid>
-                                            <Grid item xs={12}>
-                                                <MobileField>
-                                                    <MobileLabel>Correo</MobileLabel>
-                                                    <MobileValue>{user.email}</MobileValue>
-                                                </MobileField>
-                                            </Grid>
-                                            <Grid item xs={12}>
-                                                <MobileField>
-                                                    <MobileLabel>Rol</MobileLabel>
-                                                    <MobileValue>{user.Role ? user.Role.name : '—'}</MobileValue>
-                                                </MobileField>
-                                            </Grid>
-                                            <Grid item xs={12}>
-                                                <MobileField>
-                                                    <MobileLabel>Colegio</MobileLabel>
-                                                    <MobileValue>{user.School ? user.School.name : '—'}</MobileValue>
-                                                </MobileField>
-                                            </Grid>
-                                            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 1 }}>
-                                                <Tooltip title="Editar">
-                                                    <IconButton onClick={() => handleEditClick(user)}>
-                                                        <Edit />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <Tooltip title="Eliminar">
-                                                    <IconButton onClick={() => handleDeleteClick(user.id)}>
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </Grid>
+                            {displayedUsers.map((user) => (
+                                <MobileCard key={user.id} elevation={3}>
+                                    <Grid container spacing={1}>
+                                        <Grid item xs={12}>
+                                            <MobileField>
+                                                <MobileLabel>Nombre</MobileLabel>
+                                                <MobileValue>
+                                                    {user.name}{' '}
+                                                    {isUserNew(user) && (
+                                                        <Chip
+                                                            label="NUEVO"
+                                                            color="success"
+                                                            size="small"
+                                                            sx={{ ml: 1 }}
+                                                        />
+                                                    )}
+                                                </MobileValue>
+                                            </MobileField>
                                         </Grid>
-                                    </MobileCard>
-                                ))}
+                                        <Grid item xs={12}>
+                                            <MobileField>
+                                                <MobileLabel>Correo</MobileLabel>
+                                                <MobileValue>{user.email}</MobileValue>
+                                            </MobileField>
+                                        </Grid>
+                                        <Grid item xs={12}>
+                                            <MobileField>
+                                                <MobileLabel>Rol</MobileLabel>
+                                                <MobileValue>{user.Role ? user.Role.name : '—'}</MobileValue>
+                                            </MobileField>
+                                        </Grid>
+                                        <Grid item xs={12}>
+                                            <MobileField>
+                                                <MobileLabel>Colegio</MobileLabel>
+                                                <MobileValue>{user.School ? user.School.name : '—'}</MobileValue>
+                                            </MobileField>
+                                        </Grid>
+                                        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 1 }}>
+                                            <Tooltip title="Editar">
+                                                <IconButton onClick={() => handleEditClick(user)}>
+                                                    <Edit />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Eliminar">
+                                                <IconButton onClick={() => handleDeleteClick(user.id)}>
+                                                    <Delete />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Grid>
+                                    </Grid>
+                                </MobileCard>
+                            ))}
                             <TablePagination
                                 component="div"
-                                count={filteredUsers.length}
+                                count={sortedUsers.length}
                                 page={page}
                                 onPageChange={handleChangePage}
                                 rowsPerPage={rowsPerPage}
@@ -989,52 +1075,115 @@ const RolesManagementPage = () => {
                                 <Table stickyHeader>
                                     <ResponsiveTableHead>
                                         <TableRow>
-                                            <TableCell>Nombre</TableCell>
-                                            <TableCell>Correo</TableCell>
-                                            <TableCell>Rol</TableCell>
-                                            <TableCell>Colegio</TableCell>
+                                            {/* Columna Nombre con TableSortLabel */}
+                                            <TableCell sortDirection={orderBy === 'name' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'name'}
+                                                    direction={orderBy === 'name' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('name')}
+                                                    hideSortIcon={false}
+                                                    sx={{
+                                                        '& .MuiTableSortLabel-icon': {
+                                                            opacity: 1,
+                                                        },
+                                                    }}
+                                                >
+                                                    Nombre
+                                                </TableSortLabel>
+                                            </TableCell>
+
+                                            {/* Columna Correo */}
+                                            <TableCell sortDirection={orderBy === 'email' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'email'}
+                                                    direction={orderBy === 'email' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('email')}
+                                                    hideSortIcon={false}
+                                                    sx={{
+                                                        '& .MuiTableSortLabel-icon': {
+                                                            opacity: 1,
+                                                        },
+                                                    }}
+                                                >
+                                                    Correo
+                                                </TableSortLabel>
+                                            </TableCell>
+
+                                            {/* Columna Rol */}
+                                            <TableCell sortDirection={orderBy === 'role' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'role'}
+                                                    direction={orderBy === 'role' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('role')}
+                                                    hideSortIcon={false}
+                                                    sx={{
+                                                        '& .MuiTableSortLabel-icon': {
+                                                            opacity: 1,
+                                                        },
+                                                    }}
+                                                >
+                                                    Rol
+                                                </TableSortLabel>
+                                            </TableCell>
+
+                                            {/* Columna Colegio */}
+                                            <TableCell sortDirection={orderBy === 'school' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'school'}
+                                                    direction={orderBy === 'school' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('school')}
+                                                    hideSortIcon={false}
+                                                    sx={{
+                                                        '& .MuiTableSortLabel-icon': {
+                                                            opacity: 1,
+                                                        },
+                                                    }}
+                                                >
+                                                    Colegio
+                                                </TableSortLabel>
+                                            </TableCell>
+
+                                            {/* Columna Acciones (sin orden) */}
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </ResponsiveTableHead>
                                     <TableBody>
-                                        {filteredUsers
-                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                            .map((user) => (
-                                                <TableRow key={user.id}>
-                                                    <ResponsiveTableCell data-label="Nombre">
-                                                        {user.name}{' '}
-                                                        {isUserNew(user) && (
-                                                            <Chip
-                                                                label="NUEVO"
-                                                                color="success"
-                                                                size="small"
-                                                                sx={{ ml: 1 }}
-                                                            />
-                                                        )}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Correo">
-                                                        {user.email}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Rol">
-                                                        {user.Role ? user.Role.name : '—'}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Colegio">
-                                                        {user.School ? user.School.name : '—'}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Acciones" align="center">
-                                                        <Tooltip title="Editar">
-                                                            <IconButton onClick={() => handleEditClick(user)}>
-                                                                <Edit />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                        <Tooltip title="Eliminar">
-                                                            <IconButton onClick={() => handleDeleteClick(user.id)}>
-                                                                <Delete />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </ResponsiveTableCell>
-                                                </TableRow>
-                                            ))}
+                                        {displayedUsers.map((user) => (
+                                            <TableRow key={user.id}>
+                                                <ResponsiveTableCell data-label="Nombre">
+                                                    {user.name}{' '}
+                                                    {isUserNew(user) && (
+                                                        <Chip
+                                                            label="NUEVO"
+                                                            color="success"
+                                                            size="small"
+                                                            sx={{ ml: 1 }}
+                                                        />
+                                                    )}
+                                                </ResponsiveTableCell>
+                                                <ResponsiveTableCell data-label="Correo">
+                                                    {user.email}
+                                                </ResponsiveTableCell>
+                                                <ResponsiveTableCell data-label="Rol">
+                                                    {user.Role ? user.Role.name : '—'}
+                                                </ResponsiveTableCell>
+                                                <ResponsiveTableCell data-label="Colegio">
+                                                    {user.School ? user.School.name : '—'}
+                                                </ResponsiveTableCell>
+                                                <ResponsiveTableCell data-label="Acciones" align="center">
+                                                    <Tooltip title="Editar">
+                                                        <IconButton onClick={() => handleEditClick(user)}>
+                                                            <Edit />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title="Eliminar">
+                                                        <IconButton onClick={() => handleDeleteClick(user.id)}>
+                                                            <Delete />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </ResponsiveTableCell>
+                                            </TableRow>
+                                        ))}
                                         {filteredUsers.length === 0 && (
                                             <TableRow>
                                                 <ResponsiveTableCell colSpan={5} align="center">
@@ -1047,7 +1196,7 @@ const RolesManagementPage = () => {
                             </TableContainer>
                             <TablePagination
                                 component="div"
-                                count={filteredUsers.length}
+                                count={sortedUsers.length}
                                 page={page}
                                 onPageChange={handleChangePage}
                                 rowsPerPage={rowsPerPage}
@@ -1186,9 +1335,10 @@ const RolesManagementPage = () => {
                             </FormControl>
                         </Grid>
 
-                        {/* Si es Padre => FamilyDetail */}
+                        {/* ==== Si es Padre => FamilyDetail ==== */}
                         {Number(selectedUser?.roleId) === 3 && (
                             <>
+                                {/* Contrato */}
                                 <Grid item xs={12} md={6}>
                                     <FormControl variant="outlined" fullWidth>
                                         <InputLabel>Contrato</InputLabel>
@@ -1203,6 +1353,28 @@ const RolesManagementPage = () => {
                                             {contracts.map((c) => (
                                                 <MenuItem key={c.uuid} value={c.uuid}>
                                                     {c.title}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+
+                                {/* Bus asignado */}
+                                <Grid item xs={12} md={6}>
+                                    <FormControl variant="outlined" fullWidth>
+                                        <InputLabel>Bus Asignado</InputLabel>
+                                        <Select
+                                            name="busId"
+                                            value={selectedUser?.busId || ''}
+                                            onChange={handleBusChange}
+                                            label="Bus Asignado"
+                                        >
+                                            <MenuItem value="">
+                                                <em>Ninguno</em>
+                                            </MenuItem>
+                                            {buses.map((bus) => (
+                                                <MenuItem key={bus.id} value={bus.id}>
+                                                    {bus.plate}
                                                 </MenuItem>
                                             ))}
                                         </Select>
@@ -1380,7 +1552,7 @@ const RolesManagementPage = () => {
                                     {familyDetail.scheduleSlots.map((slot, idx) => (
                                         <Grid item xs={12} key={idx}>
                                             <Typography variant="body2" sx={{ ml: 2 }}>
-                                                • {slot.time} {slot.note && `(${slot.note})`}
+                                                • {slot.time} {slot.note && (`(${slot.note})`)}
                                             </Typography>
                                         </Grid>
                                     ))}
@@ -1557,7 +1729,7 @@ const RolesManagementPage = () => {
                 onClose={() => setOpenCircularModal(false)}
                 schools={schools}
                 onSuccess={() => {
-                    // Opcional
+                    // Opcional: lógica luego de enviar la circular
                 }}
             />
 

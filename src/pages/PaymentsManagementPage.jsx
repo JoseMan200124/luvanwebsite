@@ -32,7 +32,8 @@ import {
     useMediaQuery,
     Box,
     Switch,
-    Grid // IMPORTANTE: importamos Grid para corregir el error.
+    Grid,
+    TableSortLabel
 } from '@mui/material';
 import {
     Send as SendIcon,
@@ -42,10 +43,12 @@ import {
     ZoomOut as ZoomOutIcon,
     Payment as PaymentIcon,
     PauseCircleFilled as PauseIcon,
-    PlayCircleFilled as PlayIcon
+    PlayCircleFilled as PlayIcon,
+    MoneyOff as MoneyOffIcon
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import PaymentHistorySection from "../components/PaymentHistorySection";
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import { getSocket } from '../services/socketService';
@@ -92,6 +95,98 @@ const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
 
+/* ========== Código para ordenamiento ========== */
+function descendingComparator(a, b, orderBy) {
+    const aValue = getFieldValue(a, orderBy);
+    const bValue = getFieldValue(b, orderBy);
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return bValue.localeCompare(aValue);
+    }
+    if (bValue < aValue) return -1;
+    if (bValue > aValue) return 1;
+    return 0;
+}
+
+function getComparator(order, orderBy) {
+    return order === 'desc'
+        ? (a, b) => descendingComparator(a, b, orderBy)
+        : (a, b) => -descendingComparator(a, b, orderBy);
+}
+
+function stableSort(array, comparator) {
+    const stabilizedThis = array.map((el, index) => [el, index]);
+    stabilizedThis.sort((a, b) => {
+        const order = comparator(a[0], b[0]);
+        if (order !== 0) return order;
+        return a[1] - b[1];
+    });
+    return stabilizedThis.map((el) => el[0]);
+}
+
+/**
+ * Extrae el valor a partir del objeto payment según la columna.
+ * Para campos numéricos (monto, saldo, etc.) se elimina el prefijo "Q " y se convierte a número.
+ */
+function getFieldValue(payment, field) {
+    switch (field) {
+        case 'familyLastName':
+            return payment.User && payment.User.FamilyDetail
+                ? payment.User.FamilyDetail.familyLastName || ''
+                : '';
+        case 'studentCount':
+            return payment.User && payment.User.FamilyDetail && Array.isArray(payment.User.FamilyDetail.Students)
+                ? payment.User.FamilyDetail.Students.length
+                : 0;
+        case 'finalStatus':
+            return payment.finalStatus || '';
+        case 'nextPaymentDate':
+            return payment.nextPaymentDate ? new Date(payment.nextPaymentDate).getTime() : 0;
+        case 'lastPaymentDate':
+            return payment.lastPaymentDate ? new Date(payment.lastPaymentDate).getTime() : 0;
+        case 'montoTotal': {
+            let val = payment.montoTotal;
+            if (typeof val === 'string') {
+                val = val.replace('Q ', '');
+            }
+            return parseFloat(val) || 0;
+        }
+        case 'leftover': {
+            let val = payment.leftover;
+            if (typeof val === 'string') {
+                val = val.replace('Q ', '');
+            }
+            return parseFloat(val) || 0;
+        }
+        case 'accumulatedPenalty': {
+            let val = payment.accumulatedPenalty;
+            if (typeof val === 'string') {
+                val = val.replace('Q ', '');
+            }
+            return parseFloat(val) || 0;
+        }
+        case 'totalDue': {
+            let val = payment.totalDue;
+            if (typeof val === 'string') {
+                val = val.replace('Q ', '');
+            }
+            return parseFloat(val) || 0;
+        }
+        case 'creditBalance': {
+            let val = payment.creditBalance;
+            if (typeof val === 'string') {
+                val = val.replace('Q ', '');
+            }
+            return parseFloat(val) || 0;
+        }
+        default:
+            return '';
+    }
+}
+/* ========== Fin código para ordenamiento ========== */
+
 const PaymentsManagementPage = () => {
     const { auth } = useContext(AuthContext);
     const theme = useTheme();
@@ -112,6 +207,16 @@ const PaymentsManagementPage = () => {
     // Paginación
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+
+    // Estados para ordenamiento (agregados)
+    const [order, setOrder] = useState('asc');
+    const [orderBy, setOrderBy] = useState('');
+
+    const handleRequestSort = (property) => {
+        const isAsc = orderBy === property && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(property);
+    };
 
     // Mora Global
     const [globalDailyPenalty, setGlobalDailyPenalty] = useState(10);
@@ -175,6 +280,80 @@ const PaymentsManagementPage = () => {
     const [analysisSchoolId, setAnalysisSchoolId] = useState(''); // string vacía => "Todos"
 
     // ==============================
+    // NUEVO: Exonerar Mora
+    // ==============================
+    const [openExonerateDialog, setOpenExonerateDialog] = useState(false);
+    const [exoneratePayment, setExoneratePayment] = useState(null);
+    const [exonerateAmount, setExonerateAmount] = useState('');
+
+    const handleOpenExonerateDialog = (payment) => {
+        setExoneratePayment(payment);
+        setExonerateAmount('');
+        setOpenExonerateDialog(true);
+    };
+
+    const handleCloseExonerateDialog = () => {
+        setOpenExonerateDialog(false);
+        setExoneratePayment(null);
+        setExonerateAmount('');
+    };
+
+    const handleExoneratePenalty = async () => {
+        if (!exoneratePayment) return;
+        const amt = parseFloat(exonerateAmount);
+        if (isNaN(amt) || amt <= 0) {
+            setSnackbar({
+                open: true,
+                message: 'Ingrese un monto válido para exonerar',
+                severity: 'error'
+            });
+            return;
+        }
+        try {
+            await api.post(`/payments/${exoneratePayment.id}/exoneratePenalty`, {
+                exonerateAmount: amt
+            });
+            setSnackbar({
+                open: true,
+                message: 'Mora exonerada correctamente',
+                severity: 'success'
+            });
+            handleCloseExonerateDialog();
+            fetchPayments();
+        } catch (err) {
+            console.error(err);
+            setSnackbar({ open: true, message: 'Error al exonerar mora', severity: 'error' });
+        }
+    };
+
+    // ==============================
+    // NUEVO: Marcar si requiere factura
+    // ==============================
+    // IMPORTANTE: Tomamos el valor de e.target.checked
+    const handleToggleInvoiceNeed = async (payment, newCheckedValue) => {
+        try {
+            // Llamar endpoint con el nuevo valor
+            await api.put(`/payments/${payment.id}/set-invoice-need`, {
+                requiresInvoice: newCheckedValue
+            });
+            setSnackbar({
+                open: true,
+                message: `Se ha actualizado la opción de factura a: ${newCheckedValue ? 'Sí' : 'No'}`,
+                severity: 'success'
+            });
+            // Refrescar data
+            fetchPayments();
+        } catch (error) {
+            console.error('Error al actualizar requerimiento de factura:', error);
+            setSnackbar({
+                open: true,
+                message: 'Error al actualizar si requiere factura',
+                severity: 'error'
+            });
+        }
+    };
+
+    // ==============================
     // 1) Cargar data
     // ==============================
     const fetchPayments = async () => {
@@ -215,7 +394,6 @@ const PaymentsManagementPage = () => {
     // NUEVO: Función para traer análisis de pagos, con schoolId opcional
     const fetchPaymentsAnalysis = async (schId) => {
         try {
-            // si schId es '', no enviamos param, si no, enviamos ?schoolId=xx
             const params = {};
             if (schId && schId !== '') {
                 params.schoolId = schId;
@@ -243,7 +421,6 @@ const PaymentsManagementPage = () => {
             await fetchPayments();
             await fetchSchools();
             await fetchGlobalSettings();
-            // Cargar análisis sin filtrar por defecto
             await fetchPaymentsAnalysis('');
         })();
     }, []);
@@ -417,7 +594,6 @@ const PaymentsManagementPage = () => {
                 severity: 'success'
             });
             handleCloseEditDialog();
-            // fetchPayments(); // si deseas refrescar la lista
         } catch (error) {
             setSnackbar({ open: true, message: 'Error al actualizar pago', severity: 'error' });
         }
@@ -854,6 +1030,7 @@ const PaymentsManagementPage = () => {
             {/* Secciones por colegio (tabla de pagos) */}
             {Object.keys(paymentsBySchool).map((schoolName) => {
                 const payArr = paymentsBySchool[schoolName];
+                const sortedPayArr = stableSort(payArr, getComparator(order, orderBy));
                 return (
                     <div key={schoolName} style={{ marginBottom: '40px' }}>
                         <Typography variant="h5" style={{ marginBottom: '16px' }}>
@@ -861,7 +1038,7 @@ const PaymentsManagementPage = () => {
                         </Typography>
                         {isMobile ? (
                             // VISTA MÓVIL (tarjetas)
-                            payArr.map((payment) => {
+                            sortedPayArr.map((payment) => {
                                 const family = payment.User?.FamilyDetail;
                                 const familiaApellido = family?.familyLastName || '';
                                 const cantidadEst = family?.Students?.length || 0;
@@ -894,6 +1071,12 @@ const PaymentsManagementPage = () => {
                                                 {payment.lastPaymentDate
                                                     ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
                                                     : '—'}
+                                            </MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Requiere Factura</MobileLabel>
+                                            <MobileValue>
+                                                {family?.requiresInvoice ? 'Sí' : 'No'}
                                             </MobileValue>
                                         </MobileField>
                                         {/* Botones de acciones */}
@@ -950,6 +1133,24 @@ const PaymentsManagementPage = () => {
                                                     <PauseIcon style={{ color: 'red' }} />
                                                 )}
                                             </IconButton>
+                                            <IconButton
+                                                title="Exonerar Mora"
+                                                onClick={() => handleOpenExonerateDialog(payment)}
+                                            >
+                                                <MoneyOffIcon />
+                                            </IconButton>
+                                            {/* NUEVO: Switch factura en móvil */}
+                                            <FormControlLabel
+                                                control={
+                                                    <Switch
+                                                        checked={!!family?.requiresInvoice}
+                                                        onChange={(e) => handleToggleInvoiceNeed(payment, e.target.checked)}
+                                                    />
+                                                }
+                                                label="Factura"
+                                                labelPlacement="top"
+                                                sx={{ marginLeft: 0 }}
+                                            />
                                         </Box>
                                     </MobileCard>
                                 );
@@ -961,22 +1162,124 @@ const PaymentsManagementPage = () => {
                                     <Table>
                                         <TableHead>
                                             <TableRow>
-                                                <TableCell>Apellido de la Familia</TableCell>
-                                                <TableCell>Cantidad de Estudiantes</TableCell>
-                                                <TableCell>Estado</TableCell>
-                                                <TableCell>Próximo Pago</TableCell>
-                                                <TableCell>Último Pago</TableCell>
-                                                <TableCell>Monto Total</TableCell>
-                                                <TableCell>Saldo</TableCell>
-                                                <TableCell>Multa Acum.</TableCell>
-                                                <TableCell>Total a Pagar</TableCell>
-                                                <TableCell>Ingresos percibidos</TableCell>
+                                                <TableCell sortDirection={orderBy === 'familyLastName' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'familyLastName'}
+                                                        direction={orderBy === 'familyLastName' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('familyLastName')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Apellido de la Familia
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'studentCount' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'studentCount'}
+                                                        direction={orderBy === 'studentCount' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('studentCount')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Cantidad de Estudiantes
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'finalStatus' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'finalStatus'}
+                                                        direction={orderBy === 'finalStatus' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('finalStatus')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Estado
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'nextPaymentDate' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'nextPaymentDate'}
+                                                        direction={orderBy === 'nextPaymentDate' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('nextPaymentDate')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Próximo Pago
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'lastPaymentDate' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'lastPaymentDate'}
+                                                        direction={orderBy === 'lastPaymentDate' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('lastPaymentDate')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Último Pago
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'montoTotal' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'montoTotal'}
+                                                        direction={orderBy === 'montoTotal' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('montoTotal')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Monto Total
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'leftover' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'leftover'}
+                                                        direction={orderBy === 'leftover' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('leftover')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Saldo
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'accumulatedPenalty' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'accumulatedPenalty'}
+                                                        direction={orderBy === 'accumulatedPenalty' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('accumulatedPenalty')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Multa Acum.
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'totalDue' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'totalDue'}
+                                                        direction={orderBy === 'totalDue' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('totalDue')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Total a Pagar
+                                                    </TableSortLabel>
+                                                </TableCell>
+                                                <TableCell sortDirection={orderBy === 'creditBalance' ? order : false}>
+                                                    <TableSortLabel
+                                                        active={orderBy === 'creditBalance'}
+                                                        direction={orderBy === 'creditBalance' ? order : 'asc'}
+                                                        onClick={() => handleRequestSort('creditBalance')}
+                                                        hideSortIcon={false}
+                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                    >
+                                                        Ingresos percibidos
+                                                    </TableSortLabel>
+                                                </TableCell>
                                                 <TableCell>Usuario Activo</TableCell>
+                                                {/* NUEVO: Columna Factura */}
+                                                <TableCell>Factura</TableCell>
                                                 <TableCell align="center">Acciones</TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {payArr
+                                            {sortedPayArr
                                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                                 .map((payment) => {
                                                     const fatherId = payment.User?.id;
@@ -993,6 +1296,7 @@ const PaymentsManagementPage = () => {
                                                     const familyDetail = payment.User?.FamilyDetail;
                                                     const apellidoFam = familyDetail?.familyLastName || '';
                                                     const cantEst = familyDetail?.Students?.length || 0;
+                                                    const requiresInvoice = !!familyDetail?.requiresInvoice;
 
                                                     return (
                                                         <TableRow
@@ -1019,6 +1323,13 @@ const PaymentsManagementPage = () => {
                                                             <TableCell>Q {cb.toFixed(2)}</TableCell>
                                                             <TableCell>
                                                                 {payment.User?.state === 1 ? 'Sí' : 'No'}
+                                                            </TableCell>
+                                                            {/* Muestra si requiere factura */}
+                                                            <TableCell>
+                                                                <Switch
+                                                                    checked={requiresInvoice}
+                                                                    onChange={(e) => handleToggleInvoiceNeed(payment, e.target.checked)}
+                                                                />
                                                             </TableCell>
                                                             <TableCell align="center">
                                                                 <IconButton
@@ -1065,6 +1376,12 @@ const PaymentsManagementPage = () => {
                                                                     ) : (
                                                                         <PauseIcon style={{ color: 'red' }} />
                                                                     )}
+                                                                </IconButton>
+                                                                <IconButton
+                                                                    title="Exonerar Mora"
+                                                                    onClick={() => handleOpenExonerateDialog(payment)}
+                                                                >
+                                                                    <MoneyOffIcon />
                                                                 </IconButton>
                                                             </TableCell>
                                                         </TableRow>
@@ -1206,7 +1523,6 @@ const PaymentsManagementPage = () => {
                             <ResponsiveContainer width="100%" height={300}>
                                 <LineChart
                                     data={analysisData.monthlyEarnings.map((item) => {
-                                        // Creamos una etiqueta "YYYY-MM" o "MM/YY"
                                         const mm = String(item.month).padStart(2, '0');
                                         const label = `${item.year}-${mm}`;
                                         return {
@@ -1228,7 +1544,6 @@ const PaymentsManagementPage = () => {
                     )}
                 </Box>
             )}
-            {/* ==================== FIN SECCIÓN ANÁLISIS ===================== */}
 
             {/* Dialog Email */}
             <Dialog open={openEmailDialog} onClose={handleCloseEmailDialog} maxWidth="sm" fullWidth>
@@ -1569,6 +1884,33 @@ const PaymentsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
+            {/* NUEVO DIALOG: EXONERAR MORA */}
+            <Dialog
+                open={openExonerateDialog}
+                onClose={handleCloseExonerateDialog}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle>Exonerar Mora</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        label="Monto a exonerar (Q)"
+                        type="number"
+                        fullWidth
+                        variant="outlined"
+                        margin="dense"
+                        value={exonerateAmount}
+                        onChange={(e) => setExonerateAmount(e.target.value)}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseExonerateDialog}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleExoneratePenalty}>
+                        Exonerar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
@@ -1584,6 +1926,7 @@ const PaymentsManagementPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+            <PaymentHistorySection />
         </Container>
     );
 };

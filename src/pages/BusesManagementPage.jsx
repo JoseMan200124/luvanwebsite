@@ -34,7 +34,8 @@ import {
     FormControlLabel,
     Switch,
     useTheme,
-    useMediaQuery
+    useMediaQuery,
+    TableSortLabel
 } from '@mui/material';
 import {
     Edit,
@@ -119,9 +120,61 @@ const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
 
-// ───────────────────────────────
-// Componente Principal
-// ───────────────────────────────
+/* =================== Código para ordenamiento =================== */
+function descendingComparator(a, b, orderBy) {
+    const aValue = getFieldValue(a, orderBy);
+    const bValue = getFieldValue(b, orderBy);
+
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return bValue.localeCompare(aValue);
+    }
+    if (bValue < aValue) return -1;
+    if (bValue > aValue) return 1;
+    return 0;
+}
+
+function getComparator(order, orderBy) {
+    return order === 'desc'
+        ? (a, b) => descendingComparator(a, b, orderBy)
+        : (a, b) => -descendingComparator(a, b, orderBy);
+}
+
+function stableSort(array, comparator) {
+    const stabilizedThis = array.map((el, index) => [el, index]);
+    stabilizedThis.sort((a, b) => {
+        const order = comparator(a[0], b[0]);
+        if (order !== 0) return order;
+        return a[1] - b[1];
+    });
+    return stabilizedThis.map((el) => el[0]);
+}
+
+function getFieldValue(bus, field) {
+    switch (field) {
+        case 'plate':
+            return bus.plate;
+        case 'capacity':
+            return bus.capacity;
+        case 'routeNumber':
+            return bus.routeNumber;
+        case 'occupation':
+            return bus.occupation;
+        case 'description':
+            return bus.description;
+        case 'pilot':
+            return bus.pilot ? bus.pilot.email : '';
+        case 'monitora':
+            return bus.monitora ? bus.monitora.email : '';
+        default:
+            return '';
+    }
+}
+/* =================== Fin código para ordenamiento =================== */
+
 const BusesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -154,6 +207,16 @@ const BusesManagementPage = () => {
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
+
+    // =================== Estados para ordenamiento ===================
+    const [order, setOrder] = useState('asc');
+    const [orderBy, setOrderBy] = useState('');
+
+    const handleRequestSort = (property) => {
+        const isAsc = orderBy === property && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(property);
+    };
 
     /**
      * Cargar lista de Buses
@@ -212,17 +275,14 @@ const BusesManagementPage = () => {
 
     /**
      * Obtiene los horarios del colegio (school) asignado a un piloto específico
-     * pilot.school puede venir como string, así que lo parseamos a número si existe.
      */
     const fetchSchedulesByPilot = async (pilotId) => {
         try {
-            // Buscamos el piloto en la lista de pilotos para ver su "school"
             const pilot = availablePilots.find((p) => p.id === pilotId);
             if (!pilot || !pilot.school) {
                 setAvailableSchedules([]);
                 return;
             }
-            // Aseguramos que sea un entero (o un string válido)
             const schoolId = parseInt(pilot.school, 10);
             if (!schoolId) {
                 setAvailableSchedules([]);
@@ -278,7 +338,6 @@ const BusesManagementPage = () => {
             inWorkshop: bus.inWorkshop || false,
             schedule: bus.schedule || null
         });
-        // Cargar horarios del colegio asociado al piloto de este bus (si aplica)
         if (bus.pilotId) {
             fetchSchedulesByPilot(bus.pilotId);
         } else {
@@ -358,7 +417,6 @@ const BusesManagementPage = () => {
             setSelectedBus((prev) => ({ ...prev, schedule: null }));
             return;
         }
-        // Buscamos la coincidencia en availableSchedules
         const selected = availableSchedules.find((sch) => {
             return `${sch.day}-${(sch.times || []).join(',')}` === value;
         });
@@ -366,7 +424,7 @@ const BusesManagementPage = () => {
     };
 
     /**
-     * Manejar archivos subidos (para crear/editar un bus)
+     * Manejar archivos subidos
      */
     const handleFileChange = (e) => {
         const files = e.target.files;
@@ -425,7 +483,6 @@ const BusesManagementPage = () => {
             }
 
             if (selectedBus.id) {
-                // UPDATE
                 await api.put(`/buses/${selectedBus.id}`, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
@@ -438,7 +495,6 @@ const BusesManagementPage = () => {
                     severity: 'success'
                 });
             } else {
-                // CREATE
                 await api.post('/buses', formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
@@ -585,6 +641,9 @@ const BusesManagementPage = () => {
 
     const downloadFilename = `buses_template_${getFormattedDateTime()}.xlsx`;
 
+    // Aplicamos el ordenamiento a la lista filtrada
+    const sortedBuses = stableSort(filteredBuses, getComparator(order, orderBy));
+
     return (
         <BusesContainer>
             <Typography variant="h4" gutterBottom>
@@ -637,7 +696,7 @@ const BusesManagementPage = () => {
                 <>
                     {isMobile ? (
                         <>
-                            {filteredBuses
+                            {sortedBuses
                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                 .map((bus) => (
                                     <MobileCard key={bus.id} elevation={3}>
@@ -736,7 +795,7 @@ const BusesManagementPage = () => {
                                 ))}
                             <TablePagination
                                 component="div"
-                                count={filteredBuses.length}
+                                count={sortedBuses.length}
                                 page={page}
                                 onPageChange={handleChangePage}
                                 rowsPerPage={rowsPerPage}
@@ -751,20 +810,90 @@ const BusesManagementPage = () => {
                                 <Table stickyHeader>
                                     <TableHead>
                                         <TableRow>
-                                            <TableCell>Placa</TableCell>
-                                            <TableCell>Capacidad</TableCell>
-                                            <TableCell>Número de Ruta</TableCell>
-                                            <TableCell>Ocupación</TableCell>
-                                            <TableCell>Descripción</TableCell>
-                                            <TableCell>Piloto (Email)</TableCell>
-                                            <TableCell>Monitora (Email)</TableCell>
+                                            <TableCell sortDirection={orderBy === 'plate' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'plate'}
+                                                    direction={orderBy === 'plate' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('plate')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Placa
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'capacity' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'capacity'}
+                                                    direction={orderBy === 'capacity' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('capacity')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Capacidad
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'routeNumber' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'routeNumber'}
+                                                    direction={orderBy === 'routeNumber' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('routeNumber')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Número de Ruta
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'occupation' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'occupation'}
+                                                    direction={orderBy === 'occupation' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('occupation')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Ocupación
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'description' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'description'}
+                                                    direction={orderBy === 'description' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('description')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Descripción
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'pilot' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'pilot'}
+                                                    direction={orderBy === 'pilot' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('pilot')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Piloto (Email)
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'monitora' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'monitora'}
+                                                    direction={orderBy === 'monitora' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('monitora')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Monitora (Email)
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell>Estado</TableCell>
                                             <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {filteredBuses
+                                        {sortedBuses
                                             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                             .map((bus) => (
                                                 <TableRow key={bus.id}>
@@ -798,19 +927,12 @@ const BusesManagementPage = () => {
                                                             'Disponible'
                                                         )}
                                                     </ResponsiveTableCell>
-                                                    <ResponsiveTableCell
-                                                        data-label="Archivos"
-                                                        sx={{ maxWidth: 200, verticalAlign: 'top' }}
-                                                    >
+                                                    <ResponsiveTableCell data-label="Archivos" sx={{ maxWidth: 200, verticalAlign: 'top' }}>
                                                         <List disablePadding>
                                                             {bus.files.map((file) => {
                                                                 const fileLabel = file.fileName.split('/').pop();
                                                                 return (
-                                                                    <ListItem
-                                                                        key={file.id}
-                                                                        disableGutters
-                                                                        sx={{ p: 0 }}
-                                                                    >
+                                                                    <ListItem key={file.id} disableGutters sx={{ p: 0 }}>
                                                                         {file.fileType === 'application/pdf' ? (
                                                                             <InsertDriveFile sx={{ mr: 1 }} />
                                                                         ) : (
@@ -865,7 +987,7 @@ const BusesManagementPage = () => {
                                                     </ResponsiveTableCell>
                                                 </TableRow>
                                             ))}
-                                        {filteredBuses.length === 0 && (
+                                        {sortedBuses.length === 0 && (
                                             <TableRow>
                                                 <ResponsiveTableCell colSpan={10} align="center">
                                                     No se encontraron buses.
@@ -877,7 +999,7 @@ const BusesManagementPage = () => {
                             </TableContainer>
                             <TablePagination
                                 component="div"
-                                count={filteredBuses.length}
+                                count={sortedBuses.length}
                                 page={page}
                                 onPageChange={handleChangePage}
                                 rowsPerPage={rowsPerPage}
@@ -982,7 +1104,7 @@ const BusesManagementPage = () => {
                         </Select>
                     </FormControl>
 
-                    {/* Selección del horario (siempre se muestra) */}
+                    {/* Selección del horario */}
                     <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
                         <InputLabel>Horario</InputLabel>
                         <Select
