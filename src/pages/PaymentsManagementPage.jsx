@@ -69,9 +69,7 @@ import {
     XAxis,
     YAxis,
     CartesianGrid,
-    ResponsiveContainer,
-    LineChart,
-    Line
+    ResponsiveContainer
 } from 'recharts';
 
 // Contenedor principal con Twin.Macro
@@ -82,19 +80,16 @@ const MobileCard = styled(Paper)`
     padding: 16px;
     margin-bottom: 16px;
 `;
-
 const MobileField = styled(Box)`
     margin-bottom: 8px;
     display: flex;
     flex-direction: column;
 `;
-
 const MobileLabel = styled(Typography)`
     font-weight: bold;
     font-size: 0.875rem;
     color: #555;
 `;
-
 const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
@@ -132,7 +127,7 @@ function stableSort(array, comparator) {
 
 /**
  * Extrae el valor a partir del objeto payment según la columna.
- * Para campos numéricos (monto, saldo, etc.) se elimina el prefijo "Q " y se convierte a número.
+ * Para campos numéricos se elimina el prefijo "Q " y se convierte a número.
  */
 function getFieldValue(payment, field) {
     switch (field) {
@@ -195,11 +190,8 @@ const PaymentsManagementPage = () => {
     const { auth } = useContext(AuthContext);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const [extraordinaryDialogOpen, setExtraordinaryDialogOpen] = useState(false);
 
-    // ==============================
-    // Estados (Pagos, Colegios, Filtros, etc.)
-    // ==============================
+    // Estados generales
     const [payments, setPayments] = useState([]);
     const [schools, setSchools] = useState([]);
     const [filteredPayments, setFilteredPayments] = useState([]);
@@ -213,7 +205,7 @@ const PaymentsManagementPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
-    // Estados para ordenamiento (agregados)
+    // Ordenamiento
     const [order, setOrder] = useState('asc');
     const [orderBy, setOrderBy] = useState('');
 
@@ -223,11 +215,9 @@ const PaymentsManagementPage = () => {
         setOrderBy(property);
     };
 
-    // Mora Global
+    // Estados para mora global
     const [globalDailyPenalty, setGlobalDailyPenalty] = useState(10);
     const [openPenaltyEdit, setOpenPenaltyEdit] = useState(false);
-
-    // Pausa Global de la mora
     const [globalPenaltyPaused, setGlobalPenaltyPaused] = useState(false);
 
     // Diálogo Email
@@ -237,16 +227,14 @@ const PaymentsManagementPage = () => {
     const [emailMessage, setEmailMessage] = useState('');
     const [attachments, setAttachments] = useState([]);
 
-    // Diálogo Edit Payment
+    // Diálogo Editar Pago
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [editPayment, setEditPayment] = useState({});
 
-    // Boletas
+    // Boletas y zoom
     const [openReceiptsDialog, setOpenReceiptsDialog] = useState(false);
     const [fatherReceipts, setFatherReceipts] = useState([]);
     const [fatherName, setFatherName] = useState('');
-
-    // Zoom/Pan para boletas
     const [openImageDialog, setOpenImageDialog] = useState(false);
     const [selectedImageUrl, setSelectedImageUrl] = useState('');
     const [zoomScale, setZoomScale] = useState(1);
@@ -260,7 +248,6 @@ const PaymentsManagementPage = () => {
     // Diálogo Registrar Pago
     const [openRegisterPayDialog, setOpenRegisterPayDialog] = useState(false);
     const [registerPaySelected, setRegisterPaySelected] = useState(null);
-
     const [registerPaymentData, setRegisterPaymentData] = useState({
         paymentId: null,
         amountPaid: '',
@@ -269,7 +256,7 @@ const PaymentsManagementPage = () => {
         monthsCount: 1
     });
 
-    // NUEVO: Estados para actualizar método de pago
+    // Estados para actualizar método de pago
     const [openPaymentMethodDialog, setOpenPaymentMethodDialog] = useState(false);
     const [selectedPaymentForPaymentMethod, setSelectedPaymentForPaymentMethod] = useState(null);
     const [paymentMethodValue, setPaymentMethodValue] = useState('');
@@ -282,17 +269,21 @@ const PaymentsManagementPage = () => {
         severity: 'success'
     });
 
-    // ==============================
     // Análisis de pagos
-    // ==============================
     const [analysisData, setAnalysisData] = useState(null);
+    const [analysisSchoolId, setAnalysisSchoolId] = useState('');
+    const [combinedEarnings, setCombinedEarnings] = useState([]);
 
-    // Filtro para el análisis por colegio
-    const [analysisSchoolId, setAnalysisSchoolId] = useState(''); // string vacía => "Todos"
+    // Indicadores adicionales
+    const pagadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PAGADO')?.count || 0;
+    const moraCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'MORA')?.count || 0;
+    const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
+    const totalFamilies = analysisData?.totalPayments || 0;
+    const currentMonthEarnings = combinedEarnings.find(item =>
+        item.year === moment().year() && item.month === (moment().month() + 1)
+    )?.total || 0;
 
-    // ==============================
     // NUEVO: Exonerar Mora
-    // ==============================
     const [openExonerateDialog, setOpenExonerateDialog] = useState(false);
     const [exoneratePayment, setExoneratePayment] = useState(null);
     const [exonerateAmount, setExonerateAmount] = useState('');
@@ -337,13 +328,9 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // ==============================
     // NUEVO: Marcar si requiere factura
-    // ==============================
-    // IMPORTANTE: Tomamos el valor de e.target.checked
     const handleToggleInvoiceNeed = async (payment, newCheckedValue) => {
         try {
-            // Llamar endpoint con el nuevo valor
             await api.put(`/payments/${payment.id}/set-invoice-need`, {
                 requiresInvoice: newCheckedValue
             });
@@ -352,7 +339,6 @@ const PaymentsManagementPage = () => {
                 message: `Se ha actualizado la opción de factura a: ${newCheckedValue ? 'Sí' : 'No'}`,
                 severity: 'success'
             });
-            // Refrescar data
             fetchPayments();
         } catch (error) {
             console.error('Error al actualizar requerimiento de factura:', error);
@@ -364,13 +350,6 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    const handleOpenExtraordinaryDialog = () => {
-        setExtraordinaryDialogOpen(true);
-    };
-
-    const handleCloseExtraordinaryDialog = () => {
-        setExtraordinaryDialogOpen(false);
-    };
     const handleOpenPaymentMethodDialog = (payment) => {
         setSelectedPaymentForPaymentMethod(payment);
         setPaymentMethodValue(payment.paymentMethod || 'Deposito');
@@ -421,8 +400,17 @@ const PaymentsManagementPage = () => {
     };
 
     // ==============================
-    // 1) Cargar data
+    // 1) Cargar data (solo se ejecuta una vez al montar)
     // ==============================
+    useEffect(() => {
+        (async () => {
+            await fetchPayments();
+            await fetchSchools();
+            await fetchGlobalSettings();
+            await fetchPaymentsAnalysis('');
+        })();
+    }, []);
+
     const fetchPayments = async () => {
         try {
             const res = await api.get('/payments');
@@ -458,7 +446,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // NUEVO: Función para traer análisis de pagos, con schoolId opcional
+    // Función para traer análisis de pagos normales
     const fetchPaymentsAnalysis = async (schId) => {
         try {
             const params = {};
@@ -473,6 +461,45 @@ const PaymentsManagementPage = () => {
         }
     };
 
+    // Función para traer análisis de pagos extraordinarios
+    const fetchExtraordinaryEarnings = async () => {
+        try {
+            const res = await api.get('/payments/extraordinary/analysis');
+            return res.data.monthlyEarnings || [];
+        } catch (error) {
+            console.error('Error al obtener análisis de pagos extraordinarios:', error);
+            return [];
+        }
+    };
+
+    // UseEffect para combinar ganancias una vez que analysisData cambie
+    useEffect(() => {
+        (async () => {
+            const extra = await fetchExtraordinaryEarnings();
+            const normal = analysisData?.monthlyEarnings || [];
+            const combined = combineEarnings(normal, extra);
+            setCombinedEarnings(combined);
+        })();
+    }, [analysisData]);
+
+    const combineEarnings = (normalEarnings, extraEarnings) => {
+        const map = {};
+        normalEarnings.forEach(item => {
+            const key = `${item.year}-${item.month}`;
+            map[key] = (map[key] || 0) + item.total;
+        });
+        extraEarnings.forEach(item => {
+            const key = `${item.year}-${item.month}`;
+            map[key] = (map[key] || 0) + item.total;
+        });
+        const combined = Object.keys(map).map(key => {
+            const [year, month] = key.split('-').map(Number);
+            return { year, month, total: map[key] };
+        });
+        combined.sort((a, b) => (a.year - b.year) || (a.month - b.month));
+        return combined;
+    };
+
     const fetchHasUnreadReceipts = async (fatherId) => {
         try {
             const resp = await api.get(`/parents/${fatherId}/hasUnreadReceipts`);
@@ -483,16 +510,6 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    useEffect(() => {
-        (async () => {
-            await fetchPayments();
-            await fetchSchools();
-            await fetchGlobalSettings();
-            await fetchPaymentsAnalysis('');
-        })();
-    }, []);
-
-    // Cargar info de boletas no vistas
     useEffect(() => {
         const fatherIds = new Set();
         payments.forEach((p) => {
@@ -672,12 +689,12 @@ const PaymentsManagementPage = () => {
     const getRowColor = (pay) => {
         const st = (pay.finalStatus || '').toUpperCase();
         if (st === 'PAGADO') {
-            return '#bbf7d0'; // Verde
+            return '#bbf7d0';
         }
         if (st === 'MORA') {
-            return '#fca5a5'; // Rojo
+            return '#fca5a5';
         }
-        return '#fde68a'; // Amarillo para Pendiente u otros
+        return '#fde68a';
     };
 
     // ==============================
@@ -699,13 +716,8 @@ const PaymentsManagementPage = () => {
         const fatherId = pay.User.id;
         try {
             const resp = await api.get(`/parents/${fatherId}/receipts`);
-            if (resp.data?.receipts) {
-                setFatherReceipts(resp.data.receipts);
-            } else {
-                setFatherReceipts([]);
-            }
+            setFatherReceipts(resp.data?.receipts || []);
             setOpenReceiptsDialog(true);
-            // Marcamos que ya no tiene boletas no vistas
             setUnreadReceiptsMap((prev) => ({ ...prev, [fatherId]: false }));
         } catch (err) {
             setSnackbar({ open: true, message: 'Error al obtener boletas', severity: 'error' });
@@ -754,7 +766,6 @@ const PaymentsManagementPage = () => {
         let newX = e.clientX - dragStart.x;
         let newY = e.clientY - dragStart.y;
 
-        // Límites horizontales
         if (scaledW <= containerWidth) {
             newX = (containerWidth - scaledW) / 2;
         } else {
@@ -762,7 +773,6 @@ const PaymentsManagementPage = () => {
             if (newX < minX) newX = minX;
             if (newX > 0) newX = 0;
         }
-        // Límites verticales
         if (scaledH <= containerHeight) {
             newY = (containerHeight - scaledH) / 2;
         } else {
@@ -870,7 +880,6 @@ const PaymentsManagementPage = () => {
             });
             setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
             handleCloseRegisterPayDialog();
-            // Recargamos data
             fetchPayments();
         } catch (err) {
             setSnackbar({ open: true, message: 'Error al registrar pago', severity: 'error' });
@@ -931,7 +940,6 @@ const PaymentsManagementPage = () => {
                 message: 'Error al actualizar la pausa de mora para usuario',
                 severity: 'error'
             });
-            // Revertimos en caso de error
             const revertPayments = payments.map((p) => {
                 if (p.id === payment.id) {
                     return { ...p, penaltyPaused: payment.penaltyPaused };
@@ -939,7 +947,6 @@ const PaymentsManagementPage = () => {
                 return p;
             });
             setPayments(revertPayments);
-
             const revertFiltered = filteredPayments.map((fp) => {
                 if (fp.id === payment.id) {
                     return { ...fp, penaltyPaused: payment.penaltyPaused };
@@ -1007,7 +1014,6 @@ const PaymentsManagementPage = () => {
                             </div>
                         </div>
                     </div>
-
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {!openPenaltyEdit ? (
                             <>
@@ -1037,9 +1043,7 @@ const PaymentsManagementPage = () => {
                                     variant="outlined"
                                     size="small"
                                     value={globalDailyPenalty}
-                                    onChange={(e) => {
-                                        setGlobalDailyPenalty(e.target.value);
-                                    }}
+                                    onChange={(e) => setGlobalDailyPenalty(e.target.value)}
                                 />
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                     <Button variant="contained" onClick={handleSaveGlobalPenalty}>
@@ -1104,12 +1108,10 @@ const PaymentsManagementPage = () => {
                             {schoolName}
                         </Typography>
                         {isMobile ? (
-                            // VISTA MÓVIL (tarjetas)
                             sortedPayArr.map((payment) => {
                                 const family = payment.User?.FamilyDetail;
                                 const familiaApellido = family?.familyLastName || '';
                                 const cantidadEst = family?.Students?.length || 0;
-
                                 return (
                                     <MobileCard key={payment.id}>
                                         <MobileField>
@@ -1146,7 +1148,6 @@ const PaymentsManagementPage = () => {
                                                 {family?.requiresInvoice ? 'Sí' : 'No'}
                                             </MobileValue>
                                         </MobileField>
-                                        {/* Botones de acciones */}
                                         <Box
                                             sx={{
                                                 display: 'flex',
@@ -1155,22 +1156,13 @@ const PaymentsManagementPage = () => {
                                                 marginTop: 1
                                             }}
                                         >
-                                            <IconButton
-                                                title="Enviar Correo"
-                                                onClick={() => handleOpenEmailDialog(payment)}
-                                            >
+                                            <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
                                                 <SendIcon />
                                             </IconButton>
-                                            <IconButton
-                                                title="Editar"
-                                                onClick={() => handleOpenEditDialog(payment)}
-                                            >
+                                            <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
                                                 <EditIcon />
                                             </IconButton>
-                                            <IconButton
-                                                title="Ver Boletas"
-                                                onClick={() => handleShowReceipts(payment)}
-                                            >
+                                            <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
                                                 <Badge
                                                     color="primary"
                                                     variant="dot"
@@ -1180,41 +1172,22 @@ const PaymentsManagementPage = () => {
                                                     <ReceiptIcon />
                                                 </Badge>
                                             </IconButton>
-                                            <IconButton
-                                                title="Registrar Pago"
-                                                onClick={() => handleOpenRegisterPayDialog(payment)}
-                                            >
+                                            <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
                                                 <PaymentIcon />
                                             </IconButton>
-                                            <IconButton
-                                                title={
-                                                    payment.penaltyPaused
-                                                        ? 'Descongelar mora (usuario)'
-                                                        : 'Congelar mora (usuario)'
-                                                }
-                                                onClick={() => handleTogglePenaltyPausedIndividual(payment)}
-                                            >
+                                            <IconButton title={payment.penaltyPaused ? 'Descongelar mora (usuario)' : 'Congelar mora (usuario)'} onClick={() => handleTogglePenaltyPausedIndividual(payment)}>
                                                 {payment.penaltyPaused ? (
                                                     <PlayIcon style={{ color: 'green' }} />
                                                 ) : (
                                                     <PauseIcon style={{ color: 'red' }} />
                                                 )}
                                             </IconButton>
-                                            <IconButton
-                                                title="Exonerar Mora"
-                                                onClick={() => handleOpenExonerateDialog(payment)}
-                                            >
+                                            <IconButton title="Exonerar Mora" onClick={() => handleOpenExonerateDialog(payment)}>
                                                 <MoneyOffIcon />
                                             </IconButton>
-                                            {/* NUEVO: Botón para editar el método de pago */}
-                                            <IconButton
-                                                title="Editar Método de Pago"
-                                                onClick={() => handleOpenPaymentMethodDialog(payment)}
-                                            >
+                                            <IconButton title="Editar Método de Pago" onClick={() => handleOpenPaymentMethodDialog(payment)}>
                                                 <AccountBalanceWalletIcon />
                                             </IconButton>
-
-                                            {/* NUEVO: Switch factura en móvil */}
                                             <FormControlLabel
                                                 control={
                                                     <Switch
@@ -1231,7 +1204,6 @@ const PaymentsManagementPage = () => {
                                 );
                             })
                         ) : (
-                            // VISTA ESCRITORIO (tabla)
                             <Paper>
                                 <TableContainer>
                                     <Table>
@@ -1349,7 +1321,6 @@ const PaymentsManagementPage = () => {
                                                 </TableCell>
                                                 <TableCell>Método de Pago</TableCell>
                                                 <TableCell>Usuario Activo</TableCell>
-                                                {/* NUEVO: Columna Factura */}
                                                 <TableCell>Factura</TableCell>
                                                 <TableCell align="center">Acciones</TableCell>
                                             </TableRow>
@@ -1359,26 +1330,17 @@ const PaymentsManagementPage = () => {
                                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                                 .map((payment) => {
                                                     const fatherId = payment.User?.id;
-                                                    const hasUnread = fatherId
-                                                        ? unreadReceiptsMap[fatherId] === true
-                                                        : false;
-
+                                                    const hasUnread = fatherId ? unreadReceiptsMap[fatherId] === true : false;
                                                     const mt = parseFloat(payment.montoTotal) || 0;
                                                     const lo = parseFloat(payment.leftover) || 0;
                                                     const pen = parseFloat(payment.accumulatedPenalty) || 0;
                                                     const td = parseFloat(payment.totalDue) || 0;
                                                     const cb = parseFloat(payment.creditBalance) || 0;
-
                                                     const familyDetail = payment.User?.FamilyDetail;
                                                     const apellidoFam = familyDetail?.familyLastName || '';
                                                     const cantEst = familyDetail?.Students?.length || 0;
-                                                    const requiresInvoice = !!familyDetail?.requiresInvoice;
-
                                                     return (
-                                                        <TableRow
-                                                            key={payment.id}
-                                                            style={{ backgroundColor: getRowColor(payment) }}
-                                                        >
+                                                        <TableRow key={payment.id} style={{ backgroundColor: getRowColor(payment) }}>
                                                             <TableCell>{apellidoFam}</TableCell>
                                                             <TableCell>{cantEst}</TableCell>
                                                             <TableCell>{payment.finalStatus}</TableCell>
@@ -1397,77 +1359,41 @@ const PaymentsManagementPage = () => {
                                                             <TableCell>Q {pen.toFixed(2)}</TableCell>
                                                             <TableCell>Q {td.toFixed(2)}</TableCell>
                                                             <TableCell>Q {cb.toFixed(2)}</TableCell>
-                                                            <TableCell>
-                                                                {payment.paymentMethod || 'Deposito'}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {payment.User?.state === 1 ? 'Sí' : 'No'}
-                                                            </TableCell>
-                                                            {/* Muestra si requiere factura */}
+                                                            <TableCell>{payment.paymentMethod || 'Deposito'}</TableCell>
+                                                            <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
                                                             <TableCell>
                                                                 <Switch
-                                                                    checked={requiresInvoice}
+                                                                    checked={!!familyDetail?.requiresInvoice}
                                                                     onChange={(e) => handleToggleInvoiceNeed(payment, e.target.checked)}
                                                                 />
                                                             </TableCell>
                                                             <TableCell align="center">
-                                                                <IconButton
-                                                                    title="Enviar Correo"
-                                                                    onClick={() => handleOpenEmailDialog(payment)}
-                                                                >
+                                                                <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
                                                                     <SendIcon />
                                                                 </IconButton>
-                                                                <IconButton
-                                                                    title="Editar"
-                                                                    onClick={() => handleOpenEditDialog(payment)}
-                                                                >
+                                                                <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
                                                                     <EditIcon />
                                                                 </IconButton>
-                                                                <IconButton
-                                                                    title="Ver Boletas"
-                                                                    onClick={() => handleShowReceipts(payment)}
-                                                                >
-                                                                    <Badge
-                                                                        color="primary"
-                                                                        variant="dot"
-                                                                        overlap="circular"
-                                                                        invisible={!hasUnread}
-                                                                    >
+                                                                <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
+                                                                    <Badge color="primary" variant="dot" overlap="circular" invisible={!hasUnread}>
                                                                         <ReceiptIcon />
                                                                     </Badge>
                                                                 </IconButton>
-                                                                <IconButton
-                                                                    title="Registrar Pago"
-                                                                    onClick={() => handleOpenRegisterPayDialog(payment)}
-                                                                >
+                                                                <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
                                                                     <PaymentIcon />
                                                                 </IconButton>
-                                                                <IconButton
-                                                                    title={
-                                                                        payment.penaltyPaused
-                                                                            ? 'Descongelar mora (usuario)'
-                                                                            : 'Congelar mora (usuario)'
-                                                                    }
-                                                                    onClick={() => handleTogglePenaltyPausedIndividual(payment)}
-                                                                >
+                                                                <IconButton title={payment.penaltyPaused ? 'Descongelar mora (usuario)' : 'Congelar mora (usuario)'} onClick={() => handleTogglePenaltyPausedIndividual(payment)}>
                                                                     {payment.penaltyPaused ? (
                                                                         <PlayIcon style={{ color: 'green' }} />
                                                                     ) : (
                                                                         <PauseIcon style={{ color: 'red' }} />
                                                                     )}
                                                                 </IconButton>
-                                                                <IconButton
-                                                                    title="Exonerar Mora"
-                                                                    onClick={() => handleOpenExonerateDialog(payment)}
-                                                                >
+                                                                <IconButton title="Exonerar Mora" onClick={() => handleOpenExonerateDialog(payment)}>
                                                                     <MoneyOffIcon />
                                                                 </IconButton>
-                                                                {/* NUEVO: Botón para editar el método de pago */}
-                                                                <IconButton
-                                                                    title="Editar Método de Pago"
-                                                                    onClick={() => handleOpenPaymentMethodDialog(payment)}
-                                                                >
-                                                                    <AccountBalanceWalletIcon  />
+                                                                <IconButton title="Editar Método de Pago" onClick={() => handleOpenPaymentMethodDialog(payment)}>
+                                                                    <AccountBalanceWalletIcon />
                                                                 </IconButton>
                                                             </TableCell>
                                                         </TableRow>
@@ -1491,7 +1417,11 @@ const PaymentsManagementPage = () => {
                     </div>
                 );
             })}
+
+            {/* SECCIÓN DE PAGO EXTRAORDINARIO */}
             <ExtraordinaryPaymentSection onPaymentCreated={(newExtraPayment) => {
+                // Opcional: refrescar datos o notificar
+                console.log('Nuevo pago extraordinario registrado:', newExtraPayment);
             }} />
 
             {/* Dialog Email */}
@@ -1614,11 +1544,7 @@ const PaymentsManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
-                        value={
-                            editPayment.nextPaymentDate
-                                ? moment(editPayment.nextPaymentDate).format('YYYY-MM-DD')
-                                : ''
-                        }
+                        value={editPayment.nextPaymentDate ? moment(editPayment.nextPaymentDate).format('YYYY-MM-DD') : ''}
                         disabled
                     />
                     <TextField
@@ -1628,11 +1554,7 @@ const PaymentsManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
-                        value={
-                            editPayment.lastPaymentDate
-                                ? moment(editPayment.lastPaymentDate).format('YYYY-MM-DD')
-                                : ''
-                        }
+                        value={editPayment.lastPaymentDate ? moment(editPayment.lastPaymentDate).format('YYYY-MM-DD') : ''}
                         onChange={(e) => {
                             setEditPayment({ ...editPayment, lastPaymentDate: e.target.value });
                         }}
@@ -1753,16 +1675,10 @@ const PaymentsManagementPage = () => {
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <IconButton
-                        onClick={() => setZoomScale((z) => Math.max(0.3, z - 0.1))}
-                        title="Zoom Out"
-                    >
+                    <IconButton onClick={() => setZoomScale((z) => Math.max(0.3, z - 0.1))} title="Zoom Out">
                         <ZoomOutIcon />
                     </IconButton>
-                    <IconButton
-                        onClick={() => setZoomScale((z) => Math.min(4, z + 0.1))}
-                        title="Zoom In"
-                    >
+                    <IconButton onClick={() => setZoomScale((z) => Math.min(4, z + 0.1))} title="Zoom In">
                         <ZoomInIcon />
                     </IconButton>
                     <Button onClick={handleCloseImageDialog}>Cerrar</Button>
@@ -1798,7 +1714,6 @@ const PaymentsManagementPage = () => {
                             onChange={(e) => handleMonthsCountChange(e.target.value)}
                         />
                     )}
-
                     <FormControlLabel
                         control={
                             <Checkbox
@@ -1813,7 +1728,6 @@ const PaymentsManagementPage = () => {
                         }
                         label="Pago Completo"
                     />
-
                     <TextField
                         label="Monto Pagado (Q)"
                         margin="dense"
@@ -1833,7 +1747,7 @@ const PaymentsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* NUEVO DIALOG: Actualizar Método de Pago */}
+            {/* Dialog Actualizar Método de Pago */}
             <Dialog open={openPaymentMethodDialog} onClose={handleClosePaymentMethodDialog} maxWidth="xs" fullWidth>
                 <DialogTitle>Actualizar Método de Pago</DialogTitle>
                 <DialogContent>
@@ -1875,26 +1789,18 @@ const PaymentsManagementPage = () => {
                 onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert
-                    onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
+                <Alert onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
             <PaymentHistorySection />
-            {/*
-             ==============================================================================
-               SECCIÓN DE ANÁLISIS DE PAGOS (NUEVO)
-             ==============================================================================
-            */}
+
+            {/* SECCIÓN DE ANÁLISIS DE PAGOS */}
             <Box sx={{ mt: 6, mb: 2 }}>
                 <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>
                     Análisis General de Pagos
                 </Typography>
-
-                {/* Filtro por colegio en el análisis */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                     <FormControl variant="outlined" size="small" sx={{ width: 220 }}>
                         <InputLabel>Colegio (Análisis)</InputLabel>
@@ -1919,84 +1825,70 @@ const PaymentsManagementPage = () => {
 
             {analysisData && (
                 <Box sx={{ mb: 4 }}>
-                    {/* Datos numéricos */}
+                    {/* Indicadores numéricos */}
+                    <Grid container spacing={2} sx={{ mb: 3 }}>
+                        <Grid item xs={12} sm={4}>
+                            <Typography variant="body1">
+                                <strong>Total Familias: </strong>{analysisData.totalPayments}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={4}>
+                            <Typography variant="body1">
+                                <strong>Familias Pagadas: </strong>{pagadoCount}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={4}>
+                            <Typography variant="body1">
+                                <strong>Familias en Mora: </strong>{moraCount}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={4}>
+                            <Typography variant="body1">
+                                <strong>Familias Pendientes: </strong>{pendienteCount}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={4}>
+                            <Typography variant="body1">
+                                <strong>Ganancias Mes Actual: </strong>Q {currentMonthEarnings.toFixed(2)}
+                            </Typography>
+                        </Grid>
+                    </Grid>
+                    {/* Solo se muestra Total Adeudado */}
                     <Box sx={{ mb: 3 }}>
                         <Typography variant="body1">
-                            <strong>Total de Registros de Pago: </strong>
-                            {analysisData.totalPayments}
-                        </Typography>
-                        <Typography variant="body1">
-                            <strong>Suma Total de Saldos (leftover): </strong>Q {analysisData.sumLeftover}
-                        </Typography>
-                        <Typography variant="body1">
-                            <strong>Suma Total de Penalizaciones: </strong>Q {analysisData.sumPenalty}
-                        </Typography>
-                        <Typography variant="body1">
-                            <strong>Total Adeudado (leftover + penalización): </strong>Q {analysisData.sumTotalDue}
+                            <strong>Total Adeudado: </strong>Q {analysisData.sumTotalDue}
                         </Typography>
                     </Box>
-
+                    {/* Gráfica de Ganancias Mensuales (BarChart) */}
                     <Grid container spacing={2}>
-                        {/* PieChart - Distribución por finalStatus */}
-                        <Grid item xs={12} md={6}>
+                        <Grid item xs={12}>
                             <Typography variant="subtitle1" gutterBottom>
-                                Distribución por Estado de Pago
+                                Ganancias Mensuales (Pagos + Extraordinarios)
                             </Typography>
                             <ResponsiveContainer width="100%" height={300}>
-                                <PieChart>
-                                    <Pie
-                                        data={analysisData.statusDistribution}
-                                        dataKey="count"
-                                        nameKey="finalStatus"
-                                        outerRadius={90}
-                                        fill="#8884d8"
-                                        label
-                                    >
-                                        {analysisData.statusDistribution.map((entry, index) => {
-                                            const COLORS = ['#0088FE', '#FFBB28', '#FF8042', '#00C49F'];
-                                            return (
-                                                <Cell
-                                                    key={`cell-${index}`}
-                                                    fill={COLORS[index % COLORS.length]}
-                                                />
-                                            );
-                                        })}
-                                    </Pie>
-                                    <RechartsTooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </Grid>
-
-                        <Grid item xs={12} md={6}>
-                            <Typography variant="subtitle1" gutterBottom>
-                                Ganancias Mensuales (Suma de pagos realizados)
-                            </Typography>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <LineChart
-                                    data={analysisData.monthlyEarnings.map((item) => {
-                                        const mm = String(item.month).padStart(2, '0');
-                                        const label = `${item.year}-${mm}`;
-                                        return {
-                                            ...item,
-                                            label,
-                                            total: parseFloat(item.total) || 0
-                                        };
-                                    })}
+                                <BarChart
+                                    data={combinedEarnings.map(item => ({
+                                        ...item,
+                                        label: moment({ year: item.year, month: item.month - 1 }).format("MMMM YYYY")
+                                    }))}
                                 >
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="label" />
                                     <YAxis />
-                                    <RechartsTooltip />
+                                    <RechartsTooltip formatter={(value) => `Q ${value}`} />
                                     <Legend />
-                                    <Line type="monotone" dataKey="total" stroke="#8884d8" />
-                                </LineChart>
+                                    <Bar dataKey="total">
+                                        {combinedEarnings.map((entry, index) => {
+                                            const colors = ['#0088FE', '#FFBB28', '#FF8042', '#00C49F', '#FF6633', '#9933FF', '#33CCFF', '#66CC33'];
+                                            return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                                        })}
+                                    </Bar>
+                                </BarChart>
                             </ResponsiveContainer>
                         </Grid>
                     </Grid>
                 </Box>
             )}
-
         </Container>
     );
 };
