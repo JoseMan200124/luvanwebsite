@@ -1,6 +1,4 @@
-// src/pages/RolesManagementPage.js
-
-import React, { useState, useEffect, useContext, useCallback, memo } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
     Typography,
     Table,
@@ -36,21 +34,25 @@ import {
     Chip,
     TableSortLabel
 } from '@mui/material';
-import { Edit, Delete, Add, FileUpload } from '@mui/icons-material';
+import {
+    Edit,
+    Delete,
+    Add,
+    FileUpload,
+    DirectionsBus,
+    Mail
+} from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import CircularMasivaModal from '../components/CircularMasivaModal';
-
-// Importamos xlsx para descargar el Excel
 import * as XLSX from 'xlsx';
 
 const RolesContainer = tw.div`
   p-8 bg-gray-100 min-h-screen w-full
 `;
 
-// Opciones de rol
 const roleOptions = [
     { id: 1, name: 'Gestor' },
     { id: 2, name: 'Administrador' },
@@ -60,32 +62,237 @@ const roleOptions = [
     { id: 6, name: 'Supervisor' },
 ];
 
-// Listado de pilotos (supervisor)
-const SupervisorPilotsList = memo(({ allPilots, selectedSupervisorPilots, onToggle }) => {
-    return (
-        <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
-            {allPilots.map((pilot) => {
-                const pilotIdNum = Number(pilot.id);
-                const checked = selectedSupervisorPilots.includes(pilotIdNum);
-                return (
-                    <div
-                        key={pilotIdNum}
-                        style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}
-                    >
-                        <Checkbox
-                            checked={checked}
-                            onChange={() => onToggle(pilotIdNum)}
-                            color="primary"
-                        />
-                        <span>{`${pilot.name} (ID: ${pilotIdNum})`}</span>
-                    </div>
-                );
-            })}
-        </div>
-    );
-});
+/* =========================================================================
+   SUBMODAL PARA ASIGNAR BUSES Y MOSTRAR LAS ASIGNACIONES PREVIAS
+   Ahora se agrega un select para elegir el contrato a enviar (opcional)
+   ========================================================================= */
+const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveSuccess }) => {
+    const [loading, setLoading] = useState(false);
+    const [students, setStudents] = useState([]);
+    // Estructura: { [studentId]: [ { busId, assignedSchedule: string[] }, ... ] }
+    const [assignments, setAssignments] = useState({});
+    // Nuevo estado para contrato a enviar al asignar buses
+    const [selectedContractForBuses, setSelectedContractForBuses] = useState('');
 
-/* ========== Responsive Table ========== */
+    // Función para aplanar el schedule del bus en strings tipo "Lunes 08:00"
+    const getScheduleOptions = (bus) => {
+        if (!bus.schedule || !Array.isArray(bus.schedule)) return [];
+        const options = [];
+        bus.schedule.forEach((sch) => {
+            const day = sch.day;
+            sch.times.forEach((t) => {
+                options.push(`${day} ${t}`);
+            });
+        });
+        return options;
+    };
+
+    // Al abrir el modal, cargar los estudiantes y sus asignaciones previas
+    useEffect(() => {
+        if (open && parentUser && parentUser.FamilyDetail) {
+            const st = parentUser.FamilyDetail.Students || [];
+            setStudents(st);
+            const loadAssignments = async () => {
+                const initial = {};
+                await Promise.all(
+                    st.map(async (stud) => {
+                        try {
+                            const res = await api.get(`/students/${stud.id}/assign-buses`);
+                            // Aseguramos que cada asignación tenga assignedSchedule en array
+                            const parsedAssignments = res.data.assignments.map(assignment => {
+                                if (typeof assignment.assignedSchedule === 'string') {
+                                    try {
+                                        assignment.assignedSchedule = JSON.parse(assignment.assignedSchedule);
+                                    } catch (e) {
+                                        assignment.assignedSchedule = [];
+                                    }
+                                }
+                                return assignment;
+                            });
+                            initial[stud.id] = parsedAssignments;
+                        } catch (error) {
+                            initial[stud.id] = [];
+                        }
+                    })
+                );
+                setAssignments(initial);
+            };
+            loadAssignments();
+            // Inicializamos el select de contrato como vacío (opción "Ninguno")
+            setSelectedContractForBuses('');
+        }
+    }, [open, parentUser]);
+
+    // Toggle de un bus (checkbox)
+    const handleToggleBus = (studentId, busId) => {
+        setAssignments((prev) => {
+            const currentList = prev[studentId] || [];
+            const alreadyExists = currentList.find(item => item.busId === busId);
+            if (alreadyExists) {
+                // Quitar esa asignación
+                const newArray = currentList.filter(item => item.busId !== busId);
+                return { ...prev, [studentId]: newArray };
+            } else {
+                // Agregar la asignación con assignedSchedule = []
+                const newArray = [...currentList, { busId, assignedSchedule: [] }];
+                return { ...prev, [studentId]: newArray };
+            }
+        });
+    };
+
+    // Saber si un checkbox (bus) está marcado
+    const isBusChecked = (studentId, busId) => {
+        const currentList = assignments[studentId] || [];
+        return currentList.some(item => item.busId === busId);
+    };
+
+    // Devolver array de horarios actualmente seleccionados
+    const getSelectedSchedules = (studentId, busId) => {
+        const currentList = assignments[studentId] || [];
+        const found = currentList.find(item => item.busId === busId);
+        return found ? found.assignedSchedule : [];
+    };
+
+    // Manejar el cambio de horarios (multiple)
+    const handleSchedulesChange = (studentId, busId, newSchedules) => {
+        setAssignments((prev) => {
+            const currentList = prev[studentId] || [];
+            const newArray = currentList.map((item) =>
+                item.busId === busId ? { ...item, assignedSchedule: newSchedules } : item
+            );
+            return { ...prev, [studentId]: newArray };
+        });
+    };
+
+    const handleSave = async () => {
+        setLoading(true);
+        try {
+            // Para cada estudiante, hacemos PUT /students/:id/assign-buses
+            const promises = Object.keys(assignments).map(async (studId) => {
+                const assignedBuses = assignments[studId];
+                await api.put(`/students/${studId}/assign-buses`, { assignedBuses });
+            });
+            await Promise.all(promises);
+            // Luego, si se seleccionó un contrato, se envía
+            if (selectedContractForBuses) {
+                const contractResp = await api.get(`/contracts/${selectedContractForBuses}`);
+                const contract = contractResp.data;
+                if (contract && parentUser.email) {
+                    const fatherShareUrl = `${contract.url}?parentId=${parentUser.id}`;
+                    await api.post('/mail/send', {
+                        to: parentUser.email,
+                        subject: 'Enlace de Contrato Asignado (Tras asignar rutas)',
+                        html: `
+              <h1>Hola, ${parentUser.name}</h1>
+              <p>Te han asignado el contrato <strong>${contract.title}</strong> tras la asignación de rutas.</p>
+              <p>Puedes llenarlo en el siguiente enlace:
+              <a href="${fatherShareUrl}" target="_blank">${fatherShareUrl}</a></p>
+              <br/>
+              <p>Atentamente, Sistema de Contratos</p>
+            `
+                    });
+                }
+            }
+            setLoading(false);
+            if (onSaveSuccess) onSaveSuccess();
+            onClose();
+        } catch (error) {
+            console.error('Error al asignar buses:', error);
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+            <DialogTitle>Asignar Buses</DialogTitle>
+            <DialogContent>
+                {students.length === 0 ? (
+                    <Typography>No hay estudiantes para este padre.</Typography>
+                ) : (
+                    <>
+                        {students.map((stud) => (
+                            <Box key={stud.id} sx={{ mb: 3, borderBottom: '1px solid #ccc', pb: 2 }}>
+                                <Typography variant="h6">{stud.fullName}</Typography>
+                                <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+                                    Grado: {stud.grade || 'N/A'}
+                                </Typography>
+                                <Box sx={{ ml: 2 }}>
+                                    {buses.map((bus) => {
+                                        if (!bus.pilot) return null;
+                                        if (String(bus.pilot.school) !== String(parentUser.school)) return null;
+                                        const checked = isBusChecked(stud.id, bus.id);
+                                        const scheduleOptions = getScheduleOptions(bus);
+                                        return (
+                                            <div key={bus.id} style={{ marginBottom: 10 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <Checkbox
+                                                        checked={checked}
+                                                        onChange={() => handleToggleBus(stud.id, bus.id)}
+                                                        color="primary"
+                                                    />
+                                                    <span>{`Bus [${bus.plate}] (Piloto: ${bus.pilot?.name || 'N/A'})`}</span>
+                                                </div>
+                                                {checked && scheduleOptions.length > 0 && (
+                                                    <FormControl size="small" sx={{ ml: 4, mt: 1, minWidth: 280 }}>
+                                                        <InputLabel>Horarios</InputLabel>
+                                                        <Select
+                                                            label="Horarios"
+                                                            multiple
+                                                            value={getSelectedSchedules(stud.id, bus.id)}
+                                                            onChange={(e) => handleSchedulesChange(stud.id, bus.id, e.target.value)}
+                                                            renderValue={(selected) =>
+                                                                Array.isArray(selected) ? selected.join(', ') : ''
+                                                            }
+                                                        >
+                                                            {scheduleOptions.map((opt, idx) => (
+                                                                <MenuItem key={idx} value={opt}>
+                                                                    <Checkbox checked={getSelectedSchedules(stud.id, bus.id).includes(opt)} />
+                                                                    <Typography sx={{ ml: 1 }}>{opt}</Typography>
+                                                                </MenuItem>
+                                                            ))}
+                                                        </Select>
+                                                    </FormControl>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </Box>
+                            </Box>
+                        ))}
+                        {/* Nuevo select para elegir el contrato a enviar (opcional) */}
+                        <Box sx={{ mt: 2 }}>
+                            <FormControl fullWidth>
+                                <InputLabel>Contrato a enviar (opcional)</InputLabel>
+                                <Select
+                                    value={selectedContractForBuses}
+                                    onChange={(e) => setSelectedContractForBuses(e.target.value)}
+                                    label="Contrato a enviar (opcional)"
+                                >
+                                    <MenuItem value="">
+                                        <em>Ninguno</em>
+                                    </MenuItem>
+                                    {contracts.map((c) => (
+                                        <MenuItem key={c.uuid} value={c.uuid}>
+                                            {c.title}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Box>
+                    </>
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Cerrar</Button>
+                <Button variant="contained" onClick={handleSave} disabled={loading}>
+                    {loading ? 'Guardando...' : 'Guardar'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+
+/* ================== Responsive Table & Mobile Cards =================== */
 const ResponsiveTableHead = styled(TableHead)`
     @media (max-width: 600px) {
         display: none;
@@ -110,8 +317,6 @@ const ResponsiveTableCell = styled(TableCell)`
         }
     }
 `;
-
-/* ========== Mobile Card Styles ========== */
 const MobileCard = styled(Paper)`
     padding: 16px;
     margin-bottom: 16px;
@@ -130,61 +335,36 @@ const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
 
-/**
- * Determina si un usuario es "nuevo":
- * - FamilyDetail.source = "enrollment"
- * - FamilyDetail.isNew = true
- * - Menos de 14 días de creado
- */
+// Helper para saber si un usuario es "nuevo"
 function isUserNew(user) {
     if (!user.FamilyDetail) return false;
     if (user.FamilyDetail.source !== 'enrollment') return false;
     if (user.FamilyDetail.isNew === false) return false;
-
     const createdAt = new Date(user.createdAt);
     const now = new Date();
     const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
     return diffDays <= 14;
 }
 
-/* =========================================================
-   ==============   CÓDIGO NUEVO PARA ORDENAR   =============
-   ========================================================= */
-
-// Estado y funciones para manejar el ordenamiento
+// Helpers para sort
 function descendingComparator(a, b, orderBy) {
     const aValue = getFieldValue(a, orderBy);
     const bValue = getFieldValue(b, orderBy);
-
-    // Manejo de null/undefined
-    if (aValue == null && bValue == null) {
-        return 0;
-    } else if (aValue == null) {
-        return 1;
-    } else if (bValue == null) {
-        return -1;
-    }
-
-    // Si son strings, comparamos de forma local
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
     if (typeof aValue === 'string' && typeof bValue === 'string') {
         return bValue.localeCompare(aValue);
     }
-    // Si no, comparamos de forma genérica
-    if (bValue < aValue) {
-        return -1;
-    }
-    if (bValue > aValue) {
-        return 1;
-    }
+    if (bValue < aValue) return -1;
+    if (bValue > aValue) return 1;
     return 0;
 }
-
 function getComparator(order, orderBy) {
     return order === 'desc'
         ? (a, b) => descendingComparator(a, b, orderBy)
         : (a, b) => -descendingComparator(a, b, orderBy);
 }
-
 function stableSort(array, comparator) {
     const stabilizedThis = array.map((el, index) => [el, index]);
     stabilizedThis.sort((a, b) => {
@@ -194,11 +374,6 @@ function stableSort(array, comparator) {
     });
     return stabilizedThis.map((el) => el[0]);
 }
-
-/**
- * Dado un usuario y el campo por el que se va a ordenar,
- * retornamos el valor apropiado (nombre, correo, rol, colegio, etc.)
- */
 function getFieldValue(user, field) {
     switch (field) {
         case 'name':
@@ -213,21 +388,85 @@ function getFieldValue(user, field) {
             return '';
     }
 }
-/* =========================================================
-   =========   FIN DE CÓDIGO NUEVO PARA ORDENAR   ==========
-   ========================================================= */
+
+/* Nuevo diálogo para envío manual de contrato */
+const SendContractDialog = ({ open, onClose, user, contracts, onSent }) => {
+    const [selectedContract, setSelectedContract] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSend = async () => {
+        if (!selectedContract) return;
+        setLoading(true);
+        try {
+            const contractResp = await api.get(`/contracts/${selectedContract}`);
+            const contract = contractResp.data;
+            if (contract && user.email) {
+                const fatherShareUrl = `${contract.url}?parentId=${user.id}`;
+                await api.post('/mail/send', {
+                    to: user.email,
+                    subject: 'Enlace de Contrato Asignado (Manual)',
+                    html: `
+            <h1>Hola, ${user.name}</h1>
+            <p>Te han asignado el contrato <strong>${contract.title}</strong>.</p>
+            <p>Puedes llenarlo en el siguiente enlace:
+            <a href="${fatherShareUrl}" target="_blank">${fatherShareUrl}</a></p>
+            <br/>
+            <p>Atentamente, Sistema de Contratos</p>
+          `
+                });
+                onSent();
+            }
+        } catch (err) {
+            console.error('Error enviando contrato manualmente:', err);
+        }
+        setLoading(false);
+        onClose();
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+            <DialogTitle>Enviar Contrato Manualmente</DialogTitle>
+            <DialogContent>
+                <DialogContentText>
+                    Selecciona el contrato que deseas enviar a <strong>{user?.name}</strong>.
+                </DialogContentText>
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                    <InputLabel>Contrato</InputLabel>
+                    <Select
+                        value={selectedContract}
+                        onChange={(e) => setSelectedContract(e.target.value)}
+                        label="Contrato"
+                    >
+                        <MenuItem value="">
+                            <em>Ninguno</em>
+                        </MenuItem>
+                        {contracts.map((c) => (
+                            <MenuItem key={c.uuid} value={c.uuid}>
+                                {c.title}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Cancelar</Button>
+                <Button onClick={handleSend} variant="contained" disabled={loading || !selectedContract}>
+                    {loading ? 'Enviando...' : 'Enviar Contrato'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
 
 const RolesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const { auth } = useContext(AuthContext);
 
-    // =================== States Principales ===================
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
     const [buses, setBuses] = useState([]);
     const [contracts, setContracts] = useState([]);
-
     const [selectedUser, setSelectedUser] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
@@ -242,13 +481,16 @@ const RolesManagementPage = () => {
         nit: '',
         mainAddress: '',
         alternativeAddress: '',
+        routeType: '',
         students: [],
         scheduleSlots: [],
         specialFee: 0
     });
+    const [originalStudents, setOriginalStudents] = useState([]);
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
     const [newSlot, setNewSlot] = useState({ time: '', note: '' });
-    const [selectedContractUuid, setSelectedContractUuid] = useState('');
+    // Se elimina la gestión de contrato en el diálogo de edición
+    // const [selectedContractUuid, setSelectedContractUuid] = useState('');
 
     const [snackbar, setSnackbar] = useState({
         open: false,
@@ -260,45 +502,39 @@ const RolesManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // Para Supervisor
     const [allPilots, setAllPilots] = useState([]);
     const [selectedSupervisorPilots, setSelectedSupervisorPilots] = useState([]);
 
-    // Piloto
-    const [availablePilotSchedules, setAvailablePilotSchedules] = useState([]);
-    const [selectedPilotSchedules, setSelectedPilotSchedules] = useState([]);
-
-    // Carga masiva
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
 
     const [schoolGrades, setSchoolGrades] = useState([]);
-
-    // Circular Masiva
     const [openCircularModal, setOpenCircularModal] = useState(false);
 
-    // =================== Filtros ===================
-    // Filtro "Nuevos / No nuevos"
-    const [newUsersFilter, setNewUsersFilter] = useState('all'); // all | new | old
+    // Submodal para asignar buses (sólo para padres)
+    const [assignBusesOpen, setAssignBusesOpen] = useState(false);
 
-    // Filtro por Rol / Colegio
+    // Nuevo diálogo para envío manual de contrato
+    const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
+    const [selectedUserForManualSend, setSelectedUserForManualSend] = useState(null);
+
+    // Filtros
+    const [newUsersFilter, setNewUsersFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('');
     const [schoolFilter, setSchoolFilter] = useState('');
 
-    // =================== ADICIÓN: Estados para ordenamiento ===================
+    // Orden
     const [order, setOrder] = useState('asc');
     const [orderBy, setOrderBy] = useState('');
 
-    // Función para cuando se hace clic en el encabezado
     const handleRequestSort = (property) => {
         const isAsc = orderBy === property && order === 'asc';
         setOrder(isAsc ? 'desc' : 'asc');
         setOrderBy(property);
     };
 
-    // =================== useEffects ===================
     useEffect(() => {
         fetchUsers();
         fetchSchools();
@@ -307,7 +543,6 @@ const RolesManagementPage = () => {
         fetchAllPilots();
     }, []);
 
-    // =================== Cargar datos ===================
     const fetchAllPilots = async () => {
         try {
             const resp = await api.get('/users/pilots');
@@ -359,26 +594,6 @@ const RolesManagementPage = () => {
         }
     };
 
-    const fetchSchedulesForSchool = async (schoolId) => {
-        try {
-            const resp = await api.get(`/schools/${schoolId}/schedules`);
-            if (resp.data && Array.isArray(resp.data.schedules)) {
-                const expanded = [];
-                resp.data.schedules.forEach((schObj) => {
-                    schObj.times.forEach((t) => {
-                        expanded.push({ day: schObj.day, time: t });
-                    });
-                });
-                setAvailablePilotSchedules(expanded);
-            } else {
-                setAvailablePilotSchedules([]);
-            }
-        } catch (error) {
-            console.error('[fetchSchedulesForSchool] Error:', error);
-            setAvailablePilotSchedules([]);
-        }
-    };
-
     const fetchSchoolGrades = async (schoolId) => {
         try {
             const response = await api.get(`/schools/${schoolId}`);
@@ -393,17 +608,6 @@ const RolesManagementPage = () => {
         }
     };
 
-    const fetchPilotAssignedSchedules = async (pilotId) => {
-        try {
-            const resp = await api.get(`/transportistas/${pilotId}/schedules`);
-            setSelectedPilotSchedules(resp.data.schedules || []);
-        } catch (error) {
-            console.error('[fetchPilotAssignedSchedules] Error:', error);
-            setSelectedPilotSchedules([]);
-        }
-    };
-
-    // =================== Supervisor ===================
     const handleToggleSupervisorPilot = useCallback((pilotId) => {
         setSelectedSupervisorPilots(prev => {
             if (prev.includes(pilotId)) {
@@ -414,9 +618,7 @@ const RolesManagementPage = () => {
         });
     }, []);
 
-    // =================== Editar / Crear / Eliminar ===================
     const handleEditClick = async (user) => {
-        // Marcar "no nuevo" si es nuevo
         if (isUserNew(user)) {
             try {
                 await api.put(`/users/${user.id}/mark-not-new`);
@@ -425,14 +627,12 @@ const RolesManagementPage = () => {
                 console.error('Error al marcar como NO nuevo:', err);
             }
         }
-
         const parsedRoleId = Number(user.roleId);
         setSelectedUser({
             ...user,
             roleId: parsedRoleId,
             password: ''
         });
-
         if (parsedRoleId === 3 && user.FamilyDetail) {
             setFamilyDetail({
                 motherName: user.FamilyDetail.motherName || '',
@@ -445,10 +645,13 @@ const RolesManagementPage = () => {
                 nit: user.FamilyDetail.nit || '',
                 mainAddress: user.FamilyDetail.mainAddress || '',
                 alternativeAddress: user.FamilyDetail.alternativeAddress || '',
+                routeType: user.FamilyDetail.routeType || '',
                 students: user.FamilyDetail.Students || [],
                 scheduleSlots: user.FamilyDetail.ScheduleSlots || [],
                 specialFee: user.FamilyDetail.specialFee ?? 0
             });
+            // Guardamos la lista original para comparar
+            setOriginalStudents(user.FamilyDetail.Students || []);
             if (user.school) {
                 await fetchSchoolGrades(user.school);
             }
@@ -464,29 +667,19 @@ const RolesManagementPage = () => {
                 nit: '',
                 mainAddress: '',
                 alternativeAddress: '',
+                routeType: '',
                 students: [],
                 scheduleSlots: [],
                 specialFee: 0
             });
+            setOriginalStudents([]);
         }
-
-        setSelectedContractUuid('');
-        setAvailablePilotSchedules([]);
-        setSelectedPilotSchedules([]);
+        // Nota: El select de contrato NO se muestra en el diálogo de edición
         setSelectedSupervisorPilots([]);
-
-        if (parsedRoleId === 5) {
-            if (user.school) {
-                await fetchSchedulesForSchool(user.school);
-            }
-            await fetchPilotAssignedSchedules(user.id);
-        }
-
         if (parsedRoleId === 6 || (user.Role && user.Role.name === 'Supervisor')) {
             const newArray = user.supervisorPilots ? user.supervisorPilots.map(sp => Number(sp.pilotId)) : [];
             setSelectedSupervisorPilots(newArray);
         }
-
         setOpenDialog(true);
     };
 
@@ -497,8 +690,7 @@ const RolesManagementPage = () => {
             email: '',
             password: '',
             roleId: '',
-            school: '',
-            busId: ''
+            school: ''
         });
         setFamilyDetail({
             motherName: '',
@@ -511,13 +703,12 @@ const RolesManagementPage = () => {
             nit: '',
             mainAddress: '',
             alternativeAddress: '',
+            routeType: '',
             students: [],
             scheduleSlots: [],
             specialFee: 0
         });
-        setSelectedContractUuid('');
-        setAvailablePilotSchedules([]);
-        setSelectedPilotSchedules([]);
+        setOriginalStudents([]);
         setSelectedSupervisorPilots([]);
         setSchoolGrades([]);
         setOpenDialog(true);
@@ -542,7 +733,17 @@ const RolesManagementPage = () => {
         }
     };
 
-    // =================== Form ===================
+    const handleSendContractManually = async (fatherUser) => {
+        try {
+            if (!fatherUser) return;
+            // Se abre el diálogo para envío manual (donde se muestra el select de contratos)
+            setSelectedUserForManualSend(fatherUser);
+            setOpenSendContractDialog(true);
+        } catch (err) {
+            console.error('Error en envío manual:', err);
+        }
+    };
+
     const handleUserChange = (e) => {
         setSelectedUser(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
@@ -550,11 +751,6 @@ const RolesManagementPage = () => {
     const handleRoleIdChange = (e) => {
         const newRoleId = Number(e.target.value);
         setSelectedUser(prev => ({ ...prev, roleId: newRoleId }));
-    };
-
-    const handleBusChange = (e) => {
-        const busIdVal = parseInt(e.target.value, 10) || null;
-        setSelectedUser(prev => ({ ...prev, busId: busIdVal }));
     };
 
     const handleFamilyDetailChange = (e) => {
@@ -579,67 +775,38 @@ const RolesManagementPage = () => {
         setNewSlot({ time: '', note: '' });
     };
 
-    // =================== Piloto: schedules ===================
-    const handleTogglePilotSchedule = (day, time) => {
-        const found = selectedPilotSchedules.find(s => s.day === day && s.time === time);
-        if (found) {
-            setSelectedPilotSchedules(prev => prev.filter(x => x !== found));
-        } else {
-            setSelectedPilotSchedules(prev => [...prev, { day, time }]);
-        }
-    };
-
-    const finalizePilotSchedules = async (pilotId) => {
-        try {
-            await api.post(`/transportistas/${pilotId}/schedules`, {
-                schedules: selectedPilotSchedules
-            });
-        } catch (err) {
-            console.error('[finalizePilotSchedules] Error:', err);
-        }
-    };
-
-    // =================== Guardar Usuario ===================
     const handleSaveUser = async () => {
         try {
+            // Si la lista de estudiantes no cambió, no enviar ese campo
+            const familyDetailPayload = { ...familyDetail };
+            if (JSON.stringify(familyDetail.students) === JSON.stringify(originalStudents)) {
+                delete familyDetailPayload.students;
+            }
             let payload = {
                 id: selectedUser.id,
                 name: selectedUser.name,
                 email: selectedUser.email,
                 roleId: Number(selectedUser.roleId),
                 school: selectedUser.school,
-                busId: selectedUser.busId || null,
                 phoneNumber: selectedUser.phoneNumber || null
             };
-
             if (selectedUser.password && selectedUser.password.trim() !== '') {
                 payload.password = selectedUser.password;
             }
-
             if (payload.roleId === 3) {
-                payload.familyDetail = familyDetail;
-                payload.selectedContractUuid = selectedContractUuid;
+                // En el diálogo de edición NO se envía el contrato (se omite el campo de contrato)
+                payload.familyDetail = familyDetailPayload;
             }
-
             if (payload.roleId === 6) {
                 payload.supervisorPilots = selectedSupervisorPilots;
             }
-
             if (selectedUser.id) {
                 await api.put(`/users/${selectedUser.id}`, payload);
-                if (payload.roleId === 5) {
-                    await finalizePilotSchedules(selectedUser.id);
-                }
                 setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
             } else {
-                const resp = await api.post('/users', payload);
-                const newUserId = resp.data.user.id;
-                if (payload.roleId === 5) {
-                    await finalizePilotSchedules(newUserId);
-                }
+                await api.post('/users', payload);
                 setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
             }
-
             fetchUsers();
             handleDialogClose();
         } catch (err) {
@@ -648,43 +815,32 @@ const RolesManagementPage = () => {
         }
     };
 
-    // =================== Filtros / Búsqueda ===================
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
     };
 
-    // Filtramos
     const filteredUsers = users.filter((u) => {
-        // Búsqueda por texto
         const matchesSearch =
             (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (u.email || '').toLowerCase().includes(searchQuery.toLowerCase());
         if (!matchesSearch) return false;
-
-        // Filtro "Nuevos" / "No nuevos"
         if (newUsersFilter === 'new') {
             if (!isUserNew(u)) return false;
         } else if (newUsersFilter === 'old') {
             if (isUserNew(u)) return false;
         }
-
-        // Filtro Rol
         if (roleFilter) {
             if (Number(u.roleId) !== Number(roleFilter)) return false;
         }
-
-        // Filtro Colegio
         if (schoolFilter) {
             if (Number(u.school) !== Number(schoolFilter)) return false;
         }
-
         return true;
     });
 
-    // === Aquí aplicamos el ordenamiento a la lista filtrada antes de paginar ===
     const sortedUsers = stableSort(filteredUsers, getComparator(order, orderBy));
+    const displayedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
-    // =================== Paginación ===================
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
     };
@@ -693,10 +849,6 @@ const RolesManagementPage = () => {
         setPage(0);
     };
 
-    // Tomamos los usuarios ya ordenados y aplicamos la paginación
-    const displayedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-
-    // =================== Carga Masiva ===================
     const handleOpenBulkDialog = () => {
         setBulkFile(null);
         setBulkResults(null);
@@ -716,10 +868,8 @@ const RolesManagementPage = () => {
         if (!bulkFile) return;
         setBulkLoading(true);
         setBulkResults(null);
-
         const formData = new FormData();
         formData.append('file', bulkFile);
-
         try {
             const resp = await api.post('/users/bulk-upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
@@ -746,12 +896,8 @@ const RolesManagementPage = () => {
 
     const downloadFilename = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
 
-    // =================== Descargar Excel de Usuarios Nuevos ===================
     const handleDownloadNewUsers = () => {
-        // Filtramos sólo "nuevos"
         const newUsers = users.filter(isUserNew);
-
-        // Columnas EXACTAS
         const headers = [
             "Nombre",
             "Correo electrónico",
@@ -769,27 +915,19 @@ const RolesManagementPage = () => {
             "NIT",
             "Dirección Principal",
             "Dirección Alterna",
-            "Descuento especial",
-            "Alumnos",
+            "Descuenta especial",
+            "Alumno 1",
+            "Alumno 2",
+            "Alumno 3",
+            "Alumno 4",
+            "Tipo ruta",
             "Pilotos a Cargo"
         ];
-
         const data = [];
-        // Fila 1 => encabezados
         data.push(headers);
-
         newUsers.forEach((u) => {
             const roleName = u.Role ? u.Role.name : "";
             const schoolName = u.School ? u.School.name : "";
-
-            // Bus -> Placa
-            let busPlate = "";
-            if (u.busId && buses.length) {
-                const foundBus = buses.find(b => b.id === u.busId);
-                busPlate = foundBus ? foundBus.plate : "";
-            }
-
-            // FamilyDetail
             const fd = u.FamilyDetail || {};
             const motherName = fd.motherName || "";
             const motherCell = fd.motherCellphone || "";
@@ -802,64 +940,58 @@ const RolesManagementPage = () => {
             const mainAddr = fd.mainAddress || "";
             const altAddr = fd.alternativeAddress || "";
             const specialFee = fd.specialFee || 0;
-
-            // Alumnos => "fullName:grade" separadas por comas
-            let alumnosStr = "";
+            const routeType = fd.routeType || "";
+            let alumno1 = "";
+            let alumno2 = "";
+            let alumno3 = "";
+            let alumno4 = "";
             if (fd.Students && fd.Students.length) {
-                alumnosStr = fd.Students
-                    .map(st => `${st.fullName}:${st.grade}`)
-                    .join(",");
+                if (fd.Students[0]) alumno1 = fd.Students[0].fullName;
+                if (fd.Students[1]) alumno2 = fd.Students[1].fullName;
+                if (fd.Students[2]) alumno3 = fd.Students[2].fullName;
+                if (fd.Students[3]) alumno4 = fd.Students[3].fullName;
             }
-
-            // Pilotos a Cargo => si es Supervisor
             let pilotosACargoStr = "";
             if (roleName.toLowerCase() === "supervisor" && u.supervisorPilots) {
-                // Obtenemos correos de cada piloto
                 const emails = u.supervisorPilots.map(sp => {
                     const pilot = allPilots.find(ap => ap.id === sp.pilotId);
                     return pilot ? pilot.email : "";
                 });
                 pilotosACargoStr = emails.join(";");
             }
-
-            // Contraseña la dejamos vacía
-            const password = "";
-
             const row = [
-                u.name || "",           // Nombre
-                u.email || "",          // Correo electrónico
-                password,               // Contraseña
-                roleName,               // Rol
-                schoolName,             // Colegio
-                busPlate,               // Placa de Bus
-                motherName,             // Nombre de la Madre
-                motherCell,             // Celular de la Madre
-                motherEmail,            // Correo de la Madre
-                fatherName,             // Nombre del Padre
-                fatherCell,             // Celular del Padre
-                fatherEmail,            // Correo del Padre
-                razonSocial,            // Razón social
-                nit,                    // NIT
-                mainAddr,               // Dirección Principal
-                altAddr,                // Dirección Alterna
-                String(specialFee),     // Descuento especial
-                alumnosStr,             // Alumnos
-                pilotosACargoStr        // Pilotos a Cargo
+                u.name || "",
+                u.email || "",
+                "",
+                roleName,
+                schoolName,
+                "",
+                motherName,
+                motherCell,
+                motherEmail,
+                fatherName,
+                fatherCell,
+                fatherEmail,
+                razonSocial,
+                nit,
+                mainAddr,
+                altAddr,
+                String(specialFee),
+                alumno1,
+                alumno2,
+                alumno3,
+                alumno4,
+                routeType,
+                pilotosACargoStr
             ];
-
             data.push(row);
         });
-
-        // Creación del libro XLSX
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(data);
         XLSX.utils.book_append_sheet(wb, ws, "UsuariosNuevos");
-
         const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
         const blob = new Blob([wbout], { type: "application/octet-stream" });
         const fileName = `usuarios_nuevos_${getFormattedDateTime()}.xlsx`;
-
-        // Forzar descarga
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -870,13 +1002,11 @@ const RolesManagementPage = () => {
         URL.revokeObjectURL(url);
     };
 
-    // =================== Render ===================
     return (
         <RolesContainer>
             <Typography variant="h4" gutterBottom>
                 Gestión de Usuarios y Roles
             </Typography>
-
             <Box
                 sx={{
                     display: 'flex',
@@ -886,7 +1016,6 @@ const RolesManagementPage = () => {
                     gap: 2
                 }}
             >
-                {/* Búsqueda */}
                 <TextField
                     label="Buscar usuarios"
                     variant="outlined"
@@ -895,10 +1024,7 @@ const RolesManagementPage = () => {
                     onChange={handleSearchChange}
                     sx={{ width: '100%', maxWidth: '300px' }}
                 />
-
-                {/* Filtros y Botones */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {/* Filtro "Nuevos / No nuevos" */}
                     <FormControl size="small" sx={{ width: 150 }}>
                         <InputLabel>Filtro Nuevo</InputLabel>
                         <Select
@@ -911,8 +1037,6 @@ const RolesManagementPage = () => {
                             <MenuItem value="old">No nuevos</MenuItem>
                         </Select>
                     </FormControl>
-
-                    {/* Filtro por Rol */}
                     <FormControl size="small" sx={{ width: 150 }}>
                         <InputLabel>Rol</InputLabel>
                         <Select
@@ -930,8 +1054,6 @@ const RolesManagementPage = () => {
                             ))}
                         </Select>
                     </FormControl>
-
-                    {/* Filtro por Colegio */}
                     <FormControl size="small" sx={{ width: 150 }}>
                         <InputLabel>Colegio</InputLabel>
                         <Select
@@ -949,8 +1071,6 @@ const RolesManagementPage = () => {
                             ))}
                         </Select>
                     </FormControl>
-
-                    {/* Botón: Carga masiva */}
                     <Button
                         variant="contained"
                         color="info"
@@ -959,8 +1079,6 @@ const RolesManagementPage = () => {
                     >
                         Carga Masiva
                     </Button>
-
-                    {/* Botón: Añadir usuario */}
                     <Button
                         variant="contained"
                         color="primary"
@@ -969,8 +1087,6 @@ const RolesManagementPage = () => {
                     >
                         Añadir Usuario
                     </Button>
-
-                    {/* Botón: Circular masiva */}
                     <Button
                         variant="contained"
                         color="secondary"
@@ -979,8 +1095,6 @@ const RolesManagementPage = () => {
                     >
                         Enviar Circular Masiva
                     </Button>
-
-                    {/* Botón: Descargar Usuarios Nuevos */}
                     <Button
                         variant="contained"
                         color="success"
@@ -990,7 +1104,6 @@ const RolesManagementPage = () => {
                     </Button>
                 </div>
             </Box>
-
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '16px' }}>
                     <CircularProgress />
@@ -998,7 +1111,6 @@ const RolesManagementPage = () => {
             ) : (
                 <>
                     {isMobile ? (
-                        // ======= Modo Móvil =======
                         <>
                             {displayedUsers.map((user) => (
                                 <MobileCard key={user.id} elevation={3}>
@@ -1009,12 +1121,7 @@ const RolesManagementPage = () => {
                                                 <MobileValue>
                                                     {user.name}{' '}
                                                     {isUserNew(user) && (
-                                                        <Chip
-                                                            label="NUEVO"
-                                                            color="success"
-                                                            size="small"
-                                                            sx={{ ml: 1 }}
-                                                        />
+                                                        <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
                                                     )}
                                                 </MobileValue>
                                             </MobileField>
@@ -1048,6 +1155,23 @@ const RolesManagementPage = () => {
                                                     <Delete />
                                                 </IconButton>
                                             </Tooltip>
+                                            {user.roleId === 3 && (
+                                                <>
+                                                    <Tooltip title="Asignar Buses">
+                                                        <IconButton onClick={() => {
+                                                            setSelectedUser(user);
+                                                            setAssignBusesOpen(true);
+                                                        }}>
+                                                            <DirectionsBus />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title="Enviar Contrato Manualmente">
+                                                        <IconButton onClick={() => handleSendContractManually(user)}>
+                                                            <Mail />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </>
+                                            )}
                                         </Grid>
                                     </Grid>
                                 </MobileCard>
@@ -1064,86 +1188,55 @@ const RolesManagementPage = () => {
                             />
                         </>
                     ) : (
-                        // ======= Modo Escritorio =======
                         <Paper sx={{ width: '100%', overflowX: 'auto' }}>
-                            <TableContainer
-                                sx={{
-                                    maxHeight: { xs: 400, sm: 'none' },
-                                    overflowX: 'auto'
-                                }}
-                            >
+                            <TableContainer sx={{ maxHeight: { xs: 400, sm: 'none' }, overflowX: 'auto' }}>
                                 <Table stickyHeader>
                                     <ResponsiveTableHead>
                                         <TableRow>
-                                            {/* Columna Nombre con TableSortLabel */}
                                             <TableCell sortDirection={orderBy === 'name' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'name'}
                                                     direction={orderBy === 'name' ? order : 'asc'}
                                                     onClick={() => handleRequestSort('name')}
                                                     hideSortIcon={false}
-                                                    sx={{
-                                                        '& .MuiTableSortLabel-icon': {
-                                                            opacity: 1,
-                                                        },
-                                                    }}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
                                                     Nombre
                                                 </TableSortLabel>
                                             </TableCell>
-
-                                            {/* Columna Correo */}
                                             <TableCell sortDirection={orderBy === 'email' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'email'}
                                                     direction={orderBy === 'email' ? order : 'asc'}
                                                     onClick={() => handleRequestSort('email')}
                                                     hideSortIcon={false}
-                                                    sx={{
-                                                        '& .MuiTableSortLabel-icon': {
-                                                            opacity: 1,
-                                                        },
-                                                    }}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
                                                     Correo
                                                 </TableSortLabel>
                                             </TableCell>
-
-                                            {/* Columna Rol */}
                                             <TableCell sortDirection={orderBy === 'role' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'role'}
                                                     direction={orderBy === 'role' ? order : 'asc'}
                                                     onClick={() => handleRequestSort('role')}
                                                     hideSortIcon={false}
-                                                    sx={{
-                                                        '& .MuiTableSortLabel-icon': {
-                                                            opacity: 1,
-                                                        },
-                                                    }}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
                                                     Rol
                                                 </TableSortLabel>
                                             </TableCell>
-
-                                            {/* Columna Colegio */}
                                             <TableCell sortDirection={orderBy === 'school' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'school'}
                                                     direction={orderBy === 'school' ? order : 'asc'}
                                                     onClick={() => handleRequestSort('school')}
                                                     hideSortIcon={false}
-                                                    sx={{
-                                                        '& .MuiTableSortLabel-icon': {
-                                                            opacity: 1,
-                                                        },
-                                                    }}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
                                                     Colegio
                                                 </TableSortLabel>
                                             </TableCell>
-
-                                            {/* Columna Acciones (sin orden) */}
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </ResponsiveTableHead>
@@ -1153,12 +1246,7 @@ const RolesManagementPage = () => {
                                                 <ResponsiveTableCell data-label="Nombre">
                                                     {user.name}{' '}
                                                     {isUserNew(user) && (
-                                                        <Chip
-                                                            label="NUEVO"
-                                                            color="success"
-                                                            size="small"
-                                                            sx={{ ml: 1 }}
-                                                        />
+                                                        <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
                                                     )}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Correo">
@@ -1181,6 +1269,23 @@ const RolesManagementPage = () => {
                                                             <Delete />
                                                         </IconButton>
                                                     </Tooltip>
+                                                    {user.roleId === 3 && (
+                                                        <>
+                                                            <Tooltip title="Asignar Buses">
+                                                                <IconButton onClick={() => {
+                                                                    setSelectedUser(user);
+                                                                    setAssignBusesOpen(true);
+                                                                }}>
+                                                                    <DirectionsBus />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                            <Tooltip title="Enviar Contrato Manualmente">
+                                                                <IconButton onClick={() => handleSendContractManually(user)}>
+                                                                    <Mail />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </>
+                                                    )}
                                                 </ResponsiveTableCell>
                                             </TableRow>
                                         ))}
@@ -1209,7 +1314,7 @@ const RolesManagementPage = () => {
                 </>
             )}
 
-            {/* Diálogo para editar/agregar usuario */}
+            {/* Diálogo para crear/editar usuario (En este diálogo NO se muestra el select de contrato) */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
                 <DialogTitle>{selectedUser?.id ? 'Editar Usuario' : 'Añadir Usuario'}</DialogTitle>
                 <DialogContent>
@@ -1218,7 +1323,6 @@ const RolesManagementPage = () => {
                             ? 'Actualiza la información del usuario.'
                             : 'Completa la información para crear un nuevo usuario.'}
                     </DialogContentText>
-
                     <Grid container spacing={2} sx={{ mt: 1 }}>
                         <Grid item xs={12} md={6}>
                             <TextField
@@ -1246,7 +1350,6 @@ const RolesManagementPage = () => {
                                 disabled={Boolean(selectedUser?.id)}
                             />
                         </Grid>
-                        {/* Si es creación */}
                         {!selectedUser?.id && (
                             <Grid item xs={12} md={6}>
                                 <TextField
@@ -1261,7 +1364,6 @@ const RolesManagementPage = () => {
                                 />
                             </Grid>
                         )}
-                        {/* Si es update */}
                         {selectedUser?.id && (
                             <Grid item xs={12} md={6}>
                                 <TextField
@@ -1295,7 +1397,6 @@ const RolesManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-
                         <Grid item xs={12} md={6}>
                             <FormControl variant="outlined" fullWidth>
                                 <InputLabel>Colegio</InputLabel>
@@ -1305,26 +1406,14 @@ const RolesManagementPage = () => {
                                     onChange={async (e) => {
                                         const newSchoolId = e.target.value;
                                         setSelectedUser(prev => ({ ...prev, school: newSchoolId }));
-                                        if (Number(selectedUser?.roleId) === 5) {
-                                            if (newSchoolId) {
-                                                await fetchSchedulesForSchool(newSchoolId);
-                                            } else {
-                                                setAvailablePilotSchedules([]);
-                                                setSelectedPilotSchedules([]);
-                                            }
-                                        }
-                                        if (Number(selectedUser?.roleId) === 3) {
-                                            if (newSchoolId) {
-                                                await fetchSchoolGrades(newSchoolId);
-                                            } else {
-                                                setSchoolGrades([]);
-                                            }
+                                        if (Number(selectedUser?.roleId) === 3 && newSchoolId) {
+                                            await fetchSchoolGrades(newSchoolId);
                                         }
                                     }}
                                     label="Colegio"
                                 >
                                     <MenuItem value="">
-                                        <em>Seleccione un colegio</em>
+                                        <em>Ninguno</em>
                                     </MenuItem>
                                     {schools.map((sch) => (
                                         <MenuItem key={sch.id} value={sch.id}>
@@ -1334,57 +1423,13 @@ const RolesManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-
-                        {/* ==== Si es Padre => FamilyDetail ==== */}
                         {Number(selectedUser?.roleId) === 3 && (
                             <>
-                                {/* Contrato */}
-                                <Grid item xs={12} md={6}>
-                                    <FormControl variant="outlined" fullWidth>
-                                        <InputLabel>Contrato</InputLabel>
-                                        <Select
-                                            value={selectedContractUuid}
-                                            onChange={(e) => setSelectedContractUuid(e.target.value)}
-                                            label="Contrato"
-                                        >
-                                            <MenuItem value="">
-                                                <em>Ninguno</em>
-                                            </MenuItem>
-                                            {contracts.map((c) => (
-                                                <MenuItem key={c.uuid} value={c.uuid}>
-                                                    {c.title}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-
-                                {/* Bus asignado */}
-                                <Grid item xs={12} md={6}>
-                                    <FormControl variant="outlined" fullWidth>
-                                        <InputLabel>Bus Asignado</InputLabel>
-                                        <Select
-                                            name="busId"
-                                            value={selectedUser?.busId || ''}
-                                            onChange={handleBusChange}
-                                            label="Bus Asignado"
-                                        >
-                                            <MenuItem value="">
-                                                <em>Ninguno</em>
-                                            </MenuItem>
-                                            {buses.map((bus) => (
-                                                <MenuItem key={bus.id} value={bus.id}>
-                                                    {bus.plate}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-
-                                <Typography variant="h6" sx={{ mt: 3 }}>
+                                {/* Se ha removido el select de contrato en el diálogo de edición */}
+                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
                                     Datos de la Familia (Padre)
                                 </Typography>
-                                <Grid container spacing={2} sx={{ mt: 1 }}>
+                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
                                     <Grid item xs={12} md={4}>
                                         <TextField
                                             name="motherName"
@@ -1488,7 +1533,7 @@ const RolesManagementPage = () => {
                                     <Grid item xs={12} md={6}>
                                         <TextField
                                             name="specialFee"
-                                            label="Descuento Especial (monto fijo)"
+                                            label="Descuento Especial (monto)"
                                             type="number"
                                             fullWidth
                                             variant="outlined"
@@ -1496,15 +1541,29 @@ const RolesManagementPage = () => {
                                             onChange={handleFamilyDetailChange}
                                         />
                                     </Grid>
+                                    <Grid item xs={12} md={6}>
+                                        <FormControl fullWidth>
+                                            <InputLabel>Tipo de ruta</InputLabel>
+                                            <Select
+                                                name="routeType"
+                                                label="Tipo de ruta"
+                                                value={familyDetail.routeType}
+                                                onChange={handleFamilyDetailChange}
+                                            >
+                                                <MenuItem value="Completa">Completa</MenuItem>
+                                                <MenuItem value="Ruta AM">Ruta AM</MenuItem>
+                                                <MenuItem value="Ruta PM">Ruta PM</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
                                 </Grid>
-
-                                <Typography variant="h6" sx={{ mt: 3 }}>
+                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
                                     Alumnos
                                 </Typography>
-                                <Grid container spacing={2}>
+                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
                                     {familyDetail.students.map((st, idx) => (
                                         <Grid item xs={12} key={idx}>
-                                            <Typography variant="body2" sx={{ ml: 2 }}>
+                                            <Typography variant="body2">
                                                 • {st.fullName} ({st.grade})
                                             </Typography>
                                         </Grid>
@@ -1520,23 +1579,14 @@ const RolesManagementPage = () => {
                                         />
                                     </Grid>
                                     <Grid item xs={12} md={4}>
-                                        <FormControl fullWidth>
-                                            <InputLabel>Grado</InputLabel>
-                                            <Select
-                                                value={newStudent.grade}
-                                                label="Grado"
-                                                onChange={(e) => setNewStudent({ ...newStudent, grade: e.target.value })}
-                                            >
-                                                <MenuItem value="">
-                                                    <em>Seleccione un grado</em>
-                                                </MenuItem>
-                                                {schoolGrades.map((grade, idx) => (
-                                                    <MenuItem key={idx} value={grade.name}>
-                                                        {grade.name}
-                                                    </MenuItem>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
+                                        <TextField
+                                            name="grade"
+                                            label="Grado"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={newStudent.grade}
+                                            onChange={(e) => setNewStudent({ ...newStudent, grade: e.target.value })}
+                                        />
                                     </Grid>
                                     <Grid item xs={12} md={2} display="flex" alignItems="center">
                                         <Button variant="outlined" onClick={handleAddStudent} sx={{ mt: 1 }}>
@@ -1544,15 +1594,14 @@ const RolesManagementPage = () => {
                                         </Button>
                                     </Grid>
                                 </Grid>
-
-                                <Typography variant="h6" sx={{ mt: 3 }}>
+                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
                                     Horarios de Parada
                                 </Typography>
-                                <Grid container spacing={2}>
+                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
                                     {familyDetail.scheduleSlots.map((slot, idx) => (
                                         <Grid item xs={12} key={idx}>
-                                            <Typography variant="body2" sx={{ ml: 2 }}>
-                                                • {slot.time} {slot.note && (`(${slot.note})`)}
+                                            <Typography variant="body2">
+                                                • {slot.time} {slot.note && `(${slot.note})`}
                                             </Typography>
                                         </Grid>
                                     ))}
@@ -1586,40 +1635,6 @@ const RolesManagementPage = () => {
                                 </Grid>
                             </>
                         )}
-
-                        {/* Piloto => horarios */}
-                        {Number(selectedUser?.roleId) === 5 && (
-                            <>
-                                <Typography variant="h6" sx={{ mt: 3 }}>
-                                    Horarios Disponibles del Colegio
-                                </Typography>
-                                {availablePilotSchedules.length === 0 ? (
-                                    <Typography variant="body2" color="textSecondary">
-                                        No hay horarios disponibles o no se han cargado.
-                                    </Typography>
-                                ) : (
-                                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
-                                        {availablePilotSchedules.map((slot, idx) => {
-                                            const checked = !!selectedPilotSchedules.find(
-                                                s => s.day === slot.day && s.time === slot.time
-                                            );
-                                            return (
-                                                <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
-                                                    <Checkbox
-                                                        checked={checked}
-                                                        onChange={() => handleTogglePilotSchedule(slot.day, slot.time)}
-                                                        color="primary"
-                                                    />
-                                                    <span>{`${slot.day} - ${slot.time}`}</span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </>
-                        )}
-
-                        {/* Supervisor => Pilotos a cargo */}
                         {Number(selectedUser?.roleId) === 6 && (
                             <>
                                 <Typography variant="h6" sx={{ mt: 3 }}>
@@ -1628,11 +1643,21 @@ const RolesManagementPage = () => {
                                 <Typography variant="body2" color="textSecondary">
                                     Selecciona uno o más pilotos que estarán a cargo de este Supervisor.
                                 </Typography>
-                                <SupervisorPilotsList
-                                    allPilots={allPilots}
-                                    selectedSupervisorPilots={selectedSupervisorPilots}
-                                    onToggle={handleToggleSupervisorPilot}
-                                />
+                                <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
+                                    {allPilots.map((pilot) => {
+                                        const checked = selectedSupervisorPilots.includes(pilot.id);
+                                        return (
+                                            <div key={pilot.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                                                <Checkbox
+                                                    checked={checked}
+                                                    onChange={() => handleToggleSupervisorPilot(pilot.id)}
+                                                    color="primary"
+                                                />
+                                                <span>{pilot.name} (ID: {pilot.id})</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </>
                         )}
                     </Grid>
@@ -1647,7 +1672,7 @@ const RolesManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Diálogo para Carga Masiva */}
+            {/* Diálogo Carga Masiva */}
             <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
                 <DialogTitle>Carga Masiva de Usuarios</DialogTitle>
                 <DialogContent>
@@ -1667,12 +1692,7 @@ const RolesManagementPage = () => {
                         </Button>
                         <Button variant="outlined" component="label" startIcon={<FileUpload />}>
                             Seleccionar Archivo
-                            <input
-                                type="file"
-                                hidden
-                                onChange={handleFileChange}
-                                accept=".xlsx, .xls, .csv"
-                            />
+                            <input type="file" hidden onChange={handleFileChange} accept=".xlsx, .xls, .csv" />
                         </Button>
                         {bulkFile && (
                             <Typography variant="body2" sx={{ mt: 1 }}>
@@ -1712,12 +1732,7 @@ const RolesManagementPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
-                    <Button
-                        onClick={handleUploadBulk}
-                        variant="contained"
-                        color="primary"
-                        disabled={!bulkFile || bulkLoading}
-                    >
+                    <Button onClick={handleUploadBulk} variant="contained" color="primary" disabled={!bulkFile || bulkLoading}>
                         Subir
                     </Button>
                 </DialogActions>
@@ -1728,23 +1743,44 @@ const RolesManagementPage = () => {
                 open={openCircularModal}
                 onClose={() => setOpenCircularModal(false)}
                 schools={schools}
-                onSuccess={() => {
-                    // Opcional: lógica luego de enviar la circular
-                }}
+                onSuccess={() => {}}
             />
 
-            {/* Snackbar */}
+            {/* Submodal para asignar buses al padre */}
+            {selectedUser && (
+                <AssignBusesModal
+                    open={assignBusesOpen}
+                    onClose={() => setAssignBusesOpen(false)}
+                    parentUser={selectedUser}
+                    buses={buses}
+                    contracts={contracts}
+                    onSaveSuccess={async () => {
+                        fetchUsers();
+                    }}
+                />
+            )}
+
+            {/* Diálogo para envío manual de contrato */}
+            {openSendContractDialog && selectedUserForManualSend && (
+                <SendContractDialog
+                    open={openSendContractDialog}
+                    onClose={() => setOpenSendContractDialog(false)}
+                    user={selectedUserForManualSend}
+                    contracts={contracts}
+                    onSent={() => {
+                        setSnackbar({ open: true, message: 'Contrato enviado manualmente.', severity: 'success' });
+                        fetchUsers();
+                    }}
+                />
+            )}
+
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={6000}
                 onClose={() => setSnackbar({ ...snackbar, open: false })}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
+                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
                     {snackbar.message}
                 </Alert>
             </Snackbar>

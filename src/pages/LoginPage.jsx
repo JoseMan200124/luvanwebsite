@@ -221,7 +221,7 @@ const LoginPage = () => {
                 <LeftSection>
                     <Title variant="h4">Transportes Luvan</Title>
                     <Slogan variant="subtitle1">
-                        Soluciones de Transporte Escolar Seguras y Confiables
+                        Soluciones de Transporte Seguras y Confiables
                     </Slogan>
                 </LeftSection>
 

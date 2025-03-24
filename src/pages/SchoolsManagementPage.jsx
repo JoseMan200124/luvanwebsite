@@ -426,9 +426,11 @@ const SchoolsManagementPage = () => {
     };
 
     // ────── Horarios ──────────────────────────────────────────
+    // [ADDED] Ahora cada horario tendrá también un "name"
     const handleAddSchedule = () => {
-        setSchoolSchedules((prev) => [...prev, { day: '', times: [''] }]);
+        setSchoolSchedules((prev) => [...prev, { day: '', name: '', times: [''] }]);
     };
+
     const handleRemoveSchedule = (scheduleIndex) => {
         setSchoolSchedules((prev) => {
             const newArr = [...prev];
@@ -436,6 +438,17 @@ const SchoolsManagementPage = () => {
             return newArr;
         });
     };
+
+    // [ADDED] Manejar cambio en el nombre del horario
+    const handleScheduleNameChange = (e, scheduleIndex) => {
+        const { value } = e.target;
+        setSchoolSchedules((prev) => {
+            const clone = [...prev];
+            clone[scheduleIndex].name = value;
+            return clone;
+        });
+    };
+
     const handleScheduleDayChange = (e, scheduleIndex) => {
         const { value } = e.target;
         setSchoolSchedules((prev) => {
@@ -444,6 +457,7 @@ const SchoolsManagementPage = () => {
             return clone;
         });
     };
+
     const handleAddTime = (scheduleIndex) => {
         setSchoolSchedules((prev) => {
             const clone = [...prev];
@@ -451,6 +465,7 @@ const SchoolsManagementPage = () => {
             return clone;
         });
     };
+
     const handleRemoveTime = (scheduleIndex, timeIndex) => {
         setSchoolSchedules((prev) => {
             const clone = [...prev];
@@ -458,6 +473,7 @@ const SchoolsManagementPage = () => {
             return clone;
         });
     };
+
     const handleTimeChange = (e, scheduleIndex, timeIndex) => {
         const { value } = e.target;
         setSchoolSchedules((prev) => {
@@ -471,6 +487,7 @@ const SchoolsManagementPage = () => {
     const handleAddGrade = () => {
         setSchoolGrades((prev) => [...prev, { name: '' }]);
     };
+
     const handleRemoveGrade = (gradeIndex) => {
         setSchoolGrades((prev) => {
             const newArr = [...prev];
@@ -478,6 +495,7 @@ const SchoolsManagementPage = () => {
             return newArr;
         });
     };
+
     const handleGradeChange = (e, gradeIndex) => {
         const { value } = e.target;
         setSchoolGrades((prev) => {
@@ -494,6 +512,7 @@ const SchoolsManagementPage = () => {
             { fieldName: '', type: 'text', required: false }
         ]);
     };
+
     const handleRemoveExtraField = (index) => {
         setSchoolExtraFields((prev) => {
             const clone = [...prev];
@@ -501,6 +520,7 @@ const SchoolsManagementPage = () => {
             return clone;
         });
     };
+
     const handleChangeExtraField = (index, field, value) => {
         setSchoolExtraFields((prev) => {
             const clone = [...prev];
@@ -543,7 +563,7 @@ const SchoolsManagementPage = () => {
                 contactPerson: selectedSchool.contactPerson,
                 contactEmail: selectedSchool.contactEmail,
                 contactPhone: selectedSchool.contactPhone,
-                schedules: schoolSchedules,
+                schedules: schoolSchedules, // aquí va el nuevo campo "name" dentro de cada horario
                 grades: schoolGrades,
                 transportFeeComplete:
                     Number(selectedSchool.transportFeeComplete) || 0.0,
@@ -1259,6 +1279,19 @@ const SchoolsManagementPage = () => {
                                     <Delete />
                                 </IconButton>
                             </div>
+
+                            {/* [ADDED] Nuevo campo para el nombre del horario */}
+                            <TextField
+                                margin="dense"
+                                name="scheduleName"
+                                label="Nombre del Horario"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={sch.name}
+                                onChange={(e) => handleScheduleNameChange(e, scheduleIndex)}
+                            />
+
                             <TextField
                                 margin="dense"
                                 name="day"

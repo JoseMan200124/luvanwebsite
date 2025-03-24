@@ -7,7 +7,7 @@ import NotificationsMenu from './NotificationsMenu';
 import { AuthContext } from '../context/AuthProvider';
 
 const ProtectedLayout = () => {
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { auth } = useContext(AuthContext);
 
     const handleToggleSidebar = () => {

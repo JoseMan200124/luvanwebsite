@@ -86,27 +86,27 @@ const LandingPage = () => {
         }
     ];
 
-    // Arreglo de Servicios
+    // Arreglo de Servicios (actualizado según la imagen)
     const services = [
         {
             iconName: 'DirectionsBus',
             title: 'Transporte Escolar',
-            description: 'Servicio de transporte seguro y confiable para estudiantes.'
+            description: 'Brindamos un servicio de transporte seguro y confiable para estudiantes, con unidades monitoreadas y personal capacitado, garantizando tranquilidad para los padres y colegios.'
+        },
+        {
+            iconName: 'BusinessCenter',
+            title: 'Transporte Corporativo y Empresarial',
+            description: 'Ofrecemos soluciones de movilidad eficientes para el traslado de colaboradores, optimizando rutas y tiempos para mejorar la productividad de tu empresa.'
         },
         {
             iconName: 'TravelExplore',
             title: 'Excursiones',
-            description: 'Organización y coordinación de excursiones para colegios y grupos.'
+            description: 'Organizamos y coordinamos excursiones con cobertura a nivel nacional, asegurando comodidad y seguridad en cada viaje.'
         },
         {
             iconName: 'Event',
             title: 'Eventos Privados',
-            description: 'Shuttle service para eventos, garantizando comodidad y puntualidad.'
-        },
-        {
-            iconName: 'Groups',
-            title: 'Rutas para Empleados',
-            description: 'Rutas diseñadas para facilitar el traslado de empleados en call centers.'
+            description: 'Servicio de transporte para eventos especiales, incluyendo shuttles para actividades recreativas, fiestas, cumpleaños y más, con total comodidad y puntualidad.'
         }
     ];
 
@@ -163,7 +163,7 @@ const LandingPage = () => {
                     <Typography variant="h4" align="center" sx={{ mb: '50px' }}>
                         ¿Por qué elegirnos?
                     </Typography>
-                    <Grid container spacing={6} justifyContent="center">
+                    <Grid container spacing={6} justifyContent="center" alignItems="stretch">
                         {keyPoints.map((point, index) => (
                             <Grid item xs={12} sm={6} md={4} key={index}>
                                 <ServiceCard
@@ -183,9 +183,15 @@ const LandingPage = () => {
                     <Typography variant="h4" align="center" sx={{ mb: '50px' }}>
                         Nuestros Servicios
                     </Typography>
-                    <Grid container spacing={6} justifyContent="center">
+                    <Grid
+                        container
+                        spacing={6}
+                        justifyContent="center"
+                        alignItems="stretch"
+                    >
                         {services.map((service, index) => (
-                            <Grid item xs={12} sm={6} md={3} key={index}>
+                            // Cambiado a md={6} para que sean más anchos (2 columnas en pantallas medianas+)
+                            <Grid item xs={12} sm={6} md={6} key={index}>
                                 <ServiceCard
                                     iconName={service.iconName}
                                     title={service.title}

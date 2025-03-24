@@ -15,25 +15,25 @@ import PaymentStatusesChart from '../components/dashboard/PaymentStatusesChart';
 import Filters from '../components/dashboard/Filters';
 import api from '../utils/axiosConfig';
 
-// Styled container
+// Contenedor principal del dashboard
 const DashboardContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
-// Header style for the top of the page
+// Encabezado del dashboard
 const Header = styled.div`
     ${tw`flex flex-col md:flex-row items-center justify-between mb-8`}
 `;
 
-// Title for the dashboard
+// Título del dashboard
 const Title = tw.h1`text-3xl font-bold text-gray-800`;
 
-// A grid for the top stats cards
+// Grid para las tarjetas de indicadores
 const StatsGrid = tw.div`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8`;
 
-// A grid for the bottom charts
+// Grid para las gráficas
 const ChartsGrid = tw.div`grid grid-cols-1 lg:grid-cols-2 gap-6`;
 
 const Dashboard = () => {
-    // Filtros
+    // Estado de filtros
     const [filters, setFilters] = useState({
         colegio: '',
         mes: '',
@@ -41,21 +41,21 @@ const Dashboard = () => {
         fechaFin: ''
     });
 
-    // States donde guardamos data
+    // Estados para guardar los datos de cada indicador
     const [outstandingPayments, setOutstandingPayments] = useState([]);
     const [latePayments, setLatePayments] = useState([]);
     const [totalRoutesCompleted, setTotalRoutesCompleted] = useState(0);
     const [paymentStatuses, setPaymentStatuses] = useState([]);
     const [incidents, setIncidents] = useState([]);
 
-    // Loading / error
+    // Estados de carga y error
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Ref para generar PDF
+    // Referencia para generar PDF
     const reportRef = useRef();
 
-    // Construye query string
+    // Construye el query string según los filtros aplicados
     const buildQueryString = () => {
         const queryParams = new URLSearchParams();
         if (filters.colegio) queryParams.append('colegio', filters.colegio);
@@ -63,11 +63,10 @@ const Dashboard = () => {
         if (filters.fechaInicio) queryParams.append('fechaInicio', filters.fechaInicio);
         if (filters.fechaFin) queryParams.append('fechaFin', filters.fechaFin);
 
-        const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
-        return qs;
+        return queryParams.toString() ? `?${queryParams.toString()}` : '';
     };
 
-    // Llama a la API
+    // Función para llamar a la API y obtener los datos
     const fetchData = async () => {
         setLoading(true);
         setError(null);
@@ -88,14 +87,33 @@ const Dashboard = () => {
                 api.get(`/reports/incidents-per-pilot${qs}`)
             ]);
 
-            setOutstandingPayments(outstandingPaymentsRes.data.outstandingPayments || []);
-            setLatePayments(latePaymentsRes.data.latePayments || []);
-            setTotalRoutesCompleted(totalRoutesRes.data.totalRoutesCompleted || 0);
-            setPaymentStatuses(paymentStatusesRes.data.paymentStatuses || []);
-            setIncidents(incidentsRes.data.incidents || []);
+            const op = outstandingPaymentsRes.data.outstandingPayments || [];
+            const lp = latePaymentsRes.data.latePayments || [];
+            const trc = totalRoutesRes.data.totalRoutesCompleted || 0;
+            const ps = paymentStatusesRes.data.paymentStatuses || [];
+            const inc = incidentsRes.data.incidents || [];
+
+            setOutstandingPayments(op);
+            setLatePayments(lp);
+            setTotalRoutesCompleted(trc);
+            setPaymentStatuses(ps);
+            setIncidents(inc);
+
+            // Si ninguno de los indicadores tiene datos, se notifica "No hay datos"
+            if (op.length === 0 && lp.length === 0 && trc === 0 && ps.length === 0 && inc.length === 0) {
+                setError("No hay datos");
+            } else {
+                setError(null);
+            }
         } catch (err) {
-            console.error('Error fetching data:', err);
-            setError('Error al obtener datos de indicadores. Intenta de nuevo más tarde.');
+            console.error('Error al obtener datos:', err);
+            // En caso de error, se limpian los datos y se notifica "No hay datos"
+            setOutstandingPayments([]);
+            setLatePayments([]);
+            setTotalRoutesCompleted(0);
+            setPaymentStatuses([]);
+            setIncidents([]);
+            setError("No hay datos");
         } finally {
             setLoading(false);
         }
@@ -106,7 +124,7 @@ const Dashboard = () => {
         fetchData();
     }, []);
 
-    // Genera PDF
+    // Función para generar PDF del reporte
     const generatePDF = () => {
         const input = reportRef.current;
         if (!input) return;
@@ -123,7 +141,7 @@ const Dashboard = () => {
         });
     };
 
-    // Resetea los filtros
+    // Función para resetear los filtros y recargar los datos
     const handleResetFilters = () => {
         setFilters({
             colegio: '',
@@ -138,7 +156,7 @@ const Dashboard = () => {
 
     return (
         <DashboardContainer>
-            {/* Header */}
+            {/* Encabezado */}
             <Header>
                 <Title>Dashboard</Title>
                 <div tw="flex space-x-4">
@@ -151,43 +169,23 @@ const Dashboard = () => {
             {/* Filtros */}
             <Filters filters={filters} setFilters={setFilters} />
 
-            {/* Botones Filtrar/Reset */}
+            {/* Botones de Filtrar y Resetear */}
             <div tw="mb-4 flex space-x-3">
-                <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={fetchData}
-                >
+                <Button variant="contained" color="primary" onClick={fetchData}>
                     Filtrar
                 </Button>
-
-                <Button
-                    variant="outlined"
-                    color="secondary"
-                    onClick={handleResetFilters}
-                >
+                <Button variant="outlined" color="secondary" onClick={handleResetFilters}>
                     Resetear
                 </Button>
             </div>
 
-            {/* Loading / Error / Dashboard */}
+            {/* Se muestra spinner mientras se cargan los datos; en caso contrario, se renderiza el contenido del dashboard */}
             {loading ? (
                 <div tw="flex justify-center items-center h-64">
                     <CircularProgress />
                 </div>
-            ) : error ? (
-                <Snackbar
-                    open={Boolean(error)}
-                    autoHideDuration={6000}
-                    onClose={() => setError(null)}
-                >
-                    <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
-                        {error}
-                    </Alert>
-                </Snackbar>
             ) : (
                 <div ref={reportRef}>
-                    {/* Tarjetas */}
                     <StatsGrid>
                         <StatsCard
                             title="Pagos Pendientes (Q)"
@@ -206,7 +204,6 @@ const Dashboard = () => {
                         />
                     </StatsGrid>
 
-                    {/* Gráficas */}
                     <ChartsGrid>
                         <OutstandingPaymentsChart data={outstandingPayments} />
                         <LatePaymentsChart data={latePayments} />
@@ -215,6 +212,19 @@ const Dashboard = () => {
                         <PaymentStatusesChart data={paymentStatuses} />
                     </ChartsGrid>
                 </div>
+            )}
+
+            {/* Notificación: Si ocurre algún error o no se obtuvieron datos, se muestra "No hay datos" */}
+            {error && (
+                <Snackbar
+                    open={Boolean(error)}
+                    autoHideDuration={6000}
+                    onClose={() => setError(null)}
+                >
+                    <Alert onClose={() => setError(null)} severity="info" sx={{ width: '100%' }}>
+                        {error}
+                    </Alert>
+                </Snackbar>
             )}
         </DashboardContainer>
     );

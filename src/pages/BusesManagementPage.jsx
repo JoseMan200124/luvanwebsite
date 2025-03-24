@@ -35,7 +35,8 @@ import {
     Switch,
     useTheme,
     useMediaQuery,
-    TableSortLabel
+    TableSortLabel,
+    Checkbox
 } from '@mui/material';
 import {
     Edit,
@@ -50,7 +51,6 @@ import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 
-// Estilo general del contenedor
 const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 /**
@@ -67,9 +67,7 @@ const getFormattedDateTime = () => {
     return `${year}${month}${day}_${hours}${minutes}${seconds}`;
 };
 
-// ========================
-// Estilos para vista desktop (tabla)
-// ========================
+// ======== Estilos para vista desktop (tabla) ========
 const ResponsiveTableHead = styled(TableHead)`
     @media (max-width: 600px) {
         display: none;
@@ -96,9 +94,7 @@ const ResponsiveTableCell = styled(TableCell)`
     }
 `;
 
-// ========================
-// Estilos para vista móvil (tarjetas)
-// ========================
+// ======== Estilos para vista móvil (tarjetas) ========
 const MobileCard = styled(Paper)`
     padding: 16px;
     margin-bottom: 16px;
@@ -195,11 +191,11 @@ const BusesManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // Pilotos y Monitores disponibles
+    // Pilotos y Monitores
     const [availablePilots, setAvailablePilots] = useState([]);
     const [availableMonitors, setAvailableMonitors] = useState([]);
 
-    // Horarios del colegio (según el piloto seleccionado)
+    // Horarios disponibles (según el colegio del piloto)
     const [availableSchedules, setAvailableSchedules] = useState([]);
 
     // Carga masiva
@@ -208,19 +204,17 @@ const BusesManagementPage = () => {
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
 
-    // =================== Estados para ordenamiento ===================
+    // Ordenamiento
     const [order, setOrder] = useState('asc');
     const [orderBy, setOrderBy] = useState('');
 
+    // =================== Efectos y funciones ===================
     const handleRequestSort = (property) => {
         const isAsc = orderBy === property && order === 'asc';
         setOrder(isAsc ? 'desc' : 'asc');
         setOrderBy(property);
     };
 
-    /**
-     * Cargar lista de Buses
-     */
     const fetchBuses = async () => {
         setLoading(true);
         try {
@@ -241,9 +235,6 @@ const BusesManagementPage = () => {
         }
     };
 
-    /**
-     * Cargar lista de pilotos y monitores
-     */
     const fetchPilots = async () => {
         try {
             const response = await api.get('/users/pilots', {
@@ -273,9 +264,6 @@ const BusesManagementPage = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [auth.token]);
 
-    /**
-     * Obtiene los horarios del colegio (school) asignado a un piloto específico
-     */
     const fetchSchedulesByPilot = async (pilotId) => {
         try {
             const pilot = availablePilots.find((p) => p.id === pilotId);
@@ -303,9 +291,7 @@ const BusesManagementPage = () => {
         }
     };
 
-    /**
-     * Abrir diálogo para crear un nuevo bus
-     */
+    // =================== CRUD Buses ===================
     const handleAddBus = () => {
         setSelectedBus({
             plate: '',
@@ -316,15 +302,12 @@ const BusesManagementPage = () => {
             routeNumber: '',
             files: [],
             inWorkshop: false,
-            schedule: null
+            schedule: [] // <-- Array de varios horarios
         });
-        setAvailableSchedules([]); // reseteamos horarios
+        setAvailableSchedules([]);
         setOpenDialog(true);
     };
 
-    /**
-     * Seleccionar un bus para editarlo
-     */
     const handleEditClick = (bus) => {
         setSelectedBus({
             id: bus.id,
@@ -336,7 +319,8 @@ const BusesManagementPage = () => {
             routeNumber: bus.routeNumber || '',
             files: bus.files || [],
             inWorkshop: bus.inWorkshop || false,
-            schedule: bus.schedule || null
+            // schedule ahora será un array, si es null lo convertimos en []
+            schedule: Array.isArray(bus.schedule) ? bus.schedule : (bus.schedule ? [bus.schedule] : [])
         });
         if (bus.pilotId) {
             fetchSchedulesByPilot(bus.pilotId);
@@ -346,9 +330,6 @@ const BusesManagementPage = () => {
         setOpenDialog(true);
     };
 
-    /**
-     * Eliminar un bus
-     */
     const handleDeleteClick = async (busId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este bus?')) {
             try {
@@ -372,17 +353,11 @@ const BusesManagementPage = () => {
         }
     };
 
-    /**
-     * Cerrar diálogo
-     */
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedBus(null);
     };
 
-    /**
-     * Manejar cambios en el formulario
-     */
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setSelectedBus((prev) => ({
@@ -392,14 +367,14 @@ const BusesManagementPage = () => {
     };
 
     /**
-     * Manejar cambio específico del piloto para cargar horarios del colegio
+     * Al cambiar piloto, recargamos horarios
      */
     const handlePilotChange = async (e) => {
         const pilotId = e.target.value ? parseInt(e.target.value, 10) : '';
         setSelectedBus((prev) => ({
             ...prev,
             pilotId,
-            schedule: null
+            schedule: [] // Resetear la selección de horarios
         }));
         if (pilotId) {
             await fetchSchedulesByPilot(pilotId);
@@ -409,23 +384,15 @@ const BusesManagementPage = () => {
     };
 
     /**
-     * Manejar selección del horario
+     * NUEVA forma de manejar la MULTI-SELECCIÓN de horarios:
+     * Guardamos la estructura completa { day, times, name } en selectedBus.schedule.
      */
     const handleScheduleChange = (e) => {
-        const value = e.target.value;
-        if (!value) {
-            setSelectedBus((prev) => ({ ...prev, schedule: null }));
-            return;
-        }
-        const selected = availableSchedules.find((sch) => {
-            return `${sch.day}-${(sch.times || []).join(',')}` === value;
-        });
-        setSelectedBus((prev) => ({ ...prev, schedule: selected || null }));
+        // e.target.value será un array de strings, cada string es la representación JSON de un horario
+        const newSchedules = e.target.value.map((val) => JSON.parse(val));
+        setSelectedBus((prev) => ({ ...prev, schedule: newSchedules }));
     };
 
-    /**
-     * Manejar archivos subidos
-     */
     const handleFileChange = (e) => {
         const files = e.target.files;
         const maxSize = 5 * 1024 * 1024; // 5MB
@@ -451,9 +418,6 @@ const BusesManagementPage = () => {
         }));
     };
 
-    /**
-     * Guardar el bus (crear o actualizar)
-     */
     const handleSave = async () => {
         try {
             const formData = new FormData();
@@ -470,7 +434,8 @@ const BusesManagementPage = () => {
                 formData.append('monitoraId', selectedBus.monitoraId);
             }
 
-            if (selectedBus.schedule) {
+            // schedule es un array, lo guardamos en JSON
+            if (selectedBus.schedule && Array.isArray(selectedBus.schedule)) {
                 formData.append('schedule', JSON.stringify(selectedBus.schedule));
             }
 
@@ -520,9 +485,6 @@ const BusesManagementPage = () => {
         }
     };
 
-    /**
-     * Eliminar un archivo específico de un bus
-     */
     const handleDeleteFile = async (busId, fileId) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este archivo?')) {
             try {
@@ -546,23 +508,15 @@ const BusesManagementPage = () => {
         }
     };
 
-    /**
-     * Cerrar Snackbar
-     */
     const handleSnackbarClose = () => {
         setSnackbar({ ...snackbar, open: false });
     };
 
-    /**
-     * Manejar búsqueda
-     */
+    // =================== Búsqueda y filtros ===================
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
     };
 
-    /**
-     * Filtrar buses
-     */
     const filteredBuses = buses.filter((bus) => {
         const inPlate = bus.plate.toLowerCase().includes(searchQuery.toLowerCase());
         const inDesc =
@@ -572,9 +526,7 @@ const BusesManagementPage = () => {
         return inPlate || inDesc || inRouteNumber;
     });
 
-    /**
-     * Paginación
-     */
+    // =================== Paginación ===================
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
     };
@@ -641,9 +593,10 @@ const BusesManagementPage = () => {
 
     const downloadFilename = `buses_template_${getFormattedDateTime()}.xlsx`;
 
-    // Aplicamos el ordenamiento a la lista filtrada
+    // Aplicar ordenamiento
     const sortedBuses = stableSort(filteredBuses, getComparator(order, orderBy));
 
+    // =================== RENDER ===================
     return (
         <BusesContainer>
             <Typography variant="h4" gutterBottom>
@@ -927,7 +880,10 @@ const BusesManagementPage = () => {
                                                             'Disponible'
                                                         )}
                                                     </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Archivos" sx={{ maxWidth: 200, verticalAlign: 'top' }}>
+                                                    <ResponsiveTableCell
+                                                        data-label="Archivos"
+                                                        sx={{ maxWidth: 200, verticalAlign: 'top' }}
+                                                    >
                                                         <List disablePadding>
                                                             {bus.files.map((file) => {
                                                                 const fileLabel = file.fileName.split('/').pop();
@@ -1104,27 +1060,43 @@ const BusesManagementPage = () => {
                         </Select>
                     </FormControl>
 
-                    {/* Selección del horario */}
+                    {/* MULTI-SELECCIÓN de horarios con day, times, name */}
                     <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
-                        <InputLabel>Horario</InputLabel>
+                        <InputLabel>Horarios (puede seleccionar varios)</InputLabel>
                         <Select
+                            multiple
                             name="schedule"
                             value={
                                 selectedBus?.schedule
-                                    ? `${selectedBus.schedule.day}-${(selectedBus.schedule.times || []).join(',')}`
-                                    : ''
+                                    ? selectedBus.schedule.map((sch) => JSON.stringify(sch))
+                                    : []
                             }
                             onChange={handleScheduleChange}
+                            renderValue={(selected) =>
+                                selected
+                                    .map((val) => {
+                                        const sch = JSON.parse(val);
+                                        return `${sch.name} - ${sch.day} - ${sch.times.join(', ')}`;
+                                    })
+                                    .join(', ')
+                            }
                         >
-                            <MenuItem value="">
-                                <em>Ninguno</em>
-                            </MenuItem>
                             {availableSchedules.map((sch, idx) => {
-                                const valueKey = `${sch.day}-${(sch.times || []).join(',')}`;
-                                const label = `${sch.day} - ${(sch.times || []).join(', ')}`;
+                                const valueKey = JSON.stringify(sch);
+                                const label = `${sch.name} - ${sch.day} - ${(sch.times || []).join(', ')}`;
+                                const isChecked = selectedBus?.schedule
+                                    ? selectedBus.schedule.some(
+                                        (s) =>
+                                            s.name === sch.name &&
+                                            s.day === sch.day &&
+                                            JSON.stringify(s.times) === JSON.stringify(sch.times)
+                                    )
+                                    : false;
+
                                 return (
                                     <MenuItem key={idx} value={valueKey}>
-                                        {label}
+                                        <Checkbox checked={isChecked} />
+                                        <ListItemText primary={label} />
                                     </MenuItem>
                                 );
                             })}
@@ -1167,6 +1139,7 @@ const BusesManagementPage = () => {
                         <List sx={{ mt: 2 }}>
                             {[...selectedBus.files].map((file, index) => {
                                 if (file.id) {
+                                    // Archivos que ya existen en el servidor
                                     return (
                                         <ListItem key={file.id} disableGutters>
                                             {file.fileType === 'application/pdf' ? (
@@ -1182,6 +1155,7 @@ const BusesManagementPage = () => {
                                         </ListItem>
                                     );
                                 } else {
+                                    // Archivos recién seleccionados (File objeto en memoria)
                                     return (
                                         <ListItem key={index} disableGutters>
                                             {file.type === 'application/pdf' ? (

@@ -186,34 +186,32 @@ function getFieldValue(payment, field) {
 }
 /* ========== Fin código para ordenamiento ========== */
 
+
 const PaymentsManagementPage = () => {
     const { auth } = useContext(AuthContext);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    // Estados generales
-    const [payments, setPayments] = useState([]);
+    // Listado de colegios (para renderizar la tabla de cada uno).
     const [schools, setSchools] = useState([]);
-    const [filteredPayments, setFilteredPayments] = useState([]);
 
-    // Filtros de la tabla principal
+    // Objeto con data por colegio => {
+    //   [schoolId]: {
+    //     payments: [],
+    //     totalCount: 0,
+    //     page: 0,
+    //     rowsPerPage: 10,
+    //     order: 'asc',
+    //     orderBy: '',
+    //     filteredPayments: []
+    //   }
+    // }
+    const [schoolPaymentsData, setSchoolPaymentsData] = useState({});
+
+    // Filtros globales
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
-    const [schoolFilter, setSchoolFilter] = useState('');
-
-    // Paginación
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
-
-    // Ordenamiento
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('');
-
-    const handleRequestSort = (property) => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
-    };
+    const [schoolFilter, setSchoolFilter] = useState(''); // El "colegio (análisis)" que ya existía
 
     // Estados para mora global
     const [globalDailyPenalty, setGlobalDailyPenalty] = useState(10);
@@ -274,11 +272,10 @@ const PaymentsManagementPage = () => {
     const [analysisSchoolId, setAnalysisSchoolId] = useState('');
     const [combinedEarnings, setCombinedEarnings] = useState([]);
 
-    // Indicadores adicionales
+    // Indicadores para la sección de análisis
     const pagadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PAGADO')?.count || 0;
     const moraCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'MORA')?.count || 0;
     const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
-    const totalFamilies = analysisData?.totalPayments || 0;
     const currentMonthEarnings = combinedEarnings.find(item =>
         item.year === moment().year() && item.month === (moment().month() + 1)
     )?.total || 0;
@@ -321,7 +318,10 @@ const PaymentsManagementPage = () => {
                 severity: 'success'
             });
             handleCloseExonerateDialog();
-            fetchPayments();
+
+            // Volvemos a recargar la tabla del colegio de ese pago
+            const schId = exoneratePayment.schoolId || 'null';
+            refetchSchoolPayments(schId);
         } catch (err) {
             console.error(err);
             setSnackbar({ open: true, message: 'Error al exonerar mora', severity: 'error' });
@@ -339,7 +339,7 @@ const PaymentsManagementPage = () => {
                 message: `Se ha actualizado la opción de factura a: ${newCheckedValue ? 'Sí' : 'No'}`,
                 severity: 'success'
             });
-            fetchPayments();
+            refetchSchoolPayments(payment.schoolId);
         } catch (error) {
             console.error('Error al actualizar requerimiento de factura:', error);
             setSnackbar({
@@ -388,7 +388,7 @@ const PaymentsManagementPage = () => {
                 severity: 'success'
             });
             handleClosePaymentMethodDialog();
-            fetchPayments();
+            refetchSchoolPayments(selectedPaymentForPaymentMethod.schoolId);
         } catch (error) {
             console.error(error);
             setSnackbar({
@@ -400,33 +400,45 @@ const PaymentsManagementPage = () => {
     };
 
     // ==============================
-    // 1) Cargar data (solo se ejecuta una vez al montar)
+    // 1) Cargar data inicial
     // ==============================
     useEffect(() => {
         (async () => {
-            await fetchPayments();
-            await fetchSchools();
-            await fetchGlobalSettings();
+            await fetchSchools();         // primero obtenemos todos los colegios
+            await fetchGlobalSettings();  // para dailyPenalty
             await fetchPaymentsAnalysis('');
         })();
     }, []);
 
-    const fetchPayments = async () => {
-        try {
-            const res = await api.get('/payments');
-            const arr = res.data.payments || [];
-            setPayments(arr);
-            setFilteredPayments(arr);
-        } catch (error) {
-            console.error("fetchPayments: Error obteniendo pagos:", error);
-            setSnackbar({ open: true, message: 'Error al obtener pagos', severity: 'error' });
-        }
-    };
-
     const fetchSchools = async () => {
         try {
             const res = await api.get('/schools');
-            setSchools(res.data.schools || []);
+            const all = res.data.schools || [];
+
+            // Creamos un objeto inicial para schoolPaymentsData:
+            const initialData = {};
+            all.forEach((sch) => {
+                initialData[sch.id] = {
+                    payments: [],
+                    totalCount: 0,
+                    page: 0,
+                    rowsPerPage: 10,
+                    order: 'asc',
+                    orderBy: '',
+                    filteredPayments: []
+                };
+            });
+
+            setSchools(all);
+            setSchoolPaymentsData(initialData);
+
+            // Inmediatamente podemos hacer la primera carga de cada colegio:
+            all.forEach((sch) => {
+                // Si deseas NO cargar todas las tablas simultáneamente,
+                // podrías comentar esto y cargar bajo demanda. Pero aquí
+                // lo hacemos directo.
+                fetchPaymentsForSchool(sch.id, 0, 10);
+            });
         } catch (error) {
             console.error("fetchSchools: Error obteniendo colegios:", error);
         }
@@ -446,102 +458,110 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // Función para traer análisis de pagos normales
-    const fetchPaymentsAnalysis = async (schId) => {
-        try {
-            const params = {};
-            if (schId && schId !== '') {
-                params.schoolId = schId;
-            }
-            const res = await api.get('/payments/analysis', { params });
-            setAnalysisData(res.data);
-        } catch (error) {
-            console.error("fetchPaymentsAnalysis: Error =>", error);
-            setAnalysisData(null);
-        }
-    };
-
-    // Función para traer análisis de pagos extraordinarios
-    const fetchExtraordinaryEarnings = async () => {
-        try {
-            const res = await api.get('/payments/extraordinary/analysis');
-            return res.data.monthlyEarnings || [];
-        } catch (error) {
-            console.error('Error al obtener análisis de pagos extraordinarios:', error);
-            return [];
-        }
-    };
-
-    // UseEffect para combinar ganancias una vez que analysisData cambie
-    useEffect(() => {
-        (async () => {
-            const extra = await fetchExtraordinaryEarnings();
-            const normal = analysisData?.monthlyEarnings || [];
-            const combined = combineEarnings(normal, extra);
-            setCombinedEarnings(combined);
-        })();
-    }, [analysisData]);
-
-    const combineEarnings = (normalEarnings, extraEarnings) => {
-        const map = {};
-        normalEarnings.forEach(item => {
-            const key = `${item.year}-${item.month}`;
-            map[key] = (map[key] || 0) + item.total;
-        });
-        extraEarnings.forEach(item => {
-            const key = `${item.year}-${item.month}`;
-            map[key] = (map[key] || 0) + item.total;
-        });
-        const combined = Object.keys(map).map(key => {
-            const [year, month] = key.split('-').map(Number);
-            return { year, month, total: map[key] };
-        });
-        combined.sort((a, b) => (a.year - b.year) || (a.month - b.month));
-        return combined;
-    };
-
-    const fetchHasUnreadReceipts = async (fatherId) => {
-        try {
-            const resp = await api.get(`/parents/${fatherId}/hasUnreadReceipts`);
-            return !!resp.data.hasUnread;
-        } catch (err) {
-            console.error(`fetchHasUnreadReceipts: Error para padreId ${fatherId}:`, err);
-            return false;
-        }
-    };
-
-    useEffect(() => {
-        const fatherIds = new Set();
-        payments.forEach((p) => {
-            if (p.User) fatherIds.add(p.User.id);
-        });
-        fatherIds.forEach(async (fid) => {
-            const hasUnread = await fetchHasUnreadReceipts(fid);
-            setUnreadReceiptsMap((prev) => ({ ...prev, [fid]: hasUnread }));
-        });
-    }, [payments]);
-
     // ==============================
-    // 2) Filtros (tabla principal)
+    // 2) Petición por colegio
     // ==============================
-    useEffect(() => {
-        let temp = [...payments];
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase();
+    const fetchPaymentsForSchool = async (schId, page, rpp) => {
+        try {
+            const res = await api.get('/payments', {
+                params: {
+                    schoolId: schId,
+                    page: page + 1, // backend usa base 1
+                    limit: rpp
+                }
+            });
+            const arr = res.data.payments || [];
+            const totalCount = res.data.totalCount || 0;
+
+            setSchoolPaymentsData((prev) => {
+                const next = { ...prev };
+                if (!next[schId]) {
+                    next[schId] = {
+                        payments: [],
+                        totalCount: 0,
+                        page: 0,
+                        rowsPerPage: 10,
+                        order: 'asc',
+                        orderBy: '',
+                        filteredPayments: []
+                    };
+                }
+                next[schId].payments = arr;
+                next[schId].totalCount = totalCount;
+                // Cada vez que recargamos, hay que recalcular filteredPayments localmente
+                next[schId].filteredPayments = localFilterAndSort(
+                    arr,
+                    next[schId].order,
+                    next[schId].orderBy,
+                    searchQuery,
+                    statusFilter
+                );
+                return next;
+            });
+        } catch (error) {
+            console.error(`fetchPaymentsForSchool(${schId}):`, error);
+            setSnackbar({ open: true, message: 'Error al obtener pagos', severity: 'error' });
+        }
+    };
+
+    // Pequeña función que aplica la búsqueda, el statusFilter y el ordenamiento
+    const localFilterAndSort = (paymentsArray, order, orderBy, search, statusF) => {
+        let temp = [...paymentsArray];
+
+        // Filtro por search
+        if (search.trim()) {
+            const q = search.toLowerCase();
             temp = temp.filter((p) => {
                 const nm = p.User?.name?.toLowerCase() || '';
                 const em = p.User?.email?.toLowerCase() || '';
                 return nm.includes(q) || em.includes(q);
             });
         }
-        if (statusFilter) {
-            temp = temp.filter((p) => (p.finalStatus || '').toUpperCase() === statusFilter);
+        // Filtro por status
+        if (statusF) {
+            temp = temp.filter((p) => (p.finalStatus || '').toUpperCase() === statusF);
         }
-        if (schoolFilter) {
-            temp = temp.filter((p) => p.School && String(p.School.id) === String(schoolFilter));
+
+        // Orden
+        if (orderBy) {
+            const comparator = getComparator(order, orderBy);
+            temp = stableSort(temp, comparator);
         }
-        setFilteredPayments(temp);
-    }, [payments, searchQuery, statusFilter, schoolFilter]);
+
+        return temp;
+    };
+
+    // Función para recargar (refetch) los pagos de un colegio, con la config actual
+    const refetchSchoolPayments = (schoolId) => {
+        setSchoolPaymentsData((prev) => {
+            if (!prev[schoolId]) return prev; // no existe
+            const { page, rowsPerPage } = prev[schoolId];
+            fetchPaymentsForSchool(schoolId, page, rowsPerPage);
+            return prev;
+        });
+    };
+
+    // ==============================
+    // 3) Lógica de filtros globales
+    // ==============================
+    // Cada vez que cambie searchQuery o statusFilter, recalculamos filteredPayments
+    // en cada colegio sin volver a pedir datos al backend (pues es un filtrado local).
+    useEffect(() => {
+        setSchoolPaymentsData((prev) => {
+            const updated = { ...prev };
+            Object.keys(updated).forEach((schId) => {
+                const { payments, order, orderBy } = updated[schId];
+                updated[schId].filteredPayments = localFilterAndSort(
+                    payments,
+                    order,
+                    orderBy,
+                    searchQuery,
+                    statusFilter
+                );
+            });
+            return updated;
+        });
+    }, [searchQuery, statusFilter]);
 
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
@@ -553,17 +573,8 @@ const PaymentsManagementPage = () => {
         setSchoolFilter(e.target.value);
     };
 
-    // Paginación
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
     // ==============================
-    // 3) Editar Mora Global
+    // 4) Editar Mora Global
     // ==============================
     const handleTogglePenaltyEdit = () => {
         setOpenPenaltyEdit(!openPenaltyEdit);
@@ -604,7 +615,7 @@ const PaymentsManagementPage = () => {
     };
 
     // ==============================
-    // 4) Enviar Correo
+    // 5) Enviar Correo
     // ==============================
     const handleOpenEmailDialog = (payment) => {
         setSelectedPayment(payment);
@@ -642,7 +653,7 @@ const PaymentsManagementPage = () => {
     };
 
     // ==============================
-    // 5) Editar Payment
+    // 6) Editar Payment
     // ==============================
     const handleOpenEditDialog = (pay) => {
         setEditPayment({
@@ -678,13 +689,17 @@ const PaymentsManagementPage = () => {
                 severity: 'success'
             });
             handleCloseEditDialog();
+
+            // Recargamos la tabla de ese colegio
+            const schId = editPayment.schoolId || 'null';
+            refetchSchoolPayments(schId);
         } catch (error) {
             setSnackbar({ open: true, message: 'Error al actualizar pago', severity: 'error' });
         }
     };
 
     // ==============================
-    // 6) Leyenda de colores (tabla)
+    // 7) Leyenda de colores (tabla)
     // ==============================
     const getRowColor = (pay) => {
         const st = (pay.finalStatus || '').toUpperCase();
@@ -696,16 +711,6 @@ const PaymentsManagementPage = () => {
         }
         return '#fde68a';
     };
-
-    // ==============================
-    // 7) Agrupar pagos por colegio
-    // ==============================
-    const paymentsBySchool = {};
-    filteredPayments.forEach((p) => {
-        const schName = p.School ? p.School.name : 'Sin colegio';
-        if (!paymentsBySchool[schName]) paymentsBySchool[schName] = [];
-        paymentsBySchool[schName].push(p);
-    });
 
     // ==============================
     // 8) Ver Boletas
@@ -880,7 +885,12 @@ const PaymentsManagementPage = () => {
             });
             setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
             handleCloseRegisterPayDialog();
-            fetchPayments();
+
+            // recargar la tabla correspondiente
+            if (registerPaySelected) {
+                const schId = registerPaySelected.schoolId || 'null';
+                refetchSchoolPayments(schId);
+            }
         } catch (err) {
             setSnackbar({ open: true, message: 'Error al registrar pago', severity: 'error' });
         }
@@ -905,21 +915,21 @@ const PaymentsManagementPage = () => {
     // ==============================
     const handleTogglePenaltyPausedIndividual = async (payment) => {
         const newVal = !payment.penaltyPaused;
-        const updatedPayments = payments.map((p) => {
-            if (p.id === payment.id) {
-                return { ...p, penaltyPaused: newVal };
-            }
-            return p;
+        // Optimistic update
+        setSchoolPaymentsData((prev) => {
+            const next = { ...prev };
+            const schId = payment.schoolId;
+            if (!next[schId]) return next;
+            // actualizamos payments
+            next[schId].payments = next[schId].payments.map((p) =>
+                p.id === payment.id ? { ...p, penaltyPaused: newVal } : p
+            );
+            // actualizamos filteredPayments
+            next[schId].filteredPayments = next[schId].filteredPayments.map((p) =>
+                p.id === payment.id ? { ...p, penaltyPaused: newVal } : p
+            );
+            return next;
         });
-        setPayments(updatedPayments);
-
-        const updatedFiltered = filteredPayments.map((fp) => {
-            if (fp.id === payment.id) {
-                return { ...fp, penaltyPaused: newVal };
-            }
-            return fp;
-        });
-        setFilteredPayments(updatedFiltered);
 
         setSnackbar({
             open: true,
@@ -940,21 +950,127 @@ const PaymentsManagementPage = () => {
                 message: 'Error al actualizar la pausa de mora para usuario',
                 severity: 'error'
             });
-            const revertPayments = payments.map((p) => {
-                if (p.id === payment.id) {
-                    return { ...p, penaltyPaused: payment.penaltyPaused };
-                }
-                return p;
+            // revertir cambio
+            setSchoolPaymentsData((prev) => {
+                const next = { ...prev };
+                const schId = payment.schoolId;
+                if (!next[schId]) return next;
+                next[schId].payments = next[schId].payments.map((p) =>
+                    p.id === payment.id ? { ...p, penaltyPaused: payment.penaltyPaused } : p
+                );
+                next[schId].filteredPayments = next[schId].filteredPayments.map((p) =>
+                    p.id === payment.id ? { ...p, penaltyPaused: payment.penaltyPaused } : p
+                );
+                return next;
             });
-            setPayments(revertPayments);
-            const revertFiltered = filteredPayments.map((fp) => {
-                if (fp.id === payment.id) {
-                    return { ...fp, penaltyPaused: payment.penaltyPaused };
-                }
-                return fp;
-            });
-            setFilteredPayments(revertFiltered);
         }
+    };
+
+    // ==============================
+    // 13) Manejo de orden/paginación en cada tabla
+    // ==============================
+    // Cada tabla tiene su handleRequestSort, handleChangePage, handleChangeRowsPerPage
+    const handleRequestSort = (schoolId, property) => {
+        setSchoolPaymentsData((prev) => {
+            const next = { ...prev };
+            const data = next[schoolId];
+            if (!data) return next;
+
+            const isAsc = data.orderBy === property && data.order === 'asc';
+            const newOrder = isAsc ? 'desc' : 'asc';
+
+            // Actualizamos
+            data.order = newOrder;
+            data.orderBy = property;
+
+            // Refiltramos/ordenamos
+            data.filteredPayments = localFilterAndSort(
+                data.payments,
+                data.order,
+                data.orderBy,
+                searchQuery,
+                statusFilter
+            );
+
+            next[schoolId] = { ...data };
+            return next;
+        });
+    };
+
+    const handleChangePage = (schoolId, event, newPage) => {
+        setSchoolPaymentsData((prev) => {
+            const next = { ...prev };
+            if (!next[schoolId]) return next;
+            next[schoolId].page = newPage;
+            // llamamos a backend para recargar esa page
+            fetchPaymentsForSchool(schoolId, newPage, next[schoolId].rowsPerPage);
+            return next;
+        });
+    };
+
+    const handleChangeRowsPerPage = (schoolId, event) => {
+        const newRowsPerPage = parseInt(event.target.value, 10);
+        setSchoolPaymentsData((prev) => {
+            const next = { ...prev };
+            if (!next[schoolId]) return next;
+            next[schoolId].rowsPerPage = newRowsPerPage;
+            next[schoolId].page = 0; // reseteamos a la página 0
+            // refetch
+            fetchPaymentsForSchool(schoolId, 0, newRowsPerPage);
+            return next;
+        });
+    };
+
+    // ==============================
+    // 14) Análisis de Pagos (normal + extraordinario)
+    // ==============================
+    const fetchPaymentsAnalysis = async (schId) => {
+        try {
+            const params = {};
+            if (schId && schId !== '') {
+                params.schoolId = schId;
+            }
+            const res = await api.get('/payments/analysis', { params });
+            setAnalysisData(res.data);
+        } catch (error) {
+            console.error("fetchPaymentsAnalysis: Error =>", error);
+            setAnalysisData(null);
+        }
+    };
+    const fetchExtraordinaryEarnings = async () => {
+        try {
+            const res = await api.get('/payments/extraordinary/analysis');
+            return res.data.monthlyEarnings || [];
+        } catch (error) {
+            console.error('Error al obtener análisis de pagos extraordinarios:', error);
+            return [];
+        }
+    };
+    useEffect(() => {
+        (async () => {
+            const extra = await fetchExtraordinaryEarnings();
+            const normal = analysisData?.monthlyEarnings || [];
+            const combined = combineEarnings(normal, extra);
+            setCombinedEarnings(combined);
+        })();
+    }, [analysisData]);
+
+    const combineEarnings = (normalEarnings, extraEarnings) => {
+        const map = {};
+        normalEarnings.forEach(item => {
+            const key = `${item.year}-${item.month}`;
+            map[key] = (map[key] || 0) + item.total;
+        });
+        extraEarnings.forEach(item => {
+            const key = `${item.year}-${item.month}`;
+            map[key] = (map[key] || 0) + item.total;
+        });
+        const combined = Object.keys(map).map(key => {
+            const [year, month] = key.split('-').map(Number);
+            return { year, month, total: map[key] };
+        });
+        combined.sort((a, b) => (a.year - b.year) || (a.month - b.month));
+        return combined;
     };
 
     // ==============================
@@ -1085,6 +1201,8 @@ const PaymentsManagementPage = () => {
                         <MenuItem value="MORA">Mora</MenuItem>
                     </Select>
                 </FormControl>
+                {/* Este schoolFilter lo usas para la sección de Análisis (abajo),
+                    pero aquí se mantiene para no romper tu lógica original. */}
                 <FormControl variant="outlined" size="small" style={{ width: isMobile ? '100%' : '200px' }}>
                     <InputLabel>Colegio</InputLabel>
                     <Select label="Colegio" value={schoolFilter} onChange={handleSchoolFilterChange}>
@@ -1098,20 +1216,39 @@ const PaymentsManagementPage = () => {
                 </FormControl>
             </div>
 
-            {/* Secciones por colegio (tabla de pagos) */}
-            {Object.keys(paymentsBySchool).map((schoolName) => {
-                const payArr = paymentsBySchool[schoolName];
-                const sortedPayArr = stableSort(payArr, getComparator(order, orderBy));
+            {/* Renderizar tabla de pagos para cada colegio */}
+            {schools.map((school) => {
+                const schId = school.id;
+                const data = schoolPaymentsData[schId];
+                if (!data) return null;
+
+                // array ya filtrado y ordenado localmente
+                const payArr = data.filteredPayments;
+                const page = data.page;
+                const rowsPerPage = data.rowsPerPage;
+                const totalCount = data.totalCount;
+                const order = data.order;
+                const orderBy = data.orderBy;
+
+                // Subconjunto para la vista "Mobile" => no hace slice,
+                // en este ejemplo tú decides si en mobile igual te basas en page.
+                // Lo dejamos sin slice para que se muestre todo. O podrías slice si quieres.
+
+                // Arreglo "final" de la tabla => ya que es server side paginado,
+                // no slice local. El backend ya nos mandó solo la página actual.
+                const finalPayments = payArr;
+
                 return (
-                    <div key={schoolName} style={{ marginBottom: '40px' }}>
+                    <div key={schId} style={{ marginBottom: '40px' }}>
                         <Typography variant="h5" style={{ marginBottom: '16px' }}>
-                            {schoolName}
+                            {school.name}
                         </Typography>
                         {isMobile ? (
-                            sortedPayArr.map((payment) => {
+                            finalPayments.map((payment) => {
                                 const family = payment.User?.FamilyDetail;
-                                const familiaApellido = family?.familyLastName || '';
+                                const familiaApellido = family?.familyLastName || (family?.motherName + " " + family?.fatherName) || '';
                                 const cantidadEst = family?.Students?.length || 0;
+
                                 return (
                                     <MobileCard key={payment.id}>
                                         <MobileField>
@@ -1175,7 +1312,10 @@ const PaymentsManagementPage = () => {
                                             <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
                                                 <PaymentIcon />
                                             </IconButton>
-                                            <IconButton title={payment.penaltyPaused ? 'Descongelar mora (usuario)' : 'Congelar mora (usuario)'} onClick={() => handleTogglePenaltyPausedIndividual(payment)}>
+                                            <IconButton
+                                                title={payment.penaltyPaused ? 'Descongelar mora (usuario)' : 'Congelar mora (usuario)'}
+                                                onClick={() => handleTogglePenaltyPausedIndividual(payment)}
+                                            >
                                                 {payment.penaltyPaused ? (
                                                     <PlayIcon style={{ color: 'green' }} />
                                                 ) : (
@@ -1213,7 +1353,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'familyLastName'}
                                                         direction={orderBy === 'familyLastName' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('familyLastName')}
+                                                        onClick={() => handleRequestSort(schId, 'familyLastName')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1224,7 +1364,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'studentCount'}
                                                         direction={orderBy === 'studentCount' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('studentCount')}
+                                                        onClick={() => handleRequestSort(schId, 'studentCount')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1235,7 +1375,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'finalStatus'}
                                                         direction={orderBy === 'finalStatus' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('finalStatus')}
+                                                        onClick={() => handleRequestSort(schId, 'finalStatus')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1246,7 +1386,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'nextPaymentDate'}
                                                         direction={orderBy === 'nextPaymentDate' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('nextPaymentDate')}
+                                                        onClick={() => handleRequestSort(schId, 'nextPaymentDate')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1257,7 +1397,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'lastPaymentDate'}
                                                         direction={orderBy === 'lastPaymentDate' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('lastPaymentDate')}
+                                                        onClick={() => handleRequestSort(schId, 'lastPaymentDate')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1268,7 +1408,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'montoTotal'}
                                                         direction={orderBy === 'montoTotal' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('montoTotal')}
+                                                        onClick={() => handleRequestSort(schId, 'montoTotal')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1279,7 +1419,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'leftover'}
                                                         direction={orderBy === 'leftover' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('leftover')}
+                                                        onClick={() => handleRequestSort(schId, 'leftover')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1290,7 +1430,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'accumulatedPenalty'}
                                                         direction={orderBy === 'accumulatedPenalty' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('accumulatedPenalty')}
+                                                        onClick={() => handleRequestSort(schId, 'accumulatedPenalty')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1301,7 +1441,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'totalDue'}
                                                         direction={orderBy === 'totalDue' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('totalDue')}
+                                                        onClick={() => handleRequestSort(schId, 'totalDue')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1312,7 +1452,7 @@ const PaymentsManagementPage = () => {
                                                     <TableSortLabel
                                                         active={orderBy === 'creditBalance'}
                                                         direction={orderBy === 'creditBalance' ? order : 'asc'}
-                                                        onClick={() => handleRequestSort('creditBalance')}
+                                                        onClick={() => handleRequestSort(schId, 'creditBalance')}
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
@@ -1326,89 +1466,91 @@ const PaymentsManagementPage = () => {
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {sortedPayArr
-                                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                                .map((payment) => {
-                                                    const fatherId = payment.User?.id;
-                                                    const hasUnread = fatherId ? unreadReceiptsMap[fatherId] === true : false;
-                                                    const mt = parseFloat(payment.montoTotal) || 0;
-                                                    const lo = parseFloat(payment.leftover) || 0;
-                                                    const pen = parseFloat(payment.accumulatedPenalty) || 0;
-                                                    const td = parseFloat(payment.totalDue) || 0;
-                                                    const cb = parseFloat(payment.creditBalance) || 0;
-                                                    const familyDetail = payment.User?.FamilyDetail;
-                                                    const apellidoFam = familyDetail?.familyLastName || '';
-                                                    const cantEst = familyDetail?.Students?.length || 0;
-                                                    return (
-                                                        <TableRow key={payment.id} style={{ backgroundColor: getRowColor(payment) }}>
-                                                            <TableCell>{apellidoFam}</TableCell>
-                                                            <TableCell>{cantEst}</TableCell>
-                                                            <TableCell>{payment.finalStatus}</TableCell>
-                                                            <TableCell>
-                                                                {payment.nextPaymentDate
-                                                                    ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
-                                                                    : '—'}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {payment.lastPaymentDate
-                                                                    ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
-                                                                    : '—'}
-                                                            </TableCell>
-                                                            <TableCell>Q {mt.toFixed(2)}</TableCell>
-                                                            <TableCell>Q {lo.toFixed(2)}</TableCell>
-                                                            <TableCell>Q {pen.toFixed(2)}</TableCell>
-                                                            <TableCell>Q {td.toFixed(2)}</TableCell>
-                                                            <TableCell>Q {cb.toFixed(2)}</TableCell>
-                                                            <TableCell>{payment.paymentMethod || 'Deposito'}</TableCell>
-                                                            <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
-                                                            <TableCell>
-                                                                <Switch
-                                                                    checked={!!familyDetail?.requiresInvoice}
-                                                                    onChange={(e) => handleToggleInvoiceNeed(payment, e.target.checked)}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell align="center">
-                                                                <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
-                                                                    <SendIcon />
-                                                                </IconButton>
-                                                                <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
-                                                                    <EditIcon />
-                                                                </IconButton>
-                                                                <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
-                                                                    <Badge color="primary" variant="dot" overlap="circular" invisible={!hasUnread}>
-                                                                        <ReceiptIcon />
-                                                                    </Badge>
-                                                                </IconButton>
-                                                                <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
-                                                                    <PaymentIcon />
-                                                                </IconButton>
-                                                                <IconButton title={payment.penaltyPaused ? 'Descongelar mora (usuario)' : 'Congelar mora (usuario)'} onClick={() => handleTogglePenaltyPausedIndividual(payment)}>
-                                                                    {payment.penaltyPaused ? (
-                                                                        <PlayIcon style={{ color: 'green' }} />
-                                                                    ) : (
-                                                                        <PauseIcon style={{ color: 'red' }} />
-                                                                    )}
-                                                                </IconButton>
-                                                                <IconButton title="Exonerar Mora" onClick={() => handleOpenExonerateDialog(payment)}>
-                                                                    <MoneyOffIcon />
-                                                                </IconButton>
-                                                                <IconButton title="Editar Método de Pago" onClick={() => handleOpenPaymentMethodDialog(payment)}>
-                                                                    <AccountBalanceWalletIcon />
-                                                                </IconButton>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    );
-                                                })}
+                                            {finalPayments.map((payment) => {
+                                                const fatherId = payment.User?.id;
+                                                const hasUnread = fatherId ? unreadReceiptsMap[fatherId] === true : false;
+                                                const mt = parseFloat(payment.montoTotal) || 0;
+                                                const lo = parseFloat(payment.leftover) || 0;
+                                                const pen = parseFloat(payment.accumulatedPenalty) || 0;
+                                                const td = parseFloat(payment.totalDue) || 0;
+                                                const cb = parseFloat(payment.creditBalance) || 0;
+                                                const familyDetail = payment.User?.FamilyDetail;
+                                                const apellidoFam = familyDetail?.familyLastName || '';
+                                                const cantEst = familyDetail?.Students?.length || 0;
+
+                                                return (
+                                                    <TableRow key={payment.id} style={{ backgroundColor: getRowColor(payment) }}>
+                                                        <TableCell>{apellidoFam}</TableCell>
+                                                        <TableCell>{cantEst}</TableCell>
+                                                        <TableCell>{payment.finalStatus}</TableCell>
+                                                        <TableCell>
+                                                            {payment.nextPaymentDate
+                                                                ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
+                                                                : '—'}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {payment.lastPaymentDate
+                                                                ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
+                                                                : '—'}
+                                                        </TableCell>
+                                                        <TableCell>Q {mt.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {lo.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {pen.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {td.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {cb.toFixed(2)}</TableCell>
+                                                        <TableCell>{payment.paymentMethod || 'Deposito'}</TableCell>
+                                                        <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
+                                                        <TableCell>
+                                                            <Switch
+                                                                checked={!!familyDetail?.requiresInvoice}
+                                                                onChange={(e) => handleToggleInvoiceNeed(payment, e.target.checked)}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell align="center">
+                                                            <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
+                                                                <SendIcon />
+                                                            </IconButton>
+                                                            <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
+                                                                <EditIcon />
+                                                            </IconButton>
+                                                            <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
+                                                                <Badge color="primary" variant="dot" overlap="circular" invisible={!hasUnread}>
+                                                                    <ReceiptIcon />
+                                                                </Badge>
+                                                            </IconButton>
+                                                            <IconButton title="Registrar Pago" onClick={() => handleOpenRegisterPayDialog(payment)}>
+                                                                <PaymentIcon />
+                                                            </IconButton>
+                                                            <IconButton
+                                                                title={payment.penaltyPaused ? 'Descongelar mora (usuario)' : 'Congelar mora (usuario)'}
+                                                                onClick={() => handleTogglePenaltyPausedIndividual(payment)}
+                                                            >
+                                                                {payment.penaltyPaused ? (
+                                                                    <PlayIcon style={{ color: 'green' }} />
+                                                                ) : (
+                                                                    <PauseIcon style={{ color: 'red' }} />
+                                                                )}
+                                                            </IconButton>
+                                                            <IconButton title="Exonerar Mora" onClick={() => handleOpenExonerateDialog(payment)}>
+                                                                <MoneyOffIcon />
+                                                            </IconButton>
+                                                            <IconButton title="Editar Método de Pago" onClick={() => handleOpenPaymentMethodDialog(payment)}>
+                                                                <AccountBalanceWalletIcon />
+                                                            </IconButton>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
                                         </TableBody>
                                     </Table>
                                 </TableContainer>
                                 <TablePagination
                                     component="div"
-                                    count={payArr.length}
+                                    count={totalCount}
                                     page={page}
-                                    onPageChange={handleChangePage}
+                                    onPageChange={(e, newPage) => handleChangePage(schId, e, newPage)}
                                     rowsPerPage={rowsPerPage}
-                                    onRowsPerPageChange={handleChangeRowsPerPage}
+                                    onRowsPerPageChange={(e) => handleChangeRowsPerPage(schId, e)}
                                     rowsPerPageOptions={[5, 10, 25]}
                                     labelRowsPerPage="Filas por página"
                                 />
@@ -1420,7 +1562,6 @@ const PaymentsManagementPage = () => {
 
             {/* SECCIÓN DE PAGO EXTRAORDINARIO */}
             <ExtraordinaryPaymentSection onPaymentCreated={(newExtraPayment) => {
-                // Opcional: refrescar datos o notificar
                 console.log('Nuevo pago extraordinario registrado:', newExtraPayment);
             }} />
 
@@ -1853,7 +1994,6 @@ const PaymentsManagementPage = () => {
                             </Typography>
                         </Grid>
                     </Grid>
-                    {/* Solo se muestra Total Adeudado */}
                     <Box sx={{ mb: 3 }}>
                         <Typography variant="body1">
                             <strong>Total Adeudado: </strong>Q {analysisData.sumTotalDue}
