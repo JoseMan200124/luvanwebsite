@@ -126,6 +126,17 @@ function stableSort(array, comparator) {
 }
 
 /**
+ * Normaliza (remueve acentos/tildes) y convierte a minúscula,
+ * para facilitar la búsqueda "sin tildes".
+ */
+function normalizeString(str) {
+    return str
+        .normalize("NFD") // descompone acentos
+        .replace(/[\u0300-\u036f]/g, "") // elimina acentos/diacríticos
+        .toLowerCase();
+}
+
+/**
  * Extrae el valor a partir del objeto payment según la columna.
  * Para campos numéricos se elimina el prefijo "Q " y se convierte a número.
  */
@@ -186,34 +197,23 @@ function getFieldValue(payment, field) {
 }
 /* ========== Fin código para ordenamiento ========== */
 
-
 const PaymentsManagementPage = () => {
     const { auth } = useContext(AuthContext);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    // Listado de colegios (para renderizar la tabla de cada uno).
+    // Listado de colegios
     const [schools, setSchools] = useState([]);
 
-    // Objeto con data por colegio => {
-    //   [schoolId]: {
-    //     payments: [],
-    //     totalCount: 0,
-    //     page: 0,
-    //     rowsPerPage: 10,
-    //     order: 'asc',
-    //     orderBy: '',
-    //     filteredPayments: []
-    //   }
-    // }
+    // Data por colegio
     const [schoolPaymentsData, setSchoolPaymentsData] = useState({});
 
     // Filtros globales
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
-    const [schoolFilter, setSchoolFilter] = useState(''); // El "colegio (análisis)" que ya existía
+    const [schoolFilter, setSchoolFilter] = useState('');
 
-    // Estados para mora global
+    // Estados Mora Global
     const [globalDailyPenalty, setGlobalDailyPenalty] = useState(10);
     const [openPenaltyEdit, setOpenPenaltyEdit] = useState(false);
     const [globalPenaltyPaused, setGlobalPenaltyPaused] = useState(false);
@@ -229,7 +229,7 @@ const PaymentsManagementPage = () => {
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [editPayment, setEditPayment] = useState({});
 
-    // Boletas y zoom
+    // Boletas / Zoom
     const [openReceiptsDialog, setOpenReceiptsDialog] = useState(false);
     const [fatherReceipts, setFatherReceipts] = useState([]);
     const [fatherName, setFatherName] = useState('');
@@ -254,7 +254,7 @@ const PaymentsManagementPage = () => {
         monthsCount: 1
     });
 
-    // Estados para actualizar método de pago
+    // Diálogo Método de Pago
     const [openPaymentMethodDialog, setOpenPaymentMethodDialog] = useState(false);
     const [selectedPaymentForPaymentMethod, setSelectedPaymentForPaymentMethod] = useState(null);
     const [paymentMethodValue, setPaymentMethodValue] = useState('');
@@ -267,12 +267,12 @@ const PaymentsManagementPage = () => {
         severity: 'success'
     });
 
-    // Análisis de pagos
+    // Análisis
     const [analysisData, setAnalysisData] = useState(null);
     const [analysisSchoolId, setAnalysisSchoolId] = useState('');
     const [combinedEarnings, setCombinedEarnings] = useState([]);
 
-    // Indicadores para la sección de análisis
+    // Indicadores
     const pagadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PAGADO')?.count || 0;
     const moraCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'MORA')?.count || 0;
     const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
@@ -280,7 +280,7 @@ const PaymentsManagementPage = () => {
         item.year === moment().year() && item.month === (moment().month() + 1)
     )?.total || 0;
 
-    // NUEVO: Exonerar Mora
+    // Exonerar Mora
     const [openExonerateDialog, setOpenExonerateDialog] = useState(false);
     const [exoneratePayment, setExoneratePayment] = useState(null);
     const [exonerateAmount, setExonerateAmount] = useState('');
@@ -319,7 +319,6 @@ const PaymentsManagementPage = () => {
             });
             handleCloseExonerateDialog();
 
-            // Volvemos a recargar la tabla del colegio de ese pago
             const schId = exoneratePayment.schoolId || 'null';
             refetchSchoolPayments(schId);
         } catch (err) {
@@ -328,7 +327,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // NUEVO: Marcar si requiere factura
+    // Factura
     const handleToggleInvoiceNeed = async (payment, newCheckedValue) => {
         try {
             await api.put(`/payments/${payment.id}/set-invoice-need`, {
@@ -350,6 +349,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
+    // Método de Pago
     const handleOpenPaymentMethodDialog = (payment) => {
         setSelectedPaymentForPaymentMethod(payment);
         setPaymentMethodValue(payment.paymentMethod || 'Deposito');
@@ -399,13 +399,11 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // ==============================
-    // 1) Cargar data inicial
-    // ==============================
+    // Carga inicial
     useEffect(() => {
         (async () => {
-            await fetchSchools();         // primero obtenemos todos los colegios
-            await fetchGlobalSettings();  // para dailyPenalty
+            await fetchSchools();
+            await fetchGlobalSettings();
             await fetchPaymentsAnalysis('');
         })();
     }, []);
@@ -415,7 +413,6 @@ const PaymentsManagementPage = () => {
             const res = await api.get('/schools');
             const all = res.data.schools || [];
 
-            // Creamos un objeto inicial para schoolPaymentsData:
             const initialData = {};
             all.forEach((sch) => {
                 initialData[sch.id] = {
@@ -432,11 +429,9 @@ const PaymentsManagementPage = () => {
             setSchools(all);
             setSchoolPaymentsData(initialData);
 
-            // Inmediatamente podemos hacer la primera carga de cada colegio:
+            // Cargamos los datos de todos los colegios de una vez
+            // (o podrías cargar solo cuando se filtra, si quisieras)
             all.forEach((sch) => {
-                // Si deseas NO cargar todas las tablas simultáneamente,
-                // podrías comentar esto y cargar bajo demanda. Pero aquí
-                // lo hacemos directo.
                 fetchPaymentsForSchool(sch.id, 0, 10);
             });
         } catch (error) {
@@ -458,15 +453,13 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // ==============================
-    // 2) Petición por colegio
-    // ==============================
+    // Obtener Pagos
     const fetchPaymentsForSchool = async (schId, page, rpp) => {
         try {
             const res = await api.get('/payments', {
                 params: {
                     schoolId: schId,
-                    page: page + 1, // backend usa base 1
+                    page: page + 1,
                     limit: rpp
                 }
             });
@@ -488,7 +481,6 @@ const PaymentsManagementPage = () => {
                 }
                 next[schId].payments = arr;
                 next[schId].totalCount = totalCount;
-                // Cada vez que recargamos, hay que recalcular filteredPayments localmente
                 next[schId].filteredPayments = localFilterAndSort(
                     arr,
                     next[schId].order,
@@ -504,25 +496,46 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // Pequeña función que aplica la búsqueda, el statusFilter y el ordenamiento
+    const refetchSchoolPayments = (schoolId) => {
+        setSchoolPaymentsData((prev) => {
+            if (!prev[schoolId]) return prev;
+            const { page, rowsPerPage } = prev[schoolId];
+            fetchPaymentsForSchool(schoolId, page, rowsPerPage);
+            return prev;
+        });
+    };
+
+    // Filtro local
     const localFilterAndSort = (paymentsArray, order, orderBy, search, statusF) => {
         let temp = [...paymentsArray];
 
-        // Filtro por search
+        // =======================
+        // 1) Filtro por apellido (ignorando acentos) en vez de email/nombre
+        // =======================
         if (search.trim()) {
-            const q = search.toLowerCase();
+            const qNorm = normalizeString(search.trim());
             temp = temp.filter((p) => {
-                const nm = p.User?.name?.toLowerCase() || '';
-                const em = p.User?.email?.toLowerCase() || '';
-                return nm.includes(q) || em.includes(q);
+                const famLastRaw = p.User?.FamilyDetail?.familyLastName || '';
+                const famLastNorm = normalizeString(famLastRaw);
+                return famLastNorm.includes(qNorm);
             });
         }
-        // Filtro por status
+
+        // =======================
+        // 2) Filtro por estado (PAGADO, MORA, PENDIENTE)
+        // =======================
         if (statusF) {
             temp = temp.filter((p) => (p.finalStatus || '').toUpperCase() === statusF);
         }
 
-        // Orden
+        // =======================
+        // 3) Filtro por colegio
+        // =======================
+        if (schoolFilter) {
+            temp = temp.filter((p) => p.schoolId === schoolFilter);
+        }
+
+        // Ordenar
         if (orderBy) {
             const comparator = getComparator(order, orderBy);
             temp = stableSort(temp, comparator);
@@ -531,21 +544,7 @@ const PaymentsManagementPage = () => {
         return temp;
     };
 
-    // Función para recargar (refetch) los pagos de un colegio, con la config actual
-    const refetchSchoolPayments = (schoolId) => {
-        setSchoolPaymentsData((prev) => {
-            if (!prev[schoolId]) return prev; // no existe
-            const { page, rowsPerPage } = prev[schoolId];
-            fetchPaymentsForSchool(schoolId, page, rowsPerPage);
-            return prev;
-        });
-    };
-
-    // ==============================
-    // 3) Lógica de filtros globales
-    // ==============================
-    // Cada vez que cambie searchQuery o statusFilter, recalculamos filteredPayments
-    // en cada colegio sin volver a pedir datos al backend (pues es un filtrado local).
+    // Recalcular al cambiar
     useEffect(() => {
         setSchoolPaymentsData((prev) => {
             const updated = { ...prev };
@@ -563,6 +562,23 @@ const PaymentsManagementPage = () => {
         });
     }, [searchQuery, statusFilter]);
 
+    useEffect(() => {
+        setSchoolPaymentsData((prev) => {
+            const updated = { ...prev };
+            Object.keys(updated).forEach((schId) => {
+                const { payments, order, orderBy } = updated[schId];
+                updated[schId].filteredPayments = localFilterAndSort(
+                    payments,
+                    order,
+                    orderBy,
+                    searchQuery,
+                    statusFilter
+                );
+            });
+            return updated;
+        });
+    }, [schoolFilter]);
+
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
     };
@@ -573,9 +589,7 @@ const PaymentsManagementPage = () => {
         setSchoolFilter(e.target.value);
     };
 
-    // ==============================
-    // 4) Editar Mora Global
-    // ==============================
+    // Editar Mora Global
     const handleTogglePenaltyEdit = () => {
         setOpenPenaltyEdit(!openPenaltyEdit);
     };
@@ -614,9 +628,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // ==============================
-    // 5) Enviar Correo
-    // ==============================
+    // Enviar Correo
     const handleOpenEmailDialog = (payment) => {
         setSelectedPayment(payment);
         setEmailSubject('');
@@ -652,9 +664,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // ==============================
-    // 6) Editar Payment
-    // ==============================
+    // Editar Payment
     const handleOpenEditDialog = (pay) => {
         setEditPayment({
             id: pay.id,
@@ -690,7 +700,6 @@ const PaymentsManagementPage = () => {
             });
             handleCloseEditDialog();
 
-            // Recargamos la tabla de ese colegio
             const schId = editPayment.schoolId || 'null';
             refetchSchoolPayments(schId);
         } catch (error) {
@@ -698,9 +707,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // ==============================
-    // 7) Leyenda de colores (tabla)
-    // ==============================
+    // Leyenda de colores
     const getRowColor = (pay) => {
         const st = (pay.finalStatus || '').toUpperCase();
         if (st === 'PAGADO') {
@@ -712,9 +719,7 @@ const PaymentsManagementPage = () => {
         return '#fde68a';
     };
 
-    // ==============================
-    // 8) Ver Boletas
-    // ==============================
+    // Ver Boletas
     const handleShowReceipts = async (pay) => {
         if (!pay.User) return;
         setFatherName(pay.User.name || '');
@@ -734,9 +739,7 @@ const PaymentsManagementPage = () => {
         setFatherName('');
     };
 
-    // ==============================
-    // 9) Zoom/Pan de la Boleta
-    // ==============================
+    // Zoom Boleta
     const handleImageClick = (url) => {
         setSelectedImageUrl(url);
         setZoomScale(1);
@@ -799,9 +802,7 @@ const PaymentsManagementPage = () => {
         setZoomScale(newS);
     };
 
-    // ==============================
-    // 10) Registrar Pago
-    // ==============================
+    // Registrar Pago
     const handleOpenRegisterPayDialog = (pay) => {
         setRegisterPaySelected(pay);
         setRegisterPaymentData({
@@ -886,7 +887,6 @@ const PaymentsManagementPage = () => {
             setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
             handleCloseRegisterPayDialog();
 
-            // recargar la tabla correspondiente
             if (registerPaySelected) {
                 const schId = registerPaySelected.schoolId || 'null';
                 refetchSchoolPayments(schId);
@@ -896,9 +896,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // ==============================
-    // 11) Socket => boletas
-    // ==============================
+    // Socket
     useEffect(() => {
         const socket = getSocket();
         if (!socket) return;
@@ -910,21 +908,16 @@ const PaymentsManagementPage = () => {
         };
     }, []);
 
-    // ==============================
-    // 12) Congelar/Descongelar Mora Individual
-    // ==============================
+    // Pausa/Despausa Mora
     const handleTogglePenaltyPausedIndividual = async (payment) => {
         const newVal = !payment.penaltyPaused;
-        // Optimistic update
         setSchoolPaymentsData((prev) => {
             const next = { ...prev };
             const schId = payment.schoolId;
             if (!next[schId]) return next;
-            // actualizamos payments
             next[schId].payments = next[schId].payments.map((p) =>
                 p.id === payment.id ? { ...p, penaltyPaused: newVal } : p
             );
-            // actualizamos filteredPayments
             next[schId].filteredPayments = next[schId].filteredPayments.map((p) =>
                 p.id === payment.id ? { ...p, penaltyPaused: newVal } : p
             );
@@ -950,7 +943,6 @@ const PaymentsManagementPage = () => {
                 message: 'Error al actualizar la pausa de mora para usuario',
                 severity: 'error'
             });
-            // revertir cambio
             setSchoolPaymentsData((prev) => {
                 const next = { ...prev };
                 const schId = payment.schoolId;
@@ -966,10 +958,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // ==============================
-    // 13) Manejo de orden/paginación en cada tabla
-    // ==============================
-    // Cada tabla tiene su handleRequestSort, handleChangePage, handleChangeRowsPerPage
+    // Orden / Paginas
     const handleRequestSort = (schoolId, property) => {
         setSchoolPaymentsData((prev) => {
             const next = { ...prev };
@@ -979,11 +968,9 @@ const PaymentsManagementPage = () => {
             const isAsc = data.orderBy === property && data.order === 'asc';
             const newOrder = isAsc ? 'desc' : 'asc';
 
-            // Actualizamos
             data.order = newOrder;
             data.orderBy = property;
 
-            // Refiltramos/ordenamos
             data.filteredPayments = localFilterAndSort(
                 data.payments,
                 data.order,
@@ -1002,7 +989,6 @@ const PaymentsManagementPage = () => {
             const next = { ...prev };
             if (!next[schoolId]) return next;
             next[schoolId].page = newPage;
-            // llamamos a backend para recargar esa page
             fetchPaymentsForSchool(schoolId, newPage, next[schoolId].rowsPerPage);
             return next;
         });
@@ -1014,16 +1000,13 @@ const PaymentsManagementPage = () => {
             const next = { ...prev };
             if (!next[schoolId]) return next;
             next[schoolId].rowsPerPage = newRowsPerPage;
-            next[schoolId].page = 0; // reseteamos a la página 0
-            // refetch
+            next[schoolId].page = 0;
             fetchPaymentsForSchool(schoolId, 0, newRowsPerPage);
             return next;
         });
     };
 
-    // ==============================
-    // 14) Análisis de Pagos (normal + extraordinario)
-    // ==============================
+    // Análisis
     const fetchPaymentsAnalysis = async (schId) => {
         try {
             const params = {};
@@ -1073,12 +1056,19 @@ const PaymentsManagementPage = () => {
         return combined;
     };
 
-    // ==============================
+    // =========================
     // Render principal
-    // ==============================
+    // =========================
+
+    // Filtramos la lista de colegios para renderizar solo el que está en schoolFilter,
+    // o todos si schoolFilter = ''
+    const filteredSchools = schoolFilter
+        ? schools.filter((sch) => sch.id === schoolFilter)
+        : schools;
+
     return (
         <Container>
-            {/* Encabezado y sección de mora/leyenda */}
+            {/* SECCIÓN DE CABECERA / MORA */}
             <div
                 style={{
                     display: 'flex',
@@ -1175,7 +1165,7 @@ const PaymentsManagementPage = () => {
                 </div>
             </div>
 
-            {/* Filtros (tabla principal) */}
+            {/* FILTROS */}
             <div
                 style={{
                     display: 'flex',
@@ -1185,7 +1175,7 @@ const PaymentsManagementPage = () => {
                 }}
             >
                 <TextField
-                    label="Buscar por nombre o email"
+                    label="Buscar Apellido"
                     variant="outlined"
                     size="small"
                     value={searchQuery}
@@ -1201,8 +1191,6 @@ const PaymentsManagementPage = () => {
                         <MenuItem value="MORA">Mora</MenuItem>
                     </Select>
                 </FormControl>
-                {/* Este schoolFilter lo usas para la sección de Análisis (abajo),
-                    pero aquí se mantiene para no romper tu lógica original. */}
                 <FormControl variant="outlined" size="small" style={{ width: isMobile ? '100%' : '200px' }}>
                     <InputLabel>Colegio</InputLabel>
                     <Select label="Colegio" value={schoolFilter} onChange={handleSchoolFilterChange}>
@@ -1216,13 +1204,13 @@ const PaymentsManagementPage = () => {
                 </FormControl>
             </div>
 
-            {/* Renderizar tabla de pagos para cada colegio */}
-            {schools.map((school) => {
+            {/* TABLA PRINCIPAL:
+                Mapeamos solo los colegios que pasen el filtro "schoolFilter" */}
+            {filteredSchools.map((school) => {
                 const schId = school.id;
                 const data = schoolPaymentsData[schId];
                 if (!data) return null;
 
-                // array ya filtrado y ordenado localmente
                 const payArr = data.filteredPayments;
                 const page = data.page;
                 const rowsPerPage = data.rowsPerPage;
@@ -1230,12 +1218,6 @@ const PaymentsManagementPage = () => {
                 const order = data.order;
                 const orderBy = data.orderBy;
 
-                // Subconjunto para la vista "Mobile" => no hace slice,
-                // en este ejemplo tú decides si en mobile igual te basas en page.
-                // Lo dejamos sin slice para que se muestre todo. O podrías slice si quieres.
-
-                // Arreglo "final" de la tabla => ya que es server side paginado,
-                // no slice local. El backend ya nos mandó solo la página actual.
                 const finalPayments = payArr;
 
                 return (
@@ -1281,9 +1263,7 @@ const PaymentsManagementPage = () => {
                                         </MobileField>
                                         <MobileField>
                                             <MobileLabel>Requiere Factura</MobileLabel>
-                                            <MobileValue>
-                                                {family?.requiresInvoice ? 'Sí' : 'No'}
-                                            </MobileValue>
+                                            <MobileValue>{family?.requiresInvoice ? 'Sí' : 'No'}</MobileValue>
                                         </MobileField>
                                         <Box
                                             sx={{
@@ -1560,7 +1540,7 @@ const PaymentsManagementPage = () => {
                 );
             })}
 
-            {/* SECCIÓN DE PAGO EXTRAORDINARIO */}
+            {/* SECCIÓN DE PAGOS EXTRAORDINARIOS */}
             <ExtraordinaryPaymentSection onPaymentCreated={(newExtraPayment) => {
                 console.log('Nuevo pago extraordinario registrado:', newExtraPayment);
             }} />
@@ -1923,6 +1903,26 @@ const PaymentsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
+            {/* Exonerar Mora */}
+            <Dialog open={openExonerateDialog} onClose={handleCloseExonerateDialog} maxWidth="xs" fullWidth>
+                <DialogTitle>Exonerar Mora</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        label="Monto a Exonerar"
+                        margin="dense"
+                        type="number"
+                        fullWidth
+                        variant="outlined"
+                        value={exonerateAmount}
+                        onChange={(e) => setExonerateAmount(e.target.value)}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseExonerateDialog}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleExoneratePenalty}>Exonerar</Button>
+                </DialogActions>
+            </Dialog>
+
             {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
@@ -1930,7 +1930,11 @@ const PaymentsManagementPage = () => {
                 onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
+                <Alert
+                    onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+                    severity={snackbar.severity}
+                    sx={{ width: '100%' }}
+                >
                     {snackbar.message}
                 </Alert>
             </Snackbar>
@@ -1966,7 +1970,6 @@ const PaymentsManagementPage = () => {
 
             {analysisData && (
                 <Box sx={{ mb: 4 }}>
-                    {/* Indicadores numéricos */}
                     <Grid container spacing={2} sx={{ mb: 3 }}>
                         <Grid item xs={12} sm={4}>
                             <Typography variant="body1">
@@ -1999,7 +2002,6 @@ const PaymentsManagementPage = () => {
                             <strong>Total Adeudado: </strong>Q {analysisData.sumTotalDue}
                         </Typography>
                     </Box>
-                    {/* Gráfica de Ganancias Mensuales (BarChart) */}
                     <Grid container spacing={2}>
                         <Grid item xs={12}>
                             <Typography variant="subtitle1" gutterBottom>
@@ -2019,8 +2021,16 @@ const PaymentsManagementPage = () => {
                                     <Legend />
                                     <Bar dataKey="total">
                                         {combinedEarnings.map((entry, index) => {
-                                            const colors = ['#0088FE', '#FFBB28', '#FF8042', '#00C49F', '#FF6633', '#9933FF', '#33CCFF', '#66CC33'];
-                                            return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                                            const colors = [
+                                                '#0088FE', '#FFBB28', '#FF8042', '#00C49F',
+                                                '#FF6633', '#9933FF', '#33CCFF', '#66CC33'
+                                            ];
+                                            return (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={colors[index % colors.length]}
+                                                />
+                                            );
                                         })}
                                     </Bar>
                                 </BarChart>

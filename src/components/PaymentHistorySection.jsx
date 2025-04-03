@@ -47,8 +47,9 @@ function PaymentHistorySection() {
         }
     };
 
+    // Agrupar usando la propiedad schoolName
     const groupedHistories = histories.reduce((acc, curr) => {
-        const key = curr.schoolId || 'Sin Colegio';
+        const key = curr.schoolName || 'Sin Colegio';
         if (!acc[key]) {
             acc[key] = [];
         }
@@ -76,10 +77,10 @@ function PaymentHistorySection() {
                 </Button>
             </Box>
 
-            {Object.keys(groupedHistories).map((schoolId) => (
-                <Box key={schoolId} sx={{ mb: 4 }}>
+            {Object.keys(groupedHistories).map((schoolName) => (
+                <Box key={schoolName} sx={{ mb: 4 }}>
                     <Typography variant="h6" gutterBottom>
-                        Colegio: {schoolId}
+                        Colegio: {schoolName}
                     </Typography>
                     <TableContainer component={Paper}>
                         <Table>
@@ -102,7 +103,7 @@ function PaymentHistorySection() {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {groupedHistories[schoolId].map((h, idx) => (
+                                {groupedHistories[schoolName].map((h, idx) => (
                                     <TableRow key={`${h.familyLastName}-${idx}`}>
                                         <TableCell>{h.familyLastName}</TableCell>
                                         <TableCell>{h.studentCount}</TableCell>

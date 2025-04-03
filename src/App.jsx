@@ -10,21 +10,19 @@ import LandingPage from './pages/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthProvider from './context/AuthProvider';
 import MFAVerify from './components/MFAVerify';
-import PermissionsManagementPage from "./pages/PermissionsManagmentPage"; // Cambia si tu archivo se llama distinto
+import PermissionsManagementPage from "./pages/PermissionsManagmentPage";
 import ContractsManagementPage from './pages/ContractsManagementPage';
 import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
 import FilledContractViewer from './pages/FilledContractViewer';
 import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage';
-
-// El archivo con todos los módulos
-import { modules } from './modules';
-// Nuestro componente de redirección por defecto
 import DefaultAdminRoute from './components/DefaultAdminRoute';
+import { modules } from './modules';
+
+import ForcePasswordChangePage from './pages/ForcePasswordChangePage'; // <-- nuevo
 
 function App() {
-    // Crea rutas dinámicas según "modules.js"
     const renderDynamicRoutes = () => {
         let routes = [];
         modules.forEach((module) => {
@@ -55,11 +53,22 @@ function App() {
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/mfa" element={<MFAVerify />} />
 
-                    {/* Rutas para llenar contratos (públicas o semipúblicas) */}
-                    <Route path="/contracts" element={<ContractsManagementPage />} />
-                    <Route path="/contracts/share/:uuid" element={<ContractFillPage />} />
+                    {/* Ruta para forzar el cambio de contraseña */}
+                    <Route
+                        path="/force-password-change"
+                        element={<ForcePasswordChangePage />}
+                    />
 
-                    {/* Ver detalles de contratos llenados */}
+                    {/* Rutas para llenar contratos */}
+                    <Route
+                        path="/contracts"
+                        element={<ContractsManagementPage />}
+                    />
+                    <Route
+                        path="/contracts/share/:uuid"
+                        element={<ContractFillPage />}
+                    />
+
                     <Route
                         path="/admin/contratos-llenados/:uuid"
                         element={
@@ -69,7 +78,6 @@ function App() {
                         }
                     />
 
-                    {/* Ver detalles de contratos originales */}
                     <Route
                         path="/admin/contratos/:uuid"
                         element={
@@ -79,7 +87,6 @@ function App() {
                         }
                     />
 
-                    {/* Ruta pública para inscripción de alumnos a un colegio */}
                     <Route
                         path="/schools/enroll/:schoolId"
                         element={<SchoolEnrollmentPage />}
@@ -94,17 +101,9 @@ function App() {
                             </ProtectedRoute>
                         }
                     >
-                        {/* En lugar de redirigir por defecto al Dashboard,
-                            ahora usamos <DefaultAdminRoute /> */}
                         <Route index element={<DefaultAdminRoute />} />
-
-                        {/* Dashboard */}
                         <Route path="dashboard" element={<Dashboard />} />
-
-                        {/* Rutas dinámicas según modules.js */}
                         {renderDynamicRoutes()}
-
-                        {/* Roles y Permisos */}
                         <Route
                             path="roles-permisos"
                             element={
@@ -113,8 +112,6 @@ function App() {
                                 </ProtectedRoute>
                             }
                         />
-
-                        {/* Cualquier otra ruta dentro de /admin que no coincida */}
                         <Route
                             path="*"
                             element={<Navigate to="dashboard" replace />}

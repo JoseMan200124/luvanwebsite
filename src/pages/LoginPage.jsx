@@ -13,7 +13,8 @@ import {
 } from '@mui/material';
 import { keyframes } from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode';
+// OJO: Importar jwt-decode NO es necesario si delegamos todo a AuthContext
+// import jwtDecode from 'jwt-decode';
 
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -24,7 +25,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { modules } from '../modules';
 
-// Animaciones
+// Animaciones ...
 const moveUp = keyframes`
     0% {
         background-position: center bottom;
@@ -43,15 +44,12 @@ const fadeIn = keyframes`
     }
 `;
 
-// Contenedor principal que se adapta al alto de la pantalla
 const LoginContainer = tw.div`flex flex-col md:flex-row flex-grow min-h-screen`;
 
-// En desktop se muestra la sección izquierda, en móviles se oculta para centrar el formulario.
 const LeftSection = styled.div`
     ${tw`hidden md:flex flex-col items-center justify-center bg-gray-800 text-white md:w-1/2 p-8 relative overflow-hidden`}
 `;
 
-// La sección derecha contendrá el formulario de inicio y se adapta ocupando todo el ancho en móviles.
 const RightSection = styled.div`
     ${tw`flex flex-col items-center justify-center bg-[rgb(31,29,29)] md:w-1/2 p-8 flex-grow`}
 `;
@@ -66,13 +64,10 @@ const Slogan = styled(Typography)`
     color: #ffffff;
 `;
 
-// Ajusta el alto o el margen si necesitas que se vea más grande o separado
 const Logo = styled.img`
     ${tw`h-20 w-auto my-4`}
 `;
 
-// Contenedor del formulario
-// Importante: le damos pt-12 para que el "tab" no cubra el contenido
 const LoginFormContainer = styled.div`
     ${tw`relative bg-gray-50 rounded-lg shadow-lg w-full max-w-md mx-auto flex flex-col items-center pt-12 pb-8 px-8`}
 `;
@@ -118,12 +113,7 @@ const LoginPage = () => {
     const navigate = useNavigate();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-
-    const [formData, setFormData] = useState({
-        email: '',
-        password: '',
-    });
-
+    const [formData, setFormData] = useState({ email: '', password: '' });
     const [error, setError] = useState('');
     const [openSnackbar, setOpenSnackbar] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -133,7 +123,6 @@ const LoginPage = () => {
         e.preventDefault();
         setIsModalOpen(true);
     };
-
     const handleCloseModal = () => {
         setIsModalOpen(false);
     };
@@ -165,44 +154,25 @@ const LoginPage = () => {
         }
 
         try {
-            await login(trimmedEmail, formData.password);
+            // Llamamos a login del AuthContext
+            // Este login internamente hace la petición a /api/auth/login
+            // y ya maneja el storage del token.
+            const { passwordExpired } = await login(trimmedEmail, formData.password);
 
-            const storedToken = localStorage.getItem('token');
-            if (!storedToken) {
-                throw new Error('No se encontró un token válido tras iniciar sesión.');
+            // Si el backend nos dice que la contraseña ha expirado:
+            if (passwordExpired) {
+                navigate('/force-password-change');
+                return;
             }
 
-            const tokenPayload = jwtDecode(storedToken);
-            const roleId = tokenPayload.roleId;
+            // De lo contrario, redirección normal según roles o dashboard
+            setSnackbarMessage('¡Inicio de sesión exitoso!');
+            setSnackbarSeverity('success');
+            setOpenSnackbar(true);
 
-            const res = await api.get(`/permissions/role/${roleId}`, {
-                headers: { Authorization: `Bearer ${storedToken}` },
-            });
-            const permissions = res?.data?.permissions || {};
+            // Por simplicidad, redirigimos a /admin/dashboard (o tu lógica de roles)
+            navigate('/admin/dashboard');
 
-            if (permissions['dashboard']) {
-                setSnackbarMessage('¡Inicio de sesión exitoso!');
-                setSnackbarSeverity('success');
-                setOpenSnackbar(true);
-                navigate('/admin/dashboard');
-            } else {
-                let fallbackPath = '/admin';
-                outerLoop: for (const module of modules) {
-                    if (permissions[module.key]) {
-                        for (const submodule of module.submodules) {
-                            if (permissions[submodule.key]) {
-                                fallbackPath = `/admin/${submodule.path}`;
-                                break outerLoop;
-                            }
-                        }
-                    }
-                }
-
-                setSnackbarMessage('¡Inicio de sesión exitoso!');
-                setSnackbarSeverity('success');
-                setOpenSnackbar(true);
-                navigate(fallbackPath);
-            }
         } catch (err) {
             const customMessage = err.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
             setError(customMessage);
@@ -217,7 +187,6 @@ const LoginPage = () => {
             <Navbar />
 
             <LoginContainer>
-                {/* Se muestra solo en desktop para una mejor experiencia en móviles */}
                 <LeftSection>
                     <Title variant="h4">Transportes Luvan</Title>
                     <Slogan variant="subtitle1">
@@ -231,7 +200,6 @@ const LoginPage = () => {
                             <FormTitle variant="h6">Iniciar Sesión</FormTitle>
                         </FormTitleTab>
 
-                        {/* Logo aparece justo debajo del título */}
                         <Logo src={logoLuvan} alt="Transportes Luvan" />
 
                         {error && (

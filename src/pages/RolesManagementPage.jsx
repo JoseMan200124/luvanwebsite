@@ -1551,8 +1551,8 @@ const RolesManagementPage = () => {
                                                 onChange={handleFamilyDetailChange}
                                             >
                                                 <MenuItem value="Completa">Completa</MenuItem>
-                                                <MenuItem value="Ruta AM">Ruta AM</MenuItem>
-                                                <MenuItem value="Ruta PM">Ruta PM</MenuItem>
+                                                <MenuItem value="Media AM">Media AM</MenuItem>
+                                                <MenuItem value="Media PM">Media PM</MenuItem>
                                             </Select>
                                         </FormControl>
                                     </Grid>
@@ -1653,7 +1653,7 @@ const RolesManagementPage = () => {
                                                     onChange={() => handleToggleSupervisorPilot(pilot.id)}
                                                     color="primary"
                                                 />
-                                                <span>{pilot.name} (ID: {pilot.id})</span>
+                                                <span>{pilot.name} - {pilot.email} (ID: {pilot.id})</span>
                                             </div>
                                         );
                                     })}

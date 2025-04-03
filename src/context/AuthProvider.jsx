@@ -1,8 +1,12 @@
 // src/context/AuthProvider.js
+
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
+// Ojo: Asegúrate de usar la librería "jwt-decode" real.
+// (Aquí la variable se llama "jwtDecode" pero asegúrate de tener "npm install jwt-decode")
 import { jwtDecode } from 'jwt-decode';
+
 import { loginUser } from '../services/authService';
 import { initSocket, closeSocket } from '../services/socketService';
 
@@ -20,6 +24,8 @@ const AuthProvider = ({ children }) => {
     const [auth, setAuth] = useState({
         user: null,
         token: null,
+        // Podrías guardar passwordExpired aquí, si quieres chequearlo en otras partes:
+        // passwordExpired: false,
     });
 
     const [lastActivity, setLastActivity] = useState(Date.now());
@@ -40,13 +46,7 @@ const AuthProvider = ({ children }) => {
     }, [auth.token, lastActivity]);
 
     useEffect(() => {
-        const events = [
-            'mousemove',
-            'mousedown',
-            'touchstart',
-            'keydown',
-            'scroll',
-        ];
+        const events = ['mousemove','mousedown','touchstart','keydown','scroll'];
         events.forEach((evt) => {
             window.addEventListener(evt, resetTimer, true);
         });
@@ -57,6 +57,7 @@ const AuthProvider = ({ children }) => {
         };
     }, [resetTimer]);
 
+    // Al montar, revisamos si hay token en localStorage
     useEffect(() => {
         const storedToken = localStorage.getItem('token');
         if (storedToken) {
@@ -76,6 +77,7 @@ const AuthProvider = ({ children }) => {
             }
         }
 
+        // Revisar si hay ?token= en la URL (caso OAuth) ...
         const params = new URLSearchParams(location.search);
         const tokenFromOAuth = params.get('token');
         if (tokenFromOAuth) {
@@ -86,7 +88,6 @@ const AuthProvider = ({ children }) => {
                     user: { ...decoded, roleId: decoded.roleId },
                     token: tokenFromOAuth,
                 });
-                // navigate('/admin/dashboard');
             } catch (error) {
                 console.error('Token OAuth inválido:', error);
             }
@@ -95,30 +96,42 @@ const AuthProvider = ({ children }) => {
         setInitialLoad(false);
     }, [location]);
 
+    // Inicializar el socket si hay user
     useEffect(() => {
         if (auth.user?.id) {
             initSocket(auth.user.id);
         }
     }, [auth.user]);
 
+    // Nueva función login con passwordExpired
     const login = async (email, password) => {
         try {
+            // Llamamos a loginUser => /api/auth/login
             const response = await loginUser({ email, password });
-            const { token } = response.data;
+            const { token, passwordExpired } = response.data; // <--- AQUÍ leemos passwordExpired
+
             const decoded = jwtDecode(token);
 
-            const restrictedRoles = [3, 4, 5];
+            // Si su rol es Piloto o Monitora, etc. (el check que tenías):
+            const restrictedRoles = [3, 4, 5]; // Por ejemplo
             if (restrictedRoles.includes(decoded.roleId)) {
                 const userName = decoded.name || 'Usuario';
                 throw new Error(`Para tu usuario ${userName}, solo acceso desde la app móvil.`);
             }
 
+            // Guardar en localStorage
             localStorage.setItem('token', token);
+
+            // Actualizar estado
             setAuth({
                 user: { ...decoded, roleId: decoded.roleId },
-                token,
+                token
             });
+
+            // Retornar passwordExpired para que la LoginPage decida redirigir
+            return { passwordExpired };
         } catch (error) {
+            // Manejo de error: devolvemos error
             throw error;
         }
     };
@@ -133,9 +146,7 @@ const AuthProvider = ({ children }) => {
     const verifyToken = async () => {
         try {
             const response = await axios.get('/auth/verify', {
-                headers: {
-                    Authorization: `Bearer ${auth.token}`,
-                },
+                headers: { Authorization: `Bearer ${auth.token}` },
             });
             setAuth({
                 user: {
