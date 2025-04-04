@@ -429,10 +429,10 @@ const PaymentsManagementPage = () => {
             setSchools(all);
             setSchoolPaymentsData(initialData);
 
-            // Cargamos los datos de todos los colegios de una vez
-            // (o podrías cargar solo cuando se filtra, si quisieras)
+            // Cargamos los datos de todos los colegios de una vez:
             all.forEach((sch) => {
-                fetchPaymentsForSchool(sch.id, 0, 10);
+                // Traemos TODOS los pagos de ese colegio (limit muy grande)
+                fetchPaymentsForSchool(sch.id);
             });
         } catch (error) {
             console.error("fetchSchools: Error obteniendo colegios:", error);
@@ -453,18 +453,20 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // Obtener Pagos
-    const fetchPaymentsForSchool = async (schId, page, rpp) => {
+    // Obtener Pagos (para un colegio) - se fuerza limit alto
+    const fetchPaymentsForSchool = async (schId) => {
         try {
             const res = await api.get('/payments', {
                 params: {
                     schoolId: schId,
-                    page: page + 1,
-                    limit: rpp
+                    page: 1,
+                    limit: 999999  // <--- traemos todos para no limitar la búsqueda
                 }
             });
             const arr = res.data.payments || [];
-            const totalCount = res.data.totalCount || 0;
+
+            // Calculamos total localmente
+            const totalCount = arr.length;
 
             setSchoolPaymentsData((prev) => {
                 const next = { ...prev };
@@ -497,12 +499,9 @@ const PaymentsManagementPage = () => {
     };
 
     const refetchSchoolPayments = (schoolId) => {
-        setSchoolPaymentsData((prev) => {
-            if (!prev[schoolId]) return prev;
-            const { page, rowsPerPage } = prev[schoolId];
-            fetchPaymentsForSchool(schoolId, page, rowsPerPage);
-            return prev;
-        });
+        // Simplemente volvemos a llamar sin paginación,
+        // para recargar todo y recalcular en local
+        fetchPaymentsForSchool(schoolId);
     };
 
     // Filtro local
@@ -510,7 +509,7 @@ const PaymentsManagementPage = () => {
         let temp = [...paymentsArray];
 
         // =======================
-        // 1) Filtro por apellido (ignorando acentos) en vez de email/nombre
+        // 1) Filtro por apellido (ignorando acentos)
         // =======================
         if (search.trim()) {
             const qNorm = normalizeString(search.trim());
@@ -535,7 +534,7 @@ const PaymentsManagementPage = () => {
             temp = temp.filter((p) => p.schoolId === schoolFilter);
         }
 
-        // Ordenar
+        // Ordenar localmente
         if (orderBy) {
             const comparator = getComparator(order, orderBy);
             temp = stableSort(temp, comparator);
@@ -544,7 +543,7 @@ const PaymentsManagementPage = () => {
         return temp;
     };
 
-    // Recalcular al cambiar
+    // Cada que cambie la búsqueda o el estado, recalculamos para cada colegio
     useEffect(() => {
         setSchoolPaymentsData((prev) => {
             const updated = { ...prev };
@@ -562,6 +561,7 @@ const PaymentsManagementPage = () => {
         });
     }, [searchQuery, statusFilter]);
 
+    // Cada que cambie el filtro de colegio, también recalculamos
     useEffect(() => {
         setSchoolPaymentsData((prev) => {
             const updated = { ...prev };
@@ -958,7 +958,7 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // Orden / Paginas
+    // Orden
     const handleRequestSort = (schoolId, property) => {
         setSchoolPaymentsData((prev) => {
             const next = { ...prev };
@@ -984,12 +984,12 @@ const PaymentsManagementPage = () => {
         });
     };
 
+    // Paginación LOCAL (ya no llamamos al servidor):
     const handleChangePage = (schoolId, event, newPage) => {
         setSchoolPaymentsData((prev) => {
             const next = { ...prev };
             if (!next[schoolId]) return next;
             next[schoolId].page = newPage;
-            fetchPaymentsForSchool(schoolId, newPage, next[schoolId].rowsPerPage);
             return next;
         });
     };
@@ -1001,7 +1001,6 @@ const PaymentsManagementPage = () => {
             if (!next[schoolId]) return next;
             next[schoolId].rowsPerPage = newRowsPerPage;
             next[schoolId].page = 0;
-            fetchPaymentsForSchool(schoolId, 0, newRowsPerPage);
             return next;
         });
     };
@@ -1204,21 +1203,23 @@ const PaymentsManagementPage = () => {
                 </FormControl>
             </div>
 
-            {/* TABLA PRINCIPAL:
-                Mapeamos solo los colegios que pasen el filtro "schoolFilter" */}
+            {/* TABLA PRINCIPAL */}
             {filteredSchools.map((school) => {
                 const schId = school.id;
                 const data = schoolPaymentsData[schId];
                 if (!data) return null;
 
-                const payArr = data.filteredPayments;
+                // Aquí aplicamos la paginación local
                 const page = data.page;
                 const rowsPerPage = data.rowsPerPage;
-                const totalCount = data.totalCount;
+                const startIndex = page * rowsPerPage;
+                const endIndex = startIndex + rowsPerPage;
+
+                // "finalPayments" es el slice de lo filtrado
+                const slicedPayments = data.filteredPayments.slice(startIndex, endIndex);
+                const totalCount = data.filteredPayments.length;
                 const order = data.order;
                 const orderBy = data.orderBy;
-
-                const finalPayments = payArr;
 
                 return (
                     <div key={schId} style={{ marginBottom: '40px' }}>
@@ -1226,9 +1227,11 @@ const PaymentsManagementPage = () => {
                             {school.name}
                         </Typography>
                         {isMobile ? (
-                            finalPayments.map((payment) => {
+                            slicedPayments.map((payment) => {
                                 const family = payment.User?.FamilyDetail;
-                                const familiaApellido = family?.familyLastName || (family?.motherName + " " + family?.fatherName) || '';
+                                const familiaApellido = family?.familyLastName ||
+                                    (family?.motherName + " " + family?.fatherName) ||
+                                    '';
                                 const cantidadEst = family?.Students?.length || 0;
 
                                 return (
@@ -1446,7 +1449,7 @@ const PaymentsManagementPage = () => {
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {finalPayments.map((payment) => {
+                                            {slicedPayments.map((payment) => {
                                                 const fatherId = payment.User?.id;
                                                 const hasUnread = fatherId ? unreadReceiptsMap[fatherId] === true : false;
                                                 const mt = parseFloat(payment.montoTotal) || 0;
