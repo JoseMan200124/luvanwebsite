@@ -251,7 +251,8 @@ const PaymentsManagementPage = () => {
         amountPaid: '',
         isFullPayment: false,
         isMultipleMonths: false,
-        monthsCount: 1
+        monthsCount: 1,
+        paymentDate: moment().format('YYYY-MM-DD')
     });
 
     // Diálogo Método de Pago
@@ -460,12 +461,14 @@ const PaymentsManagementPage = () => {
                 params: {
                     schoolId: schId,
                     page: 1,
-                    limit: 999999  // <--- traemos todos para no limitar la búsqueda
+                    limit: 999999
                 }
             });
             const arr = res.data.payments || [];
+            const studentsTotal = res.data.studentTotals
+                ? (res.data.studentTotals[schId] || 0)
+                : 0;
 
-            // Calculamos total localmente
             const totalCount = arr.length;
 
             setSchoolPaymentsData((prev) => {
@@ -483,6 +486,7 @@ const PaymentsManagementPage = () => {
                 }
                 next[schId].payments = arr;
                 next[schId].totalCount = totalCount;
+                next[schId].totalStudents = studentsTotal;
                 next[schId].filteredPayments = localFilterAndSort(
                     arr,
                     next[schId].order,
@@ -877,13 +881,16 @@ const PaymentsManagementPage = () => {
     };
     const handleRegisterPayment = async () => {
         try {
-            const { paymentId, amountPaid, isFullPayment, isMultipleMonths, monthsCount } = registerPaymentData;
+            const { paymentId, amountPaid, isFullPayment,
+                isMultipleMonths, monthsCount, paymentDate } = registerPaymentData;
             await api.post(`/payments/${paymentId}/add-transaction`, {
                 amountPaid,
                 isFullPayment,
                 isMultipleMonths,
-                monthsCount
+                monthsCount,
+                paymentDate
             });
+
             setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
             handleCloseRegisterPayDialog();
 
@@ -1225,6 +1232,9 @@ const PaymentsManagementPage = () => {
                     <div key={schId} style={{ marginBottom: '40px' }}>
                         <Typography variant="h5" style={{ marginBottom: '16px' }}>
                             {school.name}
+                        </Typography>
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                            Total de estudiantes: {data.totalStudents ?? 0}
                         </Typography>
                         {isMobile ? (
                             slicedPayments.map((payment) => {
@@ -1861,6 +1871,17 @@ const PaymentsManagementPage = () => {
                         value={registerPaymentData.amountPaid}
                         onChange={(e) => handleAmountPaidManual(e.target.value)}
                         disabled={registerPaymentData.isMultipleMonths || registerPaymentData.isFullPayment}
+                    />
+                    <TextField
+                        label="Fecha del Pago"
+                        type="date"
+                        margin="dense"
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                        value={registerPaymentData.paymentDate}
+                        onChange={(e) =>
+                            setRegisterPaymentData({ ...registerPaymentData, paymentDate: e.target.value })
+                        }
                     />
                 </DialogContent>
                 <DialogActions>

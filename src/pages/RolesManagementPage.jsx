@@ -380,6 +380,8 @@ function getFieldValue(user, field) {
             return user.name;
         case 'email':
             return user.email;
+        case 'familyLastName':
+            return user.FamilyDetail ? user.FamilyDetail.familyLastName : '';
         case 'role':
             return user.Role ? user.Role.name : '';
         case 'school':
@@ -683,6 +685,22 @@ const RolesManagementPage = () => {
         setOpenDialog(true);
     };
 
+    const handleStudentChange = (index, field, value) => {
+        setFamilyDetail(prev => {
+            const students = [...prev.students];
+            students[index] = { ...students[index], [field]: value };
+            return { ...prev, students };
+        });
+    };
+
+    const handleRemoveStudent = (index) => {
+        setFamilyDetail(prev => {
+            const students = [...prev.students];
+            students.splice(index, 1);
+            return { ...prev, students };
+        });
+    };
+
     const handleAddUser = () => {
         setSelectedUser({
             id: null,
@@ -794,7 +812,6 @@ const RolesManagementPage = () => {
                 payload.password = selectedUser.password;
             }
             if (payload.roleId === 3) {
-                // En el diálogo de edición NO se envía el contrato (se omite el campo de contrato)
                 payload.familyDetail = familyDetailPayload;
             }
             if (payload.roleId === 6) {
@@ -819,10 +836,12 @@ const RolesManagementPage = () => {
         setSearchQuery(e.target.value);
     };
 
+    // --- MODIFICACIÓN: Se actualiza el filtrado para considerar además el apellido de la familia ---
     const filteredUsers = users.filter((u) => {
         const matchesSearch =
             (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (u.email || '').toLowerCase().includes(searchQuery.toLowerCase());
+            (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            ((u.FamilyDetail?.familyLastName || '').toLowerCase().includes(searchQuery.toLowerCase()));
         if (!matchesSearch) return false;
         if (newUsersFilter === 'new') {
             if (!isUserNew(u)) return false;
@@ -837,6 +856,7 @@ const RolesManagementPage = () => {
         }
         return true;
     });
+    // --- FIN MODIFICACIÓN ---
 
     const sortedUsers = stableSort(filteredUsers, getComparator(order, orderBy));
     const displayedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
@@ -900,6 +920,7 @@ const RolesManagementPage = () => {
         const newUsers = users.filter(isUserNew);
         const headers = [
             "Nombre",
+            "Apellido Familia",
             "Correo electrónico",
             "Contraseña",
             "Rol",
@@ -961,6 +982,7 @@ const RolesManagementPage = () => {
             }
             const row = [
                 u.name || "",
+                fd.familyLastName || "",
                 u.email || "",
                 "",
                 roleName,
@@ -1117,6 +1139,12 @@ const RolesManagementPage = () => {
                                     <Grid container spacing={1}>
                                         <Grid item xs={12}>
                                             <MobileField>
+                                                <MobileLabel>Apellido Familia</MobileLabel>
+                                                <MobileValue>{user.FamilyDetail ? user.FamilyDetail.familyLastName : '—'}</MobileValue>
+                                            </MobileField>
+                                        </Grid>
+                                        <Grid item xs={12}>
+                                            <MobileField>
                                                 <MobileLabel>Nombre</MobileLabel>
                                                 <MobileValue>
                                                     {user.name}{' '}
@@ -1193,6 +1221,17 @@ const RolesManagementPage = () => {
                                 <Table stickyHeader>
                                     <ResponsiveTableHead>
                                         <TableRow>
+                                            <TableCell sortDirection={orderBy === 'familyLastName' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'familyLastName'}
+                                                    direction={orderBy === 'familyLastName' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('familyLastName')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Apellido Familia
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell sortDirection={orderBy === 'name' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'name'}
@@ -1204,6 +1243,7 @@ const RolesManagementPage = () => {
                                                     Nombre
                                                 </TableSortLabel>
                                             </TableCell>
+
                                             <TableCell sortDirection={orderBy === 'email' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'email'}
@@ -1243,6 +1283,9 @@ const RolesManagementPage = () => {
                                     <TableBody>
                                         {displayedUsers.map((user) => (
                                             <TableRow key={user.id}>
+                                                <ResponsiveTableCell data-label="Apellido Familia">
+                                                    {user.FamilyDetail ? user.FamilyDetail.familyLastName : '—'}
+                                                </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Nombre">
                                                     {user.name}{' '}
                                                     {isUserNew(user) && (
@@ -1291,7 +1334,7 @@ const RolesManagementPage = () => {
                                         ))}
                                         {filteredUsers.length === 0 && (
                                             <TableRow>
-                                                <ResponsiveTableCell colSpan={5} align="center">
+                                                <ResponsiveTableCell colSpan={6} align="center">
                                                     No se encontraron usuarios.
                                                 </ResponsiveTableCell>
                                             </TableRow>
@@ -1562,11 +1605,37 @@ const RolesManagementPage = () => {
                                 </Typography>
                                 <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
                                     {familyDetail.students.map((st, idx) => (
-                                        <Grid item xs={12} key={idx}>
-                                            <Typography variant="body2">
-                                                • {st.fullName} ({st.grade})
-                                            </Typography>
-                                        </Grid>
+                                        <React.Fragment key={idx}>
+                                            <Grid item xs={12} md={5}>
+                                                <TextField
+                                                    label="Nombre del Alumno"
+                                                    fullWidth
+                                                    value={st.fullName}
+                                                    onChange={e =>
+                                                        handleStudentChange(idx, 'fullName', e.target.value)
+                                                    }
+                                                />
+                                            </Grid>
+                                            <Grid item xs={10} md={5}>
+                                                <TextField
+                                                    label="Grado"
+                                                    fullWidth
+                                                    value={st.grade}
+                                                    onChange={e =>
+                                                        handleStudentChange(idx, 'grade', e.target.value)
+                                                    }
+                                                />
+                                            </Grid>
+                                            <Grid item xs={2} md={2} display="flex" alignItems="center">
+                                                <IconButton
+                                                    color="error"
+                                                    aria-label="Eliminar alumno"
+                                                    onClick={() => handleRemoveStudent(idx)}
+                                                >
+                                                    <Delete />
+                                                </IconButton>
+                                            </Grid>
+                                        </React.Fragment>
                                     ))}
                                     <Grid item xs={12} md={6}>
                                         <TextField

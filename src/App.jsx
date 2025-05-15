@@ -8,6 +8,7 @@ import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import LandingPage from './pages/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import AuthProvider from './context/AuthProvider';
 import MFAVerify from './components/MFAVerify';
 import PermissionsManagementPage from "./pages/PermissionsManagmentPage";
@@ -52,6 +53,7 @@ function App() {
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/mfa" element={<MFAVerify />} />
+                    <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 
                     {/* Ruta para forzar el cambio de contraseña */}
                     <Route

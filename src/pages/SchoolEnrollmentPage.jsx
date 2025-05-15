@@ -13,7 +13,8 @@ import {
     Snackbar,
     Box,
     Divider,
-    CircularProgress
+    CircularProgress,
+    Autocomplete
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import api from '../utils/axiosConfig';
@@ -22,7 +23,6 @@ import logoLuvan from '../assets/img/logo-sin-fondo.png';
 const SchoolEnrollmentPage = () => {
     const { schoolId } = useParams();
 
-    // Usamos 'loading' aquí y en la parte final del efecto
     const [loading, setLoading] = useState(true);
 
     const [grades, setGrades] = useState([]);
@@ -123,7 +123,6 @@ const SchoolEnrollmentPage = () => {
                 severity: 'success'
             });
 
-            // Limpiar formulario
             setFamilyLastName('');
             setServiceAddress('');
             setZoneOrSector('');
@@ -189,7 +188,6 @@ const SchoolEnrollmentPage = () => {
                     severity: 'error'
                 });
             } finally {
-                // Al terminar de cargar
                 setLoading(false);
             }
         };
@@ -345,23 +343,29 @@ const SchoolEnrollmentPage = () => {
                                 }
                                 required
                             />
-                            <FormControl fullWidth margin="normal">
-                                <InputLabel>Grado del alumno #{index + 1}</InputLabel>
-                                <Select
-                                    value={st.grade}
-                                    onChange={(e) =>
-                                        handleChangeStudentField(index, 'grade', e.target.value)
-                                    }
-                                    label={`Grado del alumno #${index + 1}`}
-                                    required
-                                >
-                                    {grades.map((grade, idx) => (
-                                        <MenuItem key={idx} value={grade.name}>
-                                            {grade.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                            <Autocomplete
+                                options={grades}
+                                getOptionLabel={(option) => option.name}
+                                isOptionEqualToValue={(option, value) => option.name === value.name}
+                                value={
+                                    grades.find((g) => g.name === st.grade) || null
+                                }
+                                onChange={(event, newValue) =>
+                                    handleChangeStudentField(
+                                        index,
+                                        'grade',
+                                        newValue ? newValue.name : ''
+                                    )
+                                }
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label={`Grado del alumno #${index + 1}`}
+                                        margin="normal"
+                                        required
+                                    />
+                                )}
+                            />
                         </Box>
                     ))}
 
