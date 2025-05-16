@@ -870,17 +870,27 @@ const SchoolsManagementPage = () => {
                                         <MobileField>
                                             <MobileLabel>Grados</MobileLabel>
                                             <MobileValue>
-                                                {school.grades && school.grades.length > 0
-                                                    ? school.grades.map((g, idx) => (
+                                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                                    {school.grades.slice(0, 3).map((grade, index) => (
                                                         <Chip
-                                                            key={idx}
-                                                            label={g.name}
-                                                            size="small"
-                                                            color="primary"
-                                                            style={{ marginRight: 4, marginBottom: 4 }}
+                                                        key={index}
+                                                        label={grade.name}
+                                                        size="small"
+                                                        color="primary"
                                                         />
-                                                    ))
-                                                    : '—'}
+                                                    ))}
+                                                    {school.grades.length > 3 && (
+                                                        <Chip
+                                                        label={`+${school.grades.length - 3} más`}
+                                                        size="small"
+                                                        onClick={(e) =>
+                                                            handlePopoverOpen(e, school.grades.slice(3))
+                                                        }
+                                                        clickable
+                                                        color="secondary"
+                                                        />
+                                                    )}
+                                                </Box>
                                             </MobileValue>
                                         </MobileField>
                                         <Box

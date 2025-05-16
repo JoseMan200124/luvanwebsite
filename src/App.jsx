@@ -18,10 +18,12 @@ import ContractViewer from './pages/ContractViewer';
 import FilledContractViewer from './pages/FilledContractViewer';
 import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage';
+import ThankYouPage from './pages/ThankYouPage';
 import DefaultAdminRoute from './components/DefaultAdminRoute';
 import { modules } from './modules';
 
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage'; // <-- nuevo
+import UpdateParentInfoPage from './pages/UpdateParentInfoPage';
 
 function App() {
     const renderDynamicRoutes = () => {
@@ -122,6 +124,8 @@ function App() {
 
                     {/* Resto de rutas que no coincidan */}
                     <Route path="*" element={<Navigate to="/" replace />} />
+                    <Route path="/thank-you" element={<ThankYouPage />} />
+                    <Route path="/update-parent-info" element={<UpdateParentInfoPage />} />
                 </Routes>
             </AuthProvider>
         </Router>

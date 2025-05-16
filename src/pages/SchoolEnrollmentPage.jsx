@@ -16,14 +16,18 @@ import {
     CircularProgress,
     Autocomplete
 } from '@mui/material';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
+import EnrollmentModal from '../components/modals/EnrollmentModal';
 
 const SchoolEnrollmentPage = () => {
     const { schoolId } = useParams();
-
+        
+    const navigate = useNavigate();
+    
     const [loading, setLoading] = useState(true);
+    const [isEnrollmentModalOpen, setEnrollmentModalOpen] = useState(true);
 
     const [grades, setGrades] = useState([]);
     const [extraFields, setExtraFields] = useState([]);
@@ -116,7 +120,18 @@ const SchoolEnrollmentPage = () => {
 
         try {
             await api.post(`/public/schools/enroll/${schoolId}`, payload);
-
+            
+            // Redirigir a la página de agradecimiento
+            setTimeout(() => {
+                navigate('/thank-you', {
+                    state: {
+                        title: '¡Gracias por inscribirse!',
+                        body: 'En breve le llegará un correo electrónico con su usuario.',
+                        footer: 'Por favor asegúrese de ingresar desde la aplicación móvil.'
+                    }
+                });
+            }, 2000);
+            
             setSnackbar({
                 open: true,
                 message: '¡Registro enviado correctamente!',
@@ -156,6 +171,7 @@ const SchoolEnrollmentPage = () => {
         const fetchSchoolData = async () => {
             try {
                 const response = await api.get(`/schools/${schoolId}`);
+                
                 if (response.data && response.data.school) {
                     const { school } = response.data;
                     if (Array.isArray(school.grades)) {
@@ -213,6 +229,12 @@ const SchoolEnrollmentPage = () => {
     }
 
     return (
+        <><EnrollmentModal
+                open={isEnrollmentModalOpen}
+                onClose={() => setEnrollmentModalOpen(false)}
+                disableEscapeKeyDown
+                disableBackdropClick
+            />
         <Box
             sx={{
                 backgroundColor: '#f7f7f7',
@@ -642,6 +664,7 @@ const SchoolEnrollmentPage = () => {
                 </Snackbar>
             </Box>
         </Box>
+        </>
     );
 };
 

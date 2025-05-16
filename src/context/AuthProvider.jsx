@@ -104,6 +104,39 @@ const AuthProvider = ({ children }) => {
     }, [auth.user]);
 
     // Nueva función login con passwordExpired
+    const loginUpdateParentsInfo = async (email, password) => {
+        try {
+            // Llamamos a loginUser => /api/auth/login
+            const response = await loginUser({ email, password });
+            const { token, passwordExpired } = response.data; // <--- AQUÍ leemos passwordExpired
+
+            const decoded = jwtDecode(token);
+
+            // Si su rol no es Padres:
+            const restrictedRoles = [3]; // Por ejemplo
+            if (!restrictedRoles.includes(decoded.roleId)) {
+                const userName = decoded.name || 'Usuario';
+                throw new Error(`Para tu usuario ${userName}, solo acceso desde la página principal.`);
+            }
+
+            // Guardar en localStorage
+            localStorage.setItem('token', token);
+
+            // Actualizar estado
+            setAuth({
+                user: { ...decoded, roleId: decoded.roleId },
+                token
+            });
+
+            // Retornar passwordExpired para que la LoginPage decida redirigir
+            return { passwordExpired };
+        } catch (error) {
+            // Manejo de error: devolvemos error
+            throw error;
+        }
+    };
+
+    // Nueva función login con passwordExpired
     const login = async (email, password) => {
         try {
             // Llamamos a loginUser => /api/auth/login
@@ -164,6 +197,7 @@ const AuthProvider = ({ children }) => {
     const value = {
         auth,
         initialLoad,
+        loginUpdateParentsInfo,
         login,
         logout,
         verifyToken,
