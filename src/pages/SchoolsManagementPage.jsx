@@ -703,6 +703,7 @@ const SchoolsManagementPage = () => {
     const handleViewSubmissions = async (school) => {
         setSelectedSchoolForSubmissions(school);
         setSubmissions([]);
+        
         try {
             setLoading(true);
             const resp = await api.get(`/schools/${school.id}/submissions`, {
@@ -726,6 +727,7 @@ const SchoolsManagementPage = () => {
                 };
             });
             setSubmissions(parsedSubmissions);
+            setOpenSubmissionDialog(true);
         } catch (error) {
             console.error('Error al obtener inscripciones:', error);
             setSnackbar({
@@ -1136,17 +1138,68 @@ const SchoolsManagementPage = () => {
             </Popover>
 
             <Dialog open={openSubmissionDialog} onClose={handleCloseSubmissionDialog} maxWidth="md" fullWidth>
-                <DialogTitle>Detalle del Formulario</DialogTitle>
+                <DialogTitle>
+                    {submissionDetail ? "Detalle del Formulario" : "Formularios Llenados"}
+                </DialogTitle>
                 <DialogContent>
                     {submissionDetail ? (
                         <SubmissionPreview submission={submissionDetail} />
                     ) : (
-                        <DialogContentText>
-                            No hay datos para mostrar.
-                        </DialogContentText>
+                        <>
+                            {submissions.length === 0 ? (
+                                <DialogContentText>
+                                    No hay formularios llenados para este colegio.
+                                </DialogContentText>
+                            ) : (
+                                <Box>
+                                    <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                                        Selecciona un formulario para ver el detalle:
+                                    </Typography>
+                                    <Table>
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell>Fecha</TableCell>
+                                                <TableCell>Nombre</TableCell>
+                                                <TableCell>Correo</TableCell>
+                                                <TableCell>Acciones</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {submissions.map((sub) => (
+                                                <TableRow key={sub.id}>
+                                                    <TableCell>
+                                                        {new Date(sub.createdAt).toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {sub.data.accountFullName || sub.data.fatherName || sub.data.motherName || '—'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {sub.data.accountEmail || sub.data.fatherEmail || sub.data.motherEmail || '—'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Button
+                                                            variant="outlined"
+                                                            size="small"
+                                                            onClick={() => setSubmissionDetail(sub)}
+                                                        >
+                                                            Ver Detalle
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </Box>
+                            )}
+                        </>
                     )}
                 </DialogContent>
                 <DialogActions>
+                    {submissionDetail && (
+                        <Button onClick={() => setSubmissionDetail(null)}>
+                            Volver a la lista
+                        </Button>
+                    )}
                     <Button onClick={handleCloseSubmissionDialog}>Cerrar</Button>
                 </DialogActions>
             </Dialog>
