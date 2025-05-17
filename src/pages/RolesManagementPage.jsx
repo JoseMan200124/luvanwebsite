@@ -67,6 +67,9 @@ const roleOptions = [
    Ahora se agrega un select para elegir el contrato a enviar (opcional)
    ========================================================================= */
 const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveSuccess }) => {
+    const [schoolSchedules, setSchoolSchedules] = useState([]);
+    const [studentSchedules, setStudentSchedules] = useState({});
+
     const [loading, setLoading] = useState(false);
     const [students, setStudents] = useState([]);
     // Estructura: { [studentId]: [ { busId, assignedSchedule: string[] }, ... ] }
@@ -89,61 +92,92 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
 
     // Al abrir el modal, cargar los estudiantes y sus asignaciones previas
     useEffect(() => {
-        if (open && parentUser && parentUser.FamilyDetail) {
-            const st = parentUser.FamilyDetail.Students || [];
-            setStudents(st);
-            const loadAssignments = async () => {
-                const initial = {};
-                await Promise.all(
-                    st.map(async (stud) => {
-                        try {
-                            const res = await api.get(`/students/${stud.id}/assign-buses`);
-                            // Aseguramos que cada asignación tenga assignedSchedule en array
-                            const parsedAssignments = res.data.assignments.map(assignment => {
-                                if (typeof assignment.assignedSchedule === 'string') {
-                                    try {
-                                        assignment.assignedSchedule = JSON.parse(assignment.assignedSchedule);
-                                    } catch (e) {
-                                        assignment.assignedSchedule = [];
-                                    }
-                                }
-                                return assignment;
-                            });
-                            initial[stud.id] = parsedAssignments;
-                        } catch (error) {
-                            initial[stud.id] = [];
-                        }
-                    })
-                );
-                setAssignments(initial);
+        if (open && parentUser && parentUser.school) {
+            const fetchSchedules = async () => {
+                try {
+                    const resp = await api.get(`/schools/${parentUser.school}`);
+                    setSchoolSchedules(resp.data.school.schedules || []);
+                } catch (error) {
+                    setSchoolSchedules([]);
+                }
             };
-            loadAssignments();
-            // Inicializamos el select de contrato como vacío (opción "Ninguno")
+            fetchSchedules();
+            setStudents(parentUser.FamilyDetail?.Students || []);
+            setAssignments({});
             setSelectedContractForBuses('');
+            setStudentSchedules({}); // Limpiar horarios por alumno
         }
     }, [open, parentUser]);
 
-    // Toggle de un bus (checkbox)
-    const handleToggleBus = (studentId, busId) => {
-        setAssignments((prev) => {
-            const currentList = prev[studentId] || [];
-            const alreadyExists = currentList.find(item => item.busId === busId);
-            if (alreadyExists) {
-                // Quitar esa asignación
-                const newArray = currentList.filter(item => item.busId !== busId);
-                return { ...prev, [studentId]: newArray };
-            } else {
-                // Agregar la asignación con assignedSchedule = []
-                const newArray = [...currentList, { busId, assignedSchedule: [] }];
-                return { ...prev, [studentId]: newArray };
-            }
+    // Cambiar un horario en un selector específico
+    const handleStudentScheduleChange = (studentId, idx, value) => {
+        setStudentSchedules(prev => {
+            const arr = prev[studentId] ? [...prev[studentId]] : [];
+            const prevHorario = arr[idx];
+            arr[idx] = value;
+            // Si cambió el horario, elimina la asignación de buses del horario anterior
+            setAssignments(prevAssignments => {
+                const arrAssign = prevAssignments[studentId] ? [...prevAssignments[studentId]] : [];
+                const filtered = arrAssign.filter(h => h.horario !== prevHorario);
+                return { ...prevAssignments, [studentId]: filtered };
+            });
+            return { ...prev, [studentId]: arr };
         });
     };
 
-    // Saber si un checkbox (bus) está marcado
-    const isBusChecked = (studentId, busId) => {
-        const currentList = assignments[studentId] || [];
-        return currentList.some(item => item.busId === busId);
+    // Toggle bus para un horario específico
+    const handleToggleBus = (studentId, horario, busId) => {
+        setAssignments(prev => {
+            const arr = prev[studentId] ? [...prev[studentId]] : [];
+            let horarioObj = arr.find(h => h.horario === horario);
+            if (!horarioObj) {
+                // Si no existe, lo creamos
+                horarioObj = { horario, buses: [busId] };
+                return { ...prev, [studentId]: [...arr, horarioObj] };
+            }
+            const buses = horarioObj.buses.includes(busId)
+                ? horarioObj.buses.filter(id => id !== busId)
+                : [...horarioObj.buses, busId];
+            const newArr = arr.map(h =>
+                h.horario === horario ? { ...h, buses } : h
+            ).filter(h => h.buses.length > 0); // Elimina horarios sin buses
+            // Si después de quitar el bus no quedan buses, elimina el objeto
+            if (!buses.length) {
+                return { ...prev, [studentId]: newArr };
+            }
+            return { ...prev, [studentId]: newArr };
+        });
+    };
+
+    // Saber si un bus está asignado a un horario específico
+    const isBusChecked = (studentId, horario, busId) => {
+        const arr = assignments[studentId] || [];
+        const horarioObj = arr.find(h => h.horario === horario);
+        return horarioObj ? horarioObj.buses.includes(busId) : false;
+    };
+
+    // Agregar un nuevo selector de horario
+    const handleAddScheduleSelector = (studentId) => {
+        setStudentSchedules(prev => ({
+            ...prev,
+            [studentId]: [...(prev[studentId] || []), ""]
+        }));
+    };
+
+    // Eliminar un selector de horario
+    const handleRemoveScheduleSelector = (studentId, idx) => {
+        setStudentSchedules(prev => {
+            const arr = prev[studentId] ? [...prev[studentId]] : [];
+            const removed = arr[idx];
+            arr.splice(idx, 1);
+            // Al eliminar, también elimina las asignaciones de ese horario
+            setAssignments(prevAssignments => {
+                const arrAssign = prevAssignments[studentId] ? [...prevAssignments[studentId]] : [];
+                const newArrAssign = arrAssign.filter(h => h.horario !== removed);
+                return { ...prevAssignments, [studentId]: newArrAssign };
+            });
+            return { ...prev, [studentId]: arr };
+        });
     };
 
     // Devolver array de horarios actualmente seleccionados
@@ -164,12 +198,25 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
         });
     };
 
+    // Al guardar, transforma assignments al formato esperado por el backend
     const handleSave = async () => {
         setLoading(true);
         try {
-            // Para cada estudiante, hacemos PUT /students/:id/assign-buses
             const promises = Object.keys(assignments).map(async (studId) => {
-                const assignedBuses = assignments[studId];
+                // Agrupar por busId y juntar todos los horarios
+                const busToHorarios = {};
+                (assignments[studId] || []).forEach(h => {
+                    h.buses.forEach(busId => {
+                        if (!busToHorarios[busId]) busToHorarios[busId] = [];
+                        if (!busToHorarios[busId].includes(h.horario)) {
+                            busToHorarios[busId].push(h.horario);
+                        }
+                    });
+                });
+                const assignedBuses = Object.entries(busToHorarios).map(([busId, horarios]) => ({
+                    busId: Number(busId),
+                    assignedSchedule: horarios
+                }));
                 await api.put(`/students/${studId}/assign-buses`, { assignedBuses });
             });
             await Promise.all(promises);
@@ -210,55 +257,93 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
                     <Typography>No hay estudiantes para este padre.</Typography>
                 ) : (
                     <>
-                        {students.map((stud) => (
-                            <Box key={stud.id} sx={{ mb: 3, borderBottom: '1px solid #ccc', pb: 2 }}>
-                                <Typography variant="h6">{stud.fullName}</Typography>
-                                <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
-                                    Grado: {stud.grade || 'N/A'}
-                                </Typography>
-                                <Box sx={{ ml: 2 }}>
-                                    {buses.map((bus) => {
-                                        if (!bus.pilot) return null;
-                                        if (String(bus.pilot.school) !== String(parentUser.school)) return null;
-                                        const checked = isBusChecked(stud.id, bus.id);
-                                        const scheduleOptions = getScheduleOptions(bus);
+                        {students.map((stud) => {
+                            const schedulesArr = studentSchedules[stud.id] || [];
+                            const allHorarioOptions = schoolSchedules.flatMap((sch) =>
+                                (sch.times || []).map((time) => `${sch.day} ${time}`)
+                            );
+                            return (
+                                <Box key={stud.id} sx={{ mb: 3, borderBottom: '1px solid #ccc', pb: 2 }}>
+                                    <Typography variant="h6">{stud.fullName}</Typography>
+                                    <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+                                        Grado: {stud.grade || 'N/A'}
+                                    </Typography>
+                                    {/* Renderiza un selector por cada horario */}
+                                    {schedulesArr.map((selectedSchedule, idx) => {
+                                        const used = schedulesArr.filter((_, i) => i !== idx);
+                                        const availableOptions = allHorarioOptions.filter(opt => !used.includes(opt));
                                         return (
-                                            <div key={bus.id} style={{ marginBottom: 10 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                    <Checkbox
-                                                        checked={checked}
-                                                        onChange={() => handleToggleBus(stud.id, bus.id)}
-                                                        color="primary"
-                                                    />
-                                                    <span>{`Bus [${bus.plate}] (Piloto: ${bus.pilot?.name || 'N/A'})`}</span>
-                                                </div>
-                                                {checked && scheduleOptions.length > 0 && (
-                                                    <FormControl size="small" sx={{ ml: 4, mt: 1, minWidth: 280 }}>
-                                                        <InputLabel>Horarios</InputLabel>
+                                            <Box key={idx} sx={{ mb: 2 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                                    <FormControl fullWidth>
+                                                        <InputLabel>Horario</InputLabel>
                                                         <Select
-                                                            label="Horarios"
-                                                            multiple
-                                                            value={getSelectedSchedules(stud.id, bus.id)}
-                                                            onChange={(e) => handleSchedulesChange(stud.id, bus.id, e.target.value)}
-                                                            renderValue={(selected) =>
-                                                                Array.isArray(selected) ? selected.join(', ') : ''
-                                                            }
+                                                            value={selectedSchedule}
+                                                            onChange={e => handleStudentScheduleChange(stud.id, idx, e.target.value)}
+                                                            label="Horario"
                                                         >
-                                                            {scheduleOptions.map((opt, idx) => (
-                                                                <MenuItem key={idx} value={opt}>
-                                                                    <Checkbox checked={getSelectedSchedules(stud.id, bus.id).includes(opt)} />
-                                                                    <Typography sx={{ ml: 1 }}>{opt}</Typography>
+                                                            <MenuItem value="">
+                                                                <em>Seleccione un horario</em>
+                                                            </MenuItem>
+                                                            {availableOptions.map((value) => (
+                                                                <MenuItem key={value} value={value}>
+                                                                    {value}
                                                                 </MenuItem>
                                                             ))}
                                                         </Select>
                                                     </FormControl>
+                                                    <IconButton
+                                                        color="error"
+                                                        aria-label="Eliminar horario"
+                                                        onClick={() => handleRemoveScheduleSelector(stud.id, idx)}
+                                                        sx={{ ml: 1 }}
+                                                        disabled={schedulesArr.length === 1}
+                                                    >
+                                                        <Delete />
+                                                    </IconButton>
+                                                </Box>
+                                                {/* Mostrar buses solo si hay horario seleccionado */}
+                                                {selectedSchedule && (
+                                                    <Box sx={{ ml: 2 }}>
+                                                        {buses
+                                                            .filter(bus => {
+                                                                if (!bus.pilot) return false;
+                                                                if (String(bus.pilot.school) !== String(parentUser.school)) return false;
+                                                                const busSchedules = getScheduleOptions(bus);
+                                                                return busSchedules.includes(selectedSchedule);
+                                                            })
+                                                            .map((bus) => {
+                                                                const checked = isBusChecked(stud.id, selectedSchedule, bus.id);
+                                                                return (
+                                                                    <div key={bus.id} style={{ marginBottom: 10 }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                                            <Checkbox
+                                                                                checked={checked}
+                                                                                onChange={() => handleToggleBus(stud.id, selectedSchedule, bus.id)}
+                                                                                color="primary"
+                                                                            />
+                                                                            <span>{`Bus [Ruta ${bus.routeNumber}] (Piloto: ${bus.pilot?.name || 'N/A'})`}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                    </Box>
                                                 )}
-                                            </div>
+                                            </Box>
                                         );
                                     })}
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        sx={{ mb: 2 }}
+                                        onClick={() => handleAddScheduleSelector(stud.id)}
+                                        disabled={schedulesArr.length >= allHorarioOptions.length}
+                                    >
+                                        Agregar ruta
+                                    </Button>
                                 </Box>
-                            </Box>
-                        ))}
+                            );
+                        })}
                         {/* Nuevo select para elegir el contrato a enviar (opcional) */}
                         <Box sx={{ mt: 2 }}>
                             <FormControl fullWidth>
