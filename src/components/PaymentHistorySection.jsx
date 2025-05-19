@@ -15,13 +15,22 @@ import {
     TableRow,
     Snackbar,
     Alert,
-    TablePagination
+    TablePagination,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem
 } from '@mui/material';
 import moment from 'moment';
+import 'moment/locale/es';
 import api from '../utils/axiosConfig';
+import * as XLSX from 'xlsx';
 
-function PaymentHistorySection() {
+function PaymentHistorySection({ refresh = 0 }) {
     const [snapshotDate, setSnapshotDate] = useState(moment().format('YYYY-MM-DD'));
+    const [lastPaymentDate, setLastPaymentDate] = useState("");
+    const [selectedMonth, setSelectedMonth] = useState('');
+    const currentYear = moment().year();
 
     // Aquí guardamos la data que viene del backend (solo la "página" actual)
     const [histories, setHistories] = useState([]);
@@ -44,15 +53,24 @@ function PaymentHistorySection() {
         fetchHistory();
         // Cada vez que cambie page, rowsPerPage o snapshotDate
         // se hará una nueva búsqueda en el backend
-    }, [page, rowsPerPage, snapshotDate]);
+    }, [refresh, page, rowsPerPage, snapshotDate, lastPaymentDate, selectedMonth]);
 
     const fetchHistory = async () => {
         try {
             const params = {
                 snapshotDate,
+                lastPaymentDate,
                 page,
                 limit: rowsPerPage
             };
+
+            // Si el usuario seleccionó un mes, agrega el rango
+            if (selectedMonth) {
+                const start = moment(`${currentYear}-${selectedMonth}-01`).startOf('month').format('YYYY-MM-DD');
+                const end = moment(`${currentYear}-${selectedMonth}-01`).endOf('month').format('YYYY-MM-DD');
+                params.monthStart = start;
+                params.monthEnd = end;
+            }   
 
             const res = await api.get('/payments/history', { params });
             const { totalRecords, histories } = res.data;
@@ -90,6 +108,110 @@ function PaymentHistorySection() {
         setPage(0); // al cambiar el tamaño, volvemos a la página 0
     };
 
+    // Utilidad para formatear fecha/hora para el nombre del archivo
+    const getFormattedDateTime = () => {
+        const currentDate = new Date();
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const hours = String(currentDate.getHours()).padStart(2, '0');
+        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
+        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
+        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+    };
+
+    // Función para descargar el historial de pagos en Excel
+    const handleDownloadPaymentHistory = async () => {
+        try {
+            // Construye los mismos filtros que fetchHistory
+            const params = {
+                snapshotDate,
+                lastPaymentDate,
+                page: 0,
+                limit: 10000 // Un número suficientemente grande para traer todos
+            };
+
+            if (selectedMonth) {
+                const start = moment(`${currentYear}-${selectedMonth}-01`).startOf('month').format('YYYY-MM-DD');
+                const end = moment(`${currentYear}-${selectedMonth}-01`).endOf('month').format('YYYY-MM-DD');
+                params.monthStart = start;
+                params.monthEnd = end;
+            }
+
+            // Pide todos los registros al backend
+            const res = await api.get('/payments/history', { params });
+            const allHistories = res.data.histories || [];
+
+            if (!allHistories.length) {
+                setSnackbar({
+                    open: true,
+                    message: 'No hay datos de historial para exportar',
+                    severity: 'info'
+                });
+                return;
+            }
+
+            const headers = [
+                "Colegio",
+                "Apellido Familia",
+                "Cant. Estudiantes",
+                "Estado Final",
+                "Próximo Pago",
+                "Último Pago",
+                "Monto Total (Q)",
+                "Saldo (Q)",
+                "Multa Acum. (Q)",
+                "Total a Pagar (Q)",
+                "Abono (Q)",
+                "Medio de Pago",
+                "Factura",
+                "Exoneración (Q)"
+            ];
+
+            const data = [headers];
+
+            allHistories.forEach((h) => {
+                data.push([
+                    h.schoolName || '',
+                    h.familyLastName || '',
+                    h.studentCount || 0,
+                    h.finalStatus || '',
+                    h.nextPaymentDate ? moment(h.nextPaymentDate).format('DD/MM/YYYY') : '',
+                    h.lastPaymentDate ? moment(h.lastPaymentDate).format('DD/MM/YYYY') : '',
+                    parseFloat(h.montoTotal).toFixed(2),
+                    parseFloat(h.leftover).toFixed(2),
+                    parseFloat(h.accumulatedPenalty).toFixed(2),
+                    parseFloat(h.totalDue).toFixed(2),
+                    parseFloat(h.creditBalance).toFixed(2),
+                    h.paymentMethod || 'Deposito',
+                    h.requiresInvoice ? 'Sí' : 'No',
+                    parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)
+                ]);
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            XLSX.utils.book_append_sheet(wb, ws, "HistorialPagos");
+            const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+            const blob = new Blob([wbout], { type: "application/octet-stream" });
+            const fileName = `historial_pagos_${getFormattedDateTime()}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            setSnackbar({
+                open: true,
+                message: 'Error al descargar el historial',
+                severity: 'error'
+            });
+        }
+    };
+
     return (
         <Box sx={{ mt: 6 }}>
             <Typography variant="h5" gutterBottom>
@@ -98,18 +220,43 @@ function PaymentHistorySection() {
 
             <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                 <TextField
-                    label="Fecha"
+                    label="Fecha Último Pago"
                     type="date"
                     size="small"
                     InputLabelProps={{ shrink: true }}
-                    value={snapshotDate}
+                    value={lastPaymentDate}
                     onChange={(e) => {
                         setPage(0); // resetear paginación al cambiar fecha
-                        setSnapshotDate(e.target.value);
+                        setLastPaymentDate(e.target.value);
+                        setSelectedMonth(''); // limpiar filtro de mes
                     }}
                 />
-                <Button variant="contained" onClick={fetchHistory}>
-                    Ver Historial
+                <FormControl size="small">
+                    <InputLabel>Mes</InputLabel>
+                    <Select
+                        label="Mes"
+                        value={selectedMonth}
+                        onChange={e => {
+                            setSelectedMonth(e.target.value);
+                            setPage(0);
+                            setLastPaymentDate(''); // limpiar filtro de fecha
+                        }}
+                        style={{ minWidth: 100 }}
+                    >
+                        <MenuItem value="">Todos</MenuItem>
+                        {moment.localeData('es').months().map((m, idx) => (
+                            <MenuItem key={m} value={idx + 1}>
+                                {m.charAt(0).toUpperCase() + m.slice(1)}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+                <Button
+                    variant="outlined"
+                    color="success"
+                    onClick={handleDownloadPaymentHistory}
+                >
+                    Descargar Excel
                 </Button>
             </Box>
 
@@ -136,7 +283,6 @@ function PaymentHistorySection() {
                                     <TableCell>Medio de Pago</TableCell>
                                     <TableCell>Factura</TableCell>
                                     <TableCell>Exoneración (Q)</TableCell>
-                                    <TableCell>Fecha Historial</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -147,12 +293,12 @@ function PaymentHistorySection() {
                                         <TableCell>{h.finalStatus}</TableCell>
                                         <TableCell>
                                             {h.nextPaymentDate
-                                                ? moment(h.nextPaymentDate).format('DD/MM/YYYY')
+                                                ? moment.parseZone(h.nextPaymentDate).format('DD/MM/YYYY')
                                                 : '—'}
                                         </TableCell>
                                         <TableCell>
                                             {h.lastPaymentDate
-                                                ? moment(h.lastPaymentDate).format('DD/MM/YYYY')
+                                                ? moment.parseZone(h.lastPaymentDate).format('DD/MM/YYYY')
                                                 : '—'}
                                         </TableCell>
                                         <TableCell>
@@ -178,9 +324,6 @@ function PaymentHistorySection() {
                                         </TableCell>
                                         <TableCell>
                                             {parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {moment(h.snapshotDate).format('DD/MM/YYYY HH:mm')}
                                         </TableCell>
                                     </TableRow>
                                 ))}

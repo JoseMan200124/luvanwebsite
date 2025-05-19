@@ -286,6 +286,11 @@ const PaymentsManagementPage = () => {
     const [exoneratePayment, setExoneratePayment] = useState(null);
     const [exonerateAmount, setExonerateAmount] = useState('');
 
+    // Refrescar Historial de Pagos
+    const [paymentHistoryRefresh, setPaymentHistoryRefresh] = useState(0);
+
+    const triggerPaymentHistoryRefresh = () => setPaymentHistoryRefresh(prev => prev + 1);
+
     const handleOpenExonerateDialog = (payment) => {
         setExoneratePayment(payment);
         setExonerateAmount('');
@@ -313,6 +318,7 @@ const PaymentsManagementPage = () => {
             await api.post(`/payments/${exoneratePayment.id}/exoneratePenalty`, {
                 exonerateAmount: amt
             });
+            triggerPaymentHistoryRefresh();
             setSnackbar({
                 open: true,
                 message: 'Mora exonerada correctamente',
@@ -334,6 +340,7 @@ const PaymentsManagementPage = () => {
             await api.put(`/payments/${payment.id}/set-invoice-need`, {
                 requiresInvoice: newCheckedValue
             });
+            triggerPaymentHistoryRefresh();
             setSnackbar({
                 open: true,
                 message: `Se ha actualizado la opción de factura a: ${newCheckedValue ? 'Sí' : 'No'}`,
@@ -383,6 +390,7 @@ const PaymentsManagementPage = () => {
             await api.put(`/payments/${selectedPaymentForPaymentMethod.id}/payment-method`, {
                 paymentMethod: newMethod
             });
+            triggerPaymentHistoryRefresh();
             setSnackbar({
                 open: true,
                 message: 'Método de pago actualizado correctamente',
@@ -463,7 +471,7 @@ const PaymentsManagementPage = () => {
                     page: 1,
                     limit: 999999
                 }
-            });
+            });   
             const arr = res.data.payments || [];
             const studentsTotal = res.data.studentTotals
                 ? (res.data.studentTotals[schId] || 0)
@@ -603,6 +611,7 @@ const PaymentsManagementPage = () => {
                 dailyPenalty: globalDailyPenalty,
                 globalPenaltyPaused: globalPenaltyPaused
             });
+            triggerPaymentHistoryRefresh();
             setSnackbar({
                 open: true,
                 message: 'Mora global actualizada',
@@ -621,6 +630,7 @@ const PaymentsManagementPage = () => {
                 dailyPenalty: globalDailyPenalty,
                 globalPenaltyPaused: newVal
             });
+            triggerPaymentHistoryRefresh();
             setGlobalPenaltyPaused(newVal);
             setSnackbar({
                 open: true,
@@ -657,6 +667,7 @@ const PaymentsManagementPage = () => {
                 }
             }
             await api.post(`/payments/${selectedPayment.id}/sendEmail`, formData);
+            triggerPaymentHistoryRefresh();
             setSnackbar({
                 open: true,
                 message: 'Correo enviado exitosamente',
@@ -697,6 +708,7 @@ const PaymentsManagementPage = () => {
                 schoolId: editPayment.schoolId !== '' ? editPayment.schoolId : null,
                 penaltyPaused: editPayment.penaltyPaused
             });
+            triggerPaymentHistoryRefresh();
             setSnackbar({
                 open: true,
                 message: 'Pago actualizado',
@@ -880,7 +892,7 @@ const PaymentsManagementPage = () => {
         setRegisterPaymentData(newData);
     };
     const handleRegisterPayment = async () => {
-        try {
+        try {            
             const { paymentId, amountPaid, isFullPayment,
                 isMultipleMonths, monthsCount, paymentDate } = registerPaymentData;
             await api.post(`/payments/${paymentId}/add-transaction`, {
@@ -890,6 +902,7 @@ const PaymentsManagementPage = () => {
                 monthsCount,
                 paymentDate
             });
+            triggerPaymentHistoryRefresh();
 
             setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
             handleCloseRegisterPayDialog();
@@ -898,7 +911,7 @@ const PaymentsManagementPage = () => {
                 const schId = registerPaySelected.schoolId || 'null';
                 refetchSchoolPayments(schId);
             }
-        } catch (err) {
+        } catch (err) {           
             setSnackbar({ open: true, message: 'Error al registrar pago', severity: 'error' });
         }
     };
@@ -943,6 +956,7 @@ const PaymentsManagementPage = () => {
             await api.put(`/payments/${payment.id}`, {
                 penaltyPaused: newVal
             });
+            triggerPaymentHistoryRefresh();
         } catch (error) {
             console.error('Error al actualizar la mora:', error);
             setSnackbar({
@@ -1478,12 +1492,12 @@ const PaymentsManagementPage = () => {
                                                         <TableCell>{payment.finalStatus}</TableCell>
                                                         <TableCell>
                                                             {payment.nextPaymentDate
-                                                                ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
+                                                                ? moment.parseZone(payment.nextPaymentDate).format('DD/MM/YYYY')
                                                                 : '—'}
                                                         </TableCell>
                                                         <TableCell>
                                                             {payment.lastPaymentDate
-                                                                ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
+                                                                ? moment.parseZone(payment.lastPaymentDate).format('DD/MM/YYYY')
                                                                 : '—'}
                                                         </TableCell>
                                                         <TableCell>Q {mt.toFixed(2)}</TableCell>
@@ -1678,7 +1692,7 @@ const PaymentsManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
-                        value={editPayment.nextPaymentDate ? moment(editPayment.nextPaymentDate).format('YYYY-MM-DD') : ''}
+                        value={editPayment.nextPaymentDate ? moment.parseZone(editPayment.nextPaymentDate).format('YYYY-MM-DD') : ''}
                         disabled
                     />
                     <TextField
@@ -1688,7 +1702,7 @@ const PaymentsManagementPage = () => {
                         fullWidth
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
-                        value={editPayment.lastPaymentDate ? moment(editPayment.lastPaymentDate).format('YYYY-MM-DD') : ''}
+                        value={editPayment.lastPaymentDate ? moment.parseZone(editPayment.lastPaymentDate).format('YYYY-MM-DD') : ''}
                         onChange={(e) => {
                             setEditPayment({ ...editPayment, lastPaymentDate: e.target.value });
                         }}
@@ -1963,7 +1977,7 @@ const PaymentsManagementPage = () => {
                 </Alert>
             </Snackbar>
 
-            <PaymentHistorySection />
+            <PaymentHistorySection refresh={paymentHistoryRefresh} />
 
             {/* SECCIÓN DE ANÁLISIS DE PAGOS */}
             <Box sx={{ mt: 6, mb: 2 }}>
