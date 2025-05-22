@@ -1034,8 +1034,6 @@ const RolesManagementPage = () => {
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
 
-    const downloadFilename = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
-
     const handleDownloadNewUsers = () => {
         const newUsers = users.filter(isUserNew);
         const headers = [
@@ -1277,6 +1275,209 @@ const RolesManagementPage = () => {
                 severity: 'error'
             });
         }
+    };
+
+    const handleDownloadUserTemplate = () => {
+        // 1. Prepara listas de referencia
+        const colegios = schools.map(s => [s.id, s.name]);
+        const tiposRuta = [
+            ["Completa"],
+            ["Media AM"],
+            ["Media PM"]
+        ];
+        const pilotos = allPilots.map(p => [p.id, p.name]);
+
+        // 2. Definir los headers por rol
+        const sheets = [
+            {
+                name: "Gestor",
+                headers: [
+                    "Nombre Completo",
+                    "Correo electrónico",
+                    "Contraseña",
+                    "Colegio (ID)"
+                ],
+                example: [
+                    "GestorEjemplo",
+                    "gestor@email.com",
+                    "contraseña123",
+                    colegios[0]?.[0] || ""
+                ]
+            },
+            {
+                name: "Administrador",
+                headers: [
+                    "Nombre Completo",
+                    "Correo electrónico",
+                    "Contraseña"
+                ],
+                example: [
+                    "AdminEjemplo",
+                    "admin@email.com",
+                    "contraseña123"
+                ]
+            },
+            {
+                name: "Padre",
+                headers: [
+                    "Nombre Completo",
+                    "Correo electrónico",
+                    "Contraseña",
+                    "Colegio (ID)",
+                    "Nombre de la Madre",
+                    "Celular de la Madre",
+                    "Correo de la Madre",
+                    "Nombre del Padre",
+                    "Celular del Padre",
+                    "Correo del Padre",
+                    "Razón social",
+                    "NIT",
+                    "Dirección Principal",
+                    "Dirección Alterna",
+                    "Descuento especial (monto)",
+                    "Tipo ruta",
+                    "Alumno 1",
+                    "Grado Alumno 1",
+                    "Alumno 2",
+                    "Grado Alumno 2",
+                    "Alumno 3",
+                    "Grado Alumno 3",
+                    "Alumno 4",
+                    "Grado Alumno 4",
+                ],
+                example: [
+                    "PadreEjemplo",
+                    "padre@email.com",
+                    "contraseña123",
+                    colegios[0]?.[0] || "",
+                    "María López",
+                    "55512345",
+                    "maria@email.com",
+                    "Carlos Pérez",
+                    "55567890",
+                    "carlos@email.com",
+                    "Razón Social Ejemplo",
+                    "1234567-8",
+                    "Calle Principal 123",
+                    "Avenida Secundaria 456",
+                    "0",
+                    tiposRuta[0][0],
+                    "Alumno Ejemplo 1",
+                    "Primero Básico",
+                    "Alumno Ejemplo 2",
+                    "Segundo",
+                    "Alumno Ejemplo 3",
+                    "Tercero",
+                    "Alumno Ejemplo 4",
+                    "Cuarto",
+                ]
+            },
+            {
+                name: "Monitora",
+                headers: [
+                    "Nombre Completo",
+                    "Correo electrónico",
+                    "Contraseña",
+                    "Colegio (ID)"
+                ],
+                example: [
+                    "MonitoraEjemplo",
+                    "moni@email.com",
+                    "contraseña123",
+                    colegios[0]?.[0] || ""
+                ]
+            },
+            {
+                name: "Piloto",
+                headers: [
+                    "Nombre Completo",
+                    "Correo electrónico",
+                    "Contraseña",
+                    "Colegio (ID)"
+                ],
+                example: [
+                    "PilotoEjemplo",
+                    "piloto@email.com",
+                    "contraseña123",
+                    colegios[0]?.[0] || ""
+                ]
+            },
+            {
+                name: "Supervisor",
+                headers: [
+                    "Nombre Completo",
+                    "Correo electrónico",
+                    "Contraseña",
+                    "Colegio (ID)",
+                    "Pilotos a Cargo (IDs separados por ;)"
+                ],
+                example: [
+                    "SupervisorEjemplo",
+                    "supervisor@email.com",
+                    "contraseña123",
+                    colegios[0]?.[0] || "",
+                    pilotos[0]?.[0] + ";" + pilotos[1]?.[0] || ""
+                ]
+            }
+        ];
+
+        // 3. Hoja de listas de referencia con columnas separadas y una columna en blanco entre cada bloque
+        // Encuentra el máximo de filas para cada bloque para alinear verticalmente
+        const maxRows = Math.max(
+            colegios.length,
+            tiposRuta.length,
+            pilotos.length
+        );
+
+        const wsListasData = [
+            [
+                "Colegios (ID)", "Colegios (Nombre)", "", // columna en blanco
+                "Tipo de Ruta", "", // columna en blanco
+                "Pilotos (ID)", "Pilotos (Nombre)"
+            ]
+        ];
+
+        for (let i = 0; i < maxRows; i++) {
+            wsListasData.push([
+                colegios[i]?.[0] ?? "", colegios[i]?.[1] ?? "", "",
+                tiposRuta[i]?.[0] ?? "", "",
+                pilotos[i]?.[0] ?? "", pilotos[i]?.[1] ?? ""
+            ]);
+        }
+
+        const wsListas = XLSX.utils.aoa_to_sheet(wsListasData);
+
+        // Ajusta el ancho de cada columna de la hoja Listas
+        wsListas['!cols'] = [
+            { wch: Math.max("Colegios (ID)".length + 2, 15) },
+            { wch: Math.max("Colegios (Nombre)".length + 2, 20) },
+            { wch: 2 },
+            { wch: Math.max("Tipo de Ruta".length + 2, 15) },
+            { wch: 2 },
+            { wch: Math.max("Pilotos (ID)".length + 2, 15) },
+            { wch: Math.max("Pilotos (Nombre)".length + 2, 20) }
+        ];
+
+        // 4. Generar el archivo
+        const wb = XLSX.utils.book_new();
+        sheets.forEach(sheet => {
+            const ws = XLSX.utils.aoa_to_sheet([sheet.headers, sheet.example]);
+            ws['!cols'] = sheet.headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
+            XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+        });
+        XLSX.utils.book_append_sheet(wb, wsListas, "Listas");
+
+        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([wbout], { type: "application/octet-stream" });
+        const fileName = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     return (
@@ -1880,6 +2081,7 @@ const RolesManagementPage = () => {
                                             </Grid>
                                             <Grid item xs={10} md={5}>
                                                 <TextField
+                                                   
                                                     label="Grado"
                                                     fullWidth
                                                     value={st.grade}
@@ -2007,17 +2209,19 @@ const RolesManagementPage = () => {
             <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
                 <DialogTitle>Carga Masiva de Usuarios</DialogTitle>
                 <DialogContent>
-                    <DialogContentText>
-                        Sube el archivo con las columnas correctas. Usa la plantilla oficial.
-                    </DialogContentText>
+                    <Typography variant="body1" sx={{ mb: 1 }}>
+                            Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial.<br />
+                            <br />
+                            Las listas de Colegios, Tipo de Ruta y Pilotos están en la hoja "Listas" de la plantilla.<br />
+                            <br />
+                            El límite de archivo es 5 MB.
+                    </Typography>
                     <Box sx={{ mt: 2 }}>
                         <Button
                             variant="outlined"
                             sx={{ mr: 2 }}
                             color="success"
-                            component={Link}
-                            href="/plantillas/plantilla_usuarios.xlsx"
-                            download={downloadFilename}
+                            onClick={handleDownloadUserTemplate}
                         >
                             Descargar Plantilla
                         </Button>
