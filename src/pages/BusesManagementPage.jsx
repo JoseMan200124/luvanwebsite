@@ -701,8 +701,6 @@ const BusesManagementPage = () => {
         URL.revokeObjectURL(url);
     };
 
-    const downloadFilename = `buses_template_${getFormattedDateTime()}.xlsx`;
-
     // Aplicar ordenamiento
     const sortedBuses = stableSort(filteredBuses, getComparator(order, orderBy));
 
