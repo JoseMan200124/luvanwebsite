@@ -18,7 +18,12 @@ import {
     AccordionDetails,
     useTheme,
     useMediaQuery,
-    Box
+    Box,
+    Button,
+    MenuItem,
+    FormControl,
+    InputLabel,
+    Select
 } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import styled from 'styled-components';
@@ -75,6 +80,8 @@ const MobileValue = styled(Typography)`
   font-size: 1rem;
 `;
 
+const PILOTS_PER_PAGE = 5;
+
 const SupervisorsManagementPage = () => {
     const { auth } = useContext(AuthContext);
     const theme = useTheme();
@@ -89,6 +96,9 @@ const SupervisorsManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(5);
 
     const [expanded, setExpanded] = useState(false);
+    const [pilotPages, setPilotPages] = useState({});
+    // Nuevo estado para colegio seleccionado por supervisor
+    const [selectedSchool, setSelectedSchool] = useState({});
 
     useEffect(() => {
         fetchSupervisors();
@@ -131,6 +141,27 @@ const SupervisorsManagementPage = () => {
         setExpanded(isExpanded ? panel : false);
     };
 
+    // Helper para manejar la página de pilotos por supervisor y colegio
+    const handlePilotPageChange = (supEmail, school, newPage) => {
+        setPilotPages(prev => ({
+            ...prev,
+            [`${supEmail}-${school}`]: newPage
+        }));
+    };
+
+    // Helper para manejar selección de colegio por supervisor
+    const handleSchoolChange = (supEmail, school) => {
+        setSelectedSchool(prev => ({
+            ...prev,
+            [supEmail]: school
+        }));
+        // Reiniciar paginación al cambiar de colegio
+        setPilotPages(prev => ({
+            ...prev,
+            [`${supEmail}-${school}`]: 0
+        }));
+    };
+
     return (
         <SupervisorsContainer>
             <Typography variant="h4" gutterBottom>
@@ -168,75 +199,116 @@ const SupervisorsManagementPage = () => {
                         <>
                             {filteredSupervisors
                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                .map((sup, index) => (
-                                    <MobileCard key={sup.email}>
-                                        <MobileField>
-                                            <MobileLabel>Nombre</MobileLabel>
-                                            <MobileValue>{sup.name}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Email</MobileLabel>
-                                            <MobileValue>{sup.email}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Pilotos Asignados</MobileLabel>
-                                            <Accordion
-                                                expanded={expanded === `panel-${index}`}
-                                                onChange={handleChangeAccordion(`panel-${index}`)}
-                                            >
-                                                <AccordionSummary
-                                                    expandIcon={<ExpandMoreIcon />}
-                                                    aria-controls={`panel-${index}-content`}
+                                .map((sup, index) => {
+                                    const schools = Object.keys(groupBySchool(sup.assignedPilots || []));
+                                    const selected = selectedSchool[sup.email] || schools[0] || '';
+                                    const pilotsBySchool = groupBySchool(sup.assignedPilots || []);
+                                    const pilots = pilotsBySchool[selected] || [];
+                                    const key = `${sup.email}-${selected}`;
+                                    const currentPage = pilotPages[key] || 0;
+                                    const totalPages = Math.ceil(pilots.length / PILOTS_PER_PAGE);
+                                    const pilotsToShow = pilots.slice(
+                                        currentPage * PILOTS_PER_PAGE,
+                                        (currentPage + 1) * PILOTS_PER_PAGE
+                                    );
+                                    return (
+                                        <MobileCard key={sup.email}>
+                                            <MobileField>
+                                                <MobileLabel>Nombre</MobileLabel>
+                                                <MobileValue>{sup.name}</MobileValue>
+                                            </MobileField>
+                                            <MobileField>
+                                                <MobileLabel>Email</MobileLabel>
+                                                <MobileValue>{sup.email}</MobileValue>
+                                            </MobileField>
+                                            <MobileField>
+                                                <MobileLabel>Pilotos Asignados</MobileLabel>
+                                                <Accordion
+                                                    expanded={expanded === `panel-${index}`}
+                                                    onChange={handleChangeAccordion(`panel-${index}`)}
                                                 >
-                                                    <Typography>Ver pilotos asignados</Typography>
-                                                </AccordionSummary>
-                                                <AccordionDetails>
-                                                    {(!sup.assignedPilots || sup.assignedPilots.length === 0) ? (
-                                                        <Typography>
-                                                            No hay pilotos asignados a este supervisor.
-                                                        </Typography>
-                                                    ) : (
-                                                        Object.entries(groupBySchool(sup.assignedPilots)).map(
-                                                            ([school, pilots]) => (
-                                                                <Box key={school} sx={{ mb: 2 }}>
-                                                                    <Typography variant="subtitle1">
-                                                                        Colegio: {school}
-                                                                    </Typography>
-                                                                    {pilots.map((p) => (
-                                                                        <Paper
-                                                                            key={p.email}
-                                                                            variant="outlined"
-                                                                            sx={{ p: 1, mb: 1 }}
+                                                    <AccordionSummary
+                                                        expandIcon={<ExpandMoreIcon />}
+                                                        aria-controls={`panel-${index}-content`}
+                                                    >
+                                                        <Typography>Ver pilotos asignados</Typography>
+                                                    </AccordionSummary>
+                                                    <AccordionDetails>
+                                                        {schools.length === 0 ? (
+                                                            <Typography>
+                                                                No hay pilotos asignados a este supervisor.
+                                                            </Typography>
+                                                        ) : (
+                                                            <>
+                                                                <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                                                                    <InputLabel>Colegio</InputLabel>
+                                                                    <Select
+                                                                        value={selected}
+                                                                        label="Colegio"
+                                                                        onChange={e => handleSchoolChange(sup.email, e.target.value)}
+                                                                    >
+                                                                        {schools.map(school => (
+                                                                            <MenuItem key={school} value={school}>
+                                                                                {school}
+                                                                            </MenuItem>
+                                                                        ))}
+                                                                    </Select>
+                                                                </FormControl>
+                                                                {pilotsToShow.map((p) => (
+                                                                    <Paper
+                                                                        key={p.email}
+                                                                        variant="outlined"
+                                                                        sx={{ p: 1, mb: 1 }}
+                                                                    >
+                                                                        <Typography variant="body2">
+                                                                            <strong>Nombre:</strong> {p.name}
+                                                                        </Typography>
+                                                                        <Typography variant="body2">
+                                                                            <strong>Email:</strong> {p.email}
+                                                                        </Typography>
+                                                                        <Typography variant="body2">
+                                                                            <strong>Kilometraje:</strong> {(p.kmTraveled ?? 0).toFixed(3)}
+                                                                        </Typography>
+                                                                        <Typography variant="body2">
+                                                                            <strong>Rutas:</strong> {p.routesCount ?? 0}
+                                                                        </Typography>
+                                                                        <Typography variant="body2">
+                                                                            <strong>Incidentes:</strong> {p.incidentsCount ?? 0}
+                                                                        </Typography>
+                                                                        <Typography variant="body2">
+                                                                            <strong>Emergencias:</strong> {p.emergenciesCount ?? 0}
+                                                                        </Typography>
+                                                                    </Paper>
+                                                                ))}
+                                                                {totalPages > 1 && (
+                                                                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                                                        <Button
+                                                                            size="small"
+                                                                            disabled={currentPage === 0}
+                                                                            onClick={() => handlePilotPageChange(sup.email, selected, currentPage - 1)}
                                                                         >
-                                                                            <Typography variant="body2">
-                                                                                <strong>Nombre:</strong> {p.name}
-                                                                            </Typography>
-                                                                            <Typography variant="body2">
-                                                                                <strong>Email:</strong> {p.email}
-                                                                            </Typography>
-                                                                            <Typography variant="body2">
-                                                                                <strong>Kilometraje:</strong> {p.kmTraveled ?? 0}
-                                                                            </Typography>
-                                                                            <Typography variant="body2">
-                                                                                <strong>Rutas:</strong> {p.routesCount ?? 0}
-                                                                            </Typography>
-                                                                            <Typography variant="body2">
-                                                                                <strong>Incidentes:</strong> {p.incidentsCount ?? 0}
-                                                                            </Typography>
-                                                                            <Typography variant="body2">
-                                                                                <strong>Emergencias:</strong> {p.emergenciesCount ?? 0}
-                                                                            </Typography>
-                                                                        </Paper>
-                                                                    ))}
-                                                                </Box>
-                                                            )
-                                                        )
-                                                    )}
-                                                </AccordionDetails>
-                                            </Accordion>
-                                        </MobileField>
-                                    </MobileCard>
-                                ))}
+                                                                            Anterior
+                                                                        </Button>
+                                                                        <Typography variant="body2" sx={{ alignSelf: 'center' }}>
+                                                                            Página {currentPage + 1} de {totalPages}
+                                                                        </Typography>
+                                                                        <Button
+                                                                            size="small"
+                                                                            disabled={currentPage >= totalPages - 1}
+                                                                            onClick={() => handlePilotPageChange(sup.email, selected, currentPage + 1)}
+                                                                        >
+                                                                            Siguiente
+                                                                        </Button>
+                                                                    </Box>
+                                                                )}
+                                                            </>
+                                                        )}
+                                                    </AccordionDetails>
+                                                </Accordion>
+                                            </MobileField>
+                                        </MobileCard>
+                                    );
+                                })}
                             <TablePagination
                                 component="div"
                                 count={filteredSupervisors.length}
@@ -265,67 +337,107 @@ const SupervisorsManagementPage = () => {
                                     <TableBody>
                                         {filteredSupervisors
                                             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                            .map((sup, index) => (
-                                                <TableRow key={sup.email}>
-                                                    <TableCell>{sup.name}</TableCell>
-                                                    <TableCell>{sup.email}</TableCell>
-                                                    <TableCell>
-                                                        <Accordion
-                                                            expanded={expanded === `panel-${index}`}
-                                                            onChange={handleChangeAccordion(`panel-${index}`)}
-                                                        >
-                                                            <AccordionSummary
-                                                                expandIcon={<ExpandMoreIcon />}
-                                                                aria-controls={`panel-${index}-content`}
+                                            .map((sup, index) => {
+                                                const schools = Object.keys(groupBySchool(sup.assignedPilots || []));
+                                                const selected = selectedSchool[sup.email] || schools[0] || '';
+                                                const pilotsBySchool = groupBySchool(sup.assignedPilots || []);
+                                                const pilots = pilotsBySchool[selected] || [];
+                                                const key = `${sup.email}-${selected}`;
+                                                const currentPage = pilotPages[key] || 0;
+                                                const totalPages = Math.ceil(pilots.length / PILOTS_PER_PAGE);
+                                                const pilotsToShow = pilots.slice(
+                                                    currentPage * PILOTS_PER_PAGE,
+                                                    (currentPage + 1) * PILOTS_PER_PAGE
+                                                );
+                                                return (
+                                                    <TableRow key={sup.email}>
+                                                        <TableCell>{sup.name}</TableCell>
+                                                        <TableCell>{sup.email}</TableCell>
+                                                        <TableCell>
+                                                            <Accordion
+                                                                expanded={expanded === `panel-${index}`}
+                                                                onChange={handleChangeAccordion(`panel-${index}`)}
                                                             >
-                                                                <Typography>Ver pilotos asignados</Typography>
-                                                            </AccordionSummary>
-                                                            <AccordionDetails>
-                                                                {(!sup.assignedPilots ||
-                                                                    sup.assignedPilots.length === 0) ? (
-                                                                    <Typography>
-                                                                        No hay pilotos asignados a este supervisor.
-                                                                    </Typography>
-                                                                ) : (
-                                                                    Object.entries(groupBySchool(sup.assignedPilots)).map(
-                                                                        ([school, pilots]) => (
-                                                                            <div key={school} style={{ marginBottom: '16px' }}>
-                                                                                <Typography variant="subtitle1">
-                                                                                    Colegio: {school}
-                                                                                </Typography>
-                                                                                <Table size="small" sx={{ overflowX: 'auto' }}>
-                                                                                    <TableHead>
-                                                                                        <TableRow>
-                                                                                            <TableCell>Nombre</TableCell>
-                                                                                            <TableCell>Email</TableCell>
-                                                                                            <TableCell>Km Recorridos</TableCell>
-                                                                                            <TableCell>Rutas Hechas</TableCell>
-                                                                                            <TableCell>Incidentes</TableCell>
-                                                                                            <TableCell>Emergencias</TableCell>
+                                                                <AccordionSummary
+                                                                    expandIcon={<ExpandMoreIcon />}
+                                                                    aria-controls={`panel-${index}-content`}
+                                                                >
+                                                                    <Typography>Ver pilotos asignados</Typography>
+                                                                </AccordionSummary>
+                                                                <AccordionDetails>
+                                                                    {schools.length === 0 ? (
+                                                                        <Typography>
+                                                                            No hay pilotos asignados a este supervisor.
+                                                                        </Typography>
+                                                                    ) : (
+                                                                        <>
+                                                                            <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                                                                                <InputLabel>Colegio</InputLabel>
+                                                                                <Select
+                                                                                    value={selected}
+                                                                                    label="Colegio"
+                                                                                    onChange={e => handleSchoolChange(sup.email, e.target.value)}
+                                                                                >
+                                                                                    {schools.map(school => (
+                                                                                        <MenuItem key={school} value={school}>
+                                                                                            {school}
+                                                                                        </MenuItem>
+                                                                                    ))}
+                                                                                </Select>
+                                                                            </FormControl>
+                                                                            <Table size="small" sx={{ overflowX: 'auto' }}>
+                                                                                <TableHead>
+                                                                                    <TableRow>
+                                                                                        <TableCell>Nombre</TableCell>
+                                                                                        <TableCell>Email</TableCell>
+                                                                                        <TableCell>Km Recorridos</TableCell>
+                                                                                        <TableCell>Rutas Hechas</TableCell>
+                                                                                        <TableCell>Incidentes</TableCell>
+                                                                                        <TableCell>Emergencias</TableCell>
+                                                                                    </TableRow>
+                                                                                </TableHead>
+                                                                                <TableBody>
+                                                                                    {pilotsToShow.map((p) => (
+                                                                                        <TableRow key={p.email}>
+                                                                                            <TableCell>{p.name}</TableCell>
+                                                                                            <TableCell>{p.email}</TableCell>
+                                                                                            <TableCell>{(p.kmTraveled ?? 0).toFixed(3)}</TableCell>
+                                                                                            <TableCell>{p.routesCount ?? 0}</TableCell>
+                                                                                            <TableCell>{p.incidentsCount ?? 0}</TableCell>
+                                                                                            <TableCell>{p.emergenciesCount ?? 0}</TableCell>
                                                                                         </TableRow>
-                                                                                    </TableHead>
-                                                                                    <TableBody>
-                                                                                        {pilots.map((p) => (
-                                                                                            <TableRow key={p.email}>
-                                                                                                <TableCell>{p.name}</TableCell>
-                                                                                                <TableCell>{p.email}</TableCell>
-                                                                                                <TableCell>{p.kmTraveled ?? 0}</TableCell>
-                                                                                                <TableCell>{p.routesCount ?? 0}</TableCell>
-                                                                                                <TableCell>{p.incidentsCount ?? 0}</TableCell>
-                                                                                                <TableCell>{p.emergenciesCount ?? 0}</TableCell>
-                                                                                            </TableRow>
-                                                                                        ))}
-                                                                                    </TableBody>
-                                                                                </Table>
-                                                                            </div>
-                                                                        )
-                                                                    )
-                                                                )}
-                                                            </AccordionDetails>
-                                                        </Accordion>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                                                                    ))}
+                                                                                </TableBody>
+                                                                            </Table>
+                                                                            {totalPages > 1 && (
+                                                                                <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                                                                    <Button
+                                                                                        size="small"
+                                                                                        disabled={currentPage === 0}
+                                                                                        onClick={() => handlePilotPageChange(sup.email, selected, currentPage - 1)}
+                                                                                    >
+                                                                                        Anterior
+                                                                                    </Button>
+                                                                                    <Typography variant="body2" sx={{ alignSelf: 'center' }}>
+                                                                                        Página {currentPage + 1} de {totalPages}
+                                                                                    </Typography>
+                                                                                    <Button
+                                                                                        size="small"
+                                                                                        disabled={currentPage >= totalPages - 1}
+                                                                                        onClick={() => handlePilotPageChange(sup.email, selected, currentPage + 1)}
+                                                                                    >
+                                                                                        Siguiente
+                                                                                    </Button>
+                                                                                </Box>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </AccordionDetails>
+                                                            </Accordion>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
                                         {filteredSupervisors.length === 0 && (
                                             <TableRow>
                                                 <TableCell colSpan={3} align="center">

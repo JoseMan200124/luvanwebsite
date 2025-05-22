@@ -300,7 +300,9 @@ const PilotsManagementPage = () => {
                                                         </MobileField>
                                                         <MobileField>
                                                             <MobileLabel>Kilometraje</MobileLabel>
-                                                            <MobileValue>{pilot.kmTraveled ?? 0} km</MobileValue>
+                                                            <MobileValue>
+                                                                {(pilot.kmTraveled ?? 0).toFixed(3)} km
+                                                            </MobileValue>
                                                         </MobileField>
                                                         <MobileField>
                                                             <MobileLabel>Rutas</MobileLabel>
@@ -423,7 +425,9 @@ const PilotsManagementPage = () => {
                                                                         </Tooltip>
                                                                         {pilot.emergenciesCount || 0}
                                                                     </TableCell>
-                                                                    <TableCell>{pilot.kmTraveled ?? 0} km</TableCell>
+                                                                    <TableCell>
+                                                                        {(pilot.kmTraveled ?? 0).toFixed(3)} km
+                                                                    </TableCell>
                                                                     <TableCell>{pilot.routesCount ?? 0}</TableCell>
                                                                 </TableRow>
                                                             ))}

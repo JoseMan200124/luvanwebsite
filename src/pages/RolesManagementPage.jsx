@@ -109,6 +109,24 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
         }
     }, [open, parentUser]);
 
+    // Filtrar contratos: solo los del colegio del padre (NO los globales)
+    const filteredContracts = contracts.filter(
+        c =>
+            c.schoolId === null || 
+            Number(c.schoolId) === Number(parentUser.school)
+    );
+
+    // Seleccionar automáticamente el contrato del colegio si existe
+    useEffect(() => {
+        if (open && parentUser && contracts.length > 0) {
+            const contractForSchool = contracts.find(
+                c => Number(c.schoolId) === Number(parentUser.school)
+            );
+            setSelectedContractForBuses(contractForSchool ? contractForSchool.uuid : '');
+        }
+    // eslint-disable-next-line
+    }, [open, parentUser, contracts]);
+
     // Cambiar un horario en un selector específico
     const handleStudentScheduleChange = (studentId, idx, value) => {
         setStudentSchedules(prev => {
@@ -230,13 +248,13 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
                         to: parentUser.email,
                         subject: 'Enlace de Contrato Asignado (Tras asignar rutas)',
                         html: `
-              <h1>Hola, ${parentUser.name}</h1>
-              <p>Te han asignado el contrato <strong>${contract.title}</strong> tras la asignación de rutas.</p>
-              <p>Puedes llenarlo en el siguiente enlace:
-              <a href="${fatherShareUrl}" target="_blank">${fatherShareUrl}</a></p>
-              <br/>
-              <p>Atentamente, Sistema de Contratos</p>
-            `
+                            <h1>Hola, ${parentUser.name}</h1>
+                            <p>Te han asignado el contrato <strong>${contract.title}</strong> tras la asignación de rutas.</p>
+                            <p>Puedes llenarlo en el siguiente enlace:
+                            <a href="${fatherShareUrl}" target="_blank">${fatherShareUrl}</a></p>
+                            <br/>
+                            <p>Atentamente, Sistema de Contratos</p>
+                            `
                     });
                 }
             }
@@ -356,7 +374,7 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
                                     <MenuItem value="">
                                         <em>Ninguno</em>
                                     </MenuItem>
-                                    {contracts.map((c) => (
+                                    {filteredContracts.map((c) => (
                                         <MenuItem key={c.uuid} value={c.uuid}>
                                             {c.title}
                                         </MenuItem>
@@ -481,6 +499,23 @@ const SendContractDialog = ({ open, onClose, user, contracts, onSent }) => {
     const [selectedContract, setSelectedContract] = useState('');
     const [loading, setLoading] = useState(false);
 
+    // Mostrar contratos del colegio del usuario y los globales (schoolId null)
+    const filteredContracts = contracts.filter(
+        c =>
+            c.schoolId === null ||
+            Number(c.schoolId) === Number(user.school)
+    );
+
+    // Seleccionar automáticamente el contrato del colegio si existe
+    useEffect(() => {
+        if (open && user && contracts.length > 0) {
+            const contractForSchool = contracts.find(
+                c => Number(c.schoolId) === Number(user.school)
+            );
+            setSelectedContract(contractForSchool ? contractForSchool.uuid : '');
+        }
+    }, [open, user, contracts]);
+
     const handleSend = async () => {
         if (!selectedContract) return;
         setLoading(true);
@@ -527,7 +562,7 @@ const SendContractDialog = ({ open, onClose, user, contracts, onSent }) => {
                         <MenuItem value="">
                             <em>Ninguno</em>
                         </MenuItem>
-                        {contracts.map((c) => (
+                        {filteredContracts.map((c) => (
                             <MenuItem key={c.uuid} value={c.uuid}>
                                 {c.title}
                             </MenuItem>
@@ -1109,6 +1144,141 @@ const RolesManagementPage = () => {
         URL.revokeObjectURL(url);
     };
 
+    const handleDownloadAllUsers = async () => {
+        try {
+            let allUsers = [];
+            let page = 0;
+            const limit = 500;
+            let total = 0;
+            let fetched = 0;
+
+            // Primera petición para saber el total
+            const firstResp = await api.get('/users', { params: { page, limit } });
+            allUsers = firstResp.data.users || [];
+            total = firstResp.data.total || allUsers.length;
+            fetched = allUsers.length;
+
+            // Si hay más, sigue pidiendo en lotes
+            while (fetched < total) {
+                page += 1;
+                const resp = await api.get('/users', { params: { page, limit } });
+                const usersBatch = resp.data.users || [];
+                allUsers = allUsers.concat(usersBatch);
+                fetched += usersBatch.length;
+                if (usersBatch.length === 0) break;
+            }
+
+            // Generar Excel
+            const headers = [
+                "Nombre",
+                "Apellido Familia",
+                "Correo electrónico",
+                "Rol",
+                "Colegio",
+                "Placa de Bus",
+                "Nombre de la Madre",
+                "Celular de la Madre",
+                "Correo de la Madre",
+                "Nombre del Padre",
+                "Celular del Padre",
+                "Correo del Padre",
+                "Razón social",
+                "NIT",
+                "Dirección Principal",
+                "Dirección Alterna",
+                "Descuento especial",
+                "Alumno 1",
+                "Alumno 2",
+                "Alumno 3",
+                "Alumno 4",
+                "Tipo ruta",
+                "Pilotos a Cargo"
+            ];
+            const data = [headers];
+            allUsers.forEach((u) => {
+                const roleName = u.Role ? u.Role.name : "";
+                const schoolName = u.School ? u.School.name : "";
+                const fd = u.FamilyDetail || {};
+                const motherName = fd.motherName || "";
+                const motherCell = fd.motherCellphone || "";
+                const motherEmail = fd.motherEmail || "";
+                const fatherName = fd.fatherName || "";
+                const fatherCell = fd.fatherCellphone || "";
+                const fatherEmail = fd.fatherEmail || "";
+                const razonSocial = fd.razonSocial || "";
+                const nit = fd.nit || "";
+                const mainAddr = fd.mainAddress || "";
+                const altAddr = fd.alternativeAddress || "";
+                const specialFee = fd.specialFee || 0;
+                const routeType = fd.routeType || "";
+                let alumno1 = "";
+                let alumno2 = "";
+                let alumno3 = "";
+                let alumno4 = "";
+                if (fd.Students && fd.Students.length) {
+                    if (fd.Students[0]) alumno1 = fd.Students[0].fullName;
+                    if (fd.Students[1]) alumno2 = fd.Students[1].fullName;
+                    if (fd.Students[2]) alumno3 = fd.Students[2].fullName;
+                    if (fd.Students[3]) alumno4 = fd.Students[3].fullName;
+                }
+                let pilotosACargoStr = "";
+                if (roleName.toLowerCase() === "supervisor" && u.supervisorPilots) {
+                    const emails = u.supervisorPilots.map(sp => {
+                        const pilot = allPilots.find(ap => ap.id === sp.pilotId);
+                        return pilot ? pilot.email : "";
+                    });
+                    pilotosACargoStr = emails.join(";");
+                }
+                const row = [
+                    u.name || "",
+                    fd.familyLastName || "",
+                    u.email || "",
+                    roleName,
+                    schoolName,
+                    "",
+                    motherName,
+                    motherCell,
+                    motherEmail,
+                    fatherName,
+                    fatherCell,
+                    fatherEmail,
+                    razonSocial,
+                    nit,
+                    mainAddr,
+                    altAddr,
+                    String(specialFee),
+                    alumno1,
+                    alumno2,
+                    alumno3,
+                    alumno4,
+                    routeType,
+                    pilotosACargoStr
+                ];
+                data.push(row);
+            });
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
+            const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+            const blob = new Blob([wbout], { type: "application/octet-stream" });
+            const fileName = `usuarios_${getFormattedDateTime()}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            setSnackbar({
+                open: true,
+                message: 'Error al descargar todos los usuarios',
+                severity: 'error'
+            });
+        }
+    };
+
     return (
         <RolesContainer>
             <Typography variant="h4" gutterBottom>
@@ -1208,6 +1378,13 @@ const RolesManagementPage = () => {
                         onClick={handleDownloadNewUsers}
                     >
                         Descargar Nuevos
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="success"
+                        onClick={handleDownloadAllUsers}
+                    >
+                        Descargar Todos
                     </Button>
                 </div>
             </Box>

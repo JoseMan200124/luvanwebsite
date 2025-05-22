@@ -50,6 +50,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import styled from 'styled-components';
+import * as XLSX from 'xlsx';
 
 const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
@@ -162,9 +163,9 @@ function getFieldValue(bus, field) {
         case 'description':
             return bus.description;
         case 'pilot':
-            return bus.pilot ? bus.pilot.email : '';
+            return bus.pilot ? bus.pilot.name : '';
         case 'monitora':
-            return bus.monitora ? bus.monitora.email : '';
+            return bus.monitora ? bus.monitora.name : '';
         default:
             return '';
     }
@@ -240,7 +241,30 @@ const BusesManagementPage = () => {
             const response = await api.get('/users/pilots', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            setAvailablePilots(Array.isArray(response.data.users) ? response.data.users : []);
+            let pilots = Array.isArray(response.data.users) ? response.data.users : [];
+
+            // Para cada piloto, obtener sus horarios según su colegio
+            const pilotsWithSchedules = await Promise.all(
+                pilots.map(async (pilot) => {
+                    if (!pilot.school) {
+                        return { ...pilot, schedules: [] };
+                    }
+                    try {
+                        const schoolId = parseInt(pilot.school, 10);
+                        const resp = await api.get(`/schools/${schoolId}/schedules`, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                        return {
+                            ...pilot,
+                            schedules: Array.isArray(resp.data.schedules) ? resp.data.schedules : []
+                        };
+                    } catch (err) {
+                        return { ...pilot, schedules: [] };
+                    }
+                })
+            );
+
+            setAvailablePilots(pilotsWithSchedules);
         } catch (err) {
             console.error('Error fetching pilots:', err);
         }
@@ -591,6 +615,92 @@ const BusesManagementPage = () => {
         setBulkLoading(false);
     };
 
+    // Función para descargar la plantilla personalizada de buses
+    const handleDownloadTemplate = () => {
+        // 1. Prepara los datos de Pilotos y Monitoras (ID y Nombre en columnas separadas)
+        const pilotos = availablePilots.map(p => [p.id, p.name]);
+        const monitoras = availableMonitors.map(m => [m.id, m.name]);
+
+        // 2. Prepara los horarios por piloto (cada horario en una columna distinta)
+        let maxHorarios = 0;
+        const pilotosConHorarios = availablePilots.map(p => {
+            const horarios = Array.isArray(p.schedules)
+                ? p.schedules.map(
+                    sch => `${sch.name} - ${sch.day} - ${(sch.times || []).join(', ')}`
+                )
+                : [];
+            if (horarios.length > maxHorarios) maxHorarios = horarios.length;
+            return {
+                id: p.id,
+                name: p.name,
+                horarios
+            };
+        });
+
+        const horariosHeaders = [];
+        for (let i = 1; i <= maxHorarios; i++) {
+            horariosHeaders.push(`Horario ${i}`);
+        }
+
+        // 3. Define las columnas y una fila de ejemplo vacía
+        const headers = [
+            "Placa",
+            "Capacidad",
+            "Descripción",
+            "Piloto (ID)",
+            "Monitora (ID)",
+            "Número de Ruta",
+            "Horarios (Nombre - Día - Horas)"
+        ];
+        const exampleRow = [
+            "PlacaEjemplo",
+            40,
+            "Descripción de Ejemplo. Esta fila es solo un ejemplo.",
+            pilotos[0]?.[0] || "",
+            monitoras[0]?.[0] || "",
+            "R-01",
+            pilotosConHorarios[0]?.horarios[0] || ""
+        ];
+
+        const data = [headers, exampleRow];
+
+        // 4. Crea la hoja de cálculo principal
+        const ws = XLSX.utils.aoa_to_sheet(data);
+
+        // 5. Agrega una hoja con las listas de referencia (ID, Nombre, Horarios)
+        // Cabecera: Pilotos (ID), Pilotos (Nombre), Horario 1, Horario 2, ...
+        const wsPilotosHorarios = [
+            ["Pilotos (ID)", "Pilotos (Nombre)", ...horariosHeaders],
+            ...pilotosConHorarios.map(piloto => [
+                piloto.id,
+                piloto.name,
+                ...piloto.horarios,
+                ...Array(maxHorarios - piloto.horarios.length).fill("") // Rellena celdas vacías si tiene menos horarios
+            ]),
+            [],
+            ["Monitoras (ID)", "Monitoras (Nombre)"],
+            ...monitoras
+        ];
+        const wsLists = XLSX.utils.aoa_to_sheet(wsPilotosHorarios);
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Buses");
+        XLSX.utils.book_append_sheet(wb, wsLists, "Listas");
+
+        // 6. Descarga el archivo
+        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([wbout], { type: "application/octet-stream" });
+        const fileName = `buses_template_${getFormattedDateTime()}.xlsx`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     const downloadFilename = `buses_template_${getFormattedDateTime()}.xlsx`;
 
     // Aplicar ordenamiento
@@ -674,12 +784,12 @@ const BusesManagementPage = () => {
                                             <MobileValue>{bus.description}</MobileValue>
                                         </MobileField>
                                         <MobileField>
-                                            <MobileLabel>Piloto (Email)</MobileLabel>
-                                            <MobileValue>{bus.pilot ? bus.pilot.email : ''}</MobileValue>
+                                            <MobileLabel>Piloto</MobileLabel>
+                                            <MobileValue>{bus.pilot ? bus.pilot.name : ''}</MobileValue>
                                         </MobileField>
                                         <MobileField>
-                                            <MobileLabel>Monitora (Email)</MobileLabel>
-                                            <MobileValue>{bus.monitora ? bus.monitora.email : ''}</MobileValue>
+                                            <MobileLabel>Monitora</MobileLabel>
+                                            <MobileValue>{bus.monitora ? bus.monitora.name : ''}</MobileValue>
                                         </MobileField>
                                         <MobileField>
                                             <MobileLabel>Estado</MobileLabel>
@@ -826,7 +936,7 @@ const BusesManagementPage = () => {
                                                     hideSortIcon={false}
                                                     sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
-                                                    Piloto (Email)
+                                                    Piloto
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell sortDirection={orderBy === 'monitora' ? order : false}>
@@ -837,7 +947,7 @@ const BusesManagementPage = () => {
                                                     hideSortIcon={false}
                                                     sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
-                                                    Monitora (Email)
+                                                    Monitora
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell>Estado</TableCell>
@@ -865,11 +975,11 @@ const BusesManagementPage = () => {
                                                     <ResponsiveTableCell data-label="Descripción">
                                                         {bus.description}
                                                     </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Piloto (Email)">
-                                                        {bus.pilot ? bus.pilot.email : ''}
+                                                    <ResponsiveTableCell data-label="Piloto">
+                                                        {bus.pilot ? bus.pilot.name : ''}
                                                     </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Monitora (Email)">
-                                                        {bus.monitora ? bus.monitora.email : ''}
+                                                    <ResponsiveTableCell data-label="Monitora">
+                                                        {bus.monitora ? bus.monitora.name : ''}
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Estado">
                                                         {bus.inWorkshop ? (
@@ -1186,16 +1296,25 @@ const BusesManagementPage = () => {
                 <DialogTitle>Carga Masiva de Buses</DialogTitle>
                 <DialogContent>
                     <Typography variant="body1" sx={{ mb: 1 }}>
-                        Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial
-                        (Columnas sugeridas: "Placa", "Capacidad", "Descripción", <strong>"Piloto"</strong>,{' '}
-                        <strong>"Monitora"</strong>, "Número de Ruta"). El límite de archivo es 5 MB.
+                        Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial.<br />
+                        <strong>Columnas requeridas:</strong>
+                        <ul>
+                            <li>Placa</li>
+                            <li>Capacidad</li>
+                            <li>Descripción</li>
+                            <li>Piloto (ID - Email)</li>
+                            <li>Monitora (ID - Email)</li>
+                            <li>Número de Ruta</li>
+                            <li>Horarios (Nombre - Día - Horas)</li>
+                        </ul>
+                        Las listas de Pilotos, Monitoras y Horarios están en la hoja "Listas" de la plantilla.<br />
+                        El límite de archivo es 5 MB.
                     </Typography>
 
                     <Button
                         variant="outlined"
                         color="success"
-                        href="/plantillas/plantilla_buses.xlsx"
-                        download={downloadFilename}
+                        onClick={handleDownloadTemplate}
                         sx={{ mr: 2 }}
                     >
                         Descargar Plantilla

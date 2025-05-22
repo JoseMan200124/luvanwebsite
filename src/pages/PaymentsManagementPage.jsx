@@ -225,10 +225,6 @@ const PaymentsManagementPage = () => {
     const [emailMessage, setEmailMessage] = useState('');
     const [attachments, setAttachments] = useState([]);
 
-    // Diálogo Editar Pago
-    const [openEditDialog, setOpenEditDialog] = useState(false);
-    const [editPayment, setEditPayment] = useState({});
-
     // Boletas / Zoom
     const [openReceiptsDialog, setOpenReceiptsDialog] = useState(false);
     const [fatherReceipts, setFatherReceipts] = useState([]);
@@ -676,50 +672,6 @@ const PaymentsManagementPage = () => {
             handleCloseEmailDialog();
         } catch (err) {
             setSnackbar({ open: true, message: 'Error al enviar correo', severity: 'error' });
-        }
-    };
-
-    // Editar Payment
-    const handleOpenEditDialog = (pay) => {
-        setEditPayment({
-            id: pay.id,
-            status: pay.status,
-            nextPaymentDate: pay.nextPaymentDate,
-            lastPaymentDate: pay.lastPaymentDate,
-            schoolId: pay.School ? pay.School.id : '',
-            leftover: pay.leftover,
-            accumulatedPenalty: pay.accumulatedPenalty,
-            totalDue: pay.totalDue,
-            creditBalance: pay.creditBalance,
-            montoTotal: pay.montoTotal,
-            penaltyPaused: pay.penaltyPaused
-        });
-        setOpenEditDialog(true);
-    };
-    const handleCloseEditDialog = () => {
-        setOpenEditDialog(false);
-        setEditPayment({});
-    };
-    const handleSaveEdit = async () => {
-        try {
-            await api.put(`/payments/${editPayment.id}`, {
-                status: editPayment.status,
-                lastPaymentDate: editPayment.lastPaymentDate || null,
-                schoolId: editPayment.schoolId !== '' ? editPayment.schoolId : null,
-                penaltyPaused: editPayment.penaltyPaused
-            });
-            triggerPaymentHistoryRefresh();
-            setSnackbar({
-                open: true,
-                message: 'Pago actualizado',
-                severity: 'success'
-            });
-            handleCloseEditDialog();
-
-            const schId = editPayment.schoolId || 'null';
-            refetchSchoolPayments(schId);
-        } catch (error) {
-            setSnackbar({ open: true, message: 'Error al actualizar pago', severity: 'error' });
         }
     };
 
@@ -1303,9 +1255,6 @@ const PaymentsManagementPage = () => {
                                             <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
                                                 <SendIcon />
                                             </IconButton>
-                                            <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
-                                                <EditIcon />
-                                            </IconButton>
                                             <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
                                                 <Badge
                                                     color="primary"
@@ -1517,9 +1466,6 @@ const PaymentsManagementPage = () => {
                                                             <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
                                                                 <SendIcon />
                                                             </IconButton>
-                                                            <IconButton title="Editar" onClick={() => handleOpenEditDialog(payment)}>
-                                                                <EditIcon />
-                                                            </IconButton>
                                                             <IconButton title="Ver Boletas" onClick={() => handleShowReceipts(payment)}>
                                                                 <Badge color="primary" variant="dot" overlap="circular" invisible={!hasUnread}>
                                                                     <ReceiptIcon />
@@ -1617,134 +1563,6 @@ const PaymentsManagementPage = () => {
                     <Button onClick={handleCloseEmailDialog}>Cancelar</Button>
                     <Button variant="contained" onClick={handleSendEmail}>
                         Enviar
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Dialog Editar Pago */}
-            <Dialog open={openEditDialog} onClose={handleCloseEditDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>Editar Pago</DialogTitle>
-                <DialogContent>
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Estado (interno)</InputLabel>
-                        <Select
-                            label="Estado"
-                            value={editPayment.status || ''}
-                            onChange={(e) => {
-                                setEditPayment({ ...editPayment, status: e.target.value });
-                            }}
-                        >
-                            <MenuItem value="PENDIENTE">Pendiente</MenuItem>
-                            <MenuItem value="EN_PROCESO">En Proceso</MenuItem>
-                            <MenuItem value="CONFIRMADO">Confirmado</MenuItem>
-                            <MenuItem value="VENCIDO">Vencido</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <TextField
-                        label="Monto Total"
-                        margin="dense"
-                        type="number"
-                        fullWidth
-                        variant="outlined"
-                        value={editPayment.montoTotal || 0}
-                        disabled
-                    />
-                    <TextField
-                        label="Saldo"
-                        margin="dense"
-                        type="number"
-                        fullWidth
-                        variant="outlined"
-                        value={editPayment.leftover || 0}
-                        disabled
-                    />
-                    <TextField
-                        label="Multa Acumulada"
-                        margin="dense"
-                        type="number"
-                        fullWidth
-                        variant="outlined"
-                        value={editPayment.accumulatedPenalty || 0}
-                        disabled
-                    />
-                    <TextField
-                        label="Total a Pagar"
-                        margin="dense"
-                        type="number"
-                        fullWidth
-                        variant="outlined"
-                        value={editPayment.totalDue || 0}
-                        disabled
-                    />
-                    <TextField
-                        label="Abono"
-                        margin="dense"
-                        type="number"
-                        fullWidth
-                        variant="outlined"
-                        value={editPayment.creditBalance || 0}
-                        disabled
-                    />
-                    <TextField
-                        label="Próximo Pago"
-                        margin="dense"
-                        type="date"
-                        fullWidth
-                        variant="outlined"
-                        InputLabelProps={{ shrink: true }}
-                        value={editPayment.nextPaymentDate ? moment.parseZone(editPayment.nextPaymentDate).format('YYYY-MM-DD') : ''}
-                        disabled
-                    />
-                    <TextField
-                        label="Último Pago"
-                        margin="dense"
-                        type="date"
-                        fullWidth
-                        variant="outlined"
-                        InputLabelProps={{ shrink: true }}
-                        value={editPayment.lastPaymentDate ? moment.parseZone(editPayment.lastPaymentDate).format('YYYY-MM-DD') : ''}
-                        onChange={(e) => {
-                            setEditPayment({ ...editPayment, lastPaymentDate: e.target.value });
-                        }}
-                    />
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Colegio</InputLabel>
-                        <Select
-                            label="Colegio"
-                            value={editPayment.schoolId || ''}
-                            onChange={(e) => {
-                                setEditPayment({ ...editPayment, schoolId: e.target.value });
-                            }}
-                        >
-                            <MenuItem value="">
-                                <em>Ninguno</em>
-                            </MenuItem>
-                            {schools.map((sch) => (
-                                <MenuItem key={sch.id} value={sch.id}>
-                                    {sch.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={!!editPayment.penaltyPaused}
-                                onChange={(e) =>
-                                    setEditPayment({
-                                        ...editPayment,
-                                        penaltyPaused: e.target.checked
-                                    })
-                                }
-                            />
-                        }
-                        label="¿Congelar mora para este usuario?"
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseEditDialog}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleSaveEdit}>
-                        Guardar
                     </Button>
                 </DialogActions>
             </Dialog>

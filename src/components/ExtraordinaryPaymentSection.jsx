@@ -18,7 +18,11 @@ import {
     Snackbar,
     Alert,
     Box,
-    TablePagination
+    TablePagination,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import api from '../utils/axiosConfig';
@@ -63,6 +67,11 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated }) => {
     // Snackbar para mensajes
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
+    // Estados para la gestión de usuarios en el formulario
+    const [userListArray, setUserListArray] = useState([]);
+    const [userDialogOpen, setUserDialogOpen] = useState(false);
+    const [newUserName, setNewUserName] = useState('');
+
     // Cargar colegios al montar
     useEffect(() => {
         const fetchSchools = async () => {
@@ -94,20 +103,50 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated }) => {
         fetchFamilies();
     }, [formData.schoolId]);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
+    // Al cambiar userListArray, actualiza formData.userList y formData.userCount automáticamente
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            userList: userListArray.join(', '),
+            userCount: userListArray.length > 0 ? userListArray.length.toString() : ''
+        }));
+    }, [userListArray]);
 
     // Manejador del Autocomplete para seleccionar familia
     const handleFamilyChange = (event, newValue) => {
         setFormData(prev => ({ ...prev, familyLastName: newValue ? newValue.familyLastName : '' }));
     };
 
+    // Manejo de cambios en el formulario
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Funciones para el diálogo de agregar usuario
+    const handleOpenUserDialog = () => {
+        setNewUserName('');
+        setUserDialogOpen(true);
+    };
+    const handleCloseUserDialog = () => {
+        setUserDialogOpen(false);
+        setNewUserName('');
+    };
+    const handleAddUserToList = () => {
+        if (newUserName.trim()) {
+            setUserListArray(prev => [...prev, newUserName.trim()]);
+        }
+        setUserDialogOpen(false);
+        setNewUserName('');
+    };
+    const handleRemoveUserFromList = (idx) => {
+        setUserListArray(prev => prev.filter((_, i) => i !== idx));
+    };
+
     // Envío del formulario para crear un pago extraordinario
     const handleSubmit = async () => {
-        if (!formData.schoolId || !formData.familyLastName || !formData.amount) {
-            alert('Por favor complete los campos obligatorios: Colegio, Apellidos de Familia y Monto.');
+        if (!formData.schoolId || !formData.amount) {
+            alert('Por favor complete los campos obligatorios: Colegio y Monto.');
             return;
         }
         try {
@@ -311,19 +350,58 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated }) => {
                                 type="number"
                                 variant="outlined"
                                 fullWidth
-                                value={formData.userCount}
-                                onChange={handleChange}
+                                value={userListArray.length}
+                                InputProps={{ readOnly: true }}
                             />
                         </Grid>
                         {(formData.eventType === 'cumpleaños' || formData.eventType === 'excursión') && (
                             <Grid item xs={12}>
+                                <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                                    Lista de Usuarios
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                                    {userListArray.map((user, idx) => (
+                                        <Box
+                                            key={idx}
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                bgcolor: '#f0f0f0',
+                                                borderRadius: 2,
+                                                px: 1,
+                                                py: 0.5,
+                                                mr: 1
+                                            }}
+                                        >
+                                            <Typography variant="body2" sx={{ mr: 1 }}>{user}</Typography>
+                                            <Button
+                                                size="small"
+                                                color="error"
+                                                onClick={() => handleRemoveUserFromList(idx)}
+                                                sx={{ minWidth: 0, px: 0.5 }}
+                                            >
+                                                ×
+                                            </Button>
+                                        </Box>
+                                    ))}
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        onClick={handleOpenUserDialog}
+                                        sx={{ height: 32 }}
+                                    >
+                                        Agregar Usuario
+                                    </Button>
+                                </Box>
+                                {/* Campo oculto para mantener compatibilidad con el backend */}
                                 <TextField
                                     name="userList"
                                     label="Lista de Usuarios (separados por comas)"
                                     variant="outlined"
                                     fullWidth
-                                    value={formData.userList}
-                                    onChange={handleChange}
+                                    value={userListArray.join(', ')}
+                                    onChange={() => {}}
+                                    style={{ display: 'none' }}
                                 />
                             </Grid>
                         )}
@@ -480,6 +558,34 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated }) => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
+            {/* Diálogo para agregar usuario */}
+            <Dialog open={userDialogOpen} onClose={handleCloseUserDialog}>
+                <DialogTitle>Agregar Usuario</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        label="Nombre del Usuario"
+                        type="text"
+                        fullWidth
+                        value={newUserName}
+                        onChange={e => setNewUserName(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddUserToList();
+                            }
+                        }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseUserDialog}>Cancelar</Button>
+                    <Button onClick={handleAddUserToList} variant="contained">
+                        Agregar
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Paper>
     );
 };
