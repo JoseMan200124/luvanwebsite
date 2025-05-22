@@ -667,21 +667,42 @@ const BusesManagementPage = () => {
         // 4. Crea la hoja de cálculo principal
         const ws = XLSX.utils.aoa_to_sheet(data);
 
-        // 5. Agrega una hoja con las listas de referencia (ID, Nombre, Horarios)
-        // Cabecera: Pilotos (ID), Pilotos (Nombre), Horario 1, Horario 2, ...
-        const wsPilotosHorarios = [
-            ["Pilotos (ID)", "Pilotos (Nombre)", ...horariosHeaders],
-            ...pilotosConHorarios.map(piloto => [
-                piloto.id,
-                piloto.name,
-                ...piloto.horarios,
-                ...Array(maxHorarios - piloto.horarios.length).fill("") // Rellena celdas vacías si tiene menos horarios
-            ]),
-            [],
-            ["Monitoras (ID)", "Monitoras (Nombre)"],
-            ...monitoras
+        // 5. Agrega una hoja con las listas de referencia (ID, Nombre, Horarios) en columnas separadas y con columnas en blanco entre bloques
+        // Encuentra el máximo de filas para alinear verticalmente
+        const maxRows = Math.max(
+            pilotosConHorarios.length,
+            monitoras.length
+        );
+
+        const wsListasData = [
+            [
+                "Pilotos (ID)", "Pilotos (Nombre)", ...horariosHeaders, "", // columna en blanco
+                "Monitoras (ID)", "Monitoras (Nombre)"
+            ]
         ];
-        const wsLists = XLSX.utils.aoa_to_sheet(wsPilotosHorarios);
+
+        for (let i = 0; i < maxRows; i++) {
+            wsListasData.push([
+                pilotosConHorarios[i]?.id ?? "", pilotosConHorarios[i]?.name ?? "",
+                ...(pilotosConHorarios[i]?.horarios ?? []),
+                ...Array(maxHorarios - (pilotosConHorarios[i]?.horarios?.length || 0)).fill(""),
+                "", // columna en blanco
+                monitoras[i]?.[0] ?? "", monitoras[i]?.[1] ?? ""
+            ]);
+        }
+
+        const wsLists = XLSX.utils.aoa_to_sheet(wsListasData);
+
+        // Ajusta el ancho de cada columna de la hoja Listas
+        const cols = [
+            { wch: Math.max("Pilotos (ID)".length + 2, 15) },
+            { wch: Math.max("Pilotos (Nombre)".length + 2, 20) },
+            ...horariosHeaders.map(h => ({ wch: Math.max(h.length + 2, 20) })),
+            { wch: 2 }, // columna en blanco
+            { wch: Math.max("Monitoras (ID)".length + 2, 15) },
+            { wch: Math.max("Monitoras (Nombre)".length + 2, 20) }
+        ];
+        wsLists['!cols'] = cols;
 
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Buses");
@@ -1295,17 +1316,9 @@ const BusesManagementPage = () => {
                 <DialogContent>
                     <Typography variant="body1" sx={{ mb: 1 }}>
                         Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial.<br />
-                        <strong>Columnas requeridas:</strong>
-                        <ul>
-                            <li>Placa</li>
-                            <li>Capacidad</li>
-                            <li>Descripción</li>
-                            <li>Piloto (ID - Email)</li>
-                            <li>Monitora (ID - Email)</li>
-                            <li>Número de Ruta</li>
-                            <li>Horarios (Nombre - Día - Horas)</li>
-                        </ul>
+                        <br />
                         Las listas de Pilotos, Monitoras y Horarios están en la hoja "Listas" de la plantilla.<br />
+                        <br />
                         El límite de archivo es 5 MB.
                     </Typography>
 
