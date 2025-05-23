@@ -6,6 +6,8 @@ import axios from 'axios';
 // Ojo: Asegúrate de usar la librería "jwt-decode" real.
 // (Aquí la variable se llama "jwtDecode" pero asegúrate de tener "npm install jwt-decode")
 import { jwtDecode } from 'jwt-decode';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 
 import { loginUser } from '../services/authService';
 import { initSocket, closeSocket } from '../services/socketService';
@@ -29,6 +31,7 @@ const AuthProvider = ({ children }) => {
     });
 
     const [lastActivity, setLastActivity] = useState(Date.now());
+    const [showIdleSnackbar, setShowIdleSnackbar] = useState(false);
 
     const resetTimer = useCallback(() => {
         setLastActivity(Date.now());
@@ -38,7 +41,7 @@ const AuthProvider = ({ children }) => {
         const checkIdle = () => {
             const now = Date.now();
             if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) {
-                logout();
+                logoutByIdle();
             }
         };
         const interval = setInterval(checkIdle, CHECK_INTERVAL_MS);
@@ -176,6 +179,14 @@ const AuthProvider = ({ children }) => {
         navigate('/login');
     };
 
+    const logoutByIdle = () => {
+        localStorage.removeItem('token');
+        closeSocket();
+        setAuth({ user: null, token: null });
+        setShowIdleSnackbar(true); // Mostrar notificación
+        navigate('/login');
+    };
+
     const verifyToken = async () => {
         try {
             const response = await axios.get('/auth/verify', {
@@ -203,7 +214,20 @@ const AuthProvider = ({ children }) => {
         verifyToken,
     };
 
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    return (
+        <AuthContext.Provider value={value}>
+            {children}
+            <Snackbar
+                open={showIdleSnackbar}
+                onClose={() => setShowIdleSnackbar(false)}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            >
+                <Alert severity="warning" sx={{ width: '100%' }}>
+                    El tiempo de inactividad venció. Vuelva a iniciar sesión.
+                </Alert>
+            </Snackbar>
+        </AuthContext.Provider>
+    );
 };
 
 export default AuthProvider;
