@@ -251,11 +251,10 @@ const PaymentsManagementPage = () => {
         paymentDate: moment().format('YYYY-MM-DD')
     });
 
-    // Diálogo Método de Pago
-    const [openPaymentMethodDialog, setOpenPaymentMethodDialog] = useState(false);
-    const [selectedPaymentForPaymentMethod, setSelectedPaymentForPaymentMethod] = useState(null);
-    const [paymentMethodValue, setPaymentMethodValue] = useState('');
-    const [customPaymentMethod, setCustomPaymentMethod] = useState('');
+    // Diálogo Número de cuenta
+    const [openBankAccountNumberDialog, setOpenBankAccountNumberDialog] = useState(false);
+    const [selectedPaymentForBankAccount, setSelectedPaymentForBankAccount] = useState(null);
+    const [bankAccountNumberValue, setBankAccountNumberValue] = useState('');
 
     // Snackbar
     const [snackbar, setSnackbar] = useState({
@@ -353,52 +352,36 @@ const PaymentsManagementPage = () => {
         }
     };
 
-    // Método de Pago
-    const handleOpenPaymentMethodDialog = (payment) => {
-        setSelectedPaymentForPaymentMethod(payment);
-        setPaymentMethodValue(payment.paymentMethod || 'Deposito');
-        setCustomPaymentMethod('');
-        setOpenPaymentMethodDialog(true);
+    // Número de cuenta
+    const handleOpenBankAccountDialog = (payment) => {
+        setSelectedPaymentForBankAccount(payment);
+        setBankAccountNumberValue(payment.bankAccountNumber || '');
+        setOpenBankAccountNumberDialog(true);
     };
 
-    const handleClosePaymentMethodDialog = () => {
-        setOpenPaymentMethodDialog(false);
-        setSelectedPaymentForPaymentMethod(null);
-        setPaymentMethodValue('');
-        setCustomPaymentMethod('');
+    const handleCloseBankAccountNumberDialog = () => {
+        setOpenBankAccountNumberDialog(false);
+        setSelectedPaymentForBankAccount(null);
     };
 
-    const handleSavePaymentMethod = async () => {
-        if (!selectedPaymentForPaymentMethod) return;
-        let newMethod = paymentMethodValue;
-        if (paymentMethodValue === 'Otro') {
-            if (!customPaymentMethod.trim()) {
-                setSnackbar({
-                    open: true,
-                    message: 'Ingrese un método de pago válido para "Otro"',
-                    severity: 'error'
-                });
-                return;
-            }
-            newMethod = customPaymentMethod.trim();
-        }
+    const handleSaveBankAccountNumber = async () => {
+        if (!selectedPaymentForBankAccount) return;
         try {
-            await api.put(`/payments/${selectedPaymentForPaymentMethod.id}/payment-method`, {
-                paymentMethod: newMethod
+            await api.put(`/payments/${selectedPaymentForBankAccount.id}/bank-account`, {
+                bankAccountNumber: bankAccountNumberValue
             });
             triggerPaymentHistoryRefresh();
             setSnackbar({
                 open: true,
-                message: 'Método de pago actualizado correctamente',
+                message: 'Número de cuenta actualizado correctamente',
                 severity: 'success'
             });
-            handleClosePaymentMethodDialog();
-            refetchSchoolPayments(selectedPaymentForPaymentMethod.schoolId);
+            handleCloseBankAccountNumberDialog();
+            refetchSchoolPayments(selectedPaymentForBankAccount.schoolId);
         } catch (error) {
-            console.error(error);
             setSnackbar({
                 open: true,
-                message: 'Error al actualizar el método de pago',
+                message: 'Error al actualizar el número de cuenta',
                 severity: 'error'
             });
         }
@@ -1281,7 +1264,7 @@ const PaymentsManagementPage = () => {
                                             <IconButton title="Exonerar Mora" onClick={() => handleOpenExonerateDialog(payment)}>
                                                 <MoneyOffIcon />
                                             </IconButton>
-                                            <IconButton title="Editar Método de Pago" onClick={() => handleOpenPaymentMethodDialog(payment)}>
+                                            <IconButton title="Editar Número de Cuenta" onClick={() => handleOpenBankAccountDialog(payment)}>
                                                 <AccountBalanceWalletIcon />
                                             </IconButton>
                                             <FormControlLabel
@@ -1415,7 +1398,7 @@ const PaymentsManagementPage = () => {
                                                         Abono
                                                     </TableSortLabel>
                                                 </TableCell>
-                                                <TableCell>Método de Pago</TableCell>
+                                                <TableCell>Número de Cuenta</TableCell>
                                                 <TableCell>Usuario Activo</TableCell>
                                                 <TableCell>Factura</TableCell>
                                                 <TableCell align="center">Acciones</TableCell>
@@ -1454,7 +1437,7 @@ const PaymentsManagementPage = () => {
                                                         <TableCell>Q {pen.toFixed(2)}</TableCell>
                                                         <TableCell>Q {td.toFixed(2)}</TableCell>
                                                         <TableCell>Q {cb.toFixed(2)}</TableCell>
-                                                        <TableCell>{payment.paymentMethod || 'Deposito'}</TableCell>
+                                                        <TableCell>{payment.bankAccountNumber || ''}</TableCell>
                                                         <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
                                                         <TableCell>
                                                             <Switch
@@ -1487,7 +1470,7 @@ const PaymentsManagementPage = () => {
                                                             <IconButton title="Exonerar Mora" onClick={() => handleOpenExonerateDialog(payment)}>
                                                                 <MoneyOffIcon />
                                                             </IconButton>
-                                                            <IconButton title="Editar Método de Pago" onClick={() => handleOpenPaymentMethodDialog(payment)}>
+                                                            <IconButton title="Editar Número de Cuenta" onClick={() => handleOpenBankAccountDialog(payment)}>
                                                                 <AccountBalanceWalletIcon />
                                                             </IconButton>
                                                         </TableCell>
@@ -1724,38 +1707,21 @@ const PaymentsManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Dialog Actualizar Método de Pago */}
-            <Dialog open={openPaymentMethodDialog} onClose={handleClosePaymentMethodDialog} maxWidth="xs" fullWidth>
-                <DialogTitle>Actualizar Método de Pago</DialogTitle>
+            {/* Dialog Actualizar Número de Cuenta */}
+            <Dialog open={openBankAccountNumberDialog} onClose={handleCloseBankAccountNumberDialog} maxWidth="xs" fullWidth>
+                <DialogTitle>Actualizar Número de Cuenta Bancaria</DialogTitle>
                 <DialogContent>
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Método de Pago</InputLabel>
-                        <Select
-                            label="Método de Pago"
-                            value={paymentMethodValue}
-                            onChange={(e) => setPaymentMethodValue(e.target.value)}
-                        >
-                            <MenuItem value="Transferencia">Transferencia</MenuItem>
-                            <MenuItem value="Deposito">Deposito</MenuItem>
-                            <MenuItem value="Cheque">Cheque</MenuItem>
-                            <MenuItem value="Tarjeta de crédito">Tarjeta de crédito</MenuItem>
-                            <MenuItem value="Tarjeta de debito">Tarjeta de debito</MenuItem>
-                            <MenuItem value="Otro">Otro</MenuItem>
-                        </Select>
-                    </FormControl>
-                    {paymentMethodValue === 'Otro' && (
-                        <TextField
-                            label="Escriba el método de pago"
-                            fullWidth
-                            margin="dense"
-                            value={customPaymentMethod}
-                            onChange={(e) => setCustomPaymentMethod(e.target.value)}
-                        />
-                    )}
+                    <TextField
+                        label="Número de Cuenta Bancaria"
+                        fullWidth
+                        margin="dense"
+                        value={bankAccountNumberValue}
+                        onChange={(e) => setBankAccountNumberValue(e.target.value)}
+                    />
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleClosePaymentMethodDialog}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleSavePaymentMethod}>Guardar</Button>
+                    <Button onClick={handleCloseBankAccountNumberDialog}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleSaveBankAccountNumber}>Guardar</Button>
                 </DialogActions>
             </Dialog>
 

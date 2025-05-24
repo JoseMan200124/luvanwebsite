@@ -163,7 +163,7 @@ function PaymentHistorySection({ refresh = 0 }) {
                 "Multa Acum. (Q)",
                 "Total a Pagar (Q)",
                 "Abono (Q)",
-                "Medio de Pago",
+                "Número de Cuenta",
                 "Factura",
                 "Exoneración (Q)"
             ];
@@ -183,7 +183,7 @@ function PaymentHistorySection({ refresh = 0 }) {
                     parseFloat(h.accumulatedPenalty).toFixed(2),
                     parseFloat(h.totalDue).toFixed(2),
                     parseFloat(h.creditBalance).toFixed(2),
-                    h.paymentMethod || 'Deposito',
+                    h.bankAccountNumber || '',
                     h.requiresInvoice ? 'Sí' : 'No',
                     parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)
                 ]);
@@ -280,7 +280,7 @@ function PaymentHistorySection({ refresh = 0 }) {
                                     <TableCell>Multa Acum. (Q)</TableCell>
                                     <TableCell>Total a Pagar (Q)</TableCell>
                                     <TableCell>Abono (Q)</TableCell>
-                                    <TableCell>Medio de Pago</TableCell>
+                                    <TableCell>Número de Cuenta</TableCell>
                                     <TableCell>Factura</TableCell>
                                     <TableCell>Exoneración (Q)</TableCell>
                                 </TableRow>
@@ -317,7 +317,7 @@ function PaymentHistorySection({ refresh = 0 }) {
                                             {parseFloat(h.creditBalance).toFixed(2)}
                                         </TableCell>
                                         <TableCell>
-                                            {h.paymentMethod || 'Deposito'}
+                                            {h.bankAccountNumber || ''}
                                         </TableCell>
                                         <TableCell>
                                             {h.requiresInvoice ? 'Sí' : 'No'}
