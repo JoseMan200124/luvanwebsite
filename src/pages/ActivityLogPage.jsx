@@ -266,6 +266,9 @@ const ActivityLogPage = () => {
     const [incidents, setIncidents] = useState([]);
     const [emergencies, setEmergencies] = useState([]);
     const [payments, setPayments] = useState([]);
+    const [totalPaymentsCount, setTotalPaymentsCount] = useState(0);
+    const [loadingPayments, setLoadingPayments] = useState(false);
+    const [loadingBoletas, setLoadingBoletas] = useState(false);
 
     const [snackbar, setSnackbar] = useState({
         open: false,
@@ -318,7 +321,8 @@ const ActivityLogPage = () => {
     const [payBalanceMin, setPayBalanceMin] = useState('');
     const [payBalanceMax, setPayBalanceMax] = useState('');
     const [payPage, setPayPage] = useState(0);
-    const [payRowsPerPage, setPayRowsPerPage] = useState(5);
+    const [payRowsPerPage, setPayRowsPerPage] = useState(10);
+    
 
     // Orden Buses
     const [busOrder, setBusOrder] = useState('asc');
@@ -358,6 +362,7 @@ const ActivityLogPage = () => {
 
     useEffect(() => {
         fetchAllData();
+        if (!isSupervisor) fetchPaymentsAnalysis();
         // eslint-disable-next-line
     }, []);
 
@@ -388,13 +393,41 @@ const ActivityLogPage = () => {
         }
     };
 
+    const fetchPayments = async () => {
+        try {
+            const params = {
+                page: payPage + 1,
+                limit: payRowsPerPage,
+                order: payOrder,
+                orderBy: payOrderBy,
+                dateFrom: payDateFrom,
+                dateTo: payDateTo,
+                balanceMin: payBalanceMin,
+                balanceMax: payBalanceMax
+            };
+            const res = await api.get('/payments', { params });
+            setPayments(res.data.payments || []);
+            setTotalPaymentsCount(res.data.totalCount || 0);
+        } catch (error) {
+            setSnackbar({ open: true, message: 'Error al obtener pagos', severity: 'error' });
+        } finally {
+            setLoadingPayments(false);
+        }
+    };
+
+    // Llama a fetchPayments cuando cambian filtros, orden o paginación
+    useEffect(() => {
+        if (!isSupervisor) fetchPayments();
+        // eslint-disable-next-line
+    }, [payPage, payRowsPerPage, payOrder, payOrderBy, payDateFrom, payDateTo, payBalanceMin, payBalanceMax]);
+
     const handleChangeAccordion = (panel) => (event, isExpanded) => {
         setExpanded(isExpanded ? panel : false);
     };
 
     const handleViewBoletas = async (fatherId, fatherName) => {
         try {
-            setLoading(true);
+            setLoadingBoletas(true); // Solo para boletas
             const resp = await api.get(`/parents/${fatherId}/receipts`);
             const boletas = resp.data.receipts || [];
             setCurrentBoletas(boletas);
@@ -408,7 +441,7 @@ const ActivityLogPage = () => {
                 severity: 'error'
             });
         } finally {
-            setLoading(false);
+            setLoadingBoletas(false); // Solo para boletas
         }
     };
     const handleCloseBoletasDialog = () => {
@@ -633,37 +666,6 @@ const ActivityLogPage = () => {
     };
 
     // === Filtrado y Ordenamiento Pagos (no supervisor) ===
-    const filteredPayments = payments.filter((pay) => {
-        if (payDateFrom) {
-            const from = moment(payDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
-            const payDateMs = pay.nextPaymentDate
-                ? moment.utc(pay.nextPaymentDate).tz('America/Guatemala').valueOf()
-                : 0;
-            if (payDateMs < from) return false;
-        }
-        if (payDateTo) {
-            const to = moment(payDateTo, 'YYYY-MM-DD').endOf('day').valueOf();
-            const payDateMs = pay.nextPaymentDate
-                ? moment.utc(pay.nextPaymentDate).tz('America/Guatemala').valueOf()
-                : 0;
-            if (payDateMs > to) return false;
-        }
-        if (payBalanceMin) {
-            if ((pay.leftover ?? 0) < parseFloat(payBalanceMin)) return false;
-        }
-        if (payBalanceMax) {
-            if ((pay.leftover ?? 0) > parseFloat(payBalanceMax)) return false;
-        }
-        return true;
-    });
-    const sortedPayments = stableSort(
-        filteredPayments,
-        getComparator(payOrder, payOrderBy, 'payments')
-    );
-    const payPaginated = sortedPayments.slice(
-        payPage * payRowsPerPage,
-        payPage * payRowsPerPage + payRowsPerPage
-    );
     const handleChangePayPage = (event, newPage) => {
         setPayPage(newPage);
     };
@@ -671,35 +673,52 @@ const ActivityLogPage = () => {
         setPayRowsPerPage(parseInt(event.target.value, 10));
         setPayPage(0);
     };
+    
+    const COLORS = ['#4CAF50', '#FFC107', '#F44336'];
 
-    // Análisis de pagos
-    const totalPayments = payments.length;
-    const totalPaidCount = payments.filter((p) => p.finalStatus === 'PAGADO').length;
-    const totalPendingCount = payments.filter((p) => p.finalStatus === 'PENDIENTE').length;
-    const totalMoraCount = payments.filter((p) => p.finalStatus === 'MORA').length;
-
-    const totalLeftover = payments.reduce((acc, p) => acc + parseFloat(p.leftover), 0);
-    const totalDue = payments.reduce((acc, p) => acc + parseFloat(p.totalDue), 0);
-    const totalPenalty = payments.reduce(
-        (acc, p) => acc + parseFloat(p.accumulatedPenalty),
-        0
-    );
+    const [totalPaymentsGlobal, setTotalPaymentsGlobal] = useState(0);
+    const [totalPaidCountGlobal, setTotalPaidCountGlobal] = useState(0);
+    const [totalMoraCountGlobal, setTotalMoraCountGlobal] = useState(0);
+    const [totalPendingCountGlobal, setTotalPendingCountGlobal] = useState(0);
+    const [totalLeftoverGlobal, setTotalLeftoverGlobal] = useState(0);
+    const [totalDueGlobal, setTotalDueGlobal] = useState(0);
+    const [totalPenaltyGlobal, setTotalPenaltyGlobal] = useState(0);
 
     const statusData = [
-        { name: 'PAGADO', value: totalPaidCount },
-        { name: 'PENDIENTE', value: totalPendingCount },
-        { name: 'MORA', value: totalMoraCount }
+        { name: 'PAGADO', value: totalPaidCountGlobal },
+        { name: 'PENDIENTE', value: totalPendingCountGlobal },
+        { name: 'MORA', value: totalMoraCountGlobal }
     ];
-    const COLORS = ['#4CAF50', '#FFC107', '#F44336'];
 
     const barData = [
         {
             name: 'Totales',
-            'Deuda Pendiente (totalDue)': totalDue,
-            'Saldo (leftover)': totalLeftover,
-            'Multas (penalty)': totalPenalty
+            'Deuda Pendiente (totalDue)': totalDueGlobal,
+            'Saldo (leftover)': totalLeftoverGlobal,
+            'Multas (penalty)': totalPenaltyGlobal
         }
     ];
+
+    const fetchPaymentsAnalysis = async () => {
+        try {
+            const res = await api.get('/payments/analysis');
+            setTotalPaymentsGlobal(res.data.totalPayments || 0);
+            setTotalPaidCountGlobal(
+                res.data.statusDistribution?.find(s => s.finalStatus === 'PAGADO')?.count || 0
+            );
+            setTotalPendingCountGlobal(
+                res.data.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0
+            );
+            setTotalMoraCountGlobal(
+                res.data.statusDistribution?.find(s => s.finalStatus === 'MORA')?.count || 0
+            );
+            setTotalLeftoverGlobal(res.data.sumLeftover || 0);
+            setTotalDueGlobal(res.data.sumTotalDue || 0);
+            setTotalPenaltyGlobal(res.data.sumPenalty || 0);
+        } catch (error) {
+            setSnackbar({ open: true, message: 'Error al obtener análisis global de pagos', severity: 'error' });
+        }
+    };
 
     return (
         <PageContainer>
@@ -1492,13 +1511,12 @@ const ActivityLogPage = () => {
                             <SectionTitle variant="h6" gutterBottom>
                                 Gestión de pagos
                             </SectionTitle>
-
                             <FiltersRow>
                                 <TextField
                                     label="Próximo Pago Desde"
                                     type="date"
                                     value={payDateFrom}
-                                    onChange={(e) => setPayDateFrom(e.target.value)}
+                                    onChange={(e) => { setPayDateFrom(e.target.value); setPayPage(0); }}
                                     InputLabelProps={{ shrink: true }}
                                     size="small"
                                 />
@@ -1506,7 +1524,7 @@ const ActivityLogPage = () => {
                                     label="Próximo Pago Hasta"
                                     type="date"
                                     value={payDateTo}
-                                    onChange={(e) => setPayDateTo(e.target.value)}
+                                    onChange={(e) => { setPayDateTo(e.target.value); setPayPage(0); }}
                                     InputLabelProps={{ shrink: true }}
                                     size="small"
                                 />
@@ -1515,48 +1533,44 @@ const ActivityLogPage = () => {
                                     variant="outlined"
                                     size="small"
                                     value={payBalanceMin}
-                                    onChange={(e) => setPayBalanceMin(e.target.value)}
+                                    onChange={(e) => { setPayBalanceMin(e.target.value); setPayPage(0); }}
                                 />
                                 <TextField
                                     label="Saldo Máximo"
                                     variant="outlined"
                                     size="small"
                                     value={payBalanceMax}
-                                    onChange={(e) => setPayBalanceMax(e.target.value)}
+                                    onChange={(e) => { setPayBalanceMax(e.target.value); setPayPage(0); }}
                                 />
                             </FiltersRow>
 
-                            {filteredPayments.length === 0 ? (
+                            {loadingPayments ? (
+                                <div tw="flex justify-center p-4">
+                                    <CircularProgress />
+                                </div>
+                            ) : payments.length === 0 ? (
                                 <Typography variant="body2" color="textSecondary">
                                     Aún no hay registros de pagos con esos filtros.
                                 </Typography>
                             ) : isMobile ? (
                                 <>
-                                    {payPaginated.map((pay) => (
+                                    {payments.map((pay) => (
                                         <MobileCard key={pay.id}>
                                             <MobileField>
                                                 <MobileLabel>Padre (Usuario):</MobileLabel>
-                                                <MobileValue>
-                                                    {pay.User ? pay.User.name : '—'}
-                                                </MobileValue>
+                                                <MobileValue>{pay.User ? pay.User.name : '—'}</MobileValue>
                                             </MobileField>
                                             <MobileField>
                                                 <MobileLabel>Email:</MobileLabel>
-                                                <MobileValue>
-                                                    {pay.User ? pay.User.email : '—'}
-                                                </MobileValue>
+                                                <MobileValue>{pay.User ? pay.User.email : '—'}</MobileValue>
                                             </MobileField>
                                             <MobileField>
                                                 <MobileLabel>Estado:</MobileLabel>
-                                                <MobileValue>
-                                                    {pay.finalStatus || pay.status}
-                                                </MobileValue>
+                                                <MobileValue>{pay.finalStatus || pay.status}</MobileValue>
                                             </MobileField>
                                             <MobileField>
                                                 <MobileLabel>Próximo Pago:</MobileLabel>
-                                                <MobileValue>
-                                                    {formatGuatemalaDate(pay.nextPaymentDate)}
-                                                </MobileValue>
+                                                <MobileValue>{formatGuatemalaDate(pay.nextPaymentDate)}</MobileValue>
                                             </MobileField>
                                             <MobileField>
                                                 <MobileLabel>Saldo:</MobileLabel>
@@ -1583,7 +1597,7 @@ const ActivityLogPage = () => {
                                     ))}
                                     <TablePagination
                                         component="div"
-                                        count={filteredPayments.length}
+                                        count={totalPaymentsCount}
                                         page={payPage}
                                         onPageChange={handleChangePayPage}
                                         rowsPerPage={payRowsPerPage}
@@ -1597,24 +1611,12 @@ const ActivityLogPage = () => {
                                         <TableHead>
                                             <TableRow>
                                                 <TableHeaderCell sortDirection={payOrderBy === 'userName' ? payOrder : false}>
-                                                    <TableSortLabel
-                                                        active={payOrderBy === 'userName'}
-                                                        direction={payOrderBy === 'userName' ? payOrder : 'asc'}
-                                                        onClick={() => handleRequestPaySort('userName')}
-                                                        hideSortIcon={false}
-                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                    >
+                                                    <TableSortLabel>
                                                         Padre (Usuario)
                                                     </TableSortLabel>
                                                 </TableHeaderCell>
                                                 <TableHeaderCell sortDirection={payOrderBy === 'userEmail' ? payOrder : false}>
-                                                    <TableSortLabel
-                                                        active={payOrderBy === 'userEmail'}
-                                                        direction={payOrderBy === 'userEmail' ? payOrder : 'asc'}
-                                                        onClick={() => handleRequestPaySort('userEmail')}
-                                                        hideSortIcon={false}
-                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                    >
+                                                    <TableSortLabel>
                                                         Email
                                                     </TableSortLabel>
                                                 </TableHeaderCell>
@@ -1655,7 +1657,7 @@ const ActivityLogPage = () => {
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {payPaginated.map((pay) => (
+                                            {payments.map((pay) => (
                                                 <TableRow key={pay.id} hover>
                                                     <TableCell>
                                                         {pay.User ? pay.User.name : '—'}
@@ -1692,7 +1694,7 @@ const ActivityLogPage = () => {
                                     </Table>
                                     <TablePagination
                                         component="div"
-                                        count={filteredPayments.length}
+                                        count={totalPaymentsCount}
                                         page={payPage}
                                         onPageChange={handleChangePayPage}
                                         rowsPerPage={payRowsPerPage}
@@ -1712,7 +1714,7 @@ const ActivityLogPage = () => {
                                             Total de registros de pago
                                         </Typography>
                                         <Typography variant="h5" color="primary">
-                                            {totalPayments}
+                                            {totalPaymentsGlobal}
                                         </Typography>
                                     </Paper>
                                 </Grid>
@@ -1722,7 +1724,7 @@ const ActivityLogPage = () => {
                                             Pagos completados
                                         </Typography>
                                         <Typography variant="h5" color="success.main">
-                                            {totalPaidCount}
+                                            {totalPaidCountGlobal}
                                         </Typography>
                                     </Paper>
                                 </Grid>
@@ -1732,7 +1734,7 @@ const ActivityLogPage = () => {
                                             Pagos en Mora
                                         </Typography>
                                         <Typography variant="h5" color="error">
-                                            {totalMoraCount}
+                                            {totalMoraCountGlobal}
                                         </Typography>
                                     </Paper>
                                 </Grid>
@@ -1804,7 +1806,7 @@ const ActivityLogPage = () => {
                 >
                     <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
                     <DialogContent dividers>
-                        {loading ? (
+                        {loadingBoletas ? (
                             <div tw="flex justify-center p-4">
                                 <CircularProgress />
                             </div>
@@ -1849,6 +1851,7 @@ const ActivityLogPage = () => {
                 <DialogContent dividers>
                     {selectedCoords.lat && selectedCoords.lng ? (
                         <iframe
+                            title={`Map showing location at ${selectedCoords.lat}, ${selectedCoords.lng}`}
                             width="100%"
                             height="450"
                             style={{ border: 0 }}
