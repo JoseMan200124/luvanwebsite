@@ -149,7 +149,7 @@ const AuthProvider = ({ children }) => {
             const decoded = jwtDecode(token);
 
             // Si su rol es Piloto o Monitora, etc. (el check que tenías):
-            const restrictedRoles = [3, 4, 5]; // Por ejemplo
+            const restrictedRoles = [4,5];
             if (restrictedRoles.includes(decoded.roleId)) {
                 const userName = decoded.name || 'Usuario';
                 throw new Error(`Para tu usuario ${userName}, solo acceso desde la app móvil.`);
@@ -159,13 +159,11 @@ const AuthProvider = ({ children }) => {
             localStorage.setItem('token', token);
 
             // Actualizar estado
-            setAuth({
-                user: { ...decoded, roleId: decoded.roleId },
-                token
-            });
+            setAuth({ user:{ ...decoded, roleId:decoded.roleId }, token });
+
 
             // Retornar passwordExpired para que la LoginPage decida redirigir
-            return { passwordExpired };
+            return { passwordExpired, roleId: decoded.roleId };
         } catch (error) {
             // Manejo de error: devolvemos error
             throw error;

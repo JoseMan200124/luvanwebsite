@@ -1,4 +1,4 @@
-// src/App.js
+// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
@@ -11,7 +11,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import AuthProvider from './context/AuthProvider';
 import MFAVerify from './components/MFAVerify';
-import PermissionsManagementPage from "./pages/PermissionsManagmentPage";
+import PermissionsManagementPage from './pages/PermissionsManagmentPage';
 import ContractsManagementPage from './pages/ContractsManagementPage';
 import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
@@ -20,12 +20,16 @@ import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage';
 import ThankYouPage from './pages/ThankYouPage';
 import DefaultAdminRoute from './components/DefaultAdminRoute';
+import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
+import UpdateParentInfoPage from './pages/UpdateParentInfoPage';
+import ParentDashboardPage from './pages/ParentDashboardPage';
+import ParentPaymentPage   from './pages/ParentPaymentPage';
 import { modules } from './modules';
 
-import ForcePasswordChangePage from './pages/ForcePasswordChangePage'; // <-- nuevo
-import UpdateParentInfoPage from './pages/UpdateParentInfoPage';
-
 function App() {
+    /* ------------------------------------------------------ */
+    /* Rutas dinámicas de módulos (panel administrativo)      */
+    /* ------------------------------------------------------ */
     const renderDynamicRoutes = () => {
         let routes = [];
         modules.forEach((module) => {
@@ -50,53 +54,44 @@ function App() {
         <Router>
             <AuthProvider>
                 <Routes>
-                    {/* Rutas públicas */}
-                    <Route path="/" element={<LandingPage />} />
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/register" element={<RegisterPage />} />
-                    <Route path="/mfa" element={<MFAVerify />} />
-                    <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+                    {/* ------------------ Rutas públicas ------------------ */}
+                    <Route path="/"                 element={<LandingPage />} />
+                    <Route path="/login"            element={<LoginPage />} />
+                    <Route path="/register"         element={<RegisterPage />} />
+                    <Route path="/mfa"              element={<MFAVerify />} />
+                    <Route path="/privacy-policy"   element={<PrivacyPolicyPage />} />
+                    <Route path="/thank-you"        element={<ThankYouPage />} />
+                    <Route path="/update-parent-info" element={<UpdateParentInfoPage />} />
 
-                    {/* Ruta para forzar el cambio de contraseña */}
-                    <Route
-                        path="/force-password-change"
-                        element={<ForcePasswordChangePage />}
-                    />
+                    {/* Forzar cambio de contraseña */}
+                    <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
 
-                    {/* Rutas para llenar contratos */}
-                    <Route
-                        path="/contracts"
-                        element={<ContractsManagementPage />}
-                    />
-                    <Route
-                        path="/contracts/share/:uuid"
-                        element={<ContractFillPage />}
-                    />
+                    {/* Contratos públicos */}
+                    <Route path="/contracts"                 element={<ContractsManagementPage />} />
+                    <Route path="/contracts/share/:uuid"     element={<ContractFillPage />} />
 
+                    {/* Contratos protegidos */}
                     <Route
                         path="/admin/contratos-llenados/:uuid"
                         element={
-                            <ProtectedRoute roles={['Administrador', 'Supervisor', 'Gestor']}>
+                            <ProtectedRoute roles={['Administrador','Supervisor','Gestor']}>
                                 <FilledContractViewer />
                             </ProtectedRoute>
                         }
                     />
-
                     <Route
                         path="/admin/contratos/:uuid"
                         element={
-                            <ProtectedRoute roles={['Administrador', 'Supervisor', 'Gestor']}>
+                            <ProtectedRoute roles={['Administrador','Supervisor','Gestor']}>
                                 <ContractViewer />
                             </ProtectedRoute>
                         }
                     />
 
-                    <Route
-                        path="/schools/enroll/:schoolId"
-                        element={<SchoolEnrollmentPage />}
-                    />
+                    {/* Inscripción colegios (pública) */}
+                    <Route path="/schools/enroll/:schoolId" element={<SchoolEnrollmentPage />} />
 
-                    {/* Rutas protegidas con layout */}
+                    {/* ---------------- Panel administrativo -------------- */}
                     <Route
                         path="/admin/*"
                         element={
@@ -105,27 +100,42 @@ function App() {
                             </ProtectedRoute>
                         }
                     >
-                        <Route index element={<DefaultAdminRoute />} />
+                        <Route index           element={<DefaultAdminRoute />} />
                         <Route path="dashboard" element={<Dashboard />} />
                         {renderDynamicRoutes()}
+
                         <Route
                             path="roles-permisos"
                             element={
-                                <ProtectedRoute roles={['Gestor', 'Administrador']}>
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
                                     <PermissionsManagementPage />
                                 </ProtectedRoute>
                             }
                         />
-                        <Route
-                            path="*"
-                            element={<Navigate to="dashboard" replace />}
-                        />
+                        {/* Redirect genérico */}
+                        <Route path="*" element={<Navigate to="dashboard" replace />} />
                     </Route>
 
-                    {/* Resto de rutas que no coincidan */}
+                    {/* ---------------- Área PADRES (sin sidebar) --------- */}
+                    <Route
+                        path="/parent/dashboard"
+                        element={
+                            <ProtectedRoute roles={['Padre','PadreFamilia',3]}>
+                                <ParentDashboardPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/parent/payment"
+                        element={
+                            <ProtectedRoute roles={['Padre','PadreFamilia',3]}>
+                                <ParentPaymentPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* Catch-all */}
                     <Route path="*" element={<Navigate to="/" replace />} />
-                    <Route path="/thank-you" element={<ThankYouPage />} />
-                    <Route path="/update-parent-info" element={<UpdateParentInfoPage />} />
                 </Routes>
             </AuthProvider>
         </Router>

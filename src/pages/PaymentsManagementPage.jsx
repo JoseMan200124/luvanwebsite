@@ -450,7 +450,7 @@ const PaymentsManagementPage = () => {
                     page: 1,
                     limit: 999999
                 }
-            });   
+            });
             const arr = res.data.payments || [];
             const studentsTotal = res.data.studentTotals
                 ? (res.data.studentTotals[schId] || 0)
@@ -690,7 +690,6 @@ const PaymentsManagementPage = () => {
         setFatherName('');
     };
 
-    // Zoom Boleta
     const handleImageClick = (url) => {
         setSelectedImageUrl(url);
         setZoomScale(1);
@@ -698,6 +697,7 @@ const PaymentsManagementPage = () => {
         setPos({ x: 0, y: 0 });
         setOpenImageDialog(true);
     };
+
     const handleCloseImageDialog = () => {
         setOpenImageDialog(false);
         setSelectedImageUrl('');
@@ -827,7 +827,7 @@ const PaymentsManagementPage = () => {
         setRegisterPaymentData(newData);
     };
     const handleRegisterPayment = async () => {
-        try {            
+        try {
             const { paymentId, amountPaid, isFullPayment,
                 isMultipleMonths, monthsCount, paymentDate } = registerPaymentData;
             await api.post(`/payments/${paymentId}/add-transaction`, {
@@ -846,7 +846,7 @@ const PaymentsManagementPage = () => {
                 const schId = registerPaySelected.schoolId || 'null';
                 refetchSchoolPayments(schId);
             }
-        } catch (err) {           
+        } catch (err) {
             setSnackbar({ open: true, message: 'Error al registrar pago', severity: 'error' });
         }
     };

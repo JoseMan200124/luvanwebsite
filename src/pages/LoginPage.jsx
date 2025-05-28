@@ -141,6 +141,7 @@ const LoginPage = () => {
         setOpenSnackbar(false);
     };
 
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
@@ -154,33 +155,36 @@ const LoginPage = () => {
         }
 
         try {
-            // Llamamos a login del AuthContext
-            // Este login internamente hace la petición a /api/auth/login
-            // y ya maneja el storage del token.
-            const { passwordExpired } = await login(trimmedEmail, formData.password);
+            /* --------------------- login --------------------- */
+            const { passwordExpired, roleId } =
+                await login(trimmedEmail, formData.password);
 
-            // Si el backend nos dice que la contraseña ha expirado:
             if (passwordExpired) {
                 navigate('/force-password-change');
                 return;
             }
 
-            // De lo contrario, redirección normal según roles o dashboard
+            /* ----------- redirección según rol -------------- */
+            if (roleId === 3) {
+                navigate('/parent/dashboard');
+            } else {
+                navigate('/admin/dashboard');
+            }
+
             setSnackbarMessage('¡Inicio de sesión exitoso!');
             setSnackbarSeverity('success');
             setOpenSnackbar(true);
 
-            // Por simplicidad, redirigimos a /admin/dashboard (o tu lógica de roles)
-            navigate('/admin/dashboard');
-
         } catch (err) {
-            const customMessage = err.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
+            const customMessage =
+                err.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
             setError(customMessage);
             setSnackbarMessage(customMessage);
             setSnackbarSeverity('error');
             setOpenSnackbar(true);
         }
     };
+
 
     return (
         <Box tw="flex flex-col min-h-screen">
