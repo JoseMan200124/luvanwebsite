@@ -489,6 +489,8 @@ function getFieldValue(user, field) {
             return user.Role ? user.Role.name : '';
         case 'school':
             return user.School ? user.School.name : '';
+        case 'updatedAt':
+            return user.updatedAt ? new Date(user.updatedAt).getTime() : 0;
         default:
             return '';
     }
@@ -747,6 +749,15 @@ const RolesManagementPage = () => {
                 await fetchUsers();
             } catch (err) {
                 console.error('Error al marcar como NO nuevo:', err);
+            }
+        }
+        // Nuevo: marcar hasUpdatedData como false si es padre y tiene FamilyDetail
+        if (Number(user.roleId) === 3 && user.FamilyDetail && user.FamilyDetail.id) {
+            try {
+                await api.put(`/parents/${user.FamilyDetail.id}/mark-not-updated`);
+                await fetchUsers();
+            } catch (err) {
+                console.error('Error al marcar hasUpdatedData como false:', err);
             }
         }
         const parsedRoleId = Number(user.roleId);
@@ -1614,6 +1625,9 @@ const RolesManagementPage = () => {
                                                     {isUserNew(user) && (
                                                         <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
                                                     )}
+                                                    {user.FamilyDetail?.hasUpdatedData && (
+                                                        <Chip label="ACTUALIZADO" color="info" size="small" sx={{ ml: 1 }} />
+                                                    )}
                                                 </MobileValue>
                                             </MobileField>
                                         </Grid>
@@ -1740,6 +1754,17 @@ const RolesManagementPage = () => {
                                                     Colegio
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell sortDirection={orderBy === 'updatedAt' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'updatedAt'}
+                                                    direction={orderBy === 'updatedAt' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('updatedAt')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Actualizado el
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </ResponsiveTableHead>
@@ -1754,6 +1779,9 @@ const RolesManagementPage = () => {
                                                     {isUserNew(user) && (
                                                         <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
                                                     )}
+                                                    {user.FamilyDetail?.hasUpdatedData && (
+                                                        <Chip label="ACTUALIZADO" color="info" size="small" sx={{ ml: 1 }} />
+                                                    )}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Correo">
                                                     {user.email}
@@ -1763,6 +1791,17 @@ const RolesManagementPage = () => {
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Colegio">
                                                     {user.School ? user.School.name : '—'}
+                                                </ResponsiveTableCell>
+                                                <ResponsiveTableCell data-label="Actualizado el">
+                                                    {user.updatedAt
+                                                        ? new Date(user.updatedAt).toLocaleString('es-GT', {
+                                                              day: '2-digit',
+                                                              month: '2-digit',
+                                                              year: 'numeric',
+                                                              hour: '2-digit',
+                                                              minute: '2-digit'
+                                                          })
+                                                        : '—'}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Acciones" align="center">
                                                     <Tooltip title="Editar">
@@ -1853,7 +1892,6 @@ const RolesManagementPage = () => {
                                 value={selectedUser?.email || ''}
                                 onChange={handleUserChange}
                                 required
-                                disabled={Boolean(selectedUser?.id)}
                             />
                         </Grid>
                         {!selectedUser?.id && (
