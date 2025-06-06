@@ -44,10 +44,11 @@ import {
     Payment as PaymentIcon,
     PauseCircleFilled as PauseIcon,
     PlayCircleFilled as PlayIcon,
-    MoneyOff as MoneyOffIcon
+    MoneyOff as MoneyOffIcon,
+    History as HistoryIcon,
 } from '@mui/icons-material';
-import CreditCardIcon from '@mui/icons-material/CreditCard';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import NoteAltIcon from '@mui/icons-material/NoteAlt'; // Agrega este import
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -284,6 +285,24 @@ const PaymentsManagementPage = () => {
     // Refrescar Historial de Pagos
     const [paymentHistoryRefresh, setPaymentHistoryRefresh] = useState(0);
 
+    // Notas
+    const [openNotesDialog, setOpenNotesDialog] = useState(false);
+    const [selectedPaymentForNotes, setSelectedPaymentForNotes] = useState(null);
+    const [notesDraftDialog, setNotesDraftDialog] = useState('');
+
+    // Recibo
+    const [openReceiptDialog, setOpenReceiptDialog] = useState(false);
+    const [selectedPaymentForReceipt, setSelectedPaymentForReceipt] = useState(null);
+    const [receiptNumberDraft, setReceiptNumberDraft] = useState('');
+
+    // Historial de Pagos de Usuario
+    const [openUserHistoryDialog, setOpenUserHistoryDialog] = useState(false);
+    const [userHistoryPayments, setUserHistoryPayments] = useState([]);
+    const [userHistoryLoading, setUserHistoryLoading] = useState(false);
+    const [userHistoryName, setUserHistoryName] = useState('');
+    const [userHistoryMonth, setUserHistoryMonth] = useState(moment().format('YYYY-MM'));
+    const [userHistoryUserId, setUserHistoryUserId] = useState(null);
+
     const triggerPaymentHistoryRefresh = () => setPaymentHistoryRefresh(prev => prev + 1);
 
     const handleOpenExonerateDialog = (payment) => {
@@ -384,6 +403,132 @@ const PaymentsManagementPage = () => {
                 message: 'Error al actualizar el número de cuenta',
                 severity: 'error'
             });
+        }
+    };
+
+    // Notas
+    const handleNotesSave = async (paymentId, value) => {
+        try {
+            await api.put(`/payments/${paymentId}/notes`, { notes: value });
+            setSnackbar({ open: true, message: 'Notas actualizadas', severity: 'success' });
+            // Actualiza en memoria
+            setSchoolPaymentsData(prev => {
+                const next = { ...prev };
+                Object.values(next).forEach(sch => {
+                    sch.payments = sch.payments.map(p =>
+                        p.id === paymentId ? { ...p, notes: value } : p
+                    );
+                    sch.filteredPayments = sch.filteredPayments.map(p =>
+                        p.id === paymentId ? { ...p, notes: value } : p
+                    );
+                });
+                return next;
+            });
+        } catch (err) {
+            setSnackbar({ open: true, message: 'Error al actualizar notas', severity: 'error' });
+        }
+    };
+
+    // Handler para abrir el diálogo de notas
+    const handleOpenNotesDialog = (payment) => {
+        setSelectedPaymentForNotes(payment);
+        setNotesDraftDialog(payment.notes || '');
+        setOpenNotesDialog(true);
+    };
+
+    // Handler para cerrar el diálogo de notas
+    const handleCloseNotesDialog = () => {
+        setOpenNotesDialog(false);
+        setSelectedPaymentForNotes(null);
+        setNotesDraftDialog('');
+    };
+
+    // Guardar nota desde el diálogo
+    const handleSaveNotesDialog = async () => {
+        if (!selectedPaymentForNotes) return;
+        await handleNotesSave(selectedPaymentForNotes.id, notesDraftDialog);
+        handleCloseNotesDialog();
+    };
+
+    // Handler para abrir el diálogo de recibo
+    const handleOpenReceiptDialog = (payment) => {
+        setSelectedPaymentForReceipt(payment);
+        setReceiptNumberDraft(payment.receiptNumber || '');
+        setOpenReceiptDialog(true);
+    };
+
+    // Handler para cerrar el diálogo de recibo
+    const handleCloseReceiptDialog = () => {
+        setOpenReceiptDialog(false);
+        setSelectedPaymentForReceipt(null);
+        setReceiptNumberDraft('');
+    };
+
+    // Guardar número de recibo desde el diálogo
+    const handleSaveReceiptDialog = async () => {
+        if (!selectedPaymentForReceipt) return;
+        try {
+            await api.put(`/payments/${selectedPaymentForReceipt.id}/receipt-number`, { receiptNumber: receiptNumberDraft });
+            setSnackbar({ open: true, message: 'Número de recibo actualizado', severity: 'success' });
+            setSchoolPaymentsData(prev => {
+                const next = { ...prev };
+                Object.values(next).forEach(sch => {
+                    sch.payments = sch.payments.map(p =>
+                        p.id === selectedPaymentForReceipt.id ? { ...p, receiptNumber: receiptNumberDraft } : p
+                    );
+                    sch.filteredPayments = sch.filteredPayments.map(p =>
+                        p.id === selectedPaymentForReceipt.id ? { ...p, receiptNumber: receiptNumberDraft } : p
+                    );
+                });
+                return next;
+            });
+            handleCloseReceiptDialog();
+        } catch (err) {
+            setSnackbar({ open: true, message: 'Error al actualizar número de recibo', severity: 'error' });
+        }
+    };
+
+    // Abrir diálogo de historial de pagos de usuario
+    const handleOpenUserHistoryDialog = async (payment) => {
+        setUserHistoryLoading(true);
+        setOpenUserHistoryDialog(true);
+        setUserHistoryName(payment.User?.name || '');
+        setUserHistoryUserId(payment.User?.id || null);
+        setUserHistoryMonth(moment().format('YYYY-MM')); // Por defecto, mes actual
+        await fetchUserHistory(payment.User?.id, moment().format('YYYY-MM'));
+        setUserHistoryLoading(false);
+    };
+
+    // Cerrar diálogo de historial de pagos de usuario
+    const handleCloseUserHistoryDialog = () => {
+        setOpenUserHistoryDialog(false);
+        setUserHistoryPayments([]);
+        setUserHistoryName('');
+        setUserHistoryMonth(moment().format('YYYY-MM'));
+    };
+
+    // Función para obtener el historial de pagos de un usuario en un mes específico
+    const fetchUserHistory = async (userId, yearMonth) => {
+        setUserHistoryLoading(true);
+        try {
+            const [year, month] = yearMonth.split('-');
+            const monthStart = moment(`${year}-${month}-01`).startOf('month').format('YYYY-MM-DD');
+            const monthEnd = moment(`${year}-${month}-01`).endOf('month').format('YYYY-MM-DD');
+            const res = await api.get(`/payments/history`, {
+                params: { userId, monthStart, monthEnd, limit: 100 }
+            });
+            setUserHistoryPayments(res.data.histories || []);
+        } catch (err) {
+            setUserHistoryPayments([]);
+        }
+        setUserHistoryLoading(false);
+    };
+
+    const handleUserHistoryMonthChange = async (e) => {
+        const newMonth = e.target.value;
+        setUserHistoryMonth(newMonth);
+        if (userHistoryUserId) {
+            await fetchUserHistory(userHistoryUserId, newMonth);
         }
     };
 
@@ -1195,38 +1340,6 @@ const PaymentsManagementPage = () => {
 
                                 return (
                                     <MobileCard key={payment.id}>
-                                        <MobileField>
-                                            <MobileLabel>Familia</MobileLabel>
-                                            <MobileValue>{familiaApellido}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Cantidad de Estudiantes</MobileLabel>
-                                            <MobileValue>{cantidadEst}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Estado</MobileLabel>
-                                            <MobileValue>{payment.finalStatus}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Próximo Pago</MobileLabel>
-                                            <MobileValue>
-                                                {payment.nextPaymentDate
-                                                    ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
-                                                    : '—'}
-                                            </MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Último Pago</MobileLabel>
-                                            <MobileValue>
-                                                {payment.lastPaymentDate
-                                                    ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
-                                                    : '—'}
-                                            </MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Requiere Factura</MobileLabel>
-                                            <MobileValue>{family?.requiresInvoice ? 'Sí' : 'No'}</MobileValue>
-                                        </MobileField>
                                         <Box
                                             sx={{
                                                 display: 'flex',
@@ -1267,6 +1380,9 @@ const PaymentsManagementPage = () => {
                                             <IconButton title="Editar Número de Cuenta" onClick={() => handleOpenBankAccountDialog(payment)}>
                                                 <AccountBalanceWalletIcon />
                                             </IconButton>
+                                            <IconButton title="Editar Nota" onClick={() => handleOpenNotesDialog(payment)}>
+                                                <NoteAltIcon />
+                                            </IconButton>
                                             <FormControlLabel
                                                 control={
                                                     <Switch
@@ -1278,7 +1394,79 @@ const PaymentsManagementPage = () => {
                                                 labelPlacement="top"
                                                 sx={{ marginLeft: 0 }}
                                             />
+                                            <IconButton
+                                                title="Ver Historial de Pagos"
+                                                onClick={() => handleOpenUserHistoryDialog(payment)}
+                                            >
+                                                <HistoryIcon />
+                                            </IconButton>
                                         </Box>
+                                        <MobileField>
+                                            <MobileLabel>Familia</MobileLabel>
+                                            <MobileValue>{familiaApellido}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Cantidad de Estudiantes</MobileLabel>
+                                            <MobileValue>{cantidadEst}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Estado</MobileLabel>
+                                            <MobileValue>{payment.finalStatus}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Tipo</MobileLabel>
+                                            <MobileValue>{family?.routeType || ''}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Razón Social</MobileLabel>
+                                            <MobileValue>{family?.razonSocial || ''}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>NIT</MobileLabel>
+                                            <MobileValue>{family?.nit || ''}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Descuento</MobileLabel>
+                                            <MobileValue>Q {Number(family?.specialFee || 0).toFixed(2)}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Próximo Pago</MobileLabel>
+                                            <MobileValue>
+                                                {payment.nextPaymentDate
+                                                    ? moment(payment.nextPaymentDate).format('DD/MM/YYYY')
+                                                    : '—'}
+                                            </MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Último Pago</MobileLabel>
+                                            <MobileValue>
+                                                {payment.lastPaymentDate
+                                                    ? moment(payment.lastPaymentDate).format('DD/MM/YYYY')
+                                                    : '—'}
+                                            </MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Requiere Factura</MobileLabel>
+                                            <MobileValue>{family?.requiresInvoice ? 'Sí' : 'No'}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Notas</MobileLabel>
+                                            <MobileValue>{payment.notes || ''}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
+                                            <MobileLabel>Recibo</MobileLabel>
+                                            <MobileValue>
+                                                {payment.receiptNumber || ''}
+                                                <IconButton
+                                                    size="small"
+                                                    title="Editar Recibo"
+                                                    onClick={() => handleOpenReceiptDialog(payment)}
+                                                    sx={{ ml: 1 }}
+                                                >
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </MobileValue>
+                                        </MobileField>
                                     </MobileCard>
                                 );
                             })
@@ -1288,6 +1476,7 @@ const PaymentsManagementPage = () => {
                                     <Table>
                                         <TableHead>
                                             <TableRow>
+                                                <TableCell align="center">Acciones</TableCell>
                                                 <TableCell sortDirection={orderBy === 'familyLastName' ? order : false}>
                                                     <TableSortLabel
                                                         active={orderBy === 'familyLastName'}
@@ -1307,7 +1496,7 @@ const PaymentsManagementPage = () => {
                                                         hideSortIcon={false}
                                                         sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                     >
-                                                        Cantidad de Estudiantes
+                                                        Cant. Estudiantes
                                                     </TableSortLabel>
                                                 </TableCell>
                                                 <TableCell sortDirection={orderBy === 'finalStatus' ? order : false}>
@@ -1321,6 +1510,9 @@ const PaymentsManagementPage = () => {
                                                         Estado
                                                     </TableSortLabel>
                                                 </TableCell>
+                                                <TableCell>Tipo</TableCell>
+                                                <TableCell>Razón Social</TableCell>
+                                                <TableCell>NIT</TableCell>
                                                 <TableCell sortDirection={orderBy === 'nextPaymentDate' ? order : false}>
                                                     <TableSortLabel
                                                         active={orderBy === 'nextPaymentDate'}
@@ -1398,10 +1590,12 @@ const PaymentsManagementPage = () => {
                                                         Abono
                                                     </TableSortLabel>
                                                 </TableCell>
+                                                <TableCell>Descuento</TableCell>
                                                 <TableCell>Número de Cuenta</TableCell>
+                                                <TableCell>Recibo</TableCell>
                                                 <TableCell>Usuario Activo</TableCell>
                                                 <TableCell>Factura</TableCell>
-                                                <TableCell align="center">Acciones</TableCell>
+                                                <TableCell>Notas</TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
@@ -1419,32 +1613,6 @@ const PaymentsManagementPage = () => {
 
                                                 return (
                                                     <TableRow key={payment.id} style={{ backgroundColor: getRowColor(payment) }}>
-                                                        <TableCell>{apellidoFam}</TableCell>
-                                                        <TableCell>{cantEst}</TableCell>
-                                                        <TableCell>{payment.finalStatus}</TableCell>
-                                                        <TableCell>
-                                                            {payment.nextPaymentDate
-                                                                ? moment.parseZone(payment.nextPaymentDate).format('DD/MM/YYYY')
-                                                                : '—'}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {payment.lastPaymentDate
-                                                                ? moment.parseZone(payment.lastPaymentDate).format('DD/MM/YYYY')
-                                                                : '—'}
-                                                        </TableCell>
-                                                        <TableCell>Q {mt.toFixed(2)}</TableCell>
-                                                        <TableCell>Q {lo.toFixed(2)}</TableCell>
-                                                        <TableCell>Q {pen.toFixed(2)}</TableCell>
-                                                        <TableCell>Q {td.toFixed(2)}</TableCell>
-                                                        <TableCell>Q {cb.toFixed(2)}</TableCell>
-                                                        <TableCell>{payment.bankAccountNumber || ''}</TableCell>
-                                                        <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
-                                                        <TableCell>
-                                                            <Switch
-                                                                checked={!!familyDetail?.requiresInvoice}
-                                                                onChange={(e) => handleToggleInvoiceNeed(payment, e.target.checked)}
-                                                            />
-                                                        </TableCell>
                                                         <TableCell align="center">
                                                             <IconButton title="Enviar Correo" onClick={() => handleOpenEmailDialog(payment)}>
                                                                 <SendIcon />
@@ -1473,7 +1641,57 @@ const PaymentsManagementPage = () => {
                                                             <IconButton title="Editar Número de Cuenta" onClick={() => handleOpenBankAccountDialog(payment)}>
                                                                 <AccountBalanceWalletIcon />
                                                             </IconButton>
+                                                            <IconButton title="Editar Nota" onClick={() => handleOpenNotesDialog(payment)}>
+                                                                <NoteAltIcon />
+                                                            </IconButton>
+                                                            <IconButton
+                                                                title="Ver Historial de Pagos"
+                                                                onClick={() => handleOpenUserHistoryDialog(payment)}
+                                                            >
+                                                                <HistoryIcon />
+                                                            </IconButton>
                                                         </TableCell>
+                                                        <TableCell>{apellidoFam}</TableCell>
+                                                        <TableCell>{cantEst}</TableCell>
+                                                        <TableCell>{payment.finalStatus}</TableCell>
+                                                        <TableCell>{familyDetail?.routeType || ''}</TableCell>
+                                                        <TableCell>{familyDetail?.razonSocial || ''}</TableCell>
+                                                        <TableCell>{familyDetail?.nit || ''}</TableCell>
+                                                        <TableCell>
+                                                            {payment.nextPaymentDate
+                                                                ? moment.parseZone(payment.nextPaymentDate).format('DD/MM/YYYY')
+                                                                : '—'}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {payment.lastPaymentDate
+                                                                ? moment.parseZone(payment.lastPaymentDate).format('DD/MM/YYYY')
+                                                                : '—'}
+                                                        </TableCell>
+                                                        <TableCell>Q {mt.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {lo.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {pen.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {td.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {cb.toFixed(2)}</TableCell>
+                                                        <TableCell>Q {Number(familyDetail?.specialFee || 0).toFixed(2)}</TableCell>
+                                                        <TableCell>{payment.bankAccountNumber || ''}</TableCell>
+                                                        <TableCell>
+                                                            {payment.receiptNumber || ''}
+                                                            <IconButton
+                                                                size="small"
+                                                                title="Editar Recibo"
+                                                                onClick={() => handleOpenReceiptDialog(payment)}
+                                                            >
+                                                                <EditIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </TableCell>
+                                                        <TableCell>{payment.User?.state === 1 ? 'Sí' : 'No'}</TableCell>
+                                                        <TableCell>
+                                                            <Switch
+                                                                checked={!!familyDetail?.requiresInvoice}
+                                                                onChange={(e) => handleToggleInvoiceNeed(payment, e.target.checked)}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell>{payment.notes || ''}</TableCell>
                                                     </TableRow>
                                                 );
                                             })}
@@ -1742,6 +1960,143 @@ const PaymentsManagementPage = () => {
                 <DialogActions>
                     <Button onClick={handleCloseExonerateDialog}>Cancelar</Button>
                     <Button variant="contained" onClick={handleExoneratePenalty}>Exonerar</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog Editar Nota */}
+            <Dialog open={openNotesDialog} onClose={handleCloseNotesDialog} maxWidth="xs" fullWidth>
+                <DialogTitle>Editar Nota</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        label="Nota"
+                        value={notesDraftDialog}
+                        onChange={e => setNotesDraftDialog(e.target.value)}
+                        fullWidth
+                        multiline
+                        minRows={2}
+                        maxRows={6}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseNotesDialog}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleSaveNotesDialog}>Guardar</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog Editar Número de Recibo */}
+            <Dialog open={openReceiptDialog} onClose={handleCloseReceiptDialog} maxWidth="xs" fullWidth>
+                <DialogTitle>Editar Número de Recibo</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        label="Número de Recibo"
+                        value={receiptNumberDraft}
+                        onChange={e => setReceiptNumberDraft(e.target.value)}
+                        fullWidth
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseReceiptDialog}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleSaveReceiptDialog}>Guardar</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog Historial de Pagos de Usuario */}
+            <Dialog open={openUserHistoryDialog} onClose={handleCloseUserHistoryDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Historial de Pagos de {userHistoryName}</DialogTitle>
+                <DialogContent dividers style={{ maxHeight: 400, overflowY: 'auto' }}>
+                    <Box sx={{ mb: 2 }}>
+                        <FormControl size="small" fullWidth>
+                            <InputLabel>Mes</InputLabel>
+                            <Select
+                                label="Mes"
+                                value={userHistoryMonth}
+                                onChange={handleUserHistoryMonthChange}
+                            >
+                                {Array.from({ length: 12 }, (_, i) => {
+                                    const month = (i + 1).toString().padStart(2, '0');
+                                    const value = `${moment().year()}-${month}`;
+                                    return (
+                                        <MenuItem key={value} value={value}>
+                                            {moment(value, 'YYYY-MM').format('MMMM')}
+                                        </MenuItem>
+                                    );
+                                })}
+                            </Select>
+                        </FormControl>
+                    </Box>
+                    {userHistoryLoading ? (
+                        <Typography>Cargando...</Typography>
+                    ) : userHistoryPayments.length === 0 ? (
+                        <Typography>No hay historial de pagos.</Typography>
+                    ) : (
+                        <TableContainer component={Paper}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Apellido Familia</TableCell>
+                                        <TableCell>Cant. Estudiantes</TableCell>
+                                        <TableCell>Estado Final</TableCell>
+                                        <TableCell>Próximo Pago</TableCell>
+                                        <TableCell>Último Pago</TableCell>
+                                        <TableCell>Monto Total (Q)</TableCell>
+                                        <TableCell>Saldo (Q)</TableCell>
+                                        <TableCell>Multa Acum. (Q)</TableCell>
+                                        <TableCell>Total a Pagar (Q)</TableCell>
+                                        <TableCell>Abono (Q)</TableCell>
+                                        <TableCell>Número de Cuenta</TableCell>
+                                        <TableCell>Factura</TableCell>
+                                        <TableCell>Exoneración (Q)</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {userHistoryPayments.map((h, idx) => (
+                                        <TableRow key={h.id || idx}>
+                                            <TableCell>{h.familyLastName}</TableCell>
+                                            <TableCell>{h.studentCount}</TableCell>
+                                            <TableCell>{h.finalStatus}</TableCell>
+                                            <TableCell>
+                                                {h.nextPaymentDate
+                                                    ? moment.parseZone(h.nextPaymentDate).format('DD/MM/YYYY')
+                                                    : '—'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {h.lastPaymentDate
+                                                    ? moment.parseZone(h.lastPaymentDate).format('DD/MM/YYYY')
+                                                    : '—'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {parseFloat(h.montoTotal).toFixed(2)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {parseFloat(h.leftover).toFixed(2)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {parseFloat(h.accumulatedPenalty).toFixed(2)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {parseFloat(h.totalDue).toFixed(2)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {parseFloat(h.creditBalance).toFixed(2)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {h.bankAccountNumber || ''}
+                                            </TableCell>
+                                            <TableCell>
+                                                {h.requiresInvoice ? 'Sí' : 'No'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseUserHistoryDialog}>Cerrar</Button>
                 </DialogActions>
             </Dialog>
 
