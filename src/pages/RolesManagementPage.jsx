@@ -449,6 +449,21 @@ function isUserNew(user) {
     return diffDays <= 14;
 }
 
+// Helper para saber si el apellido de familia está duplicado
+function isFamilyLastNameDuplicated(user, allUsers) {
+    if (!user.FamilyDetail || !user.FamilyDetail.familyLastName) return false;
+    const lastName = user.FamilyDetail.familyLastName.trim().toLowerCase();
+    if (!lastName) return false;
+    // Cuenta cuántos usuarios tienen el mismo apellido de familia (ignorando mayúsculas/minúsculas)
+    const count = allUsers.filter(
+        u =>
+            u.FamilyDetail &&
+            u.FamilyDetail.familyLastName &&
+            u.FamilyDetail.familyLastName.trim().toLowerCase() === lastName
+    ).length;
+    return count > 1;
+}
+
 // Helpers para sort
 function descendingComparator(a, b, orderBy) {
     const aValue = getFieldValue(a, orderBy);
@@ -1628,6 +1643,9 @@ const RolesManagementPage = () => {
                                                     {user.FamilyDetail?.hasUpdatedData && (
                                                         <Chip label="ACTUALIZADO" color="info" size="small" sx={{ ml: 1 }} />
                                                     )}
+                                                    {isFamilyLastNameDuplicated(user, users) && (
+                                                        <Chip label="POSIBLE DUPLICADO" color="warning" size="small" sx={{ ml: 1 }} />
+                                                    )}
                                                 </MobileValue>
                                             </MobileField>
                                         </Grid>
@@ -1781,6 +1799,9 @@ const RolesManagementPage = () => {
                                                     )}
                                                     {user.FamilyDetail?.hasUpdatedData && (
                                                         <Chip label="ACTUALIZADO" color="info" size="small" sx={{ ml: 1 }} />
+                                                    )}
+                                                    {isFamilyLastNameDuplicated(user, users) && (
+                                                        <Chip label="POSIBLE DUPLICADO" color="warning" size="small" sx={{ ml: 1 }} />
                                                     )}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Correo">
