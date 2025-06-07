@@ -2147,38 +2147,50 @@ const PaymentsManagementPage = () => {
 
             {analysisData && (
                 <Box sx={{ mb: 4 }}>
-                    <Grid container spacing={2} sx={{ mb: 3 }}>
-                        <Grid item xs={12} sm={4}>
-                            <Typography variant="body1">
-                                <strong>Total Familias: </strong>{analysisData.totalPayments}
-                            </Typography>
+                    <Box sx={{ mb: 3, p: 2, background: '#f9fafb', borderRadius: 2, boxShadow: 1 }}>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Total Familias: </strong></Typography>
+                                <Typography variant="h6">{analysisData.totalPayments}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Familias Pagadas: </strong></Typography>
+                                <Typography variant="h6">{pagadoCount}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Familias en Mora: </strong></Typography>
+                                <Typography variant="h6">{moraCount}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Familias Pendientes: </strong></Typography>
+                                <Typography variant="h6">{pendienteCount}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Usuarios Activos (Alumnos):</strong></Typography>
+                                <Typography variant="h6">{analysisData.totalPayments}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Ingreso Neto:</strong></Typography>
+                                <Typography variant="h6">Q {Number(analysisData.netIncome ?? 0).toFixed(2)}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Ingreso por Mora:</strong></Typography>
+                                <Typography variant="h6">Q {Number(analysisData.lateFeeIncome ?? 0).toFixed(2)}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Monto de ingreso a la Fecha:</strong></Typography>
+                                <Typography variant="h6">Q {currentMonthEarnings.toFixed(2)}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Pendiente de Pago a la Fecha:</strong></Typography>
+                                <Typography variant="h6">Q {analysisData.sumTotalDue}</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={5} md={2}>
+                                <Typography variant="body2"><strong>Total Descuentos Aplicados:</strong></Typography>
+                                <Typography variant="h6">Q {Number(analysisData.totalSpecialFee ?? 0).toFixed(2)}</Typography>
+                            </Grid>
                         </Grid>
-                        <Grid item xs={12} sm={4}>
-                            <Typography variant="body1">
-                                <strong>Familias Pagadas: </strong>{pagadoCount}
-                            </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={4}>
-                            <Typography variant="body1">
-                                <strong>Familias en Mora: </strong>{moraCount}
-                            </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={4}>
-                            <Typography variant="body1">
-                                <strong>Familias Pendientes: </strong>{pendienteCount}
-                            </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={4}>
-                            <Typography variant="body1">
-                                <strong>Ganancias Mes Actual: </strong>Q {currentMonthEarnings.toFixed(2)}
-                            </Typography>
-                        </Grid>
-                    </Grid>
-                    <Box sx={{ mb: 3 }}>
-                        <Typography variant="body1">
-                            <strong>Total Adeudado: </strong>Q {analysisData.sumTotalDue}
-                        </Typography>
-                    </Box>
+                    </Box>                        
                     <Grid container spacing={2}>
                         <Grid item xs={12}>
                             <Typography variant="subtitle1" gutterBottom>
