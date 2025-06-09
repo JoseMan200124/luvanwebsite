@@ -112,7 +112,7 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
     // Filtrar contratos: solo los del colegio del padre (NO los globales)
     const filteredContracts = contracts.filter(
         c =>
-            c.schoolId === null || 
+            c.schoolId === null ||
             Number(c.schoolId) === Number(parentUser.school)
     );
 
@@ -661,6 +661,7 @@ const RolesManagementPage = () => {
 
     // Filtros
     const [newUsersFilter, setNewUsersFilter] = useState('all');
+    const [updatedFilter, setUpdatedFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('');
     const [schoolFilter, setSchoolFilter] = useState('');
 
@@ -681,6 +682,10 @@ const RolesManagementPage = () => {
         fetchContracts();
         fetchAllPilots();
     }, []);
+
+    useEffect(() => {
+        setPage(0);
+    }, [updatedFilter]);
 
     const fetchAllPilots = async () => {
         try {
@@ -993,6 +998,11 @@ const RolesManagementPage = () => {
             if (!isUserNew(u)) return false;
         } else if (newUsersFilter === 'old') {
             if (isUserNew(u)) return false;
+        }
+        if (updatedFilter === 'updated') {
+            if (!u.FamilyDetail?.hasUpdatedData) return false;
+        } else if (updatedFilter === 'notUpdated') {
+            if (u.FamilyDetail?.hasUpdatedData) return false;
         }
         if (roleFilter) {
             if (Number(u.roleId) !== Number(roleFilter)) return false;
@@ -1541,6 +1551,19 @@ const RolesManagementPage = () => {
                             <MenuItem value="old">No nuevos</MenuItem>
                         </Select>
                     </FormControl>
+                    <FormControl size="small" sx={{ width: 150 }}>
+                        <InputLabel>Actualizado</InputLabel>
+                        <Select
+                            label="Actualizado"
+                            value={updatedFilter}
+                            onChange={(e) => setUpdatedFilter(e.target.value)}
+                        >
+                            <MenuItem value="all">Todos</MenuItem>
+                            <MenuItem value="updated">Actualizados</MenuItem>
+                            <MenuItem value="notUpdated">No actualizados</MenuItem>
+                        </Select>
+                    </FormControl>
+
                     <FormControl size="small" sx={{ width: 150 }}>
                         <InputLabel>Rol</InputLabel>
                         <Select
@@ -2140,7 +2163,7 @@ const RolesManagementPage = () => {
                                             </Grid>
                                             <Grid item xs={10} md={5}>
                                                 <TextField
-                                                   
+
                                                     label="Grado"
                                                     fullWidth
                                                     value={st.grade}
