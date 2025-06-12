@@ -137,6 +137,16 @@ const NotificationsMenu = ({ authToken }) => {
     // ==============================
     const unreadCount = notifications.filter((n) => n.status === 'unread').length;
 
+    const getNotificationStyle = (notification) => {
+        if (notification.type === 'asistencia') {
+            return {
+                backgroundColor: '#e6f7ff', // Color de fondo para notificaciones de asistencia
+                borderLeft: '4px solid #1890ff' // Barra lateral para destacar
+            };
+        }
+        return {};
+    };
+
     return (
         <>
             <NotificationIconButton onClick={handleMenuOpen} ref={menuRef}>
@@ -181,6 +191,7 @@ const NotificationsMenu = ({ authToken }) => {
                                     position: 'relative',
                                     minHeight: '80px',
                                     alignItems: 'flex-start',
+                                    ...getNotificationStyle(notification)
                                 }}
                             >
                                 <div
