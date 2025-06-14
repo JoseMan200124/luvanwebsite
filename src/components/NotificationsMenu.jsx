@@ -138,13 +138,66 @@ const NotificationsMenu = ({ authToken }) => {
     const unreadCount = notifications.filter((n) => n.status === 'unread').length;
 
     const getNotificationStyle = (notification) => {
-        if (notification.type === 'asistencia') {
-            return {
-                backgroundColor: '#e6f7ff', // Color de fondo para notificaciones de asistencia
-                borderLeft: '4px solid #1890ff' // Barra lateral para destacar
-            };
+        // Estilo base para todas las notificaciones
+        const baseStyle = {
+            transition: 'background-color 0.3s ease',
+        };
+        
+        // Color más tenue si ya fue leída
+        const intensity = notification.status === 'unread' ? 1 : 0.4;
+        
+        // Estilos según el título
+        switch (notification.title) {
+            case 'Registro de Asistencia':
+                return {
+                    ...baseStyle,
+                    borderLeft: `4px solid rgba(76, 175, 80, ${intensity})`,
+                    backgroundColor: `rgba(232, 245, 233, ${intensity * 0.7})`
+                };
+            case 'Ruta Finalizada':
+                return {
+                    ...baseStyle,
+                    borderLeft: `4px solid rgba(33, 150, 243, ${intensity})`,
+                    backgroundColor: `rgba(227, 242, 253, ${intensity * 0.7})`
+                };
+            case 'Incidente Reportado':
+                return {
+                    ...baseStyle,
+                    borderLeft: `4px solid rgba(255, 152, 0, ${intensity})`,
+                    backgroundColor: `rgba(255, 243, 224, ${intensity * 0.7})`
+                };
+            case 'Nueva Boleta de Pago':
+                return {
+                    ...baseStyle,
+                    borderLeft: `4px solid rgba(156, 39, 176, ${intensity})`,
+                    backgroundColor: `rgba(243, 229, 245, ${intensity * 0.7})`
+                };
+            case 'Pago Confirmado':
+                return {
+                    ...baseStyle,
+                    borderLeft: `4px solid rgba(0, 200, 83, ${intensity})`,
+                    backgroundColor: `rgba(232, 245, 233, ${intensity * 0.7})`
+                };
+            case 'Emergencia Reportada':
+                return {
+                    ...baseStyle,
+                    borderLeft: `4px solid rgba(244, 67, 54, ${intensity})`,
+                    backgroundColor: `rgba(255, 235, 238, ${intensity * 0.7})`
+                };
+            case 'Bus en Taller':
+                return {
+                    ...baseStyle,
+                    borderLeft: `4px solid rgba(158, 158, 158, ${intensity})`,
+                    backgroundColor: `rgba(238, 238, 238, ${intensity * 0.7})`
+                };
+            default:
+                // Estilo por defecto para otros títulos
+                return notification.status === 'unread' ? {
+                    ...baseStyle,
+                    borderLeft: '4px solid rgba(33, 150, 243, 1)',
+                    backgroundColor: 'rgba(227, 242, 253, 0.7)'
+                } : baseStyle;
         }
-        return {};
     };
 
     return (
