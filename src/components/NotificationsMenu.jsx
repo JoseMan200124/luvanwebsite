@@ -132,6 +132,7 @@ const NotificationsMenu = ({ authToken }) => {
         };
     }, [authToken]);
 
+
     // ==============================
     // 8) Contador => unread
     // ==============================

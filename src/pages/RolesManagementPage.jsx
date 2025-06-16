@@ -608,6 +608,7 @@ const RolesManagementPage = () => {
     const [contracts, setContracts] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
+    const [duplicateFilter, setDuplicateFilter] = useState('all');
 
     const [familyDetail, setFamilyDetail] = useState({
         motherName: '',
@@ -685,7 +686,7 @@ const RolesManagementPage = () => {
 
     useEffect(() => {
         setPage(0);
-    }, [updatedFilter]);
+    }, [updatedFilter, duplicateFilter]);
 
     const fetchAllPilots = async () => {
         try {
@@ -1010,6 +1011,9 @@ const RolesManagementPage = () => {
         if (schoolFilter) {
             if (Number(u.school) !== Number(schoolFilter)) return false;
         }
+        if (duplicateFilter === 'duplicated' && !isFamilyLastNameDuplicated(u, users)) return false;
+        if (duplicateFilter === 'notDuplicated' && isFamilyLastNameDuplicated(u, users)) return false;
+
         return true;
     });
     // --- FIN MODIFICACIÓN ---
@@ -1561,6 +1565,19 @@ const RolesManagementPage = () => {
                             <MenuItem value="all">Todos</MenuItem>
                             <MenuItem value="updated">Actualizados</MenuItem>
                             <MenuItem value="notUpdated">No actualizados</MenuItem>
+                        </Select>
+                    </FormControl>
+
+                    <FormControl size="small" sx={{ width: 150 }}>
+                        <InputLabel>Duplicado</InputLabel>
+                        <Select
+                            label="Duplicado"
+                            value={duplicateFilter}
+                            onChange={(e) => setDuplicateFilter(e.target.value)}
+                        >
+                            <MenuItem value="all">Todos</MenuItem>
+                            <MenuItem value="duplicated">Duplicados</MenuItem>
+                            <MenuItem value="notDuplicated">No duplicados</MenuItem>
                         </Select>
                     </FormControl>
 

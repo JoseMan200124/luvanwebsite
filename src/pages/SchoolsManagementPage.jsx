@@ -64,7 +64,7 @@ import {
     CartesianGrid
 } from 'recharts';
 import SubmissionPreview from './SubmissionPreview';
-
+import { CalendarToday as CalendarIcon } from '@mui/icons-material'
 // ───────────────────────────────
 // Estilos generales
 // ───────────────────────────────
@@ -230,6 +230,16 @@ const SchoolsManagementPage = () => {
     // =================== Estados para ordenamiento ===================
     const [order, setOrder] = useState('asc');
     const [orderBy, setOrderBy] = useState('');
+    const currentYear = new Date().getFullYear();
+    const cycleYears = Array.from(
+        { length: currentYear - 2025 + 1 },
+        (_, i) => 2025 + i
+    );
+    const [schoolCycles, setSchoolCycles] = useState({});
+
+    const handleCycleChange = (schoolId, year) => {
+        setSchoolCycles(prev => ({ ...prev, [schoolId]: year }));
+    };
 
     const handleRequestSort = (property) => {
         const isAsc = orderBy === property && order === 'asc';
@@ -291,6 +301,11 @@ const SchoolsManagementPage = () => {
                 };
             });
             setSchools(fetchedSchools);
+            const initialCycles = fetchedSchools.reduce((acc, sc) => {
+                acc[sc.id] = currentYear;
+                return acc;
+            }, {});
+            setSchoolCycles(initialCycles);
             setLoading(false);
         } catch (err) {
             console.error('Error al obtener los colegios:', err);
@@ -703,7 +718,7 @@ const SchoolsManagementPage = () => {
     const handleViewSubmissions = async (school) => {
         setSelectedSchoolForSubmissions(school);
         setSubmissions([]);
-        
+
         try {
             setLoading(true);
             const resp = await api.get(`/schools/${school.id}/submissions`, {
@@ -846,6 +861,19 @@ const SchoolsManagementPage = () => {
                                 .map((school) => (
                                     <MobileCard key={school.id} elevation={3}>
                                         <MobileField>
+                                            <MobileLabel>Ciclo Escolar</MobileLabel>
+                                            <FormControl size="small">
+                                                <Select
+                                                    value={schoolCycles[school.id]}
+                                                    onChange={e => handleCycleChange(school.id, e.target.value)}
+                                                >
+                                                    {cycleYears.map(y => (
+                                                        <MenuItem key={y} value={y}>{y}</MenuItem>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                        </MobileField>
+                                        <MobileField>
                                             <MobileLabel>Nombre</MobileLabel>
                                             <MobileValue>{school.name}</MobileValue>
                                         </MobileField>
@@ -959,6 +987,10 @@ const SchoolsManagementPage = () => {
                                                     Nombre
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell>
+                                                Ciclo Escolar
+                                            </TableCell>
+
                                             <TableCell sortDirection={orderBy === 'city' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'city'}
@@ -1029,6 +1061,18 @@ const SchoolsManagementPage = () => {
                                                 return (
                                                     <TableRow key={school.id}>
                                                         <ResponsiveTableCell data-label="Nombre">{school.name}</ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Ciclo Escolar">
+                                                            <FormControl size="small" fullWidth>
+                                                                <Select
+                                                                    value={schoolCycles[school.id]}
+                                                                    onChange={e => handleCycleChange(school.id, e.target.value)}
+                                                                >
+                                                                    {cycleYears.map(y => (
+                                                                        <MenuItem key={y} value={y}>{y}</MenuItem>
+                                                                    ))}
+                                                                </Select>
+                                                            </FormControl>
+                                                        </ResponsiveTableCell>
                                                         <ResponsiveTableCell data-label="Ciudad">{school.city}</ResponsiveTableCell>
                                                         <ResponsiveTableCell data-label="Dirección">{school.address}</ResponsiveTableCell>
                                                         <ResponsiveTableCell data-label="Contacto">{school.contactPerson}</ResponsiveTableCell>
@@ -1161,6 +1205,7 @@ const SchoolsManagementPage = () => {
                                                 <TableCell>Fecha</TableCell>
                                                 <TableCell>Nombre</TableCell>
                                                 <TableCell>Correo</TableCell>
+                                                <TableCell>Ciclo Escolar</TableCell>
                                                 <TableCell>Acciones</TableCell>
                                             </TableRow>
                                         </TableHead>

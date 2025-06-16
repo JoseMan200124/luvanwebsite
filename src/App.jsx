@@ -23,7 +23,8 @@ import DefaultAdminRoute from './components/DefaultAdminRoute';
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import UpdateParentInfoPage from './pages/UpdateParentInfoPage';
 import ParentDashboardPage from './pages/ParentDashboardPage';
-import ParentPaymentPage   from './pages/ParentPaymentPage';
+import ParentPaymentPage from './pages/ParentPaymentPage';
+import HistoricalDataPage from './pages/HistoricalDataPage';
 import { modules } from './modules';
 
 function App() {
@@ -55,20 +56,20 @@ function App() {
             <AuthProvider>
                 <Routes>
                     {/* ------------------ Rutas públicas ------------------ */}
-                    <Route path="/"                 element={<LandingPage />} />
-                    <Route path="/login"            element={<LoginPage />} />
-                    <Route path="/register"         element={<RegisterPage />} />
-                    <Route path="/mfa"              element={<MFAVerify />} />
-                    <Route path="/privacy-policy"   element={<PrivacyPolicyPage />} />
-                    <Route path="/thank-you"        element={<ThankYouPage />} />
+                    <Route path="/"                   element={<LandingPage />} />
+                    <Route path="/login"              element={<LoginPage />} />
+                    <Route path="/register"           element={<RegisterPage />} />
+                    <Route path="/mfa"                element={<MFAVerify />} />
+                    <Route path="/privacy-policy"     element={<PrivacyPolicyPage />} />
+                    <Route path="/thank-you"          element={<ThankYouPage />} />
                     <Route path="/update-parent-info" element={<UpdateParentInfoPage />} />
 
                     {/* Forzar cambio de contraseña */}
                     <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
 
                     {/* Contratos públicos */}
-                    <Route path="/contracts"                 element={<ContractsManagementPage />} />
-                    <Route path="/contracts/share/:uuid"     element={<ContractFillPage />} />
+                    <Route path="/contracts"             element={<ContractsManagementPage />} />
+                    <Route path="/contracts/share/:uuid" element={<ContractFillPage />} />
 
                     {/* Contratos protegidos */}
                     <Route
@@ -100,8 +101,19 @@ function App() {
                             </ProtectedRoute>
                         }
                     >
-                        <Route index           element={<DefaultAdminRoute />} />
-                        <Route path="dashboard" element={<Dashboard />} />
+                        <Route index             element={<DefaultAdminRoute />} />
+                        <Route path="dashboard"  element={<Dashboard />} />
+
+                        {/* Historial de Ciclos Escolares */}
+                        <Route
+                            path="historial"
+                            element={
+                                <ProtectedRoute>
+                                    <HistoricalDataPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
                         {renderDynamicRoutes()}
 
                         <Route
@@ -112,6 +124,7 @@ function App() {
                                 </ProtectedRoute>
                             }
                         />
+
                         {/* Redirect genérico */}
                         <Route path="*" element={<Navigate to="dashboard" replace />} />
                     </Route>
