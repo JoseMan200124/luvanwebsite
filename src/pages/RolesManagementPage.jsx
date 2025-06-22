@@ -32,7 +32,8 @@ import {
     useMediaQuery,
     useTheme,
     Chip,
-    TableSortLabel
+    TableSortLabel,
+    FormControlLabel
 } from '@mui/material';
 import {
     Edit,
@@ -60,6 +61,7 @@ const roleOptions = [
     { id: 4, name: 'Monitora' },
     { id: 5, name: 'Piloto' },
     { id: 6, name: 'Supervisor' },
+    { id: 7, name: 'Auxiliar' },
 ];
 
 /* =========================================================================
@@ -645,6 +647,9 @@ const RolesManagementPage = () => {
     const [allPilots, setAllPilots] = useState([]);
     const [selectedSupervisorPilots, setSelectedSupervisorPilots] = useState([]);
 
+    const [allMonitoras, setAllMonitoras] = useState([]);
+    const [selectedAuxiliarMonitoras, setSelectedAuxiliarMonitoras] = useState([]);
+
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
@@ -682,6 +687,7 @@ const RolesManagementPage = () => {
         fetchBuses();
         fetchContracts();
         fetchAllPilots();
+        fetchAllMonitoras();
     }, []);
 
     useEffect(() => {
@@ -695,6 +701,16 @@ const RolesManagementPage = () => {
         } catch (error) {
             console.error('[fetchAllPilots] Error:', error);
             setAllPilots([]);
+        }
+    };
+
+    const fetchAllMonitoras = async () => {
+        try {
+            const resp = await api.get('/users/monitors');
+            setAllMonitoras(resp.data.users || []);
+        } catch (error) {
+            console.error('[fetchAllMonitoras] Error:', error);
+            setAllMonitoras([]);
         }
     };
 
@@ -759,6 +775,16 @@ const RolesManagementPage = () => {
                 return prev.filter(x => x !== pilotId);
             } else {
                 return [...prev, pilotId];
+            }
+        });
+    }, []);
+
+    const handleToggleAuxiliarMonitora = useCallback((monitoraId) => {
+        setSelectedAuxiliarMonitoras(prev => {
+            if (prev.includes(monitoraId)) {
+                return prev.filter(id => id !== monitoraId);
+            } else {
+                return [...prev, monitoraId];
             }
         });
     }, []);
@@ -833,6 +859,23 @@ const RolesManagementPage = () => {
         if (parsedRoleId === 6 || (user.Role && user.Role.name === 'Supervisor')) {
             const newArray = user.supervisorPilots ? user.supervisorPilots.map(sp => Number(sp.pilotId)) : [];
             setSelectedSupervisorPilots(newArray);
+        }
+        // Para el caso de Auxiliar
+        if (user.Role?.name === 'Auxiliar') {
+            const auxMonitoras = [];
+            try {
+                // Intentamos obtener las monitoras asignadas
+                const auxMonitorasResp = await api.get(`/users/${user.id}/assigned-monitoras`);
+                if (auxMonitorasResp.data && auxMonitorasResp.data.monitoraIds) {
+                    // Convertir a números para consistencia
+                    auxMonitoras.push(...auxMonitorasResp.data.monitoraIds.map(id => Number(id)));
+                }
+            } catch (error) {
+                console.error('Error al obtener monitoras asignadas al auxiliar:', error);
+            }
+            setSelectedAuxiliarMonitoras(auxMonitoras);
+        } else {
+            setSelectedAuxiliarMonitoras([]);
         }
         setOpenDialog(true);
     };
@@ -968,6 +1011,9 @@ const RolesManagementPage = () => {
             }
             if (payload.roleId === 6) {
                 payload.supervisorPilots = selectedSupervisorPilots;
+            }
+            if (selectedUser?.roleId === 7) {
+                payload.monitorasAsignadas = selectedAuxiliarMonitoras;
             }
             if (selectedUser.id) {
                 await api.put(`/users/${selectedUser.id}`, payload);
@@ -1326,6 +1372,7 @@ const RolesManagementPage = () => {
             ["Media PM"]
         ];
         const pilotos = allPilots.map(p => [p.id, p.name]);
+        const monitoras = allMonitoras.map(m => [m.id, m.name]);
 
         // 2. Definir los headers por rol
         const sheets = [
@@ -1456,7 +1503,24 @@ const RolesManagementPage = () => {
                     "supervisor@email.com",
                     "contraseña123",
                     colegios[0]?.[0] || "",
-                    pilotos[0]?.[0] + ";" + pilotos[1]?.[0] || ""
+                    [pilotos[0]?.[0], pilotos[1]?.[0]].filter(Boolean).join(";")
+                ]
+            },
+            {
+                name: "Auxiliar",
+                headers: [
+                    "Nombre Completo",
+                    "Correo electrónico",
+                    "Contraseña",
+                    "Colegio (ID)",
+                    "Monitoras a Cargo (IDs separados por ;)"
+                ],
+                example: [
+                    "AuxiliarEjemplo",
+                    "auxiliar@email.com",
+                    "contraseña123",
+                    colegios[0]?.[0] || "",
+                    [monitoras[0]?.[0], monitoras[1]?.[0]].filter(Boolean).join(";")
                 ]
             }
         ];
@@ -1466,14 +1530,16 @@ const RolesManagementPage = () => {
         const maxRows = Math.max(
             colegios.length,
             tiposRuta.length,
-            pilotos.length
+            pilotos.length,
+            monitoras.length
         );
 
         const wsListasData = [
             [
                 "Colegios (ID)", "Colegios (Nombre)", "", // columna en blanco
                 "Tipo de Ruta", "", // columna en blanco
-                "Pilotos (ID)", "Pilotos (Nombre)"
+                "Pilotos (ID)", "Pilotos (Nombre)", "",
+                "Monitoras (ID)", "Monitoras (Nombre)"
             ]
         ];
 
@@ -1481,7 +1547,8 @@ const RolesManagementPage = () => {
             wsListasData.push([
                 colegios[i]?.[0] ?? "", colegios[i]?.[1] ?? "", "",
                 tiposRuta[i]?.[0] ?? "", "",
-                pilotos[i]?.[0] ?? "", pilotos[i]?.[1] ?? ""
+                pilotos[i]?.[0] ?? "", pilotos[i]?.[1] ?? "", "",
+                monitoras[i]?.[0] ?? "", monitoras[i]?.[1] ?? ""
             ]);
         }
 
@@ -1495,7 +1562,10 @@ const RolesManagementPage = () => {
             { wch: Math.max("Tipo de Ruta".length + 2, 15) },
             { wch: 2 },
             { wch: Math.max("Pilotos (ID)".length + 2, 15) },
-            { wch: Math.max("Pilotos (Nombre)".length + 2, 20) }
+            { wch: Math.max("Pilotos (Nombre)".length + 2, 20) },
+            { wch: 2 },
+            { wch: Math.max("Monitoras (ID)".length + 2, 15) },
+            { wch: Math.max("Monitoras (Nombre)".length + 2, 20) }
         ];
 
         // 4. Generar el archivo
@@ -2268,29 +2338,74 @@ const RolesManagementPage = () => {
                             </>
                         )}
                         {Number(selectedUser?.roleId) === 6 && (
-                            <>
-                                <Typography variant="h6" sx={{ mt: 3 }}>
+                            <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
+                                <Typography variant="h6" sx={{ mb: 1 }}>
                                     Pilotos a cargo
                                 </Typography>
-                                <Typography variant="body2" color="textSecondary">
+                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
                                     Selecciona uno o más pilotos que estarán a cargo de este Supervisor.
                                 </Typography>
-                                <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
-                                    {allPilots.map((pilot) => {
-                                        const checked = selectedSupervisorPilots.includes(pilot.id);
-                                        return (
-                                            <div key={pilot.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                                                <Checkbox
-                                                    checked={checked}
-                                                    onChange={() => handleToggleSupervisorPilot(pilot.id)}
-                                                    color="primary"
+                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto' }}>
+                                    {allPilots.length === 0 ? (
+                                        <Typography variant="body2" color="text.secondary">
+                                            No hay pilotos disponibles.
+                                        </Typography>
+                                    ) : (
+                                        allPilots.map((pilot) => {
+                                            const checked = selectedSupervisorPilots.includes(pilot.id);
+                                            return (
+                                                <FormControlLabel
+                                                    key={pilot.id}
+                                                    control={
+                                                        <Checkbox
+                                                            checked={checked}
+                                                            onChange={() => handleToggleSupervisorPilot(pilot.id)}
+                                                            color="primary"
+                                                        />
+                                                    }
+                                                    label={`${pilot.name} - ${pilot.email} (ID: ${pilot.id})`}
+                                                    sx={{ display: 'block', mb: 1 }}
                                                 />
-                                                <span>{pilot.name} - {pilot.email} (ID: {pilot.id})</span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </>
+                                            );
+                                        })
+                                    )}
+                                </Paper>
+                            </Box>
+                        )}
+                        {selectedUser?.roleId === 7 && (
+                            <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
+                                <Typography variant="h6" sx={{ mb: 1 }}>
+                                    Monitoras a cargo
+                                </Typography>
+                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                    Selecciona una o más monitoras que estarán a cargo de este Auxiliar.
+                                </Typography>
+                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto' }}>
+                                    {allMonitoras.length === 0 ? (
+                                        <Typography variant="body2" color="text.secondary">
+                                            No hay monitoras disponibles.
+                                        </Typography>
+                                    ) : (
+                                        allMonitoras.map((monitora) => {
+                                            const checked = selectedAuxiliarMonitoras.includes(monitora.id);
+                                            return (
+                                                <FormControlLabel
+                                                    key={monitora.id}
+                                                    control={
+                                                        <Checkbox
+                                                            checked={checked}
+                                                            onChange={() => handleToggleAuxiliarMonitora(monitora.id)}
+                                                            color="primary"
+                                                        />
+                                                    }
+                                                    label={`${monitora.name} - ${monitora.email} (ID: ${monitora.id})`}
+                                                    sx={{ display: 'block', mb: 1 }}
+                                                />
+                                            );
+                                        })
+                                    )}
+                                </Paper>
+                            </Box>
                         )}
                     </Grid>
                 </DialogContent>

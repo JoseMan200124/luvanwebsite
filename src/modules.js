@@ -14,6 +14,7 @@ import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import MonitorsManagementPage from './pages/MonitorsManagementPage';
 import PilotsManagementPage from './pages/PilotsManagementPage';
 import SupervisorsManagementPage from './pages/SupervisorsManagementPage';
+import AuxiliaresManagementPage from './pages/AuxiliaresManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import ContractsManagementPage from './pages/ContractsManagementPage';
@@ -102,7 +103,7 @@ export const modules = [
                 name: 'Monitores',
                 path: 'monitores',
                 component: MonitorsManagementPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
+                roles: ['Administrador', 'Gestor', 'Supervisor', 'Auxiliar'],
             },
             {
                 key: 'pilotos',
@@ -116,6 +117,13 @@ export const modules = [
                 name: 'Supervisores',
                 path: 'supervisores',
                 component: SupervisorsManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'auxiliares',
+                name: 'Auxiliares',
+                path: 'auxiliares',
+                component: AuxiliaresManagementPage,
                 roles: ['Administrador', 'Gestor'],
             },
         ],
