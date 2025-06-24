@@ -613,6 +613,7 @@ const RolesManagementPage = () => {
     const [duplicateFilter, setDuplicateFilter] = useState('all');
 
     const [familyDetail, setFamilyDetail] = useState({
+        familyLastName: '',
         motherName: '',
         motherCellphone: '',
         motherEmail: '',
@@ -815,6 +816,7 @@ const RolesManagementPage = () => {
         });
         if (parsedRoleId === 3 && user.FamilyDetail) {
             setFamilyDetail({
+                familyLastName: user.FamilyDetail.familyLastName || '',
                 motherName: user.FamilyDetail.motherName || '',
                 motherCellphone: user.FamilyDetail.motherCellphone || '',
                 motherEmail: user.FamilyDetail.motherEmail || '',
@@ -837,6 +839,7 @@ const RolesManagementPage = () => {
             }
         } else {
             setFamilyDetail({
+                familyLastName: '',
                 motherName: '',
                 motherCellphone: '',
                 motherEmail: '',
@@ -906,6 +909,7 @@ const RolesManagementPage = () => {
             school: ''
         });
         setFamilyDetail({
+            familyLastName:  '',
             motherName: '',
             motherCellphone: '',
             motherEmail: '',
@@ -2105,6 +2109,16 @@ const RolesManagementPage = () => {
                                     Datos de la Familia (Padre)
                                 </Typography>
                                 <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="familyLastName"
+                                            label="Apellido de la Familia"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.familyLastName}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
                                     <Grid item xs={12} md={4}>
                                         <TextField
                                             name="motherName"
