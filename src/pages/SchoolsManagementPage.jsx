@@ -186,6 +186,8 @@ function getFieldValue(school, field) {
             return school.contactPhone;
         case 'contactEmail':
             return school.contactEmail;
+        case 'studentsCount':
+            return school.studentsCount;
         default:
             return '';
     }
@@ -297,8 +299,10 @@ const SchoolsManagementPage = () => {
                     ...school,
                     schedules: parsedSchedules,
                     grades: parsedGrades,
-                    extraEnrollmentFields: parsedExtraFields
+                    extraEnrollmentFields: parsedExtraFields,
+                    studentsCount: Number(school.studentsCount) || 0
                 };
+
             });
             setSchools(fetchedSchools);
             const initialCycles = fetchedSchools.reduce((acc, sc) => {
@@ -878,6 +882,11 @@ const SchoolsManagementPage = () => {
                                             <MobileValue>{school.name}</MobileValue>
                                         </MobileField>
                                         <MobileField>
+                                            <MobileLabel>Total de Alumnos</MobileLabel>
+                                            <MobileValue>{school.studentsCount}</MobileValue>
+                                        </MobileField>
+
+                                        <MobileField>
                                             <MobileLabel>Ciudad</MobileLabel>
                                             <MobileValue>{school.city}</MobileValue>
                                         </MobileField>
@@ -990,7 +999,16 @@ const SchoolsManagementPage = () => {
                                             <TableCell>
                                                 Ciclo Escolar
                                             </TableCell>
-
+                                            <TableCell sortDirection={orderBy === 'studentsCount' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'studentsCount'}
+                                                    direction={orderBy === 'studentsCount' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('studentsCount')}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Alumnos
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell sortDirection={orderBy === 'city' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'city'}
@@ -1072,6 +1090,9 @@ const SchoolsManagementPage = () => {
                                                                     ))}
                                                                 </Select>
                                                             </FormControl>
+                                                        </ResponsiveTableCell>
+                                                        <ResponsiveTableCell data-label="Alumnos">
+                                                            {school.studentsCount}
                                                         </ResponsiveTableCell>
                                                         <ResponsiveTableCell data-label="Ciudad">{school.city}</ResponsiveTableCell>
                                                         <ResponsiveTableCell data-label="Dirección">{school.address}</ResponsiveTableCell>
