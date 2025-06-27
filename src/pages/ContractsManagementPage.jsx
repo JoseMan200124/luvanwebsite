@@ -19,15 +19,21 @@ import {
     CircularProgress,
     Box,
     DialogActions,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
     useTheme,
-    useMediaQuery
+    useMediaQuery,
+    Chip
 } from '@mui/material';
 import {
     Delete as DeleteIcon,
     Edit as EditIcon,
     CloudUpload as CloudUploadIcon,
     ContentCopy as ContentCopyIcon,
-    Visibility as VisibilityIcon
+    Visibility as VisibilityIcon,
+    School as SchoolIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -43,40 +49,40 @@ import styled from 'styled-components';
 
 // Contenedor principal responsive
 const Container = styled.div`
-  padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-  @media (max-width: 600px) {
-    padding: 10px;
-  }
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    @media (max-width: 600px) {
+        padding: 10px;
+    }
 `;
 
 // Mobile view: Tarjeta para contrato (contratos originales)
 const MobileContractCard = styled(Box)`
-  padding: 16px;
-  margin-bottom: 12px;
-  background-color: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
 `;
 
 // Mobile view: Tarjeta para contrato llenado
 const MobileFilledContractCard = styled(Box)`
-  padding: 16px;
-  margin-bottom: 12px;
-  background-color: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
 `;
 
 // Opcionales: estilos para separar títulos y valores en mobile
 const MobileLabel = styled(Typography)`
-  font-weight: bold;
-  font-size: 0.9rem;
-  color: #555;
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #555;
 `;
 const MobileValue = styled(Typography)`
-  font-size: 1rem;
+    font-size: 1rem;
 `;
 
 // El componente principal
@@ -98,6 +104,15 @@ const ContractsManagementPage = () => {
     const [currentContract, setCurrentContract] = useState(null);
     const [contractTitle, setContractTitle] = useState('');
     const [editorData, setEditorData] = useState('');
+
+    // Selector de colegio (en editor)
+    const [schools, setSchools] = useState([]);
+    const [selectedSchool, setSelectedSchool] = useState(null);
+
+    // Diálogo para asignar colegio a contrato existente
+    const [openAssignDialog, setOpenAssignDialog] = useState(false);
+    const [contractToAssign, setContractToAssign] = useState(null);
+    const [assignSelectedSchool, setAssignSelectedSchool] = useState('');
 
     // Para placeholders y firmas
     const signatureRefs = useRef({});
@@ -133,6 +148,33 @@ const ContractsManagementPage = () => {
             }
         };
         fetchContracts();
+    }, []);
+
+    // ---------------------------
+    // useEffect para cargar colegios
+    // ---------------------------
+    useEffect(() => {
+        const fetchSchools = async () => {
+            try {
+                const response = await api.get('/schools');
+                const list = Array.isArray(response.data)
+                    ? response.data
+                    : Array.isArray(response.data?.schools)
+                        ? response.data.schools
+                        : Array.isArray(response.data?.data)
+                            ? response.data.data
+                            : [];
+                setSchools(list);
+            } catch (error) {
+                console.error('Error al obtener colegios:', error);
+                setSnackbar({
+                    open: true,
+                    message: 'No se pudieron cargar los colegios.',
+                    severity: 'error'
+                });
+            }
+        };
+        fetchSchools();
     }, []);
 
     // ---------------------------
@@ -210,23 +252,27 @@ const ContractsManagementPage = () => {
                 // Actualizar
                 response = await api.put(`/contracts/${currentContract.uuid}`, {
                     title: contractTitle,
-                    content: editorData
+                    content: editorData,
+                    schoolId: selectedSchool
                 });
             } else {
                 // Crear
                 response = await api.post('/contracts', {
                     title: contractTitle,
-                    content: editorData
+                    content: editorData,
+                    schoolId: selectedSchool
                 });
             }
 
-            const { id, uuid, url } = response.data;
+            const { id, uuid, url, schoolId, School } = response.data;
             const savedContract = {
                 id,
                 uuid,
                 title: contractTitle,
                 content: editorData,
-                url
+                url,
+                schoolId,
+                School
             };
 
             if (currentContract) {
@@ -259,12 +305,13 @@ const ContractsManagementPage = () => {
     };
 
     // ---------------------------
-    // Funciones para editar, eliminar y copiar enlace
+    // Funciones para editar, eliminar, copiar enlace y asignar colegio
     // ---------------------------
     const handleEdit = (contract) => {
         setCurrentContract(contract);
         setContractTitle(contract.title);
         setEditorData(contract.content);
+        setSelectedSchool(contract.schoolId ?? null);
         setOpenEditor(true);
     };
 
@@ -308,6 +355,50 @@ const ContractsManagementPage = () => {
 
     const handleViewContract = (contract) => {
         navigate(`/admin/contratos/${contract.uuid}`);
+    };
+
+    // Abrir diálogo de asignación de colegio
+    const handleOpenAssignDialog = (contract) => {
+        setContractToAssign(contract);
+        setAssignSelectedSchool('');
+        setOpenAssignDialog(true);
+    };
+
+    const handleCloseAssignDialog = () => {
+        setContractToAssign(null);
+        setAssignSelectedSchool('');
+        setOpenAssignDialog(false);
+    };
+
+    const handleAssignSchool = async () => {
+        if (!contractToAssign || !assignSelectedSchool) return;
+        try {
+            const response = await api.put(`/contracts/${contractToAssign.uuid}`, {
+                schoolId: assignSelectedSchool
+            });
+
+            // Actualizar contratos en estado
+            setContracts((prev) =>
+                prev.map((c) =>
+                    c.id === contractToAssign.id
+                        ? { ...c, schoolId: assignSelectedSchool, School: schools.find((s) => s.id === assignSelectedSchool) }
+                        : c
+                )
+            );
+            setSnackbar({
+                open: true,
+                message: 'Colegio asignado correctamente.',
+                severity: 'success'
+            });
+            handleCloseAssignDialog();
+        } catch (error) {
+            console.error('Error al asignar colegio:', error);
+            setSnackbar({
+                open: true,
+                message: 'No se pudo asignar el colegio.',
+                severity: 'error'
+            });
+        }
     };
 
     // ---------------------------
@@ -533,6 +624,7 @@ const ContractsManagementPage = () => {
         setCurrentContract(null);
         setContractTitle('');
         setEditorData('');
+        setSelectedSchool(null);
         signatureRefs.current = {};
         setFormValues({});
     };
@@ -560,6 +652,24 @@ const ContractsManagementPage = () => {
                     {contracts.map((contract) => (
                         <MobileContractCard key={contract.id}>
                             <Typography variant="h6">{contract.title}</Typography>
+
+                            {/* Colegio asignado */}
+                            {contract.schoolId ? (
+                                <Chip
+                                    label={contract.School?.name || 'Colegio asignado'}
+                                    size="small"
+                                    color="success"
+                                    style={{ marginTop: '4px' }}
+                                />
+                            ) : (
+                                <Chip
+                                    label="Sin colegio"
+                                    size="small"
+                                    color="warning"
+                                    style={{ marginTop: '4px' }}
+                                />
+                            )}
+
                             <Typography variant="body2" color="textSecondary">
                                 Link para compartir: {contract.url}
                             </Typography>
@@ -581,6 +691,14 @@ const ContractsManagementPage = () => {
                                 <IconButton onClick={() => handleCopyLink(contract.url)}>
                                     <ContentCopyIcon />
                                 </IconButton>
+                                {!contract.schoolId && (
+                                    <IconButton
+                                        onClick={() => handleOpenAssignDialog(contract)}
+                                        title="Asignar colegio"
+                                    >
+                                        <SchoolIcon />
+                                    </IconButton>
+                                )}
                             </Box>
                         </MobileContractCard>
                     ))}
@@ -590,7 +708,26 @@ const ContractsManagementPage = () => {
                     {contracts.map((contract) => (
                         <ListItem key={contract.id} divider>
                             <ListItemText
-                                primary={contract.title}
+                                primary={
+                                    <>
+                                        {contract.title}{' '}
+                                        {contract.schoolId ? (
+                                            <Chip
+                                                label={contract.School?.name || 'Colegio asignado'}
+                                                size="small"
+                                                color="success"
+                                                style={{ marginLeft: '6px' }}
+                                            />
+                                        ) : (
+                                            <Chip
+                                                label="Sin colegio"
+                                                size="small"
+                                                color="warning"
+                                                style={{ marginLeft: '6px' }}
+                                            />
+                                        )}
+                                    </>
+                                }
                                 secondary={
                                     <>
                                         <Typography variant="body2" color="textSecondary">
@@ -617,9 +754,23 @@ const ContractsManagementPage = () => {
                             >
                                 Vista Previa
                             </Button>
-                            <IconButton edge="end" onClick={() => handleCopyLink(contract.url)} style={{ marginLeft: '10px' }}>
+                            <IconButton
+                                edge="end"
+                                onClick={() => handleCopyLink(contract.url)}
+                                style={{ marginLeft: '10px' }}
+                            >
                                 <ContentCopyIcon />
                             </IconButton>
+                            {!contract.schoolId && (
+                                <IconButton
+                                    edge="end"
+                                    onClick={() => handleOpenAssignDialog(contract)}
+                                    style={{ marginLeft: '10px' }}
+                                    title="Asignar colegio"
+                                >
+                                    <SchoolIcon />
+                                </IconButton>
+                            )}
                         </ListItem>
                     ))}
                 </List>
@@ -776,7 +927,7 @@ const ContractsManagementPage = () => {
                 <DialogTitle>{currentContract ? 'Editar Contrato' : 'Crear Contrato'}</DialogTitle>
                 <DialogContent>
                     <Grid container spacing={2}>
-                        <Grid item xs={12} md={6} style={{ position: 'relative' }}>
+                        <Grid item xs={12} md={6}>
                             <TextField
                                 label="Título del Contrato"
                                 value={contractTitle}
@@ -784,6 +935,26 @@ const ContractsManagementPage = () => {
                                 fullWidth
                                 margin="normal"
                             />
+
+                            {/* Selector de colegio */}
+                            <FormControl fullWidth margin="normal">
+                                <InputLabel id="school-select-label">Colegio vinculado</InputLabel>
+                                <Select
+                                    labelId="school-select-label"
+                                    value={selectedSchool ?? ''}
+                                    label="Colegio vinculado"
+                                    onChange={(e) => setSelectedSchool(e.target.value || null)}
+                                >
+                                    <MenuItem value="">
+                                        <em>Sin colegio</em>
+                                    </MenuItem>
+                                    {(Array.isArray(schools) ? schools : []).map((s) => (
+                                        <MenuItem key={s.id} value={s.id}>
+                                            {s.name}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
 
                             <div style={{ marginBottom: '10px' }}>
                                 <input
@@ -846,6 +1017,38 @@ const ContractsManagementPage = () => {
                         </Button>
                     </div>
                 </DialogContent>
+            </Dialog>
+
+            {/* Diálogo para asignar colegio */}
+            <Dialog open={openAssignDialog} onClose={handleCloseAssignDialog}>
+                <DialogTitle>Asignar Colegio al Contrato</DialogTitle>
+                <DialogContent>
+                    <FormControl fullWidth margin="normal">
+                        <InputLabel id="assign-school-label">Colegios</InputLabel>
+                        <Select
+                            labelId="assign-school-label"
+                            value={assignSelectedSchool}
+                            label="Colegios"
+                            onChange={(e) => setAssignSelectedSchool(e.target.value)}
+                        >
+                            {(Array.isArray(schools) ? schools : []).map((s) => (
+                                <MenuItem key={s.id} value={s.id}>
+                                    {s.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseAssignDialog}>Cancelar</Button>
+                    <Button
+                        onClick={handleAssignSchool}
+                        variant="contained"
+                        disabled={!assignSelectedSchool}
+                    >
+                        Asignar
+                    </Button>
+                </DialogActions>
             </Dialog>
 
             {/* Diálogo para confirmar eliminación de Contrato Llenado */}
