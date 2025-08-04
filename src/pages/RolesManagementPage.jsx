@@ -1218,6 +1218,28 @@ const RolesManagementPage = () => {
         });
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(data);
+        
+        // Auto-ajustar ancho de columnas basado en los headers y contenido
+        const colWidths = headers.map((header, headerIndex) => {
+            // Calcular el ancho mínimo basado en el header y el contenido
+            let maxWidth = header.length;
+            
+            // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
+            data.slice(1).forEach(row => {
+                if (row[headerIndex] !== undefined) {
+                    const cellLength = String(row[headerIndex] || "").length;
+                    if (cellLength > maxWidth) {
+                        maxWidth = cellLength;
+                    }
+                }
+            });
+            
+            // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
+            return { wch: Math.min(Math.max(maxWidth, 10), 50) };
+        });
+        
+        ws['!cols'] = colWidths;
+        
         XLSX.utils.book_append_sheet(wb, ws, "UsuariosNuevos");
         const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
         const blob = new Blob([wbout], { type: "application/octet-stream" });
@@ -1346,6 +1368,28 @@ const RolesManagementPage = () => {
             });
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(data);
+            
+            // Auto-ajustar ancho de columnas basado en los headers y contenido
+            const colWidths = headers.map((header, headerIndex) => {
+                // Calcular el ancho mínimo basado en el header y el contenido
+                let maxWidth = header.length;
+                
+                // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
+                data.slice(1).forEach(row => {
+                    if (row[headerIndex] !== undefined) {
+                        const cellLength = String(row[headerIndex] || "").length;
+                        if (cellLength > maxWidth) {
+                            maxWidth = cellLength;
+                        }
+                    }
+                });
+                
+                // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
+                return { wch: Math.min(Math.max(maxWidth, 10), 50) };
+            });
+            
+            ws['!cols'] = colWidths;
+            
             XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
             const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
             const blob = new Blob([wbout], { type: "application/octet-stream" });
@@ -1362,6 +1406,251 @@ const RolesManagementPage = () => {
             setSnackbar({
                 open: true,
                 message: 'Error al descargar todos los usuarios',
+                severity: 'error'
+            });
+        }
+    };
+
+    const handleDownloadRouteReport = async () => {
+        try {
+            let allUsers = [];
+            let page = 0;
+            const limit = 500;
+            let total = 0;
+            let fetched = 0;
+
+            // Primera petición para saber el total
+            const firstResp = await api.get('/users', { params: { page, limit } });
+            allUsers = firstResp.data.users || [];
+            total = firstResp.data.total || allUsers.length;
+            fetched = allUsers.length;
+
+            // Si hay más, sigue pidiendo en lotes
+            while (fetched < total) {
+                page += 1;
+                const resp = await api.get('/users', { params: { page, limit } });
+                const usersBatch = resp.data.users || [];
+                allUsers = allUsers.concat(usersBatch);
+                fetched += usersBatch.length;
+                if (usersBatch.length === 0) break;
+            }
+
+            // Filtrar solo usuarios padres con FamilyDetail y routeType
+            const parentsWithRoutes = allUsers.filter(u => 
+                u.Role && u.Role.name === 'Padre' && 
+                u.FamilyDetail && 
+                u.FamilyDetail.routeType
+            );
+
+            // Agrupar por tipo de ruta
+            const routeGroups = {};
+            parentsWithRoutes.forEach(user => {
+                const routeType = user.FamilyDetail.routeType;
+                if (!routeGroups[routeType]) {
+                    routeGroups[routeType] = [];
+                }
+                routeGroups[routeType].push(user);
+            });
+
+            // Crear Excel con múltiples hojas
+            const wb = XLSX.utils.book_new();
+
+            // Hoja resumen
+            const summaryHeaders = [
+                "Tipo de Ruta",
+                "Total Familias",
+                "Total Estudiantes"
+            ];
+            const summaryData = [summaryHeaders];
+
+            Object.keys(routeGroups).forEach(routeType => {
+                const families = routeGroups[routeType];
+                const totalStudents = families.reduce((sum, family) => {
+                    return sum + (family.FamilyDetail.Students ? family.FamilyDetail.Students.length : 0);
+                }, 0);
+                
+                summaryData.push([
+                    routeType,
+                    families.length,
+                    totalStudents
+                ]);
+            });
+
+            const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+            
+            // Auto-ajustar ancho de columnas para la hoja resumen
+            const summaryColWidths = summaryHeaders.map(header => ({ wch: Math.max(header.length, 15) }));
+            summaryWs['!cols'] = summaryColWidths;
+            
+            XLSX.utils.book_append_sheet(wb, summaryWs, "Resumen por Rutas");
+
+            // Crear una hoja por cada tipo de ruta
+            Object.keys(routeGroups).forEach(routeType => {
+                const families = routeGroups[routeType];
+                
+                const headers = [
+                    "Apellido Familia",
+                    "Nombre Padre",
+                    "Email Padre",
+                    "Colegio",
+                    "Dirección Principal",
+                    "Dirección Alterna",
+                    "Tipo Ruta",
+                    "Estudiantes",
+                    "Grados",
+                    "Horarios Asignados",
+                    "Horarios de Parada",
+                    "Notas de Parada",
+                    "Paradas Asignadas"
+                ];
+                
+                const routeData = [headers];
+                
+                families.forEach(user => {
+                    const fd = user.FamilyDetail;
+                    const schoolName = user.School ? user.School.name : "";
+                    
+                    // Concatenar estudiantes y grados
+                    let studentsStr = "";
+                    let gradesStr = "";
+                    if (fd.Students && fd.Students.length) {
+                        studentsStr = fd.Students.map(s => s.fullName || "").join("; ");
+                        gradesStr = fd.Students.map(s => s.grade || "").join("; ");
+                    }
+                    
+                    // Concatenar horarios asignados desde studentbuses (AssignedBuses)
+                    let assignedSchedulesStr = "";
+                    if (fd.Students && fd.Students.length) {
+                        const scheduleInfo = [];
+                        fd.Students.forEach((student) => {
+                            if (student.AssignedBuses && student.AssignedBuses.length) {
+                                student.AssignedBuses.forEach((busAssignment) => {
+                                    const busId = busAssignment.busId;
+                                    const schedules = busAssignment.schedules || busAssignment.assignedSchedule || [];
+                                    
+                                    // Buscar información del bus
+                                    const busInfo = buses.find(b => b.id === busId);
+                                    const busName = busInfo ? (busInfo.licensePlate || `Bus ${busId}`) : `Bus ${busId}`;
+                                    
+                                    if (schedules.length > 0) {
+                                        const schedulesText = Array.isArray(schedules) ? schedules.join(", ") : schedules;
+                                        scheduleInfo.push(`${student.fullName}: ${busName} (${schedulesText})`);
+                                    } else {
+                                        scheduleInfo.push(`${student.fullName}: ${busName}`);
+                                    }
+                                });
+                            }
+                        });
+                        assignedSchedulesStr = scheduleInfo.join("; ");
+                    }
+                    
+                    // Concatenar horarios de parada y notas de parada desde ScheduleSlots
+                    let stopSchedulesStr = "";
+                    let stopNotesStr = "";
+                    if (fd.ScheduleSlots && fd.ScheduleSlots.length) {
+                        stopSchedulesStr = fd.ScheduleSlots.map(slot => slot.time || "").join("; ");
+                        stopNotesStr = fd.ScheduleSlots.map(slot => slot.note || "").join("; ");
+                    }
+                    
+                    // Concatenar paradas asignadas (buses y paradas de cada estudiante)
+                    let assignedStopsStr = "";
+                    if (fd.Students && fd.Students.length) {
+                        const stopsInfo = [];
+                        fd.Students.forEach((student) => {
+                            if (student.AssignedBuses && student.AssignedBuses.length) {
+                                student.AssignedBuses.forEach((busAssignment) => {
+                                    // busAssignment debería tener información del bus y las paradas
+                                    const busId = busAssignment.busId;
+                                    
+                                    // Buscar información del bus para obtener las paradas
+                                    const busInfo = buses.find(b => b.id === busId);
+                                    if (busInfo && busInfo.stops) {
+                                        const stopsNames = busInfo.stops.map(stop => stop.name || stop.location || stop).join(", ");
+                                        if (stopsNames) {
+                                            stopsInfo.push(`${student.fullName}: Bus ${busInfo.licensePlate || busId} (${stopsNames})`);
+                                        }
+                                    } else if (busInfo) {
+                                        stopsInfo.push(`${student.fullName}: Bus ${busInfo.licensePlate || busId}`);
+                                    }
+                                });
+                            }
+                        });
+                        assignedStopsStr = stopsInfo.join("; ");
+                    }
+                    
+                    const row = [
+                        fd.familyLastName || "",
+                        user.name || "",
+                        user.email || "",
+                        schoolName,
+                        fd.mainAddress || "",
+                        fd.alternativeAddress || "",
+                        fd.routeType || "",
+                        studentsStr,
+                        gradesStr,
+                        assignedSchedulesStr,
+                        stopSchedulesStr,
+                        stopNotesStr,
+                        assignedStopsStr
+                    ];
+                    
+                    routeData.push(row);
+                });
+                
+                const routeWs = XLSX.utils.aoa_to_sheet(routeData);
+                
+                // Auto-ajustar ancho de columnas basado en los headers
+                const colWidths = headers.map(header => {
+                    // Calcular el ancho mínimo basado en el header y el contenido
+                    let maxWidth = header.length;
+                    
+                    // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
+                    routeData.slice(1).forEach(row => {
+                        row.forEach((cell, colIndex) => {
+                            if (colIndex < headers.length) {
+                                const cellLength = String(cell || "").length;
+                                if (cellLength > maxWidth && colIndex === headers.indexOf(header)) {
+                                    maxWidth = cellLength;
+                                }
+                            }
+                        });
+                    });
+                    
+                    // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
+                    return { wch: Math.min(Math.max(maxWidth, 10), 50) };
+                });
+                
+                routeWs['!cols'] = colWidths;
+                
+                // Limpiar nombre de hoja para Excel (máximo 31 caracteres, sin caracteres especiales)
+                const sheetName = routeType.substring(0, 31).replace(/[\\/?*[\]]/g, '');
+                XLSX.utils.book_append_sheet(wb, routeWs, sheetName);
+            });
+
+            // Generar y descargar archivo
+            const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+            const blob = new Blob([wbout], { type: "application/octet-stream" });
+            const fileName = `reporte_rutas_${getFormattedDateTime()}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({
+                open: true,
+                message: 'Reporte de rutas descargado exitosamente',
+                severity: 'success'
+            });
+
+        } catch (error) {
+            console.error('[handleDownloadRouteReport] Error:', error);
+            setSnackbar({
+                open: true,
+                message: 'Error al descargar el reporte de rutas',
                 severity: 'error'
             });
         }
@@ -1726,6 +2015,13 @@ const RolesManagementPage = () => {
                         onClick={handleDownloadAllUsers}
                     >
                         Descargar Todos
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="success"
+                        onClick={handleDownloadRouteReport}
+                    >
+                        Reporte de Rutas
                     </Button>
                 </div>
             </Box>
