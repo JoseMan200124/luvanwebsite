@@ -1514,111 +1514,141 @@ const RolesManagementPage = () => {
             Object.keys(routeGroups).forEach(routeType => {
                 const families = routeGroups[routeType];
                 
-                const headers = [
+                // Determinar el número máximo de estudiantes, horarios de parada, etc. para crear las columnas dinámicas
+                let maxStudents = 0;
+                let maxScheduleSlots = 0;
+                let maxAssignedBuses = 0;
+                
+                families.forEach(user => {
+                    const fd = user.FamilyDetail;
+                    if (fd.Students && fd.Students.length > maxStudents) {
+                        maxStudents = fd.Students.length;
+                    }
+                    if (fd.ScheduleSlots && fd.ScheduleSlots.length > maxScheduleSlots) {
+                        maxScheduleSlots = fd.ScheduleSlots.length;
+                    }
+                    if (fd.Students) {
+                        fd.Students.forEach(student => {
+                            if (student.AssignedBuses && student.AssignedBuses.length > maxAssignedBuses) {
+                                maxAssignedBuses = student.AssignedBuses.length;
+                            }
+                        });
+                    }
+                });
+                
+                // Crear headers dinámicos
+                const baseHeaders = [
                     "Apellido Familia",
                     "Nombre Padre",
                     "Email Padre",
                     "Colegio",
                     "Dirección Principal",
                     "Dirección Alterna",
-                    "Tipo Ruta",
-                    "Estudiantes",
-                    "Grados",
-                    "Horarios Asignados",
-                    "Horarios de Parada",
-                    "Notas de Parada",
-                    "Paradas Asignadas"
+                    "Tipo Ruta"
                 ];
                 
+                // Agregar columnas para estudiantes
+                const studentHeaders = [];
+                for (let i = 1; i <= maxStudents; i++) {
+                    studentHeaders.push(`Estudiante ${i} - Nombre`);
+                    studentHeaders.push(`Estudiante ${i} - Grado`);
+                }
+                
+                // Agregar columnas para horarios de parada
+                const scheduleSlotHeaders = [];
+                for (let i = 1; i <= maxScheduleSlots; i++) {
+                    scheduleSlotHeaders.push(`Horario Parada ${i} - Hora`);
+                    scheduleSlotHeaders.push(`Horario Parada ${i} - Nota`);
+                }
+                
+                // Agregar columnas para buses asignados
+                const assignedBusHeaders = [];
+                for (let i = 1; i <= maxAssignedBuses; i++) {
+                    assignedBusHeaders.push(`Bus Asignado ${i} - Estudiante`);
+                    assignedBusHeaders.push(`Bus Asignado ${i} - Bus`);
+                    assignedBusHeaders.push(`Bus Asignado ${i} - Horarios`);
+                }
+                
+                const headers = [...baseHeaders, ...studentHeaders, ...scheduleSlotHeaders, ...assignedBusHeaders];
                 const routeData = [headers];
                 
                 families.forEach(user => {
                     const fd = user.FamilyDetail;
                     const schoolName = user.School ? user.School.name : "";
                     
-                    // Concatenar estudiantes y grados
-                    let studentsStr = "";
-                    let gradesStr = "";
-                    if (fd.Students && fd.Students.length) {
-                        studentsStr = fd.Students.map(s => s.fullName || "").join("; ");
-                        gradesStr = fd.Students.map(s => s.grade || "").join("; ");
-                    }
-                    
-                    // Concatenar horarios asignados desde studentbuses (AssignedBuses)
-                    let assignedSchedulesStr = "";
-                    if (fd.Students && fd.Students.length) {
-                        const scheduleInfo = [];
-                        fd.Students.forEach((student) => {
-                            if (student.AssignedBuses && student.AssignedBuses.length) {
-                                student.AssignedBuses.forEach((busAssignment) => {
-                                    const busId = busAssignment.busId;
-                                    const schedules = busAssignment.schedules || busAssignment.assignedSchedule || [];
-                                    
-                                    // Buscar información del bus
-                                    const busInfo = buses.find(b => b.id === busId);
-                                    const busName = busInfo ? (busInfo.licensePlate || `Bus ${busId}`) : `Bus ${busId}`;
-                                    
-                                    if (schedules.length > 0) {
-                                        const schedulesText = Array.isArray(schedules) ? schedules.join(", ") : schedules;
-                                        scheduleInfo.push(`${student.fullName}: ${busName} (${schedulesText})`);
-                                    } else {
-                                        scheduleInfo.push(`${student.fullName}: ${busName}`);
-                                    }
-                                });
-                            }
-                        });
-                        assignedSchedulesStr = scheduleInfo.join("; ");
-                    }
-                    
-                    // Concatenar horarios de parada y notas de parada desde ScheduleSlots
-                    let stopSchedulesStr = "";
-                    let stopNotesStr = "";
-                    if (fd.ScheduleSlots && fd.ScheduleSlots.length) {
-                        stopSchedulesStr = fd.ScheduleSlots.map(slot => slot.time || "").join("; ");
-                        stopNotesStr = fd.ScheduleSlots.map(slot => slot.note || "").join("; ");
-                    }
-                    
-                    // Concatenar paradas asignadas (buses y paradas de cada estudiante)
-                    let assignedStopsStr = "";
-                    if (fd.Students && fd.Students.length) {
-                        const stopsInfo = [];
-                        fd.Students.forEach((student) => {
-                            if (student.AssignedBuses && student.AssignedBuses.length) {
-                                student.AssignedBuses.forEach((busAssignment) => {
-                                    // busAssignment debería tener información del bus y las paradas
-                                    const busId = busAssignment.busId;
-                                    
-                                    // Buscar información del bus para obtener las paradas
-                                    const busInfo = buses.find(b => b.id === busId);
-                                    if (busInfo && busInfo.stops) {
-                                        const stopsNames = busInfo.stops.map(stop => stop.name || stop.location || stop).join(", ");
-                                        if (stopsNames) {
-                                            stopsInfo.push(`${student.fullName}: Bus ${busInfo.licensePlate || busId} (${stopsNames})`);
-                                        }
-                                    } else if (busInfo) {
-                                        stopsInfo.push(`${student.fullName}: Bus ${busInfo.licensePlate || busId}`);
-                                    }
-                                });
-                            }
-                        });
-                        assignedStopsStr = stopsInfo.join("; ");
-                    }
-                    
-                    const row = [
+                    // Datos base
+                    const baseData = [
                         fd.familyLastName || "",
                         user.name || "",
                         user.email || "",
                         schoolName,
                         fd.mainAddress || "",
                         fd.alternativeAddress || "",
-                        fd.routeType || "",
-                        studentsStr,
-                        gradesStr,
-                        assignedSchedulesStr,
-                        stopSchedulesStr,
-                        stopNotesStr,
-                        assignedStopsStr
+                        fd.routeType || ""
                     ];
+                    
+                    // Datos de estudiantes (expandidos en columnas separadas)
+                    const studentData = [];
+                    for (let i = 0; i < maxStudents; i++) {
+                        if (fd.Students && fd.Students[i]) {
+                            studentData.push(fd.Students[i].fullName || "");
+                            studentData.push(fd.Students[i].grade || "");
+                        } else {
+                            studentData.push(""); // Nombre vacío
+                            studentData.push(""); // Grado vacío
+                        }
+                    }
+                    
+                    // Datos de horarios de parada (expandidos en columnas separadas)
+                    const scheduleSlotData = [];
+                    for (let i = 0; i < maxScheduleSlots; i++) {
+                        if (fd.ScheduleSlots && fd.ScheduleSlots[i]) {
+                            scheduleSlotData.push(fd.ScheduleSlots[i].time || "");
+                            scheduleSlotData.push(fd.ScheduleSlots[i].note || "");
+                        } else {
+                            scheduleSlotData.push(""); // Hora vacía
+                            scheduleSlotData.push(""); // Nota vacía
+                        }
+                    }
+                    
+                    // Datos de buses asignados (expandidos en columnas separadas)
+                    const assignedBusData = [];
+                    let busAssignmentIndex = 0;
+                    
+                    if (fd.Students) {
+                        fd.Students.forEach(student => {
+                            if (student.AssignedBuses) {
+                                student.AssignedBuses.forEach(busAssignment => {
+                                    if (busAssignmentIndex < maxAssignedBuses) {
+                                        const busId = busAssignment.busId;
+                                        const schedules = busAssignment.schedules || busAssignment.assignedSchedule || [];
+                                        
+                                        // Buscar información del bus
+                                        const busInfo = buses.find(b => b.id === busId);
+                                        const busName = busInfo ? (busInfo.licensePlate || `Bus ${busId}`) : `Bus ${busId}`;
+                                        
+                                        const schedulesText = Array.isArray(schedules) ? schedules.join(", ") : schedules;
+                                        
+                                        assignedBusData.push(student.fullName || "");
+                                        assignedBusData.push(busName);
+                                        assignedBusData.push(schedulesText);
+                                        
+                                        busAssignmentIndex++;
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Rellenar con campos vacíos si no hay suficientes asignaciones de bus
+                    while (busAssignmentIndex < maxAssignedBuses) {
+                        assignedBusData.push(""); // Estudiante vacío
+                        assignedBusData.push(""); // Bus vacío
+                        assignedBusData.push(""); // Horarios vacíos
+                        busAssignmentIndex++;
+                    }
+                    
+                    const row = [...baseData, ...studentData, ...scheduleSlotData, ...assignedBusData];
                     
                     routeData.push(row);
                 });
