@@ -1677,13 +1677,12 @@ const RolesManagementPage = () => {
             
             // Crear headers dinámicos
             const baseHeaders = [
+                "Tipo Ruta",
                 "Apellido Familia",
                 "Nombre Padre",
                 "Email Padre",
-                "Colegio",
                 "Dirección Principal",
-                "Dirección Alterna",
-                "Tipo Ruta"
+                "Dirección Alterna"
             ];
             
             // Agregar columnas para estudiantes
@@ -1705,17 +1704,15 @@ const RolesManagementPage = () => {
             // Procesar todas las familias en una sola hoja
             parentsWithRoutes.forEach(user => {
                 const fd = user.FamilyDetail;
-                const schoolName = user.School ? user.School.name : "";
                 
                 // Datos base
                 const baseData = [
+                    fd.routeType || "",
                     fd.familyLastName || "",
                     user.name || "",
                     user.email || "",
-                    schoolName,
                     fd.mainAddress || "",
-                    fd.alternativeAddress || "",
-                    fd.routeType || ""
+                    fd.alternativeAddress || ""
                 ];
                 
                 // Datos de estudiantes (expandidos en columnas separadas)
