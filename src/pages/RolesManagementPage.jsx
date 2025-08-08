@@ -1468,7 +1468,142 @@ const RolesManagementPage = () => {
                 u.school && parseInt(u.school) === parseInt(schoolId)
             );
 
-            // Agrupar por tipo de ruta
+            // Agrupar por número de ruta del bus asignado y contar estudiantes AM/PM
+            const routeSummary = {};
+            
+            parentsWithRoutes.forEach(user => {
+                const fd = user.FamilyDetail;
+                
+                if (fd.Students && fd.Students.length > 0) {
+                    fd.Students.forEach(student => {
+                        // Verificar si el estudiante tiene buses asignados específicos
+                        if (student.buses && student.buses.length > 0) {
+                            student.buses.forEach(bus => {
+                                const busId = bus.id;
+                                const routeNumber = bus.routeNumber || `Ruta ${busId}`;
+                                
+                                // Inicializar si no existe
+                                if (!routeSummary[routeNumber]) {
+                                    routeSummary[routeNumber] = {
+                                        cantAM: 0,
+                                        cantPM: 0
+                                    };
+                                }
+                                
+                                // Obtener horarios asignados desde la tabla intermedia
+                                let assignedSchedule = [];
+                                if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
+                                    try {
+                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                            ? JSON.parse(bus.AssignedBuses.assignedSchedule)
+                                            : bus.AssignedBuses.assignedSchedule;
+                                    } catch (e) {
+                                        console.warn('Error parsing assignedSchedule:', e);
+                                        assignedSchedule = [];
+                                    }
+                                }
+                                
+                                // Analizar horarios para determinar AM/PM
+                                if (Array.isArray(assignedSchedule) && assignedSchedule.length > 0) {
+                                    assignedSchedule.forEach(schedule => {
+                                        if (schedule && typeof schedule === 'string') {
+                                            const scheduleUpper = schedule.toUpperCase();
+                                            if (scheduleUpper.includes('AM') || scheduleUpper.includes('MAÑANA') || scheduleUpper.includes('ENTRADA')) {
+                                                routeSummary[routeNumber].cantAM++;
+                                            } else if (scheduleUpper.includes('PM') || scheduleUpper.includes('TARDE') || scheduleUpper.includes('SALIDA')) {
+                                                routeSummary[routeNumber].cantPM++;
+                                            } else {
+                                                // Si no se puede determinar, analizar la hora si está disponible
+                                                const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
+                                                if (timeMatch) {
+                                                    const hour = parseInt(timeMatch[1]);
+                                                    if (hour < 12) {
+                                                        routeSummary[routeNumber].cantAM++;
+                                                    } else {
+                                                        routeSummary[routeNumber].cantPM++;
+                                                    }
+                                                } else {
+                                                    // Si no se puede determinar, contar como AM por defecto
+                                                    routeSummary[routeNumber].cantAM++;
+                                                }
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    // Si no hay horarios específicos, usar ScheduleSlots del estudiante
+                                    if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
+                                        student.ScheduleSlots.forEach(slot => {
+                                            const timeSlot = slot.timeSlot;
+                                            if (timeSlot.includes('7:30') || timeSlot.includes('8:00')) {
+                                                routeSummary[routeNumber].cantAM++;
+                                            } else if (timeSlot.includes('1:00') || timeSlot.includes('1:30') || timeSlot.includes('2:00')) {
+                                                routeSummary[routeNumber].cantPM++;
+                                            } else {
+                                                routeSummary[routeNumber].cantAM++;
+                                            }
+                                        });
+                                    } else {
+                                        // Si no hay horarios, contar como AM por defecto
+                                        routeSummary[routeNumber].cantAM++;
+                                    }
+                                }
+                            });
+                        } else {
+                            // Si el estudiante no tiene buses asignados, usar el tipo de ruta familiar
+                            const routeType = fd.routeType;
+                            const routeNumber = routeType; // Usar directamente el tipo de ruta
+                            
+                            if (!routeSummary[routeNumber]) {
+                                routeSummary[routeNumber] = {
+                                    cantAM: 0,
+                                    cantPM: 0
+                                };
+                            }
+                            
+                            // Determinar AM/PM basado en el tipo de ruta
+                            if (routeType.includes('AM') || routeType.includes('Media AM')) {
+                                routeSummary[routeNumber].cantAM++;
+                            } else if (routeType.includes('PM') || routeType.includes('Media PM')) {
+                                routeSummary[routeNumber].cantPM++;
+                            } else if (routeType.includes('Completa')) {
+                                // Para ruta completa, contar tanto AM como PM
+                                routeSummary[routeNumber].cantAM++;
+                                routeSummary[routeNumber].cantPM++;
+                            } else {
+                                // Por defecto como AM
+                                routeSummary[routeNumber].cantAM++;
+                            }
+                        }
+                    });
+                } else {
+                    // Si no hay estudiantes definidos, usar datos de la familia
+                    const routeType = fd.routeType;
+                    const routeNumber = routeType; // Usar directamente el tipo de ruta
+                    
+                    if (!routeSummary[routeNumber]) {
+                        routeSummary[routeNumber] = {
+                            cantAM: 0,
+                            cantPM: 0
+                        };
+                    }
+                    
+                    // Determinar AM/PM basado en el tipo de ruta, contar 1 familia
+                    if (routeType.includes('AM') || routeType.includes('Media AM')) {
+                        routeSummary[routeNumber].cantAM++;
+                    } else if (routeType.includes('PM') || routeType.includes('Media PM')) {
+                        routeSummary[routeNumber].cantPM++;
+                    } else if (routeType.includes('Completa')) {
+                        // Para ruta completa, contar tanto AM como PM
+                        routeSummary[routeNumber].cantAM++;
+                        routeSummary[routeNumber].cantPM++;
+                    } else {
+                        // Por defecto como AM
+                        routeSummary[routeNumber].cantAM++;
+                    }
+                }
+            });
+
+            // Agrupar por tipo de ruta para las hojas individuales
             const routeGroups = {};
             parentsWithRoutes.forEach(user => {
                 const routeType = user.FamilyDetail.routeType;
@@ -1481,26 +1616,46 @@ const RolesManagementPage = () => {
             // Crear Excel con múltiples hojas
             const wb = XLSX.utils.book_new();
 
-            // Hoja resumen
+            // Hoja resumen por rutas
             const summaryHeaders = [
-                "Tipo de Ruta",
-                "Total Familias",
-                "Total Estudiantes"
+                "No. Ruta",
+                "Cant. AM",
+                "Cant. PM"
             ];
             const summaryData = [summaryHeaders];
 
-            Object.keys(routeGroups).forEach(routeType => {
-                const families = routeGroups[routeType];
-                const totalStudents = families.reduce((sum, family) => {
-                    return sum + (family.FamilyDetail.Students ? family.FamilyDetail.Students.length : 0);
-                }, 0);
-                
-                summaryData.push([
-                    routeType,
-                    families.length,
-                    totalStudents
-                ]);
-            });
+            // Ordenar las rutas alfabéticamente
+            const sortedRoutes = Object.keys(routeSummary).sort();
+            
+            if (sortedRoutes.length === 0) {
+                // Si no hay rutas específicas, crear un resumen básico con los tipos de ruta
+                Object.keys(routeGroups).forEach(routeType => {
+                    const families = routeGroups[routeType];
+                    const totalStudents = families.reduce((sum, family) => {
+                        return sum + (family.FamilyDetail.Students ? family.FamilyDetail.Students.length : 1);
+                    }, 0);
+                    
+                    if (routeType.includes('AM') || routeType.includes('Media AM')) {
+                        summaryData.push([routeType, totalStudents, 0]);
+                    } else if (routeType.includes('PM') || routeType.includes('Media PM')) {
+                        summaryData.push([routeType, 0, totalStudents]);
+                    } else if (routeType.includes('Completa')) {
+                        summaryData.push([routeType, totalStudents, totalStudents]);
+                    } else {
+                        summaryData.push([routeType, totalStudents, 0]);
+                    }
+                });
+            } else {
+                // Usar el resumen por rutas específicas
+                sortedRoutes.forEach(routeNumber => {
+                    const routeData = routeSummary[routeNumber];
+                    summaryData.push([
+                        routeNumber,
+                        routeData.cantAM,
+                        routeData.cantPM
+                    ]);
+                });
+            }
 
             const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
             
@@ -1529,8 +1684,8 @@ const RolesManagementPage = () => {
                     }
                     if (fd.Students) {
                         fd.Students.forEach(student => {
-                            if (student.AssignedBuses && student.AssignedBuses.length > maxAssignedBuses) {
-                                maxAssignedBuses = student.AssignedBuses.length;
+                            if (student.buses && student.buses.length > maxAssignedBuses) {
+                                maxAssignedBuses = student.buses.length;
                             }
                         });
                     }
@@ -1617,17 +1772,26 @@ const RolesManagementPage = () => {
                     
                     if (fd.Students) {
                         fd.Students.forEach(student => {
-                            if (student.AssignedBuses) {
-                                student.AssignedBuses.forEach(busAssignment => {
+                            if (student.buses) {
+                                student.buses.forEach(bus => {
                                     if (busAssignmentIndex < maxAssignedBuses) {
-                                        const busId = busAssignment.busId;
-                                        const schedules = busAssignment.schedules || busAssignment.assignedSchedule || [];
+                                        const busId = bus.id;
                                         
-                                        // Buscar información del bus
-                                        const busInfo = buses.find(b => b.id === busId);
-                                        const busName = busInfo ? (busInfo.licensePlate || `Bus ${busId}`) : `Bus ${busId}`;
+                                        // Obtener horarios asignados desde la tabla intermedia
+                                        let assignedSchedule = [];
+                                        if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
+                                            try {
+                                                assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                                    ? JSON.parse(bus.AssignedBuses.assignedSchedule)
+                                                    : bus.AssignedBuses.assignedSchedule;
+                                            } catch (e) {
+                                                console.warn('Error parsing assignedSchedule for Excel:', e);
+                                                assignedSchedule = [];
+                                            }
+                                        }
+                                        const busName = bus.plate || `Bus ${busId}`;
                                         
-                                        const schedulesText = Array.isArray(schedules) ? schedules.join(", ") : schedules;
+                                        const schedulesText = Array.isArray(assignedSchedule) ? assignedSchedule.join(", ") : (assignedSchedule || "");
                                         
                                         assignedBusData.push(student.fullName || "");
                                         assignedBusData.push(busName);
