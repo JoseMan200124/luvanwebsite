@@ -666,6 +666,11 @@ const RolesManagementPage = () => {
     const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
     const [selectedUserForManualSend, setSelectedUserForManualSend] = useState(null);
 
+    // Modal para selección de colegio en reporte de rutas
+    const [openRouteReportDialog, setOpenRouteReportDialog] = useState(false);
+    const [selectedSchoolForReport, setSelectedSchoolForReport] = useState('');
+    const [routeReportLoading, setRouteReportLoading] = useState(false);
+
     // Filtros
     const [newUsersFilter, setNewUsersFilter] = useState('all');
     const [updatedFilter, setUpdatedFilter] = useState('all');
@@ -1411,7 +1416,27 @@ const RolesManagementPage = () => {
         }
     };
 
-    const handleDownloadRouteReport = async () => {
+    const handleOpenRouteReportDialog = () => {
+        setSelectedSchoolForReport('');
+        setOpenRouteReportDialog(true);
+    };
+
+    const handleCloseRouteReportDialog = () => {
+        setOpenRouteReportDialog(false);
+        setSelectedSchoolForReport('');
+    };
+
+    const handleDownloadRouteReport = async (schoolId) => {
+        if (!schoolId) {
+            setSnackbar({
+                open: true,
+                message: 'Por favor selecciona un colegio.',
+                severity: 'warning'
+            });
+            return;
+        }
+
+        setRouteReportLoading(true);
         try {
             let allUsers = [];
             let page = 0;
@@ -1435,11 +1460,12 @@ const RolesManagementPage = () => {
                 if (usersBatch.length === 0) break;
             }
 
-            // Filtrar solo usuarios padres con FamilyDetail y routeType
+            // Filtrar solo usuarios padres con FamilyDetail, routeType y del colegio seleccionado
             const parentsWithRoutes = allUsers.filter(u => 
                 u.Role && u.Role.name === 'Padre' && 
                 u.FamilyDetail && 
-                u.FamilyDetail.routeType
+                u.FamilyDetail.routeType &&
+                u.school && parseInt(u.school) === parseInt(schoolId)
             );
 
             // Agrupar por tipo de ruta
@@ -1628,9 +1654,11 @@ const RolesManagementPage = () => {
             });
 
             // Generar y descargar archivo
+            const selectedSchool = schools.find(s => s.id === parseInt(schoolId));
+            const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
             const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
             const blob = new Blob([wbout], { type: "application/octet-stream" });
-            const fileName = `reporte_rutas_${getFormattedDateTime()}.xlsx`;
+            const fileName = `reporte_rutas_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
@@ -1642,9 +1670,12 @@ const RolesManagementPage = () => {
 
             setSnackbar({
                 open: true,
-                message: 'Reporte de rutas descargado exitosamente',
+                message: `Reporte de rutas para ${schoolName} descargado exitosamente`,
                 severity: 'success'
             });
+
+            // Cerrar el modal después de la descarga exitosa
+            handleCloseRouteReportDialog();
 
         } catch (error) {
             console.error('[handleDownloadRouteReport] Error:', error);
@@ -1653,6 +1684,8 @@ const RolesManagementPage = () => {
                 message: 'Error al descargar el reporte de rutas',
                 severity: 'error'
             });
+        } finally {
+            setRouteReportLoading(false);
         }
     };
 
@@ -2019,7 +2052,7 @@ const RolesManagementPage = () => {
                     <Button
                         variant="contained"
                         color="success"
-                        onClick={handleDownloadRouteReport}
+                        onClick={handleOpenRouteReportDialog}
                     >
                         Reporte de Rutas
                     </Button>
@@ -2832,6 +2865,46 @@ const RolesManagementPage = () => {
                     }}
                 />
             )}
+
+            {/* Modal para selección de colegio en reporte de rutas */}
+            <Dialog open={openRouteReportDialog} onClose={handleCloseRouteReportDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Reporte de Rutas por Colegio</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Selecciona el colegio para el cual deseas generar el reporte de rutas.
+                    </DialogContentText>
+                    <FormControl fullWidth sx={{ mt: 2 }}>
+                        <InputLabel>Colegio</InputLabel>
+                        <Select
+                            label="Colegio"
+                            value={selectedSchoolForReport}
+                            onChange={(e) => setSelectedSchoolForReport(e.target.value)}
+                        >
+                            <MenuItem value="">
+                                <em>Seleccione un colegio</em>
+                            </MenuItem>
+                            {schools.map((school) => (
+                                <MenuItem key={school.id} value={school.id}>
+                                    {school.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseRouteReportDialog} color="primary">
+                        Cancelar
+                    </Button>
+                    <Button 
+                        onClick={() => handleDownloadRouteReport(selectedSchoolForReport)} 
+                        color="primary" 
+                        variant="contained"
+                        disabled={!selectedSchoolForReport || routeReportLoading}
+                    >
+                        {routeReportLoading ? 'Generando...' : 'Descargar Reporte'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             <Snackbar
                 open={snackbar.open}
