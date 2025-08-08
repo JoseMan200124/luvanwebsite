@@ -1665,25 +1665,13 @@ const RolesManagementPage = () => {
             XLSX.utils.book_append_sheet(wb, summaryWs, "Resumen por Rutas");
 
             // Crear una sola hoja con todos los datos de familias
-            // Determinar el número máximo de estudiantes, horarios de parada, etc. para crear las columnas dinámicas
+            // Determinar el número máximo de estudiantes para crear las columnas dinámicas
             let maxStudents = 0;
-            let maxScheduleSlots = 0;
-            let maxAssignedBuses = 0;
             
             parentsWithRoutes.forEach(user => {
                 const fd = user.FamilyDetail;
                 if (fd.Students && fd.Students.length > maxStudents) {
                     maxStudents = fd.Students.length;
-                }
-                if (fd.ScheduleSlots && fd.ScheduleSlots.length > maxScheduleSlots) {
-                    maxScheduleSlots = fd.ScheduleSlots.length;
-                }
-                if (fd.Students) {
-                    fd.Students.forEach(student => {
-                        if (student.buses && student.buses.length > maxAssignedBuses) {
-                            maxAssignedBuses = student.buses.length;
-                        }
-                    });
                 }
             });
             
@@ -1711,22 +1699,7 @@ const RolesManagementPage = () => {
                 studentHeaders.push(`Estudiante ${i} - Parada PM`);
             }
             
-            // Agregar columnas para horarios de parada
-            const scheduleSlotHeaders = [];
-            for (let i = 1; i <= maxScheduleSlots; i++) {
-                scheduleSlotHeaders.push(`Horario Parada ${i} - Hora`);
-                scheduleSlotHeaders.push(`Horario Parada ${i} - Nota`);
-            }
-            
-            // Agregar columnas para buses asignados
-            const assignedBusHeaders = [];
-            for (let i = 1; i <= maxAssignedBuses; i++) {
-                assignedBusHeaders.push(`Bus Asignado ${i} - Estudiante`);
-                assignedBusHeaders.push(`Bus Asignado ${i} - Bus`);
-                assignedBusHeaders.push(`Bus Asignado ${i} - Horarios`);
-            }
-            
-            const headers = [...baseHeaders, ...studentHeaders, ...scheduleSlotHeaders, ...assignedBusHeaders];
+            const headers = [...baseHeaders, ...studentHeaders];
             const allFamiliesData = [headers];
             
             // Procesar todas las familias en una sola hoja
@@ -1878,65 +1851,7 @@ const RolesManagementPage = () => {
                     }
                 }
                 
-                // Datos de horarios de parada (expandidos en columnas separadas)
-                const scheduleSlotData = [];
-                for (let i = 0; i < maxScheduleSlots; i++) {
-                    if (fd.ScheduleSlots && fd.ScheduleSlots[i]) {
-                        scheduleSlotData.push(fd.ScheduleSlots[i].time || "");
-                        scheduleSlotData.push(fd.ScheduleSlots[i].note || "");
-                    } else {
-                        scheduleSlotData.push(""); // Hora vacía
-                        scheduleSlotData.push(""); // Nota vacía
-                    }
-                }
-                
-                // Datos de buses asignados (expandidos en columnas separadas)
-                const assignedBusData = [];
-                let busAssignmentIndex = 0;
-                
-                if (fd.Students) {
-                    fd.Students.forEach(student => {
-                        if (student.buses) {
-                            student.buses.forEach(bus => {
-                                if (busAssignmentIndex < maxAssignedBuses) {
-                                    const busId = bus.id;
-                                    
-                                    // Obtener horarios asignados desde la tabla intermedia
-                                    let assignedSchedule = [];
-                                    if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
-                                        try {
-                                            assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
-                                                ? JSON.parse(bus.AssignedBuses.assignedSchedule)
-                                                : bus.AssignedBuses.assignedSchedule;
-                                        } catch (e) {
-                                            console.warn('Error parsing assignedSchedule for Excel:', e);
-                                            assignedSchedule = [];
-                                        }
-                                    }
-                                    const busName = bus.plate || `Bus ${busId}`;
-                                    
-                                    const schedulesText = Array.isArray(assignedSchedule) ? assignedSchedule.join(", ") : (assignedSchedule || "");
-                                    
-                                    assignedBusData.push(student.fullName || "");
-                                    assignedBusData.push(busName);
-                                    assignedBusData.push(schedulesText);
-                                    
-                                    busAssignmentIndex++;
-                                }
-                            });
-                        }
-                    });
-                }
-                
-                // Rellenar con campos vacíos si no hay suficientes asignaciones de bus
-                while (busAssignmentIndex < maxAssignedBuses) {
-                    assignedBusData.push(""); // Estudiante vacío
-                    assignedBusData.push(""); // Bus vacío
-                    assignedBusData.push(""); // Horarios vacíos
-                    busAssignmentIndex++;
-                }
-                
-                const row = [...baseData, ...studentData, ...scheduleSlotData, ...assignedBusData];
+                const row = [...baseData, ...studentData];
                 allFamiliesData.push(row);
             });
             
