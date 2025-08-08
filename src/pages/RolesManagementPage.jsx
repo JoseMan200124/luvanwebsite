@@ -1662,6 +1662,11 @@ const RolesManagementPage = () => {
             const summaryColWidths = summaryHeaders.map(header => ({ wch: Math.max(header.length, 15) }));
             summaryWs['!cols'] = summaryColWidths;
             
+            // Agregar filtros automáticos a la hoja resumen
+            if (summaryData.length > 1) {
+                summaryWs['!autofilter'] = { ref: `A1:${String.fromCharCode(65 + summaryHeaders.length - 1)}${summaryData.length}` };
+            }
+            
             XLSX.utils.book_append_sheet(wb, summaryWs, "Resumen por Rutas");
 
             // Crear una sola hoja con todos los datos de familias
@@ -1876,6 +1881,13 @@ const RolesManagementPage = () => {
             });
             
             allFamiliesWs['!cols'] = colWidths;
+            
+            // Agregar filtros automáticos a la hoja de datos de familias
+            if (allFamiliesData.length > 1) {
+                // Calcular la referencia del rango para el filtro (desde A1 hasta la última columna y fila con datos)
+                const lastColumn = String.fromCharCode(65 + headers.length - 1);
+                allFamiliesWs['!autofilter'] = { ref: `A1:${lastColumn}${allFamiliesData.length}` };
+            }
             
             XLSX.utils.book_append_sheet(wb, allFamiliesWs, "Datos Familias");
 
