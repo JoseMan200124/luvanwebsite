@@ -1603,16 +1603,6 @@ const RolesManagementPage = () => {
                 }
             });
 
-            // Agrupar por tipo de ruta para las hojas individuales
-            const routeGroups = {};
-            parentsWithRoutes.forEach(user => {
-                const routeType = user.FamilyDetail.routeType;
-                if (!routeGroups[routeType]) {
-                    routeGroups[routeType] = [];
-                }
-                routeGroups[routeType].push(user);
-            });
-
             // Crear Excel con múltiples hojas
             const wb = XLSX.utils.book_new();
 
@@ -1628,9 +1618,18 @@ const RolesManagementPage = () => {
             const sortedRoutes = Object.keys(routeSummary).sort();
             
             if (sortedRoutes.length === 0) {
-                // Si no hay rutas específicas, crear un resumen básico con los tipos de ruta
-                Object.keys(routeGroups).forEach(routeType => {
-                    const families = routeGroups[routeType];
+                // Si no hay rutas específicas, crear un resumen básico agrupando por tipo de ruta
+                const routeTypeGroups = {};
+                parentsWithRoutes.forEach(user => {
+                    const routeType = user.FamilyDetail.routeType;
+                    if (!routeTypeGroups[routeType]) {
+                        routeTypeGroups[routeType] = [];
+                    }
+                    routeTypeGroups[routeType].push(user);
+                });
+                
+                Object.keys(routeTypeGroups).forEach(routeType => {
+                    const families = routeTypeGroups[routeType];
                     const totalStudents = families.reduce((sum, family) => {
                         return sum + (family.FamilyDetail.Students ? family.FamilyDetail.Students.length : 1);
                     }, 0);
@@ -1665,187 +1664,181 @@ const RolesManagementPage = () => {
             
             XLSX.utils.book_append_sheet(wb, summaryWs, "Resumen por Rutas");
 
-            // Crear una hoja por cada tipo de ruta
-            Object.keys(routeGroups).forEach(routeType => {
-                const families = routeGroups[routeType];
+            // Crear una sola hoja con todos los datos de familias
+            // Determinar el número máximo de estudiantes, horarios de parada, etc. para crear las columnas dinámicas
+            let maxStudents = 0;
+            let maxScheduleSlots = 0;
+            let maxAssignedBuses = 0;
+            
+            parentsWithRoutes.forEach(user => {
+                const fd = user.FamilyDetail;
+                if (fd.Students && fd.Students.length > maxStudents) {
+                    maxStudents = fd.Students.length;
+                }
+                if (fd.ScheduleSlots && fd.ScheduleSlots.length > maxScheduleSlots) {
+                    maxScheduleSlots = fd.ScheduleSlots.length;
+                }
+                if (fd.Students) {
+                    fd.Students.forEach(student => {
+                        if (student.buses && student.buses.length > maxAssignedBuses) {
+                            maxAssignedBuses = student.buses.length;
+                        }
+                    });
+                }
+            });
+            
+            // Crear headers dinámicos
+            const baseHeaders = [
+                "Apellido Familia",
+                "Nombre Padre",
+                "Email Padre",
+                "Colegio",
+                "Dirección Principal",
+                "Dirección Alterna",
+                "Tipo Ruta"
+            ];
+            
+            // Agregar columnas para estudiantes
+            const studentHeaders = [];
+            for (let i = 1; i <= maxStudents; i++) {
+                studentHeaders.push(`Estudiante ${i} - Nombre`);
+                studentHeaders.push(`Estudiante ${i} - Grado`);
+            }
+            
+            // Agregar columnas para horarios de parada
+            const scheduleSlotHeaders = [];
+            for (let i = 1; i <= maxScheduleSlots; i++) {
+                scheduleSlotHeaders.push(`Horario Parada ${i} - Hora`);
+                scheduleSlotHeaders.push(`Horario Parada ${i} - Nota`);
+            }
+            
+            // Agregar columnas para buses asignados
+            const assignedBusHeaders = [];
+            for (let i = 1; i <= maxAssignedBuses; i++) {
+                assignedBusHeaders.push(`Bus Asignado ${i} - Estudiante`);
+                assignedBusHeaders.push(`Bus Asignado ${i} - Bus`);
+                assignedBusHeaders.push(`Bus Asignado ${i} - Horarios`);
+            }
+            
+            const headers = [...baseHeaders, ...studentHeaders, ...scheduleSlotHeaders, ...assignedBusHeaders];
+            const allFamiliesData = [headers];
+            
+            // Procesar todas las familias en una sola hoja
+            parentsWithRoutes.forEach(user => {
+                const fd = user.FamilyDetail;
+                const schoolName = user.School ? user.School.name : "";
                 
-                // Determinar el número máximo de estudiantes, horarios de parada, etc. para crear las columnas dinámicas
-                let maxStudents = 0;
-                let maxScheduleSlots = 0;
-                let maxAssignedBuses = 0;
-                
-                families.forEach(user => {
-                    const fd = user.FamilyDetail;
-                    if (fd.Students && fd.Students.length > maxStudents) {
-                        maxStudents = fd.Students.length;
-                    }
-                    if (fd.ScheduleSlots && fd.ScheduleSlots.length > maxScheduleSlots) {
-                        maxScheduleSlots = fd.ScheduleSlots.length;
-                    }
-                    if (fd.Students) {
-                        fd.Students.forEach(student => {
-                            if (student.buses && student.buses.length > maxAssignedBuses) {
-                                maxAssignedBuses = student.buses.length;
-                            }
-                        });
-                    }
-                });
-                
-                // Crear headers dinámicos
-                const baseHeaders = [
-                    "Apellido Familia",
-                    "Nombre Padre",
-                    "Email Padre",
-                    "Colegio",
-                    "Dirección Principal",
-                    "Dirección Alterna",
-                    "Tipo Ruta"
+                // Datos base
+                const baseData = [
+                    fd.familyLastName || "",
+                    user.name || "",
+                    user.email || "",
+                    schoolName,
+                    fd.mainAddress || "",
+                    fd.alternativeAddress || "",
+                    fd.routeType || ""
                 ];
                 
-                // Agregar columnas para estudiantes
-                const studentHeaders = [];
-                for (let i = 1; i <= maxStudents; i++) {
-                    studentHeaders.push(`Estudiante ${i} - Nombre`);
-                    studentHeaders.push(`Estudiante ${i} - Grado`);
-                }
-                
-                // Agregar columnas para horarios de parada
-                const scheduleSlotHeaders = [];
-                for (let i = 1; i <= maxScheduleSlots; i++) {
-                    scheduleSlotHeaders.push(`Horario Parada ${i} - Hora`);
-                    scheduleSlotHeaders.push(`Horario Parada ${i} - Nota`);
-                }
-                
-                // Agregar columnas para buses asignados
-                const assignedBusHeaders = [];
-                for (let i = 1; i <= maxAssignedBuses; i++) {
-                    assignedBusHeaders.push(`Bus Asignado ${i} - Estudiante`);
-                    assignedBusHeaders.push(`Bus Asignado ${i} - Bus`);
-                    assignedBusHeaders.push(`Bus Asignado ${i} - Horarios`);
-                }
-                
-                const headers = [...baseHeaders, ...studentHeaders, ...scheduleSlotHeaders, ...assignedBusHeaders];
-                const routeData = [headers];
-                
-                families.forEach(user => {
-                    const fd = user.FamilyDetail;
-                    const schoolName = user.School ? user.School.name : "";
-                    
-                    // Datos base
-                    const baseData = [
-                        fd.familyLastName || "",
-                        user.name || "",
-                        user.email || "",
-                        schoolName,
-                        fd.mainAddress || "",
-                        fd.alternativeAddress || "",
-                        fd.routeType || ""
-                    ];
-                    
-                    // Datos de estudiantes (expandidos en columnas separadas)
-                    const studentData = [];
-                    for (let i = 0; i < maxStudents; i++) {
-                        if (fd.Students && fd.Students[i]) {
-                            studentData.push(fd.Students[i].fullName || "");
-                            studentData.push(fd.Students[i].grade || "");
-                        } else {
-                            studentData.push(""); // Nombre vacío
-                            studentData.push(""); // Grado vacío
-                        }
+                // Datos de estudiantes (expandidos en columnas separadas)
+                const studentData = [];
+                for (let i = 0; i < maxStudents; i++) {
+                    if (fd.Students && fd.Students[i]) {
+                        studentData.push(fd.Students[i].fullName || "");
+                        studentData.push(fd.Students[i].grade || "");
+                    } else {
+                        studentData.push(""); // Nombre vacío
+                        studentData.push(""); // Grado vacío
                     }
-                    
-                    // Datos de horarios de parada (expandidos en columnas separadas)
-                    const scheduleSlotData = [];
-                    for (let i = 0; i < maxScheduleSlots; i++) {
-                        if (fd.ScheduleSlots && fd.ScheduleSlots[i]) {
-                            scheduleSlotData.push(fd.ScheduleSlots[i].time || "");
-                            scheduleSlotData.push(fd.ScheduleSlots[i].note || "");
-                        } else {
-                            scheduleSlotData.push(""); // Hora vacía
-                            scheduleSlotData.push(""); // Nota vacía
-                        }
+                }
+                
+                // Datos de horarios de parada (expandidos en columnas separadas)
+                const scheduleSlotData = [];
+                for (let i = 0; i < maxScheduleSlots; i++) {
+                    if (fd.ScheduleSlots && fd.ScheduleSlots[i]) {
+                        scheduleSlotData.push(fd.ScheduleSlots[i].time || "");
+                        scheduleSlotData.push(fd.ScheduleSlots[i].note || "");
+                    } else {
+                        scheduleSlotData.push(""); // Hora vacía
+                        scheduleSlotData.push(""); // Nota vacía
                     }
-                    
-                    // Datos de buses asignados (expandidos en columnas separadas)
-                    const assignedBusData = [];
-                    let busAssignmentIndex = 0;
-                    
-                    if (fd.Students) {
-                        fd.Students.forEach(student => {
-                            if (student.buses) {
-                                student.buses.forEach(bus => {
-                                    if (busAssignmentIndex < maxAssignedBuses) {
-                                        const busId = bus.id;
-                                        
-                                        // Obtener horarios asignados desde la tabla intermedia
-                                        let assignedSchedule = [];
-                                        if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
-                                            try {
-                                                assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
-                                                    ? JSON.parse(bus.AssignedBuses.assignedSchedule)
-                                                    : bus.AssignedBuses.assignedSchedule;
-                                            } catch (e) {
-                                                console.warn('Error parsing assignedSchedule for Excel:', e);
-                                                assignedSchedule = [];
-                                            }
+                }
+                
+                // Datos de buses asignados (expandidos en columnas separadas)
+                const assignedBusData = [];
+                let busAssignmentIndex = 0;
+                
+                if (fd.Students) {
+                    fd.Students.forEach(student => {
+                        if (student.buses) {
+                            student.buses.forEach(bus => {
+                                if (busAssignmentIndex < maxAssignedBuses) {
+                                    const busId = bus.id;
+                                    
+                                    // Obtener horarios asignados desde la tabla intermedia
+                                    let assignedSchedule = [];
+                                    if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
+                                        try {
+                                            assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                                ? JSON.parse(bus.AssignedBuses.assignedSchedule)
+                                                : bus.AssignedBuses.assignedSchedule;
+                                        } catch (e) {
+                                            console.warn('Error parsing assignedSchedule for Excel:', e);
+                                            assignedSchedule = [];
                                         }
-                                        const busName = bus.plate || `Bus ${busId}`;
-                                        
-                                        const schedulesText = Array.isArray(assignedSchedule) ? assignedSchedule.join(", ") : (assignedSchedule || "");
-                                        
-                                        assignedBusData.push(student.fullName || "");
-                                        assignedBusData.push(busName);
-                                        assignedBusData.push(schedulesText);
-                                        
-                                        busAssignmentIndex++;
                                     }
-                                });
-                            }
-                        });
-                    }
-                    
-                    // Rellenar con campos vacíos si no hay suficientes asignaciones de bus
-                    while (busAssignmentIndex < maxAssignedBuses) {
-                        assignedBusData.push(""); // Estudiante vacío
-                        assignedBusData.push(""); // Bus vacío
-                        assignedBusData.push(""); // Horarios vacíos
-                        busAssignmentIndex++;
-                    }
-                    
-                    const row = [...baseData, ...studentData, ...scheduleSlotData, ...assignedBusData];
-                    
-                    routeData.push(row);
-                });
-                
-                const routeWs = XLSX.utils.aoa_to_sheet(routeData);
-                
-                // Auto-ajustar ancho de columnas basado en los headers
-                const colWidths = headers.map(header => {
-                    // Calcular el ancho mínimo basado en el header y el contenido
-                    let maxWidth = header.length;
-                    
-                    // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
-                    routeData.slice(1).forEach(row => {
-                        row.forEach((cell, colIndex) => {
-                            if (colIndex < headers.length) {
-                                const cellLength = String(cell || "").length;
-                                if (cellLength > maxWidth && colIndex === headers.indexOf(header)) {
-                                    maxWidth = cellLength;
+                                    const busName = bus.plate || `Bus ${busId}`;
+                                    
+                                    const schedulesText = Array.isArray(assignedSchedule) ? assignedSchedule.join(", ") : (assignedSchedule || "");
+                                    
+                                    assignedBusData.push(student.fullName || "");
+                                    assignedBusData.push(busName);
+                                    assignedBusData.push(schedulesText);
+                                    
+                                    busAssignmentIndex++;
                                 }
-                            }
-                        });
+                            });
+                        }
                     });
-                    
-                    // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
-                    return { wch: Math.min(Math.max(maxWidth, 10), 50) };
+                }
+                
+                // Rellenar con campos vacíos si no hay suficientes asignaciones de bus
+                while (busAssignmentIndex < maxAssignedBuses) {
+                    assignedBusData.push(""); // Estudiante vacío
+                    assignedBusData.push(""); // Bus vacío
+                    assignedBusData.push(""); // Horarios vacíos
+                    busAssignmentIndex++;
+                }
+                
+                const row = [...baseData, ...studentData, ...scheduleSlotData, ...assignedBusData];
+                allFamiliesData.push(row);
+            });
+            
+            const allFamiliesWs = XLSX.utils.aoa_to_sheet(allFamiliesData);
+            
+            // Auto-ajustar ancho de columnas basado en los headers
+            const colWidths = headers.map(header => {
+                // Calcular el ancho mínimo basado en el header y el contenido
+                let maxWidth = header.length;
+                
+                // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
+                allFamiliesData.slice(1).forEach(row => {
+                    row.forEach((cell, colIndex) => {
+                        if (colIndex < headers.length) {
+                            const cellLength = String(cell || "").length;
+                            if (cellLength > maxWidth && colIndex === headers.indexOf(header)) {
+                                maxWidth = cellLength;
+                            }
+                        }
+                    });
                 });
                 
-                routeWs['!cols'] = colWidths;
-                
-                // Limpiar nombre de hoja para Excel (máximo 31 caracteres, sin caracteres especiales)
-                const sheetName = routeType.substring(0, 31).replace(/[\\/?*[\]]/g, '');
-                XLSX.utils.book_append_sheet(wb, routeWs, sheetName);
+                // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
+                return { wch: Math.min(Math.max(maxWidth, 10), 50) };
             });
+            
+            allFamiliesWs['!cols'] = colWidths;
+            
+            XLSX.utils.book_append_sheet(wb, allFamiliesWs, "Datos Familias");
 
             // Generar y descargar archivo
             const selectedSchool = schools.find(s => s.id === parseInt(schoolId));
