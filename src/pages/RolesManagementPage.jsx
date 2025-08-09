@@ -1627,8 +1627,8 @@ const RolesManagementPage = () => {
             // Crear Excel con ExcelJS para soporte completo de estilos
             const workbook = new ExcelJS.Workbook();
             
-            // Hoja resumen por rutas
-            const summaryWorksheet = workbook.addWorksheet('Resumen por Rutas');
+            // Hoja resumen por rutas (ocupacion)
+            const summaryWorksheet = workbook.addWorksheet('OCUPACIÓN POR RUTA');
             
             // Agregar headers con estilo
             const summaryHeaders = ["No. Ruta", "Cant. AM", "Cant. PM"];
@@ -1736,8 +1736,13 @@ const RolesManagementPage = () => {
             });
             summaryWorksheet.autoFilter = 'A1:C' + summaryWorksheet.rowCount;
             
+            // Congelar la primera fila (encabezados) para que sea sticky
+            summaryWorksheet.views = [
+                { state: 'frozen', ySplit: 1 }
+            ];
+            
             // Hoja de datos de familias
-            const familiesWorksheet = workbook.addWorksheet('Datos Familias');
+            const familiesWorksheet = workbook.addWorksheet('DATA');
             
             // Crear headers dinámicos
             const baseHeaders = [
@@ -1970,7 +1975,10 @@ const RolesManagementPage = () => {
                         pattern: 'solid',
                         fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
                     };
-                    cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                    cell.alignment = { 
+                        horizontal: 'center', 
+                        vertical: 'middle' 
+                    };
                     cell.border = {
                         top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                         left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
@@ -1980,7 +1988,7 @@ const RolesManagementPage = () => {
                 });
             });
             
-            // Auto-ajustar columnas y agregar filtros
+            // Auto-ajustar columnas para la hoja de familias
             familiesWorksheet.columns.forEach((column, index) => {
                 const header = headers[index];
                 let maxWidth = header ? header.length : 10;
@@ -1999,8 +2007,56 @@ const RolesManagementPage = () => {
                 column.width = Math.min(Math.max(maxWidth, 10), 50);
             });
             
-            // Agregar filtros automáticos
-            familiesWorksheet.autoFilter = 'A1:' + String.fromCharCode(65 + headers.length - 1) + familiesWorksheet.rowCount;
+            // Configurar filtros para TODAS las columnas en la hoja "Datos Familias"
+            // Primero asegurar que hay datos antes de configurar filtros
+            if (familiesWorksheet.rowCount > 1 && headers.length > 0) {
+                // Función para convertir número de columna a letra de Excel
+                const getColumnLetter = (columnNumber) => {
+                    let letter = '';
+                    while (columnNumber > 0) {
+                        const remainder = (columnNumber - 1) % 26;
+                        letter = String.fromCharCode(65 + remainder) + letter;
+                        columnNumber = Math.floor((columnNumber - 1) / 26);
+                    }
+                    return letter;
+                };
+                
+                // Validar que no excedamos el límite de Excel (1024 columnas = AMJ)
+                const maxColumns = Math.min(headers.length, 1024);
+                const lastColumnLetter = getColumnLetter(maxColumns);
+                const filterRange = `A1:${lastColumnLetter}${familiesWorksheet.rowCount}`;
+                
+                // Configurar autoFilter para toda la tabla de familias
+                familiesWorksheet.autoFilter = filterRange;
+                
+                // Configurar cada columna individualmente para asegurar que tenga filtro
+                for (let i = 0; i < maxColumns; i++) {
+                    const columnLetter = getColumnLetter(i + 1);
+                    try {
+                        const column = familiesWorksheet.getColumn(columnLetter);
+                        if (column) {
+                            // Asegurar que la columna tenga filtro habilitado
+                            column.filterButton = true;
+                        }
+                    } catch (error) {
+                        console.warn(`Error configurando filtro para columna ${columnLetter}:`, error);
+                        break; // Salir del loop si hay error
+                    }
+                }
+                
+                // Log para debugging
+                console.log('Headers count:', headers.length);
+                console.log('Max columns processed:', maxColumns);
+                console.log('AutoFilter range:', filterRange);
+                console.log('Last column letter:', lastColumnLetter);
+            } else {
+                console.warn('No hay suficientes datos para configurar filtros');
+            }
+            
+            // Congelar la primera fila (encabezados) para que sea sticky en la hoja de familias
+            familiesWorksheet.views = [
+                { state: 'frozen', ySplit: 1 }
+            ];
             
             // Generar archivo
             const selectedSchool = schools.find(s => s.id === parseInt(schoolId));
