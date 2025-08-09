@@ -1504,25 +1504,32 @@ const RolesManagementPage = () => {
                                     }
                                 }
                                 
-                                // Analizar horarios para determinar AM/PM
+                                // Analizar horarios para determinar AM/PM basado en formato de 24 horas
                                 if (Array.isArray(assignedSchedule) && assignedSchedule.length > 0) {
                                     assignedSchedule.forEach(schedule => {
                                         if (schedule && typeof schedule === 'string') {
-                                            const scheduleUpper = schedule.toUpperCase();
-                                            if (scheduleUpper.includes('AM') || scheduleUpper.includes('MAÑANA') || scheduleUpper.includes('ENTRADA')) {
-                                                routeSummary[routeNumber].cantAM++;
-                                            } else if (scheduleUpper.includes('PM') || scheduleUpper.includes('TARDE') || scheduleUpper.includes('SALIDA')) {
-                                                routeSummary[routeNumber].cantPM++;
+                                            // Buscar patrón de hora en formato 24 horas (HH:MM)
+                                            const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
+                                            if (timeMatch) {
+                                                const hour = parseInt(timeMatch[1]);
+                                                // Determinar AM/PM basado en formato de 24 horas
+                                                // AM: 0-11 horas (00:00 - 11:59)
+                                                // PM: 12-23 horas (12:00 - 23:59)
+                                                if (hour >= 0 && hour < 12) {
+                                                    routeSummary[routeNumber].cantAM++;
+                                                } else if (hour >= 12 && hour <= 23) {
+                                                    routeSummary[routeNumber].cantPM++;
+                                                } else {
+                                                    // Hora inválida, contar como AM por defecto
+                                                    routeSummary[routeNumber].cantAM++;
+                                                }
                                             } else {
-                                                // Si no se puede determinar, analizar la hora si está disponible
-                                                const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
-                                                if (timeMatch) {
-                                                    const hour = parseInt(timeMatch[1]);
-                                                    if (hour < 12) {
-                                                        routeSummary[routeNumber].cantAM++;
-                                                    } else {
-                                                        routeSummary[routeNumber].cantPM++;
-                                                    }
+                                                // Si no se encuentra hora, revisar palabras clave como fallback
+                                                const scheduleUpper = schedule.toUpperCase();
+                                                if (scheduleUpper.includes('AM') || scheduleUpper.includes('MAÑANA') || scheduleUpper.includes('ENTRADA')) {
+                                                    routeSummary[routeNumber].cantAM++;
+                                                } else if (scheduleUpper.includes('PM') || scheduleUpper.includes('TARDE') || scheduleUpper.includes('SALIDA')) {
+                                                    routeSummary[routeNumber].cantPM++;
                                                 } else {
                                                     // Si no se puede determinar, contar como AM por defecto
                                                     routeSummary[routeNumber].cantAM++;
@@ -1534,13 +1541,28 @@ const RolesManagementPage = () => {
                                     // Si no hay horarios específicos, usar ScheduleSlots del estudiante
                                     if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
                                         student.ScheduleSlots.forEach(slot => {
-                                            const timeSlot = slot.timeSlot;
-                                            if (timeSlot.includes('7:30') || timeSlot.includes('8:00')) {
-                                                routeSummary[routeNumber].cantAM++;
-                                            } else if (timeSlot.includes('1:00') || timeSlot.includes('1:30') || timeSlot.includes('2:00')) {
-                                                routeSummary[routeNumber].cantPM++;
+                                            const timeSlot = slot.timeSlot || "";
+                                            // Buscar patrón de hora en formato 24 horas
+                                            const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                                            if (timeMatch) {
+                                                const hour = parseInt(timeMatch[1]);
+                                                // Determinar AM/PM basado en formato de 24 horas
+                                                if (hour >= 0 && hour < 12) {
+                                                    routeSummary[routeNumber].cantAM++;
+                                                } else if (hour >= 12 && hour <= 23) {
+                                                    routeSummary[routeNumber].cantPM++;
+                                                } else {
+                                                    routeSummary[routeNumber].cantAM++;
+                                                }
                                             } else {
-                                                routeSummary[routeNumber].cantAM++;
+                                                // Fallback a horarios específicos conocidos
+                                                if (timeSlot.includes('7:30') || timeSlot.includes('8:00') || timeSlot.includes('07:30') || timeSlot.includes('08:00')) {
+                                                    routeSummary[routeNumber].cantAM++;
+                                                } else if (timeSlot.includes('13:00') || timeSlot.includes('13:30') || timeSlot.includes('14:00')) {
+                                                    routeSummary[routeNumber].cantPM++;
+                                                } else {
+                                                    routeSummary[routeNumber].cantAM++;
+                                                }
                                             }
                                         });
                                     } else {
@@ -1549,58 +1571,8 @@ const RolesManagementPage = () => {
                                     }
                                 }
                             });
-                        } else {
-                            // Si el estudiante no tiene buses asignados, usar el tipo de ruta familiar
-                            const routeType = fd.routeType;
-                            const routeNumber = routeType; // Usar directamente el tipo de ruta
-                            
-                            if (!routeSummary[routeNumber]) {
-                                routeSummary[routeNumber] = {
-                                    cantAM: 0,
-                                    cantPM: 0
-                                };
-                            }
-                            
-                            // Determinar AM/PM basado en el tipo de ruta
-                            if (routeType.includes('AM') || routeType.includes('Media AM')) {
-                                routeSummary[routeNumber].cantAM++;
-                            } else if (routeType.includes('PM') || routeType.includes('Media PM')) {
-                                routeSummary[routeNumber].cantPM++;
-                            } else if (routeType.includes('Completa')) {
-                                // Para ruta completa, contar tanto AM como PM
-                                routeSummary[routeNumber].cantAM++;
-                                routeSummary[routeNumber].cantPM++;
-                            } else {
-                                // Por defecto como AM
-                                routeSummary[routeNumber].cantAM++;
-                            }
                         }
                     });
-                } else {
-                    // Si no hay estudiantes definidos, usar datos de la familia
-                    const routeType = fd.routeType;
-                    const routeNumber = routeType; // Usar directamente el tipo de ruta
-                    
-                    if (!routeSummary[routeNumber]) {
-                        routeSummary[routeNumber] = {
-                            cantAM: 0,
-                            cantPM: 0
-                        };
-                    }
-                    
-                    // Determinar AM/PM basado en el tipo de ruta, contar 1 familia
-                    if (routeType.includes('AM') || routeType.includes('Media AM')) {
-                        routeSummary[routeNumber].cantAM++;
-                    } else if (routeType.includes('PM') || routeType.includes('Media PM')) {
-                        routeSummary[routeNumber].cantPM++;
-                    } else if (routeType.includes('Completa')) {
-                        // Para ruta completa, contar tanto AM como PM
-                        routeSummary[routeNumber].cantAM++;
-                        routeSummary[routeNumber].cantPM++;
-                    } else {
-                        // Por defecto como AM
-                        routeSummary[routeNumber].cantAM++;
-                    }
                 }
             });
 
@@ -1892,21 +1864,6 @@ const RolesManagementPage = () => {
                                         }
                                     }
                                 });
-                            } else {
-                                // Fallback a tipo de ruta familiar
-                                const routeType = fd.routeType || "";
-                                if (routeType.includes('AM') || routeType.includes('Media AM')) {
-                                    rutaAM = routeType;
-                                    paradaAM = fd.mainAddress || "";
-                                } else if (routeType.includes('PM') || routeType.includes('Media PM')) {
-                                    rutaPM = routeType;
-                                    paradaPM = fd.mainAddress || "";
-                                } else if (routeType.includes('Completa')) {
-                                    rutaAM = routeType;
-                                    rutaPM = routeType;
-                                    paradaAM = fd.mainAddress || "";
-                                    paradaPM = fd.mainAddress || "";
-                                }
                             }
                         }
                         
