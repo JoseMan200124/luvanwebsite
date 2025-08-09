@@ -49,6 +49,7 @@ import tw from 'twin.macro';
 import styled from 'styled-components';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 const RolesContainer = tw.div`
   p-8 bg-gray-100 min-h-screen w-full
@@ -1603,20 +1604,53 @@ const RolesManagementPage = () => {
                 }
             });
 
-            // Crear Excel con múltiples hojas
-            const wb = XLSX.utils.book_new();
-
-            // Hoja resumen por rutas
-            const summaryHeaders = [
-                "No. Ruta",
-                "Cant. AM",
-                "Cant. PM"
-            ];
-            const summaryData = [summaryHeaders];
+            // Determinar el número máximo de estudiantes para crear las columnas dinámicas
+            let maxStudents = 0;
+            
+            parentsWithRoutes.forEach(user => {
+                const fd = user.FamilyDetail;
+                if (fd.Students && fd.Students.length > maxStudents) {
+                    maxStudents = fd.Students.length;
+                }
+            });
 
             // Ordenar las rutas alfabéticamente
             const sortedRoutes = Object.keys(routeSummary).sort();
+
+            // Crear Excel con ExcelJS para soporte completo de estilos
+            const workbook = new ExcelJS.Workbook();
             
+            // Hoja resumen por rutas
+            const summaryWorksheet = workbook.addWorksheet('Resumen por Rutas');
+            
+            // Agregar headers con estilo
+            const summaryHeaders = ["No. Ruta", "Cant. AM", "Cant. PM"];
+            const summaryHeaderRow = summaryWorksheet.addRow(summaryHeaders);
+            
+            // Estilo para headers del resumen
+            summaryHeaderRow.eachCell((cell) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF4472C4' } // Azul
+                };
+                cell.font = {
+                    color: { argb: 'FFFFFFFF' },
+                    bold: true
+                };
+                cell.alignment = {
+                    horizontal: 'center',
+                    vertical: 'middle'
+                };
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+            });
+            
+            // Agregar datos del resumen
             if (sortedRoutes.length === 0) {
                 // Si no hay rutas específicas, crear un resumen básico agrupando por tipo de ruta
                 const routeTypeGroups = {};
@@ -1628,62 +1662,80 @@ const RolesManagementPage = () => {
                     routeTypeGroups[routeType].push(user);
                 });
                 
-                Object.keys(routeTypeGroups).forEach(routeType => {
+                Object.keys(routeTypeGroups).forEach((routeType, index) => {
                     const families = routeTypeGroups[routeType];
                     const totalStudents = families.reduce((sum, family) => {
                         return sum + (family.FamilyDetail.Students ? family.FamilyDetail.Students.length : 1);
                     }, 0);
                     
+                    let rowData;
                     if (routeType.includes('AM') || routeType.includes('Media AM')) {
-                        summaryData.push([routeType, totalStudents, 0]);
+                        rowData = [routeType, totalStudents, 0];
                     } else if (routeType.includes('PM') || routeType.includes('Media PM')) {
-                        summaryData.push([routeType, 0, totalStudents]);
+                        rowData = [routeType, 0, totalStudents];
                     } else if (routeType.includes('Completa')) {
-                        summaryData.push([routeType, totalStudents, totalStudents]);
+                        rowData = [routeType, totalStudents, totalStudents];
                     } else {
-                        summaryData.push([routeType, totalStudents, 0]);
+                        rowData = [routeType, totalStudents, 0];
                     }
+                    
+                    const row = summaryWorksheet.addRow(rowData);
+                    // Estilo alternado para filas
+                    const isEven = (index + 1) % 2 === 0;
+                    row.eachCell((cell) => {
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
+                        };
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        cell.border = {
+                            top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+                        };
+                    });
                 });
             } else {
                 // Usar el resumen por rutas específicas
-                sortedRoutes.forEach(routeNumber => {
+                sortedRoutes.forEach((routeNumber, index) => {
                     const routeData = routeSummary[routeNumber];
-                    summaryData.push([
-                        routeNumber,
-                        routeData.cantAM,
-                        routeData.cantPM
-                    ]);
+                    const rowData = [routeNumber, routeData.cantAM, routeData.cantPM];
+                    const row = summaryWorksheet.addRow(rowData);
+                    
+                    // Estilo alternado para filas
+                    const isEven = (index + 1) % 2 === 0;
+                    row.eachCell((cell) => {
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
+                        };
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        cell.border = {
+                            top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+                        };
+                    });
                 });
             }
-
-            const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
             
-            // Auto-ajustar ancho de columnas para la hoja resumen
-            const summaryColWidths = summaryHeaders.map(header => ({ wch: Math.max(header.length, 15) }));
-            summaryWs['!cols'] = summaryColWidths;
-            
-            // Agregar filtros automáticos a la hoja resumen
-            if (summaryData.length > 1) {
-                summaryWs['!autofilter'] = { ref: `A1:${String.fromCharCode(65 + summaryHeaders.length - 1)}${summaryData.length}` };
-            }
-            
-            XLSX.utils.book_append_sheet(wb, summaryWs, "Resumen por Rutas");
-
-            // Crear una sola hoja con todos los datos de familias
-            // Determinar el número máximo de estudiantes para crear las columnas dinámicas
-            let maxStudents = 0;
-            
-            parentsWithRoutes.forEach(user => {
-                const fd = user.FamilyDetail;
-                if (fd.Students && fd.Students.length > maxStudents) {
-                    maxStudents = fd.Students.length;
-                }
+            // Auto-ajustar columnas y agregar filtros
+            summaryWorksheet.columns.forEach(column => {
+                column.width = Math.max(15, column.header ? column.header.length : 10);
             });
+            summaryWorksheet.autoFilter = 'A1:C' + summaryWorksheet.rowCount;
+            
+            // Hoja de datos de familias
+            const familiesWorksheet = workbook.addWorksheet('Datos Familias');
             
             // Crear headers dinámicos
             const baseHeaders = [
                 "Tipo Ruta",
-                "Apellido Familia",
+                "Apellido Familia", 
                 "Nombre Padre",
                 "Email Padre",
                 "Dirección Principal",
@@ -1704,10 +1756,33 @@ const RolesManagementPage = () => {
             }
             
             const headers = [...baseHeaders, ...studentHeaders];
-            const allFamiliesData = [headers];
+            const familiesHeaderRow = familiesWorksheet.addRow(headers);
             
-            // Procesar todas las familias en una sola hoja
-            parentsWithRoutes.forEach(user => {
+            // Estilo para headers de familias
+            familiesHeaderRow.eachCell((cell) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF70AD47' } // Verde
+                };
+                cell.font = {
+                    color: { argb: 'FFFFFFFF' },
+                    bold: true
+                };
+                cell.alignment = {
+                    horizontal: 'center',
+                    vertical: 'middle'
+                };
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+            });
+            
+            // Procesar todas las familias
+            parentsWithRoutes.forEach((user, familyIndex) => {
                 const fd = user.FamilyDetail;
                 
                 // Datos base
@@ -1853,50 +1928,57 @@ const RolesManagementPage = () => {
                     }
                 }
                 
-                const row = [...baseData, ...studentData];
-                allFamiliesData.push(row);
+                const rowData = [...baseData, ...studentData];
+                const row = familiesWorksheet.addRow(rowData);
+                
+                // Estilo alternado para filas de familias
+                const isEven = (familyIndex + 1) % 2 === 0;
+                row.eachCell((cell) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
+                    };
+                    cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+                    };
+                });
             });
             
-            const allFamiliesWs = XLSX.utils.aoa_to_sheet(allFamiliesData);
-            
-            // Auto-ajustar ancho de columnas basado en los headers
-            const colWidths = headers.map(header => {
-                // Calcular el ancho mínimo basado en el header y el contenido
-                let maxWidth = header.length;
+            // Auto-ajustar columnas y agregar filtros
+            familiesWorksheet.columns.forEach((column, index) => {
+                const header = headers[index];
+                let maxWidth = header ? header.length : 10;
                 
-                // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
-                allFamiliesData.slice(1).forEach(row => {
-                    row.forEach((cell, colIndex) => {
-                        if (colIndex < headers.length) {
-                            const cellLength = String(cell || "").length;
-                            if (cellLength > maxWidth && colIndex === headers.indexOf(header)) {
-                                maxWidth = cellLength;
-                            }
+                // Calcular ancho basado en contenido
+                familiesWorksheet.eachRow((row, rowNumber) => {
+                    if (rowNumber > 1) { // Skip header row
+                        const cell = row.getCell(index + 1);
+                        const cellLength = String(cell.value || "").length;
+                        if (cellLength > maxWidth) {
+                            maxWidth = cellLength;
                         }
-                    });
+                    }
                 });
                 
-                // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
-                return { wch: Math.min(Math.max(maxWidth, 10), 50) };
+                column.width = Math.min(Math.max(maxWidth, 10), 50);
             });
             
-            allFamiliesWs['!cols'] = colWidths;
+            // Agregar filtros automáticos
+            familiesWorksheet.autoFilter = 'A1:' + String.fromCharCode(65 + headers.length - 1) + familiesWorksheet.rowCount;
             
-            // Agregar filtros automáticos a la hoja de datos de familias
-            if (allFamiliesData.length > 1) {
-                // Calcular la referencia del rango para el filtro (desde A1 hasta la última columna y fila con datos)
-                const lastColumn = String.fromCharCode(65 + headers.length - 1);
-                allFamiliesWs['!autofilter'] = { ref: `A1:${lastColumn}${allFamiliesData.length}` };
-            }
-            
-            XLSX.utils.book_append_sheet(wb, allFamiliesWs, "Datos Familias");
-
-            // Generar y descargar archivo
+            // Generar archivo
             const selectedSchool = schools.find(s => s.id === parseInt(schoolId));
             const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
-            const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-            const blob = new Blob([wbout], { type: "application/octet-stream" });
             const fileName = `reporte_rutas_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
+            
+            // Escribir archivo
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
