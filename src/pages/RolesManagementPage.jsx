@@ -1577,12 +1577,47 @@ const RolesManagementPage = () => {
             });
 
             // Determinar el número máximo de estudiantes para crear las columnas dinámicas
+            // Solo considerar familias que tienen al menos un estudiante con ruta
             let maxStudents = 0;
             
             parentsWithRoutes.forEach(user => {
                 const fd = user.FamilyDetail;
-                if (fd.Students && fd.Students.length > maxStudents) {
-                    maxStudents = fd.Students.length;
+                if (fd.Students && fd.Students.length > 0) {
+                    // Verificar si esta familia tiene al menos un estudiante con ruta
+                    const hasStudentWithRoute = fd.Students.some(student => {
+                        // Verificar si tiene buses asignados específicos
+                        if (student.buses && student.buses.length > 0) {
+                            return student.buses.some(bus => {
+                                let assignedSchedule = [];
+                                if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
+                                    try {
+                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                            ? JSON.parse(bus.AssignedBuses.assignedSchedule)
+                                            : bus.AssignedBuses.assignedSchedule;
+                                    } catch (e) {
+                                        return false;
+                                    }
+                                }
+                                return Array.isArray(assignedSchedule) && assignedSchedule.length > 0;
+                            });
+                        }
+                        
+                        // Verificar si tiene ScheduleSlots
+                        if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
+                            return student.ScheduleSlots.some(slot => {
+                                const timeSlot = slot.timeSlot || "";
+                                const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                                return timeMatch !== null;
+                            });
+                        }
+                        
+                        return false;
+                    });
+                    
+                    // Solo contar estudiantes si la familia tiene al menos uno con ruta
+                    if (hasStudentWithRoute && fd.Students.length > maxStudents) {
+                        maxStudents = fd.Students.length;
+                    }
                 }
             });
 
@@ -1753,8 +1788,47 @@ const RolesManagementPage = () => {
                 };
             });
             
-            // Procesar todas las familias
-            parentsWithRoutes.forEach((user, familyIndex) => {
+            // Función para verificar si una familia tiene al menos un estudiante con ruta AM o PM
+            const familyHasStudentWithRoute = (user) => {
+                const fd = user.FamilyDetail;
+                if (!fd.Students || fd.Students.length === 0) return false;
+                
+                return fd.Students.some(student => {
+                    // Verificar si tiene buses asignados específicos
+                    if (student.buses && student.buses.length > 0) {
+                        return student.buses.some(bus => {
+                            let assignedSchedule = [];
+                            if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
+                                try {
+                                    assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                        ? JSON.parse(bus.AssignedBuses.assignedSchedule)
+                                        : bus.AssignedBuses.assignedSchedule;
+                                } catch (e) {
+                                    return false;
+                                }
+                            }
+                            return Array.isArray(assignedSchedule) && assignedSchedule.length > 0;
+                        });
+                    }
+                    
+                    // Verificar si tiene ScheduleSlots
+                    if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
+                        return student.ScheduleSlots.some(slot => {
+                            const timeSlot = slot.timeSlot || "";
+                            const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                            return timeMatch !== null; // Tiene al menos una hora definida
+                        });
+                    }
+                    
+                    return false;
+                });
+            };
+            
+            // Filtrar familias que tienen al menos un estudiante con ruta
+            const familiesWithRoutes = parentsWithRoutes.filter(familyHasStudentWithRoute);
+            
+            // Procesar solo las familias que tienen estudiantes con rutas
+            familiesWithRoutes.forEach((user, familyIndex) => {
                 const fd = user.FamilyDetail;
                 
                 // Datos base
