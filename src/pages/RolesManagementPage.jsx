@@ -1487,7 +1487,8 @@ const RolesManagementPage = () => {
                                 if (!routeSummary[routeNumber]) {
                                     routeSummary[routeNumber] = {
                                         cantAM: 0,
-                                        cantPM: 0
+                                        cantPM: 0,
+                                        cantMD: 0
                                     };
                                 }
                                 
@@ -1504,7 +1505,7 @@ const RolesManagementPage = () => {
                                     }
                                 }
                                 
-                                // Analizar horarios para determinar AM/PM basado en formato de 24 horas
+                                // Analizar horarios para determinar AM/PM/MD basado en formato de 24 horas
                                 if (Array.isArray(assignedSchedule) && assignedSchedule.length > 0) {
                                     assignedSchedule.forEach(schedule => {
                                         if (schedule && typeof schedule === 'string') {
@@ -1512,28 +1513,23 @@ const RolesManagementPage = () => {
                                             const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
                                             if (timeMatch) {
                                                 const hour = parseInt(timeMatch[1]);
-                                                // Determinar AM/PM basado en formato de 24 horas
+                                                // Clasificar por hora:
                                                 // AM: 0-11 horas (00:00 - 11:59)
-                                                // PM: 12-23 horas (12:00 - 23:59)
+                                                // MD: 12 horas (12:00 - 12:59)
+                                                // PM: 13-23 horas (13:00 - 23:59)
                                                 if (hour >= 0 && hour < 12) {
                                                     routeSummary[routeNumber].cantAM++;
-                                                } else if (hour >= 12 && hour <= 23) {
+                                                } else if (hour === 12) {
+                                                    routeSummary[routeNumber].cantMD++;
+                                                } else if (hour >= 13 && hour <= 23) {
                                                     routeSummary[routeNumber].cantPM++;
                                                 } else {
                                                     // Hora inválida, contar como AM por defecto
                                                     routeSummary[routeNumber].cantAM++;
                                                 }
                                             } else {
-                                                // Si no se encuentra hora, revisar palabras clave como fallback
-                                                const scheduleUpper = schedule.toUpperCase();
-                                                if (scheduleUpper.includes('AM') || scheduleUpper.includes('MAÑANA') || scheduleUpper.includes('ENTRADA')) {
-                                                    routeSummary[routeNumber].cantAM++;
-                                                } else if (scheduleUpper.includes('PM') || scheduleUpper.includes('TARDE') || scheduleUpper.includes('SALIDA')) {
-                                                    routeSummary[routeNumber].cantPM++;
-                                                } else {
-                                                    // Si no se puede determinar, contar como AM por defecto
-                                                    routeSummary[routeNumber].cantAM++;
-                                                }
+                                                // Si no se encuentra hora, contar como AM por defecto
+                                                routeSummary[routeNumber].cantAM++;
                                             }
                                         }
                                     });
@@ -1546,23 +1542,22 @@ const RolesManagementPage = () => {
                                             const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
                                             if (timeMatch) {
                                                 const hour = parseInt(timeMatch[1]);
-                                                // Determinar AM/PM basado en formato de 24 horas
+                                                // Clasificar por hora:
+                                                // AM: 0-11 horas (00:00 - 11:59)
+                                                // MD: 12 horas (12:00 - 12:59)
+                                                // PM: 13-23 horas (13:00 - 23:59)
                                                 if (hour >= 0 && hour < 12) {
                                                     routeSummary[routeNumber].cantAM++;
-                                                } else if (hour >= 12 && hour <= 23) {
+                                                } else if (hour === 12) {
+                                                    routeSummary[routeNumber].cantMD++;
+                                                } else if (hour >= 13 && hour <= 23) {
                                                     routeSummary[routeNumber].cantPM++;
                                                 } else {
                                                     routeSummary[routeNumber].cantAM++;
                                                 }
                                             } else {
-                                                // Fallback a horarios específicos conocidos
-                                                if (timeSlot.includes('7:30') || timeSlot.includes('8:00') || timeSlot.includes('07:30') || timeSlot.includes('08:00')) {
-                                                    routeSummary[routeNumber].cantAM++;
-                                                } else if (timeSlot.includes('13:00') || timeSlot.includes('13:30') || timeSlot.includes('14:00')) {
-                                                    routeSummary[routeNumber].cantPM++;
-                                                } else {
-                                                    routeSummary[routeNumber].cantAM++;
-                                                }
+                                                // Si no se puede extraer hora, contar como AM por defecto
+                                                routeSummary[routeNumber].cantAM++;
                                             }
                                         });
                                     } else {
@@ -1631,7 +1626,7 @@ const RolesManagementPage = () => {
             const summaryWorksheet = workbook.addWorksheet('OCUPACIÓN POR RUTA');
             
             // Agregar headers con estilo
-            const summaryHeaders = ["No. Ruta", "Cant. AM", "Cant. PM"];
+            const summaryHeaders = ["No. Ruta", "Cant. AM", "Cant. PM", "Cant. MD"];
             const summaryHeaderRow = summaryWorksheet.addRow(summaryHeaders);
             
             // Estilo para headers del resumen
@@ -1659,56 +1654,120 @@ const RolesManagementPage = () => {
             
             // Agregar datos del resumen
             if (sortedRoutes.length === 0) {
-                // Si no hay rutas específicas, crear un resumen básico agrupando por tipo de ruta
-                const routeTypeGroups = {};
+                // Si no hay rutas específicas, crear un resumen analizando las horas de todos los estudiantes
+                const timeSummary = { cantAM: 0, cantPM: 0, cantMD: 0 };
+                
                 parentsWithRoutes.forEach(user => {
-                    const routeType = user.FamilyDetail.routeType;
-                    if (!routeTypeGroups[routeType]) {
-                        routeTypeGroups[routeType] = [];
+                    const fd = user.FamilyDetail;
+                    if (fd.Students && fd.Students.length > 0) {
+                        fd.Students.forEach(student => {
+                            // Analizar horarios de buses asignados
+                            if (student.buses && student.buses.length > 0) {
+                                student.buses.forEach(bus => {
+                                    let assignedSchedule = [];
+                                    if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
+                                        try {
+                                            assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                                ? JSON.parse(bus.AssignedBuses.assignedSchedule)
+                                                : bus.AssignedBuses.assignedSchedule;
+                                        } catch (e) {
+                                            assignedSchedule = [];
+                                        }
+                                    }
+                                    
+                                    if (Array.isArray(assignedSchedule) && assignedSchedule.length > 0) {
+                                        assignedSchedule.forEach(schedule => {
+                                            if (schedule && typeof schedule === 'string') {
+                                                const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
+                                                if (timeMatch) {
+                                                    const hour = parseInt(timeMatch[1]);
+                                                    if (hour >= 0 && hour < 12) {
+                                                        timeSummary.cantAM++;
+                                                    } else if (hour === 12) {
+                                                        timeSummary.cantMD++;
+                                                    } else if (hour >= 13 && hour <= 23) {
+                                                        timeSummary.cantPM++;
+                                                    } else {
+                                                        timeSummary.cantAM++;
+                                                    }
+                                                } else {
+                                                    timeSummary.cantAM++;
+                                                }
+                                            }
+                                        });
+                                    } else if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
+                                        // Usar ScheduleSlots si no hay horarios asignados específicos
+                                        student.ScheduleSlots.forEach(slot => {
+                                            const timeSlot = slot.timeSlot || "";
+                                            const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                                            if (timeMatch) {
+                                                const hour = parseInt(timeMatch[1]);
+                                                if (hour >= 0 && hour < 12) {
+                                                    timeSummary.cantAM++;
+                                                } else if (hour === 12) {
+                                                    timeSummary.cantMD++;
+                                                } else if (hour >= 13 && hour <= 23) {
+                                                    timeSummary.cantPM++;
+                                                } else {
+                                                    timeSummary.cantAM++;
+                                                }
+                                            } else {
+                                                timeSummary.cantAM++;
+                                            }
+                                        });
+                                    } else {
+                                        timeSummary.cantAM++;
+                                    }
+                                });
+                            } else if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
+                                // Si no tiene buses asignados, usar ScheduleSlots
+                                student.ScheduleSlots.forEach(slot => {
+                                    const timeSlot = slot.timeSlot || "";
+                                    const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                                    if (timeMatch) {
+                                        const hour = parseInt(timeMatch[1]);
+                                        if (hour >= 0 && hour < 12) {
+                                            timeSummary.cantAM++;
+                                        } else if (hour === 12) {
+                                            timeSummary.cantMD++;
+                                        } else if (hour >= 13 && hour <= 23) {
+                                            timeSummary.cantPM++;
+                                        } else {
+                                            timeSummary.cantAM++;
+                                        }
+                                    } else {
+                                        timeSummary.cantAM++;
+                                    }
+                                });
+                            } else {
+                                timeSummary.cantAM++;
+                            }
+                        });
                     }
-                    routeTypeGroups[routeType].push(user);
                 });
                 
-                Object.keys(routeTypeGroups).forEach((routeType, index) => {
-                    const families = routeTypeGroups[routeType];
-                    const totalStudents = families.reduce((sum, family) => {
-                        return sum + (family.FamilyDetail.Students ? family.FamilyDetail.Students.length : 1);
-                    }, 0);
-                    
-                    let rowData;
-                    if (routeType.includes('AM') || routeType.includes('Media AM')) {
-                        rowData = [routeType, totalStudents, 0];
-                    } else if (routeType.includes('PM') || routeType.includes('Media PM')) {
-                        rowData = [routeType, 0, totalStudents];
-                    } else if (routeType.includes('Completa')) {
-                        rowData = [routeType, totalStudents, totalStudents];
-                    } else {
-                        rowData = [routeType, totalStudents, 0];
-                    }
-                    
-                    const row = summaryWorksheet.addRow(rowData);
-                    // Estilo alternado para filas
-                    const isEven = (index + 1) % 2 === 0;
-                    row.eachCell((cell) => {
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
-                        };
-                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                            left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                            bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                            right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
-                        };
-                    });
+                // Agregar una sola fila con el resumen total
+                const rowData = ["Total", timeSummary.cantAM, timeSummary.cantPM, timeSummary.cantMD];
+                const row = summaryWorksheet.addRow(rowData);
+                row.eachCell((cell) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFF2F2F2' }
+                    };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+                    };
                 });
             } else {
                 // Usar el resumen por rutas específicas
                 sortedRoutes.forEach((routeNumber, index) => {
                     const routeData = routeSummary[routeNumber];
-                    const rowData = [routeNumber, routeData.cantAM, routeData.cantPM];
+                    const rowData = [routeNumber, routeData.cantAM, routeData.cantPM, routeData.cantMD];
                     const row = summaryWorksheet.addRow(rowData);
                     
                     // Estilo alternado para filas
@@ -1734,7 +1793,7 @@ const RolesManagementPage = () => {
             summaryWorksheet.columns.forEach(column => {
                 column.width = Math.max(15, column.header ? column.header.length : 10);
             });
-            summaryWorksheet.autoFilter = 'A1:C' + summaryWorksheet.rowCount;
+            summaryWorksheet.autoFilter = 'A1:D' + summaryWorksheet.rowCount;
             
             // Congelar la primera fila (encabezados) para que sea sticky
             summaryWorksheet.views = [
@@ -1751,20 +1810,23 @@ const RolesManagementPage = () => {
                 "Nombre Padre",
                 "Email Padre",
                 "Dirección Principal",
-                "Dirección Alterna"
+                "Dirección Alterna",
+                "Hora AM",
+                "Parada AM", 
+                "Hora MD",
+                "Parada MD",
+                "Hora PM",
+                "Parada PM"
             ];
             
-            // Agregar columnas para estudiantes
+            // Agregar columnas para estudiantes (solo nombre, grado y ruta)
             const studentHeaders = [];
             for (let i = 1; i <= maxStudents; i++) {
                 studentHeaders.push(`Estudiante ${i} - Nombre`);
                 studentHeaders.push(`Estudiante ${i} - Grado`);
                 studentHeaders.push(`Estudiante ${i} - Ruta AM`);
-                studentHeaders.push(`Estudiante ${i} - Hora AM`);
-                studentHeaders.push(`Estudiante ${i} - Parada AM`);
+                studentHeaders.push(`Estudiante ${i} - Ruta MD`);
                 studentHeaders.push(`Estudiante ${i} - Ruta PM`);
-                studentHeaders.push(`Estudiante ${i} - Hora PM`);
-                studentHeaders.push(`Estudiante ${i} - Parada PM`);
             }
             
             const headers = [...baseHeaders, ...studentHeaders];
@@ -1798,6 +1860,15 @@ const RolesManagementPage = () => {
                 const fd = user.FamilyDetail;
                 if (!fd.Students || fd.Students.length === 0) return false;
                 
+                // Verificar si tiene ScheduleSlots a nivel familiar
+                if (fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
+                    return fd.ScheduleSlots.some(slot => {
+                        const timeSlot = slot.time || "";
+                        const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                        return timeMatch !== null; // Tiene al menos una hora definida
+                    });
+                }
+                
                 return fd.Students.some(student => {
                     // Verificar si tiene buses asignados específicos
                     if (student.buses && student.buses.length > 0) {
@@ -1816,15 +1887,6 @@ const RolesManagementPage = () => {
                         });
                     }
                     
-                    // Verificar si tiene ScheduleSlots
-                    if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
-                        return student.ScheduleSlots.some(slot => {
-                            const timeSlot = slot.timeSlot || "";
-                            const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                            return timeMatch !== null; // Tiene al menos una hora definida
-                        });
-                    }
-                    
                     return false;
                 });
             };
@@ -1836,17 +1898,60 @@ const RolesManagementPage = () => {
             familiesWithRoutes.forEach((user, familyIndex) => {
                 const fd = user.FamilyDetail;
                 
-                // Datos base
+                // Extraer horas y paradas a nivel familiar desde ScheduleSlots de todos los estudiantes
+                let familyHoraAM = "", familyParadaAM = "";
+                let familyHoraMD = "", familyParadaMD = "";
+                let familyHoraPM = "", familyParadaPM = "";
+                
+                // Extraer horas y paradas a nivel familiar desde ScheduleSlots de la familia
+                if (fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
+                    console.log('DEBUG - ScheduleSlots de la familia:', fd.ScheduleSlots);
+                    fd.ScheduleSlots.forEach(slot => {
+                        console.log('DEBUG - Slot:', slot);
+                        const timeSlot = slot.time || slot.timeSlot || ""; // Verificar ambos campos
+                        const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                        const hour = timeMatch ? parseInt(timeMatch[1]) : null;
+                        
+                        console.log('DEBUG - timeSlot:', timeSlot, 'hour:', hour, 'note:', slot.note);
+                        
+                        if (hour !== null) {
+                            // Clasificar por hora y asignar a nivel familiar
+                            if (hour >= 0 && hour < 12 && !familyHoraAM) {
+                                familyHoraAM = timeMatch[0];
+                                familyParadaAM = slot.note || "";
+                                console.log('DEBUG - Asignado AM:', familyHoraAM, familyParadaAM);
+                            } else if (hour === 12 && !familyHoraMD) {
+                                familyHoraMD = timeMatch[0];
+                                familyParadaMD = slot.note || "";
+                                console.log('DEBUG - Asignado MD:', familyHoraMD, familyParadaMD);
+                            } else if (hour >= 13 && hour <= 23 && !familyHoraPM) {
+                                familyHoraPM = timeMatch[0];
+                                familyParadaPM = slot.note || "";
+                                console.log('DEBUG - Asignado PM:', familyHoraPM, familyParadaPM);
+                            }
+                        }
+                    });
+                } else {
+                    console.log('DEBUG - Familia no tiene ScheduleSlots');
+                }
+                
+                // Datos base incluyendo horas y paradas familiares
                 const baseData = [
                     fd.routeType || "",
                     fd.familyLastName || "",
                     user.name || "",
                     user.email || "",
                     fd.mainAddress || "",
-                    fd.alternativeAddress || ""
+                    fd.alternativeAddress || "",
+                    familyHoraAM,
+                    familyParadaAM,
+                    familyHoraMD,
+                    familyParadaMD,
+                    familyHoraPM,
+                    familyParadaPM
                 ];
                 
-                // Datos de estudiantes (expandidos en columnas separadas)
+                // Datos de estudiantes (solo nombre, grado y rutas)
                 const studentData = [];
                 for (let i = 0; i < maxStudents; i++) {
                     if (fd.Students && fd.Students[i]) {
@@ -1854,10 +1959,10 @@ const RolesManagementPage = () => {
                         studentData.push(student.fullName || "");
                         studentData.push(student.grade || "");
                         
-                        // Extraer información de rutas AM/PM para este estudiante
-                        let rutaAM = "", horaAM = "", paradaAM = "";
-                        let rutaPM = "", horaPM = "", paradaPM = "";
+                        // Extraer solo las rutas para este estudiante
+                        let rutaAM = "", rutaMD = "", rutaPM = "";
                         
+                        // Obtener rutas de buses asignados
                         if (student.buses && student.buses.length > 0) {
                             student.buses.forEach(bus => {
                                 // Obtener horarios asignados desde la tabla intermedia
@@ -1875,92 +1980,57 @@ const RolesManagementPage = () => {
                                 
                                 const routeNumber = bus.routeNumber || `Ruta ${bus.id}`;
                                 
-                                // Analizar cada horario asignado
+                                // Analizar cada horario asignado para obtener solo las rutas
                                 if (Array.isArray(assignedSchedule)) {
                                     assignedSchedule.forEach(schedule => {
                                         if (schedule && typeof schedule === 'string') {
-                                            const scheduleUpper = schedule.toUpperCase();
                                             const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
                                             const hour = timeMatch ? parseInt(timeMatch[1]) : null;
                                             
-                                            // Determinar si es AM o PM
-                                            const isAM = scheduleUpper.includes('AM') || 
-                                                        scheduleUpper.includes('MAÑANA') || 
-                                                        scheduleUpper.includes('ENTRADA') || 
-                                                        (hour !== null && hour < 12);
-                                            
-                                            const isPM = scheduleUpper.includes('PM') || 
-                                                        scheduleUpper.includes('TARDE') || 
-                                                        scheduleUpper.includes('SALIDA') || 
-                                                        (hour !== null && hour >= 12);
-                                            
-                                            if (isAM && !rutaAM) {
-                                                rutaAM = routeNumber;
-                                                horaAM = timeMatch ? timeMatch[0] : schedule;
-                                                // Buscar parada en ScheduleSlots del estudiante si está disponible
-                                                if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
-                                                    const matchingSlot = student.ScheduleSlots.find(slot => 
-                                                        slot.timeSlot && slot.timeSlot.includes(timeMatch ? timeMatch[0] : schedule)
-                                                    );
-                                                    paradaAM = matchingSlot ? (matchingSlot.note || matchingSlot.timeSlot) : "";
-                                                } else {
-                                                    paradaAM = fd.mainAddress || "";
-                                                }
-                                            } else if (isPM && !rutaPM) {
-                                                rutaPM = routeNumber;
-                                                horaPM = timeMatch ? timeMatch[0] : schedule;
-                                                // Buscar parada en ScheduleSlots del estudiante si está disponible
-                                                if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
-                                                    const matchingSlot = student.ScheduleSlots.find(slot => 
-                                                        slot.timeSlot && slot.timeSlot.includes(timeMatch ? timeMatch[0] : schedule)
-                                                    );
-                                                    paradaPM = matchingSlot ? (matchingSlot.note || matchingSlot.timeSlot) : "";
-                                                } else {
-                                                    paradaPM = fd.mainAddress || "";
+                                            if (hour !== null) {
+                                                // Clasificar únicamente por hora para asignar rutas
+                                                if (hour >= 0 && hour < 12 && !rutaAM) {
+                                                    rutaAM = routeNumber;
+                                                } else if (hour === 12 && !rutaMD) {
+                                                    rutaMD = routeNumber;
+                                                } else if (hour >= 13 && hour <= 23 && !rutaPM) {
+                                                    rutaPM = routeNumber;
                                                 }
                                             }
                                         }
                                     });
                                 }
                             });
-                        } else {
-                            // Si no hay buses asignados específicos, usar información de ScheduleSlots
-                            if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
-                                student.ScheduleSlots.forEach(slot => {
-                                    const timeSlot = slot.timeSlot || "";
-                                    const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                                    const hour = timeMatch ? parseInt(timeMatch[1]) : null;
-                                    
-                                    if (hour !== null) {
-                                        if (hour < 12 && !rutaAM) {
-                                            rutaAM = fd.routeType || "N/A";
-                                            horaAM = timeMatch[0];
-                                            paradaAM = slot.note || fd.mainAddress || "";
-                                        } else if (hour >= 12 && !rutaPM) {
-                                            rutaPM = fd.routeType || "N/A";
-                                            horaPM = timeMatch[0];
-                                            paradaPM = slot.note || fd.mainAddress || "";
-                                        }
+                        }
+                        
+                        // Si no hay buses asignados pero hay ScheduleSlots familiares con horas, usar N/A para rutas
+                        if (!rutaAM && !rutaMD && !rutaPM && fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
+                            fd.ScheduleSlots.forEach(slot => {
+                                const timeSlot = slot.time || slot.timeSlot || "";
+                                const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                                const hour = timeMatch ? parseInt(timeMatch[1]) : null;
+                                
+                                if (hour !== null) {
+                                    if (hour >= 0 && hour < 12 && !rutaAM) {
+                                        rutaAM = "N/A";
+                                    } else if (hour === 12 && !rutaMD) {
+                                        rutaMD = "N/A";
+                                    } else if (hour >= 13 && hour <= 23 && !rutaPM) {
+                                        rutaPM = "N/A";
                                     }
-                                });
-                            }
+                                }
+                            });
                         }
                         
                         studentData.push(rutaAM);
-                        studentData.push(horaAM);
-                        studentData.push(paradaAM);
+                        studentData.push(rutaMD);
                         studentData.push(rutaPM);
-                        studentData.push(horaPM);
-                        studentData.push(paradaPM);
                     } else {
                         studentData.push(""); // Nombre vacío
                         studentData.push(""); // Grado vacío
                         studentData.push(""); // Ruta AM vacía
-                        studentData.push(""); // Hora AM vacía
-                        studentData.push(""); // Parada AM vacía
+                        studentData.push(""); // Ruta MD vacía
                         studentData.push(""); // Ruta PM vacía
-                        studentData.push(""); // Hora PM vacía
-                        studentData.push(""); // Parada PM vacía
                     }
                 }
                 
