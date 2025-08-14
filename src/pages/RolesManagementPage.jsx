@@ -79,6 +79,7 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
     const [assignments, setAssignments] = useState({});
     // Nuevo estado para contrato a enviar al asignar buses
     const [selectedContractForBuses, setSelectedContractForBuses] = useState('');
+    const [loadedExisting, setLoadedExisting] = useState(false);
 
     // Función para aplanar el schedule del bus en strings tipo "Lunes 08:00"
     const getScheduleOptions = (bus) => {
@@ -96,6 +97,11 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
     // Al abrir el modal, cargar los estudiantes y sus asignaciones previas
     useEffect(() => {
         if (open && parentUser && parentUser.school) {
+            setStudents(parentUser.FamilyDetail?.Students || []);
+            setAssignments({});
+            setStudentSchedules({});
+            setSelectedContractForBuses('');
+            setLoadedExisting(false);
             const fetchSchedules = async () => {
                 try {
                     const resp = await api.get(`/schools/${parentUser.school}`);
@@ -104,11 +110,52 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
                     setSchoolSchedules([]);
                 }
             };
+            const fetchExistingAssignments = async () => {
+                try {
+                    const newAssignments   = {};
+                    const newSchedControls = {};
+
+                    /* Para cada estudiante de la familia */
+                    await Promise.all(
+                        (parentUser.FamilyDetail?.Students || []).map(async (stud) => {
+                            const resp = await api.get(`/students/${stud.id}/assign-buses`);
+                            const { assignments = [] } = resp.data; // ← arreglo de StudentBus
+
+                            /* Reconstruir estructura { horario, buses[] } */
+                            assignments.forEach((asig) => {
+                                (asig.assignedSchedule || []).forEach((horario) => {
+                                    if (!newAssignments[stud.id]) newAssignments[stud.id] = [];
+                                    let hObj = newAssignments[stud.id].find((h) => h.horario === horario);
+                                    if (!hObj) {
+                                        hObj = { horario, buses: [] };
+                                        newAssignments[stud.id].push(hObj);
+                                    }
+                                    hObj.buses.push(asig.busId);
+                                });
+                            });
+
+                            /* Para “pre-seleccionar” los select de horario */
+                            newSchedControls[stud.id] = newAssignments[stud.id]
+                                ? newAssignments[stud.id].map((h) => h.horario)
+                                : [];
+                        })
+                    );
+
+                    setAssignments(newAssignments);
+                    setStudentSchedules(newSchedControls);
+                    setLoadedExisting(true);
+                } catch (err) {
+                    console.error('[AssignBusesModal] error cargando asignaciones:', err);
+                    setLoadedExisting(true);
+                }
+            };
+
             fetchSchedules();
             setStudents(parentUser.FamilyDetail?.Students || []);
             setAssignments({});
             setSelectedContractForBuses('');
-            setStudentSchedules({}); // Limpiar horarios por alumno
+            setStudentSchedules({});
+            fetchExistingAssignments();
         }
     }, [open, parentUser]);
 
@@ -269,6 +316,17 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
             setLoading(false);
         }
     };
+
+    if (open && !loadedExisting) {
+        return (
+            <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+                <DialogTitle>Asignar Buses</DialogTitle>
+                <DialogContent sx={{ display:'flex', justifyContent:'center', py:4 }}>
+                    <CircularProgress />
+                </DialogContent>
+            </Dialog>
+        );
+    }
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
@@ -998,6 +1056,22 @@ const RolesManagementPage = () => {
         setNewSlot({ time: '', note: '' });
     };
 
+    const handleEditSlot = (index, field, value) => {
+        setFamilyDetail(prev => {
+            const slots = [...prev.scheduleSlots];
+            slots[index] = { ...slots[index], [field]: value };
+            return { ...prev, scheduleSlots: slots };
+        });
+    };
+
+    const handleDeleteSlot = (index) => {
+        setFamilyDetail(prev => {
+            const slots = [...prev.scheduleSlots];
+            slots.splice(index, 1);
+            return { ...prev, scheduleSlots: slots };
+        });
+    };
+
     const handleSaveUser = async () => {
         try {
             // Si la lista de estudiantes no cambió, no enviar ese campo
@@ -1224,12 +1298,12 @@ const RolesManagementPage = () => {
         });
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(data);
-        
+
         // Auto-ajustar ancho de columnas basado en los headers y contenido
         const colWidths = headers.map((header, headerIndex) => {
             // Calcular el ancho mínimo basado en el header y el contenido
             let maxWidth = header.length;
-            
+
             // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
             data.slice(1).forEach(row => {
                 if (row[headerIndex] !== undefined) {
@@ -1239,13 +1313,13 @@ const RolesManagementPage = () => {
                     }
                 }
             });
-            
+
             // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
             return { wch: Math.min(Math.max(maxWidth, 10), 50) };
         });
-        
+
         ws['!cols'] = colWidths;
-        
+
         XLSX.utils.book_append_sheet(wb, ws, "UsuariosNuevos");
         const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
         const blob = new Blob([wbout], { type: "application/octet-stream" });
@@ -1374,12 +1448,12 @@ const RolesManagementPage = () => {
             });
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(data);
-            
+
             // Auto-ajustar ancho de columnas basado en los headers y contenido
             const colWidths = headers.map((header, headerIndex) => {
                 // Calcular el ancho mínimo basado en el header y el contenido
                 let maxWidth = header.length;
-                
+
                 // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
                 data.slice(1).forEach(row => {
                     if (row[headerIndex] !== undefined) {
@@ -1389,13 +1463,13 @@ const RolesManagementPage = () => {
                         }
                     }
                 });
-                
+
                 // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
                 return { wch: Math.min(Math.max(maxWidth, 10), 50) };
             });
-            
+
             ws['!cols'] = colWidths;
-            
+
             XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
             const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
             const blob = new Blob([wbout], { type: "application/octet-stream" });
@@ -1462,19 +1536,19 @@ const RolesManagementPage = () => {
             }
 
             // Filtrar solo usuarios padres con FamilyDetail, routeType y del colegio seleccionado
-            const parentsWithRoutes = allUsers.filter(u => 
-                u.Role && u.Role.name === 'Padre' && 
-                u.FamilyDetail && 
+            const parentsWithRoutes = allUsers.filter(u =>
+                u.Role && u.Role.name === 'Padre' &&
+                u.FamilyDetail &&
                 u.FamilyDetail.routeType &&
                 u.school && parseInt(u.school) === parseInt(schoolId)
             );
 
             // Agrupar por número de ruta del bus asignado y contar estudiantes AM/PM
             const routeSummary = {};
-            
+
             parentsWithRoutes.forEach(user => {
                 const fd = user.FamilyDetail;
-                
+
                 if (fd.Students && fd.Students.length > 0) {
                     fd.Students.forEach(student => {
                         // Verificar si el estudiante tiene buses asignados específicos
@@ -1482,7 +1556,7 @@ const RolesManagementPage = () => {
                             student.buses.forEach(bus => {
                                 const busId = bus.id;
                                 const routeNumber = bus.routeNumber || `Ruta ${busId}`;
-                                
+
                                 // Inicializar si no existe
                                 if (!routeSummary[routeNumber]) {
                                     routeSummary[routeNumber] = {
@@ -1491,12 +1565,12 @@ const RolesManagementPage = () => {
                                         cantMD: 0
                                     };
                                 }
-                                
+
                                 // Obtener horarios asignados desde la tabla intermedia
                                 let assignedSchedule = [];
                                 if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
                                     try {
-                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
                                             ? JSON.parse(bus.AssignedBuses.assignedSchedule)
                                             : bus.AssignedBuses.assignedSchedule;
                                     } catch (e) {
@@ -1504,7 +1578,7 @@ const RolesManagementPage = () => {
                                         assignedSchedule = [];
                                     }
                                 }
-                                
+
                                 // Analizar horarios para determinar AM/PM/MD basado en formato de 24 horas
                                 if (Array.isArray(assignedSchedule) && assignedSchedule.length > 0) {
                                     assignedSchedule.forEach(schedule => {
@@ -1574,7 +1648,7 @@ const RolesManagementPage = () => {
             // Determinar el número máximo de estudiantes para crear las columnas dinámicas
             // Solo considerar familias que tienen al menos un estudiante con ruta
             let maxStudents = 0;
-            
+
             parentsWithRoutes.forEach(user => {
                 const fd = user.FamilyDetail;
                 if (fd.Students && fd.Students.length > 0) {
@@ -1586,7 +1660,7 @@ const RolesManagementPage = () => {
                                 let assignedSchedule = [];
                                 if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
                                     try {
-                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
                                             ? JSON.parse(bus.AssignedBuses.assignedSchedule)
                                             : bus.AssignedBuses.assignedSchedule;
                                     } catch (e) {
@@ -1596,7 +1670,7 @@ const RolesManagementPage = () => {
                                 return Array.isArray(assignedSchedule) && assignedSchedule.length > 0;
                             });
                         }
-                        
+
                         // Verificar si tiene ScheduleSlots
                         if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
                             return student.ScheduleSlots.some(slot => {
@@ -1605,10 +1679,10 @@ const RolesManagementPage = () => {
                                 return timeMatch !== null;
                             });
                         }
-                        
+
                         return false;
                     });
-                    
+
                     // Solo contar estudiantes si la familia tiene al menos uno con ruta
                     if (hasStudentWithRoute && fd.Students.length > maxStudents) {
                         maxStudents = fd.Students.length;
@@ -1621,14 +1695,14 @@ const RolesManagementPage = () => {
 
             // Crear Excel con ExcelJS para soporte completo de estilos
             const workbook = new ExcelJS.Workbook();
-            
+
             // Hoja resumen por rutas (ocupacion)
             const summaryWorksheet = workbook.addWorksheet('OCUPACIÓN POR RUTA');
-            
+
             // Agregar headers con estilo
             const summaryHeaders = ["No. Ruta", "Cant. AM", "Cant. PM", "Cant. MD"];
             const summaryHeaderRow = summaryWorksheet.addRow(summaryHeaders);
-            
+
             // Estilo para headers del resumen
             summaryHeaderRow.eachCell((cell) => {
                 cell.fill = {
@@ -1651,12 +1725,12 @@ const RolesManagementPage = () => {
                     right: { style: 'thin' }
                 };
             });
-            
+
             // Agregar datos del resumen
             if (sortedRoutes.length === 0) {
                 // Si no hay rutas específicas, crear un resumen analizando las horas de todos los estudiantes
                 const timeSummary = { cantAM: 0, cantPM: 0, cantMD: 0 };
-                
+
                 parentsWithRoutes.forEach(user => {
                     const fd = user.FamilyDetail;
                     if (fd.Students && fd.Students.length > 0) {
@@ -1667,14 +1741,14 @@ const RolesManagementPage = () => {
                                     let assignedSchedule = [];
                                     if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
                                         try {
-                                            assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                            assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
                                                 ? JSON.parse(bus.AssignedBuses.assignedSchedule)
                                                 : bus.AssignedBuses.assignedSchedule;
                                         } catch (e) {
                                             assignedSchedule = [];
                                         }
                                     }
-                                    
+
                                     if (Array.isArray(assignedSchedule) && assignedSchedule.length > 0) {
                                         assignedSchedule.forEach(schedule => {
                                             if (schedule && typeof schedule === 'string') {
@@ -1745,7 +1819,7 @@ const RolesManagementPage = () => {
                         });
                     }
                 });
-                
+
                 // Agregar una sola fila con el resumen total
                 const rowData = ["Total", timeSummary.cantAM, timeSummary.cantPM, timeSummary.cantMD];
                 const row = summaryWorksheet.addRow(rowData);
@@ -1769,7 +1843,7 @@ const RolesManagementPage = () => {
                     const routeData = routeSummary[routeNumber];
                     const rowData = [routeNumber, routeData.cantAM, routeData.cantPM, routeData.cantMD];
                     const row = summaryWorksheet.addRow(rowData);
-                    
+
                     // Estilo alternado para filas
                     const isEven = (index + 1) % 2 === 0;
                     row.eachCell((cell) => {
@@ -1788,37 +1862,37 @@ const RolesManagementPage = () => {
                     });
                 });
             }
-            
+
             // Auto-ajustar columnas y agregar filtros
             summaryWorksheet.columns.forEach(column => {
                 column.width = Math.max(15, column.header ? column.header.length : 10);
             });
             summaryWorksheet.autoFilter = 'A1:D' + summaryWorksheet.rowCount;
-            
+
             // Congelar la primera fila (encabezados) para que sea sticky
             summaryWorksheet.views = [
                 { state: 'frozen', ySplit: 1 }
             ];
-            
+
             // Hoja de datos de familias
             const familiesWorksheet = workbook.addWorksheet('DATA');
-            
+
             // Crear headers dinámicos
             const baseHeaders = [
                 "Tipo Ruta",
-                "Apellido Familia", 
+                "Apellido Familia",
                 "Nombre Padre",
                 "Email Padre",
                 "Dirección Principal",
                 "Dirección Alterna",
                 "Hora AM",
-                "Parada AM", 
+                "Parada AM",
                 "Hora MD",
                 "Parada MD",
                 "Hora PM",
                 "Parada PM"
             ];
-            
+
             // Agregar columnas para estudiantes (solo nombre, grado y ruta)
             const studentHeaders = [];
             for (let i = 1; i <= maxStudents; i++) {
@@ -1828,10 +1902,10 @@ const RolesManagementPage = () => {
                 studentHeaders.push(`Estudiante ${i} - Ruta MD`);
                 studentHeaders.push(`Estudiante ${i} - Ruta PM`);
             }
-            
+
             const headers = [...baseHeaders, ...studentHeaders];
             const familiesHeaderRow = familiesWorksheet.addRow(headers);
-            
+
             // Estilo para headers de familias
             familiesHeaderRow.eachCell((cell) => {
                 cell.fill = {
@@ -1854,12 +1928,12 @@ const RolesManagementPage = () => {
                     right: { style: 'thin' }
                 };
             });
-            
+
             // Función para verificar si una familia tiene al menos un estudiante con ruta AM o PM
             const familyHasStudentWithRoute = (user) => {
                 const fd = user.FamilyDetail;
                 if (!fd.Students || fd.Students.length === 0) return false;
-                
+
                 // Verificar si tiene ScheduleSlots a nivel familiar
                 if (fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
                     return fd.ScheduleSlots.some(slot => {
@@ -1868,7 +1942,7 @@ const RolesManagementPage = () => {
                         return timeMatch !== null; // Tiene al menos una hora definida
                     });
                 }
-                
+
                 return fd.Students.some(student => {
                     // Verificar si tiene buses asignados específicos
                     if (student.buses && student.buses.length > 0) {
@@ -1876,7 +1950,7 @@ const RolesManagementPage = () => {
                             let assignedSchedule = [];
                             if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
                                 try {
-                                    assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                    assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
                                         ? JSON.parse(bus.AssignedBuses.assignedSchedule)
                                         : bus.AssignedBuses.assignedSchedule;
                                 } catch (e) {
@@ -1886,23 +1960,23 @@ const RolesManagementPage = () => {
                             return Array.isArray(assignedSchedule) && assignedSchedule.length > 0;
                         });
                     }
-                    
+
                     return false;
                 });
             };
-            
+
             // Filtrar familias que tienen al menos un estudiante con ruta
             const familiesWithRoutes = parentsWithRoutes.filter(familyHasStudentWithRoute);
-            
+
             // Procesar solo las familias que tienen estudiantes con rutas
             familiesWithRoutes.forEach((user, familyIndex) => {
                 const fd = user.FamilyDetail;
-                
+
                 // Extraer horas y paradas a nivel familiar desde ScheduleSlots de todos los estudiantes
                 let familyHoraAM = "", familyParadaAM = "";
                 let familyHoraMD = "", familyParadaMD = "";
                 let familyHoraPM = "", familyParadaPM = "";
-                
+
                 // Extraer horas y paradas a nivel familiar desde ScheduleSlots de la familia
                 if (fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
                     console.log('DEBUG - ScheduleSlots de la familia:', fd.ScheduleSlots);
@@ -1911,9 +1985,9 @@ const RolesManagementPage = () => {
                         const timeSlot = slot.time || slot.timeSlot || ""; // Verificar ambos campos
                         const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
                         const hour = timeMatch ? parseInt(timeMatch[1]) : null;
-                        
+
                         console.log('DEBUG - timeSlot:', timeSlot, 'hour:', hour, 'note:', slot.note);
-                        
+
                         if (hour !== null) {
                             // Clasificar por hora y asignar a nivel familiar
                             if (hour >= 0 && hour < 12 && !familyHoraAM) {
@@ -1934,7 +2008,7 @@ const RolesManagementPage = () => {
                 } else {
                     console.log('DEBUG - Familia no tiene ScheduleSlots');
                 }
-                
+
                 // Datos base incluyendo horas y paradas familiares
                 const baseData = [
                     fd.routeType || "",
@@ -1950,7 +2024,7 @@ const RolesManagementPage = () => {
                     familyHoraPM,
                     familyParadaPM
                 ];
-                
+
                 // Datos de estudiantes (solo nombre, grado y rutas)
                 const studentData = [];
                 for (let i = 0; i < maxStudents; i++) {
@@ -1958,10 +2032,10 @@ const RolesManagementPage = () => {
                         const student = fd.Students[i];
                         studentData.push(student.fullName || "");
                         studentData.push(student.grade || "");
-                        
+
                         // Extraer solo las rutas para este estudiante
                         let rutaAM = "", rutaMD = "", rutaPM = "";
-                        
+
                         // Obtener rutas de buses asignados
                         if (student.buses && student.buses.length > 0) {
                             student.buses.forEach(bus => {
@@ -1969,7 +2043,7 @@ const RolesManagementPage = () => {
                                 let assignedSchedule = [];
                                 if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
                                     try {
-                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string' 
+                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
                                             ? JSON.parse(bus.AssignedBuses.assignedSchedule)
                                             : bus.AssignedBuses.assignedSchedule;
                                     } catch (e) {
@@ -1977,16 +2051,16 @@ const RolesManagementPage = () => {
                                         assignedSchedule = [];
                                     }
                                 }
-                                
+
                                 const routeNumber = bus.routeNumber || `Ruta ${bus.id}`;
-                                
+
                                 // Analizar cada horario asignado para obtener solo las rutas
                                 if (Array.isArray(assignedSchedule)) {
                                     assignedSchedule.forEach(schedule => {
                                         if (schedule && typeof schedule === 'string') {
                                             const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
                                             const hour = timeMatch ? parseInt(timeMatch[1]) : null;
-                                            
+
                                             if (hour !== null) {
                                                 // Clasificar únicamente por hora para asignar rutas
                                                 if (hour >= 0 && hour < 12 && !rutaAM) {
@@ -2002,14 +2076,14 @@ const RolesManagementPage = () => {
                                 }
                             });
                         }
-                        
+
                         // Si no hay buses asignados pero hay ScheduleSlots familiares con horas, usar N/A para rutas
                         if (!rutaAM && !rutaMD && !rutaPM && fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
                             fd.ScheduleSlots.forEach(slot => {
                                 const timeSlot = slot.time || slot.timeSlot || "";
                                 const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
                                 const hour = timeMatch ? parseInt(timeMatch[1]) : null;
-                                
+
                                 if (hour !== null) {
                                     if (hour >= 0 && hour < 12 && !rutaAM) {
                                         rutaAM = "N/A";
@@ -2021,7 +2095,7 @@ const RolesManagementPage = () => {
                                 }
                             });
                         }
-                        
+
                         studentData.push(rutaAM);
                         studentData.push(rutaMD);
                         studentData.push(rutaPM);
@@ -2033,10 +2107,10 @@ const RolesManagementPage = () => {
                         studentData.push(""); // Ruta PM vacía
                     }
                 }
-                
+
                 const rowData = [...baseData, ...studentData];
                 const row = familiesWorksheet.addRow(rowData);
-                
+
                 // Estilo alternado para filas de familias
                 const isEven = (familyIndex + 1) % 2 === 0;
                 row.eachCell((cell) => {
@@ -2045,9 +2119,9 @@ const RolesManagementPage = () => {
                         pattern: 'solid',
                         fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
                     };
-                    cell.alignment = { 
-                        horizontal: 'center', 
-                        vertical: 'middle' 
+                    cell.alignment = {
+                        horizontal: 'center',
+                        vertical: 'middle'
                     };
                     cell.border = {
                         top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
@@ -2057,12 +2131,12 @@ const RolesManagementPage = () => {
                     };
                 });
             });
-            
+
             // Auto-ajustar columnas para la hoja de familias
             familiesWorksheet.columns.forEach((column, index) => {
                 const header = headers[index];
                 let maxWidth = header ? header.length : 10;
-                
+
                 // Calcular ancho basado en contenido
                 familiesWorksheet.eachRow((row, rowNumber) => {
                     if (rowNumber > 1) { // Skip header row
@@ -2073,10 +2147,10 @@ const RolesManagementPage = () => {
                         }
                     }
                 });
-                
+
                 column.width = Math.min(Math.max(maxWidth, 10), 50);
             });
-            
+
             // Configurar filtros para TODAS las columnas en la hoja "Datos Familias"
             // Primero asegurar que hay datos antes de configurar filtros
             if (familiesWorksheet.rowCount > 1 && headers.length > 0) {
@@ -2090,15 +2164,15 @@ const RolesManagementPage = () => {
                     }
                     return letter;
                 };
-                
+
                 // Validar que no excedamos el límite de Excel (1024 columnas = AMJ)
                 const maxColumns = Math.min(headers.length, 1024);
                 const lastColumnLetter = getColumnLetter(maxColumns);
                 const filterRange = `A1:${lastColumnLetter}${familiesWorksheet.rowCount}`;
-                
+
                 // Configurar autoFilter para toda la tabla de familias
                 familiesWorksheet.autoFilter = filterRange;
-                
+
                 // Configurar cada columna individualmente para asegurar que tenga filtro
                 for (let i = 0; i < maxColumns; i++) {
                     const columnLetter = getColumnLetter(i + 1);
@@ -2113,7 +2187,7 @@ const RolesManagementPage = () => {
                         break; // Salir del loop si hay error
                     }
                 }
-                
+
                 // Log para debugging
                 console.log('Headers count:', headers.length);
                 console.log('Max columns processed:', maxColumns);
@@ -2122,17 +2196,17 @@ const RolesManagementPage = () => {
             } else {
                 console.warn('No hay suficientes datos para configurar filtros');
             }
-            
+
             // Congelar la primera fila (encabezados) para que sea sticky en la hoja de familias
             familiesWorksheet.views = [
                 { state: 'frozen', ySplit: 1 }
             ];
-            
+
             // Generar archivo
             const selectedSchool = schools.find(s => s.id === parseInt(schoolId));
             const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
             const fileName = `reporte_rutas_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
-            
+
             // Escribir archivo
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -3125,6 +3199,36 @@ const RolesManagementPage = () => {
                                             <Typography variant="body2">
                                                 • {slot.time} {slot.note && `(${slot.note})`}
                                             </Typography>
+                                            <Grid container spacing={1} alignItems="center" key={idx} sx={{ mb: 1 }}>
+                                                {/* Campo hora editable */}
+                                                <Grid item xs={12} md={4}>
+                                                    <TextField
+                                                        label="Hora"
+                                                        type="time"
+                                                        fullWidth
+                                                        variant="outlined"
+                                                        value={slot.time}
+                                                        onChange={e => handleEditSlot(idx, 'time', e.target.value)}
+                                                        InputLabelProps={{ shrink: true }}
+                                                    />
+                                                </Grid>
+                                                {/* Campo nota editable */}
+                                                <Grid item xs={12} md={6}>
+                                                    <TextField
+                                                        label="Nota"
+                                                        fullWidth
+                                                        variant="outlined"
+                                                        value={slot.note}
+                                                        onChange={e => handleEditSlot(idx, 'note', e.target.value)}
+                                                    />
+                                                </Grid>
+                                                {/* Botón borrar */}
+                                                <Grid item xs={12} md={2} display="flex" justifyContent="center">
+                                                    <IconButton color="error" onClick={() => handleDeleteSlot(idx)}>
+                                                        <Delete />
+                                                    </IconButton>
+                                                </Grid>
+                                            </Grid>
                                         </Grid>
                                     ))}
                                     <Grid item xs={12} md={4}>
@@ -3372,9 +3476,9 @@ const RolesManagementPage = () => {
                     <Button onClick={handleCloseRouteReportDialog} color="primary">
                         Cancelar
                     </Button>
-                    <Button 
-                        onClick={() => handleDownloadRouteReport(selectedSchoolForReport)} 
-                        color="primary" 
+                    <Button
+                        onClick={() => handleDownloadRouteReport(selectedSchoolForReport)}
+                        color="primary"
                         variant="contained"
                         disabled={!selectedSchoolForReport || routeReportLoading}
                     >
