@@ -1837,6 +1837,22 @@ const RolesManagementPage = () => {
                         right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                     };
                 });
+                // Asegurar que las columnas numéricas sean números (excluir horas)
+                [2, 3, 4].forEach((colIdx) => {
+                    try {
+                        const c = row.getCell(colIdx);
+                        if (c && c.value != null) {
+                            const n = Number(c.value);
+                            if (!Number.isNaN(n)) {
+                                c.value = n;
+                                c.numFmt = '0';
+                            }
+                        }
+                    } catch (e) {
+                        // no bloquear si hay error en conversión
+                        console.warn('[handleDownloadRouteReport] Numeric conversion error for total row:', e);
+                    }
+                });
             } else {
                 // Usar el resumen por rutas específicas
                 sortedRoutes.forEach((routeNumber, index) => {
@@ -1859,6 +1875,22 @@ const RolesManagementPage = () => {
                             bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                             right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                         };
+                    });
+
+                    // Asegurar que las columnas numéricas sean números (excluir horas)
+                    [2, 3, 4].forEach((colIdx) => {
+                        try {
+                            const c = row.getCell(colIdx);
+                            if (c && c.value != null) {
+                                const n = Number(c.value);
+                                if (!Number.isNaN(n)) {
+                                    c.value = n;
+                                    c.numFmt = '0';
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('[handleDownloadRouteReport] Numeric conversion error for route row:', e);
+                        }
                     });
                 });
             }
