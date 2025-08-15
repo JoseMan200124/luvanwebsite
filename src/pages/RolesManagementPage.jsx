@@ -1909,12 +1909,13 @@ const RolesManagementPage = () => {
             // Hoja de datos de familias
             const familiesWorksheet = workbook.addWorksheet('DATA');
 
-            // Crear headers dinámicos
+            // Crear headers dinámicos (nuevo orden solicitado)
+            // Orden: Apellido Familia, Tipo Ruta, Dirección Principal, Dirección Alterna,
+            // Hora AM, Parada AM, Hora MD, Parada MD, Hora PM, Parada PM,
+            // (Estudiantes...), Nombre Padre, Email Padre
             const baseHeaders = [
-                "Tipo Ruta",
                 "Apellido Familia",
-                "Nombre Padre",
-                "Email Padre",
+                "Tipo Ruta",
                 "Dirección Principal",
                 "Dirección Alterna",
                 "Hora AM",
@@ -1935,7 +1936,7 @@ const RolesManagementPage = () => {
                 studentHeaders.push(`Estudiante ${i} - Ruta PM`);
             }
 
-            const headers = [...baseHeaders, ...studentHeaders];
+            const headers = [...baseHeaders, ...studentHeaders, 'Nombre Padre', 'Email Padre'];
             const familiesHeaderRow = familiesWorksheet.addRow(headers);
 
             // Estilo para headers de familias
@@ -2042,11 +2043,11 @@ const RolesManagementPage = () => {
                 }
 
                 // Datos base incluyendo horas y paradas familiares
+                // Nuevo orden: Apellido Familia, Tipo Ruta, Dirección Principal, Dirección Alterna,
+                // Hora AM, Parada AM, Hora MD, Parada MD, Hora PM, Parada PM
                 const baseData = [
-                    fd.routeType || "",
                     fd.familyLastName || "",
-                    user.name || "",
-                    user.email || "",
+                    fd.routeType || "",
                     fd.mainAddress || "",
                     fd.alternativeAddress || "",
                     familyHoraAM,
@@ -2118,11 +2119,11 @@ const RolesManagementPage = () => {
 
                                 if (hour !== null) {
                                     if (hour >= 0 && hour < 12 && !rutaAM) {
-                                        rutaAM = "N/A";
+                                        rutaAM = "";
                                     } else if (hour === 12 && !rutaMD) {
-                                        rutaMD = "N/A";
+                                        rutaMD = "";
                                     } else if (hour >= 13 && hour <= 23 && !rutaPM) {
-                                        rutaPM = "N/A";
+                                        rutaPM = "";
                                     }
                                 }
                             });
@@ -2140,7 +2141,8 @@ const RolesManagementPage = () => {
                     }
                 }
 
-                const rowData = [...baseData, ...studentData];
+                // Agregar Nombre Padre y Email Padre al final según especificación
+                const rowData = [...baseData, ...studentData, user.name || "", user.email || ""]; 
                 const row = familiesWorksheet.addRow(rowData);
 
                 // Estilo alternado para filas de familias
