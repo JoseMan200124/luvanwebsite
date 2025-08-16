@@ -456,6 +456,363 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
     );
 };
 
+/* ================== MODAL: Edición Masiva de Rutas (Bulk) ================== */
+const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
+    const [selectedSchool, setSelectedSchool] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [studentsList, setStudentsList] = useState([]); // rows metadata
+    const [schoolSchedules, setSchoolSchedules] = useState([]);
+    const [studentSchedules, setStudentSchedules] = useState({}); // { studentId: [horario,...] }
+    const [assignments, setAssignments] = useState({}); // { studentId: [{ horario, buses: [] }, ...] }
+    const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        if (!open) return;
+        setSelectedSchool('');
+        setStudentsList([]);
+        setSchoolSchedules([]);
+        setStudentSchedules({});
+        setAssignments({});
+    }, [open]);
+
+    const getScheduleOptionsFromSchool = (schoolId) => {
+        if (!schoolSchedules || !Array.isArray(schoolSchedules)) return [];
+        return schoolSchedules.flatMap(sch => (sch.times || []).map(t => `${sch.day} ${t}`));
+    };
+
+    const fetchSchoolSchedules = async (schoolId) => {
+        try {
+            const resp = await api.get(`/schools/${schoolId}`);
+            setSchoolSchedules(resp.data.school?.schedules || []);
+        } catch (err) {
+            console.error('[BulkRouteEditorModal] Error fetching school schedules:', err);
+            setSchoolSchedules([]);
+        }
+    };
+
+    const fetchStudentsForSchool = async (schoolId) => {
+        setLoading(true);
+        try {
+            // fetch users in batches
+            let allUsers = [];
+            let page = 0;
+            const limit = 500;
+            let total = 0;
+            let fetched = 0;
+
+            const firstResp = await api.get('/users', { params: { page, limit } });
+            allUsers = firstResp.data.users || [];
+            total = firstResp.data.total || allUsers.length;
+            fetched = allUsers.length;
+
+            while (fetched < total) {
+                page += 1;
+                const resp = await api.get('/users', { params: { page, limit } });
+                const usersBatch = resp.data.users || [];
+                allUsers = allUsers.concat(usersBatch);
+                fetched += usersBatch.length;
+                if (usersBatch.length === 0) break;
+            }
+
+            const parents = allUsers.filter(u => u.Role && u.Role.name === 'Padre' && u.FamilyDetail && String(u.school) === String(schoolId));
+
+            const rows = [];
+            parents.forEach(user => {
+                const fd = user.FamilyDetail || {};
+                (fd.Students || []).forEach(student => {
+                    rows.push({
+                        studentId: student.id,
+                        familyLastName: fd.familyLastName || '',
+                        studentName: student.fullName || '',
+                        grade: student.grade || ''
+                    });
+                });
+            });
+
+            setStudentsList(rows);
+
+            // fetch existing assignments per student to populate studentSchedules & assignments
+            const newSchedControls = {};
+            const newAssignments = {};
+            await Promise.all(rows.map(async (r) => {
+                try {
+                    const resp = await api.get(`/students/${r.studentId}/assign-buses`);
+                    const asgs = resp.data.assignments || [];
+                    // build assignments structure
+                    const arr = [];
+                    asgs.forEach(a => {
+                        (a.assignedSchedule || []).forEach(h => {
+                            let hObj = arr.find(x => x.horario === h);
+                            if (!hObj) {
+                                hObj = { horario: h, buses: [] };
+                                arr.push(hObj);
+                            }
+                            if (!hObj.buses.includes(a.busId)) hObj.buses.push(a.busId);
+                        });
+                    });
+                    newAssignments[r.studentId] = arr;
+                    newSchedControls[r.studentId] = arr.map(x => x.horario);
+                } catch (err) {
+                    newAssignments[r.studentId] = [];
+                    newSchedControls[r.studentId] = [];
+                }
+            }));
+
+            setAssignments(newAssignments);
+            setStudentSchedules(newSchedControls);
+        } catch (err) {
+            console.error('[BulkRouteEditorModal] Error fetching students:', err);
+            setStudentsList([]);
+        }
+        setLoading(false);
+    };
+
+    const getBusScheduleOptions = (bus) => {
+        if (!bus.schedule || !Array.isArray(bus.schedule)) return [];
+        const opts = [];
+        bus.schedule.forEach(sch => {
+            (sch.times || []).forEach(t => opts.push(`${sch.day} ${t}`));
+        });
+        return opts;
+    };
+
+    const handleStudentScheduleChange = (studentId, idx, value) => {
+        setStudentSchedules(prev => {
+            const arr = prev[studentId] ? [...prev[studentId]] : [];
+            const prevHorario = arr[idx];
+            arr[idx] = value;
+            // remove assignments tied to previousHorario
+            setAssignments(prevA => {
+                const arrAssign = prevA[studentId] ? [...prevA[studentId]] : [];
+                const filtered = arrAssign.filter(h => h.horario !== prevHorario);
+                return { ...prevA, [studentId]: filtered };
+            });
+            return { ...prev, [studentId]: arr };
+        });
+    };
+
+    const handleAddScheduleSelector = (studentId) => {
+        setStudentSchedules(prev => ({ ...prev, [studentId]: [...(prev[studentId] || []), ''] }));
+    };
+
+    const handleRemoveScheduleSelector = (studentId, idx) => {
+        setStudentSchedules(prev => {
+            const arr = prev[studentId] ? [...prev[studentId]] : [];
+            const removed = arr[idx];
+            arr.splice(idx, 1);
+            setAssignments(prevA => {
+                const arrAssign = prevA[studentId] ? [...prevA[studentId]] : [];
+                const newArrAssign = arrAssign.filter(h => h.horario !== removed);
+                return { ...prevA, [studentId]: newArrAssign };
+            });
+            return { ...prev, [studentId]: arr };
+        });
+    };
+
+    const handleToggleBus = (studentId, horario, busId) => {
+        setAssignments(prev => {
+            const arr = prev[studentId] ? [...prev[studentId]] : [];
+            let horarioObj = arr.find(h => h.horario === horario);
+            if (!horarioObj) {
+                horarioObj = { horario, buses: [busId] };
+                return { ...prev, [studentId]: [...arr, horarioObj] };
+            }
+            const busesArr = horarioObj.buses.includes(busId) ? horarioObj.buses.filter(id => id !== busId) : [...horarioObj.buses, busId];
+            const newArr = arr.map(h => h.horario === horario ? { ...h, buses: busesArr } : h).filter(h => h.buses.length > 0);
+            return { ...prev, [studentId]: newArr };
+        });
+    };
+
+    const isBusChecked = (studentId, horario, busId) => {
+        const arr = assignments[studentId] || [];
+        const horarioObj = arr.find(h => h.horario === horario);
+        return horarioObj ? horarioObj.buses.includes(busId) : false;
+    };
+
+    const getBusOptionsForSchool = (schoolId) => {
+        return (buses || []).filter(bus => bus.pilot && String(bus.pilot.school) === String(schoolId));
+    };
+
+    const saveAll = async () => {
+        setLoading(true);
+        try {
+            await Promise.all(studentsList.map(async (r) => {
+                const studId = r.studentId;
+                const studentAssign = assignments[studId] || [];
+                // regroup by busId
+                const busToHorarios = {};
+                studentAssign.forEach(h => {
+                    h.buses.forEach(busId => {
+                        if (!busToHorarios[busId]) busToHorarios[busId] = [];
+                        if (!busToHorarios[busId].includes(h.horario)) busToHorarios[busId].push(h.horario);
+                    });
+                });
+                const assignedBuses = Object.entries(busToHorarios).map(([busId, horarios]) => ({ busId: Number(busId), assignedSchedule: horarios }));
+                await api.put(`/students/${studId}/assign-buses`, { assignedBuses });
+            }));
+            setLoading(false);
+            if (onSaved) onSaved();
+            onClose();
+        } catch (err) {
+            console.error('[BulkRouteEditorModal] Save error:', err);
+            setLoading(false);
+        }
+    };
+
+    // precompute filtered list for rendering (search)
+    const q = (searchQuery || '').trim().toLowerCase();
+    // Apply search filtering only after a school is selected
+    const filteredStudents = selectedSchool && q
+        ? studentsList.filter(s =>
+            (s.familyLastName || '').toLowerCase().includes(q) ||
+            (s.studentName || '').toLowerCase().includes(q) ||
+            (s.grade || '').toLowerCase().includes(q)
+        ) : studentsList;
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl">
+            <DialogTitle>Edición Masiva de Rutas</DialogTitle>
+            <DialogContent>
+                <Box sx={{ mb: 2 }}>
+                    <FormControl fullWidth>
+                        <InputLabel>Selecciona Colegio</InputLabel>
+                        <Select
+                            value={selectedSchool}
+                            label="Selecciona Colegio"
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedSchool(val);
+                                // fetch schedules and students
+                                fetchSchoolSchedules(val);
+                                fetchStudentsForSchool(val);
+                            }}
+                        >
+                            <MenuItem value="">
+                                <em>Seleccione</em>
+                            </MenuItem>
+                            {schools.map(s => (
+                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Box>
+
+                {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                        <CircularProgress />
+                    </Box>
+                ) : (
+                    <>
+                        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                            <TextField
+                                label="Buscar familias / alumnos / grado"
+                                size="small"
+                                fullWidth
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </Box>
+                        <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                        <Table stickyHeader>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Apellido Familia</TableCell>
+                                    <TableCell>Alumno</TableCell>
+                                    <TableCell>Grado</TableCell>
+                                    <TableCell>Horarios</TableCell>
+                                    <TableCell>Buses</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {filteredStudents.map((r) => {
+                                    const schedArr = studentSchedules[r.studentId] || [];
+                                    const allHorarioOptions = getScheduleOptionsFromSchool(selectedSchool);
+                                    return (
+                                        <TableRow key={r.studentId}>
+                                            <TableCell>{r.familyLastName}</TableCell>
+                                            <TableCell>{r.studentName}</TableCell>
+                                            <TableCell>{r.grade}</TableCell>
+                                            <TableCell>
+                                                {schedArr.map((selectedSchedule, idx) => {
+                                                    const used = schedArr.filter((_, i) => i !== idx);
+                                                    const availableOptions = allHorarioOptions.filter(opt => !used.includes(opt));
+                                                    return (
+                                                        <Box key={idx} sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
+                                                            <FormControl sx={{ flex: 1 }} size="small">
+                                                                <InputLabel>Horario</InputLabel>
+                                                                <Select
+                                                                    value={selectedSchedule}
+                                                                    label="Horario"
+                                                                    onChange={(e) => handleStudentScheduleChange(r.studentId, idx, e.target.value)}
+                                                                >
+                                                                    <MenuItem value=""><em>Seleccione</em></MenuItem>
+                                                                    {availableOptions.map(opt => (
+                                                                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                                                                    ))}
+                                                                </Select>
+                                                            </FormControl>
+                                                            <IconButton color="error" onClick={() => handleRemoveScheduleSelector(r.studentId, idx)} sx={{ ml: 1 }}>
+                                                                <Delete />
+                                                            </IconButton>
+                                                        </Box>
+                                                    );
+                                                })}
+                                                <Button size="small" variant="outlined" onClick={() => handleAddScheduleSelector(r.studentId)}>Agregar horario</Button>
+                                            </TableCell>
+                                            <TableCell>
+                                                {schedArr.length === 0 ? (
+                                                    <Typography variant="body2" color="textSecondary">Agrega un horario para asignar buses</Typography>
+                                                ) : (
+                                                    <div style={{ maxHeight: 220, overflow: 'auto' }}>
+                                                        {schedArr.map((horario, hIdx) => {
+                                                            const allBusesForSchool = getBusOptionsForSchool(selectedSchool);
+                                                            const compatibleBuses = allBusesForSchool.filter(bus => {
+                                                                const opts = getBusScheduleOptions(bus);
+                                                                return opts.includes(horario);
+                                                            });
+                                                            return (
+                                                                <Box key={hIdx} sx={{ mb: 1, p: 1, border: '1px solid #eee', borderRadius: 1 }}>
+                                                                    <Typography variant="subtitle2" sx={{ mb: 0.5 }}>{horario}</Typography>
+                                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                                        {compatibleBuses.length === 0 ? (
+                                                                            <Typography variant="body2" color="textSecondary">No hay buses compatibles con este horario</Typography>
+                                                                        ) : (
+                                                                            compatibleBuses.map(bus => (
+                                                                                <Box key={bus.id} sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                                    <Checkbox
+                                                                                        checked={isBusChecked(r.studentId, horario, bus.id)}
+                                                                                        onChange={() => handleToggleBus(r.studentId, horario, bus.id)}
+                                                                                    />
+                                                                                    <span>{`Ruta ${bus.routeNumber}${bus.plate ? ` - ${bus.plate}` : ''}`}</span>
+                                                                                </Box>
+                                                                            ))
+                                                                        )}
+                                                                    </div>
+                                                                </Box>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                        </>
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Cerrar</Button>
+                <Button variant="contained" onClick={saveAll} disabled={loading || !selectedSchool}>
+                    {loading ? 'Guardando...' : 'Guardar Asignaciones'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+
 /* ================== Responsive Table & Mobile Cards =================== */
 const ResponsiveTableHead = styled(TableHead)`
     @media (max-width: 600px) {
@@ -717,6 +1074,7 @@ const RolesManagementPage = () => {
 
     const [schoolGrades, setSchoolGrades] = useState([]);
     const [openCircularModal, setOpenCircularModal] = useState(false);
+    const [openBulkRouteEditor, setOpenBulkRouteEditor] = useState(false);
 
     // Submodal para asignar buses (sólo para padres)
     const [assignBusesOpen, setAssignBusesOpen] = useState(false);
@@ -2641,6 +2999,13 @@ const RolesManagementPage = () => {
                     >
                         Reporte de Rutas
                     </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => setOpenBulkRouteEditor(true)}
+                    >
+                        Edición Masiva Rutas
+                    </Button>
                 </div>
             </Box>
             {loading ? (
@@ -2905,6 +3270,20 @@ const RolesManagementPage = () => {
                             />
                         </Paper>
                     )}
+
+                        {/* Modal de edición masiva de rutas */}
+                        <BulkRouteEditorModal
+                            open={openBulkRouteEditor}
+                            onClose={() => setOpenBulkRouteEditor(false)}
+                            buses={buses}
+                            schools={schools}
+                            onSaved={() => {
+                                // refrescar usuarios y buses
+                                fetchUsers();
+                                fetchBuses();
+                                setSnackbar({ open: true, message: 'Asignaciones masivas guardadas', severity: 'success' });
+                            }}
+                        />
                 </>
             )}
 
