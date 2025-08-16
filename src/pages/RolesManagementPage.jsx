@@ -18,23 +18,22 @@ import {
     TableContainer,
     TablePagination,
     Dialog,
-    DialogActions,
-    DialogContent,
-    DialogContentText,
     DialogTitle,
-    Snackbar,
-    Alert,
+    DialogContent,
+    DialogActions,
+    DialogContentText,
     CircularProgress,
     Grid,
     Checkbox,
     Box,
-    Link,
+    // Link,
     useMediaQuery,
     useTheme,
     Chip,
     TableSortLabel,
     FormControlLabel
 } from '@mui/material';
+import { Snackbar, Alert } from '@mui/material';
 import {
     Edit,
     Delete,
@@ -248,23 +247,7 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
         });
     };
 
-    // Devolver array de horarios actualmente seleccionados
-    const getSelectedSchedules = (studentId, busId) => {
-        const currentList = assignments[studentId] || [];
-        const found = currentList.find(item => item.busId === busId);
-        return found ? found.assignedSchedule : [];
-    };
-
-    // Manejar el cambio de horarios (multiple)
-    const handleSchedulesChange = (studentId, busId, newSchedules) => {
-        setAssignments((prev) => {
-            const currentList = prev[studentId] || [];
-            const newArray = currentList.map((item) =>
-                item.busId === busId ? { ...item, assignedSchedule: newSchedules } : item
-            );
-            return { ...prev, [studentId]: newArray };
-        });
-    };
+    // (Removed unused helpers to reduce lint noise)
 
     // Al guardar, transforma assignments al formato esperado por el backend
     const handleSave = async () => {
@@ -456,6 +439,289 @@ const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveS
     );
 };
 
+/* ================== MODAL: Edición Masiva Horarios de Parada (Bulk) ================== */
+const BulkStopScheduleEditorModal = ({ open, onClose, schools, onSaved }) => {
+    const [selectedSchool, setSelectedSchool] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [familiesList, setFamiliesList] = useState([]); // rows metadata: { parentId, familyLastName, students }
+    const [schoolSchedules, setSchoolSchedules] = useState([]);
+    const [familySlots, setFamilySlots] = useState({}); // { parentId: [{ time, note }, ...] }
+    const [selectedForSave, setSelectedForSave] = useState({}); // { parentId: boolean }
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        if (!open) return;
+        setSelectedSchool('');
+        setFamiliesList([]);
+        setSchoolSchedules([]);
+        setFamilySlots({});
+    }, [open]);
+
+    const fetchSchoolSchedules = async (schoolId) => {
+        try {
+            const resp = await api.get(`/schools/${schoolId}`);
+            setSchoolSchedules(resp.data.school?.schedules || []);
+        } catch (err) {
+            console.error('[BulkStopScheduleEditorModal] Error fetching school schedules:', err);
+            setSchoolSchedules([]);
+        }
+    };
+
+    const fetchFamiliesForSchool = async (schoolId) => {
+        setLoading(true);
+        try {
+            let allUsers = [];
+            let page = 0;
+            const limit = 500;
+            let total = 0;
+            let fetched = 0;
+
+            const firstResp = await api.get('/users', { params: { page, limit } });
+            allUsers = firstResp.data.users || [];
+            total = firstResp.data.total || allUsers.length;
+            fetched = allUsers.length;
+
+            while (fetched < total) {
+                page += 1;
+                const resp = await api.get('/users', { params: { page, limit } });
+                const usersBatch = resp.data.users || [];
+                allUsers = allUsers.concat(usersBatch);
+                fetched += usersBatch.length;
+                if (usersBatch.length === 0) break;
+            }
+
+            const parents = allUsers.filter(u => u.Role && u.Role.name === 'Padre' && u.FamilyDetail && String(u.school) === String(schoolId));
+
+            const rows = parents.map(user => {
+                const fd = user.FamilyDetail || {};
+                const students = (fd.Students || []).map(s => s.fullName).join(', ');
+                return { parentId: user.id, familyLastName: fd.familyLastName || '', students };
+            });
+
+            setFamiliesList(rows);
+
+            const slotsObj = {};
+            parents.forEach(user => {
+                const fd = user.FamilyDetail || {};
+                const slots = (fd.ScheduleSlots || []).map(s => ({ time: s.time || '', note: s.note || '' }));
+                slotsObj[user.id] = slots;
+            });
+            setFamilySlots(slotsObj);
+        } catch (err) {
+            console.error('[BulkStopScheduleEditorModal] Error fetching families:', err);
+            setFamiliesList([]);
+            setFamilySlots({});
+        }
+        setLoading(false);
+    };
+
+    // (removed unused getScheduleOptionsFromSchool)
+
+    const handleSlotChange = (parentId, idx, field, value) => {
+        setFamilySlots(prev => {
+            const arr = prev[parentId] ? [...prev[parentId]] : [];
+            if (!arr[idx]) arr[idx] = { time: '', note: '' };
+            arr[idx] = { ...arr[idx], [field]: value };
+            // mark as modified only if not already marked to avoid re-renders on each keystroke
+            setSelectedForSave(sel => {
+                if (sel && sel[parentId]) return sel;
+                return { ...sel, [parentId]: true };
+            });
+            return { ...prev, [parentId]: arr };
+        });
+    };
+
+    const handleAddSlot = (parentId) => {
+        setFamilySlots(prev => ({ ...prev, [parentId]: [...(prev[parentId] || []), { time: '', note: '' }] }));
+    // mark added slot; only set if not already marked
+    setSelectedForSave(sel => {
+        if (sel && sel[parentId]) return sel;
+        return { ...sel, [parentId]: true };
+    });
+    };
+
+    const handleRemoveSlot = (parentId, idx) => {
+        setFamilySlots(prev => {
+            const arr = prev[parentId] ? [...prev[parentId]] : [];
+            arr.splice(idx, 1);
+            // mark removed slot; only set if not already marked
+            setSelectedForSave(sel => {
+                if (sel && sel[parentId]) return sel;
+                return { ...sel, [parentId]: true };
+            });
+            return { ...prev, [parentId]: arr };
+        });
+    };
+
+    const toggleSelectForSave = (parentId) => {
+        setSelectedForSave(prev => ({ ...prev, [parentId]: !prev[parentId] }));
+    };
+
+    const saveAll = async () => {
+        setLoading(true);
+        try {
+            const toProcess = familiesList.filter(r => selectedForSave[r.parentId]);
+            if (toProcess.length === 0) {
+                setLoading(false);
+                return;
+            }
+            await Promise.all(toProcess.map(async (r) => {
+                const parentId = r.parentId;
+                const slots = (familySlots[parentId] || []).filter(s => s.time || s.note).map(s => ({ time: s.time, note: s.note }));
+                try {
+                    // Use PATCH to update only scheduleSlots and avoid fetching full user
+                    await api.patch(`/users/${parentId}`, { familyDetail: { scheduleSlots: slots } });
+                } catch (err) {
+                    console.error(`[BulkStopScheduleEditorModal] Error patching parent ${parentId}:`, err);
+                }
+            }));
+            setLoading(false);
+            if (onSaved) onSaved();
+            onClose();
+        } catch (err) {
+            console.error('[BulkStopScheduleEditorModal] Save error:', err);
+            setLoading(false);
+        }
+    };
+
+    // precompute filtered list only after school selected
+    const q = (searchQuery || '').trim().toLowerCase();
+    const filteredFamilies = selectedSchool && q
+        ? familiesList.filter(f => (f.familyLastName || '').toLowerCase().includes(q) || (f.students || '').toLowerCase().includes(q))
+        : familiesList;
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl">
+            <DialogTitle>Edición Masiva Horarios de Parada</DialogTitle>
+            <DialogContent>
+                <Box sx={{ mb: 2 }}>
+                    <FormControl fullWidth>
+                        <InputLabel>Selecciona Colegio</InputLabel>
+                        <Select
+                            value={selectedSchool}
+                            label="Selecciona Colegio"
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedSchool(val);
+                                fetchSchoolSchedules(val);
+                                fetchFamiliesForSchool(val);
+                            }}
+                        >
+                            <MenuItem value="">
+                                <em>Seleccione</em>
+                            </MenuItem>
+                            {schools.map(s => (
+                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Box>
+
+                {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                        <CircularProgress />
+                    </Box>
+                ) : (
+                    <>
+                        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                            <TextField
+                                label="Buscar familias / alumnos"
+                                size="small"
+                                fullWidth
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </Box>
+                        <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                            <Table stickyHeader>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell padding="checkbox" />
+                                        <TableCell>Apellido Familia</TableCell>
+                                        <TableCell>Alumnos</TableCell>
+                                        <TableCell>Horarios & Paradas</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {filteredFamilies.map(f => {
+                                        const slots = familySlots[f.parentId] || [];
+                                        return (
+                                            <TableRow key={f.parentId}>
+                                                <TableCell padding="checkbox">
+                                                    <Checkbox
+                                                        checked={!!selectedForSave[f.parentId]}
+                                                        onChange={() => toggleSelectForSave(f.parentId)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>{f.familyLastName}</TableCell>
+                                                <TableCell>{f.students}</TableCell>
+                                                <TableCell>
+                                                    {slots.map((s, idx) => {
+                                                        const used = slots.filter((_, i) => i !== idx).map(x => x.time);
+                                                        const isDup = s.time && used.includes(s.time);
+                                                        return (
+                                                            <Box key={idx} sx={{ mb: 1, display: 'flex', gap: 1, alignItems: 'center' }}>
+                                                                <TextField
+                                                                    type="time"
+                                                                    label="Horario"
+                                                                    size="small"
+                                                                    value={s.time || ''}
+                                                                    onChange={(e) => handleSlotChange(f.parentId, idx, 'time', e.target.value)}
+                                                                    sx={{ minWidth: 160 }}
+                                                                    InputLabelProps={{ shrink: true }}
+                                                                    error={isDup}
+                                                                    helperText={isDup ? 'Horario duplicado' : ''}
+                                                                />
+                                                                <TextField
+                                                                    label="Nota / Parada"
+                                                                    size="small"
+                                                                    value={s.note}
+                                                                    onChange={(e) => handleSlotChange(f.parentId, idx, 'note', e.target.value)}
+                                                                    sx={{ flex: 1 }}
+                                                                />
+                                                                <IconButton color="error" onClick={() => handleRemoveSlot(f.parentId, idx)}>
+                                                                    <Delete />
+                                                                </IconButton>
+                                                            </Box>
+                                                        );
+                                                    })}
+                                                    <Button size="small" variant="outlined" onClick={() => handleAddSlot(f.parentId)}>Agregar Parada</Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </>
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Cerrar</Button>
+                <Button
+                    variant="contained"
+                    onClick={() => setConfirmOpen(true)}
+                    disabled={loading || !selectedSchool || Object.keys(selectedForSave).filter(id => selectedForSave[id]).length === 0}
+                >
+                    {loading ? 'Guardando...' : 'Guardar Paradas'}
+                </Button>
+            </DialogActions>
+
+            <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Confirmar guardado de paradas</DialogTitle>
+                <DialogContent>
+                    <Typography>Se actualizarán las paradas para {Object.keys(selectedForSave).filter(id => selectedForSave[id]).length} familias.</Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmOpen(false)}>Cancelar</Button>
+                    <Button onClick={async () => { setConfirmOpen(false); await saveAll(true); }} variant="contained" color="primary">Confirmar</Button>
+                </DialogActions>
+            </Dialog>
+        </Dialog>
+    );
+};
+
 /* ================== MODAL: Edición Masiva de Rutas (Bulk) ================== */
 const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
     const [selectedSchool, setSelectedSchool] = useState('');
@@ -464,6 +730,8 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
     const [schoolSchedules, setSchoolSchedules] = useState([]);
     const [studentSchedules, setStudentSchedules] = useState({}); // { studentId: [horario,...] }
     const [assignments, setAssignments] = useState({}); // { studentId: [{ horario, buses: [] }, ...] }
+    const [selectedForSaveRoutes, setSelectedForSaveRoutes] = useState({}); // { studentId: boolean }
+    const [confirmOpenRoutes, setConfirmOpenRoutes] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
@@ -473,6 +741,8 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
         setSchoolSchedules([]);
         setStudentSchedules({});
         setAssignments({});
+    setSelectedForSaveRoutes({});
+    setConfirmOpenRoutes(false);
     }, [open]);
 
     const getScheduleOptionsFromSchool = (schoolId) => {
@@ -587,12 +857,15 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                 const filtered = arrAssign.filter(h => h.horario !== prevHorario);
                 return { ...prevA, [studentId]: filtered };
             });
+            // mark student as selected for save only once to avoid re-renders
+            setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
             return { ...prev, [studentId]: arr };
         });
     };
 
     const handleAddScheduleSelector = (studentId) => {
         setStudentSchedules(prev => ({ ...prev, [studentId]: [...(prev[studentId] || []), ''] }));
+    setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
     };
 
     const handleRemoveScheduleSelector = (studentId, idx) => {
@@ -605,6 +878,7 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                 const newArrAssign = arrAssign.filter(h => h.horario !== removed);
                 return { ...prevA, [studentId]: newArrAssign };
             });
+            setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
             return { ...prev, [studentId]: arr };
         });
     };
@@ -615,12 +889,20 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
             let horarioObj = arr.find(h => h.horario === horario);
             if (!horarioObj) {
                 horarioObj = { horario, buses: [busId] };
+                // mark student as selected for save only once
+                setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
                 return { ...prev, [studentId]: [...arr, horarioObj] };
             }
             const busesArr = horarioObj.buses.includes(busId) ? horarioObj.buses.filter(id => id !== busId) : [...horarioObj.buses, busId];
             const newArr = arr.map(h => h.horario === horario ? { ...h, buses: busesArr } : h).filter(h => h.buses.length > 0);
+            // mark student as selected for save only once
+            setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
             return { ...prev, [studentId]: newArr };
         });
+    };
+
+    const toggleSelectForSaveRoutes = (studentId) => {
+        setSelectedForSaveRoutes(prev => ({ ...prev, [studentId]: !prev[studentId] }));
     };
 
     const isBusChecked = (studentId, horario, busId) => {
@@ -636,7 +918,12 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
     const saveAll = async () => {
         setLoading(true);
         try {
-            await Promise.all(studentsList.map(async (r) => {
+            const toProcess = studentsList.filter(r => selectedForSaveRoutes[r.studentId]);
+            if (toProcess.length === 0) {
+                setLoading(false);
+                return;
+            }
+            await Promise.all(toProcess.map(async (r) => {
                 const studId = r.studentId;
                 const studentAssign = assignments[studId] || [];
                 // regroup by busId
@@ -716,6 +1003,7 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                         <Table stickyHeader>
                             <TableHead>
                                 <TableRow>
+                                    <TableCell padding="checkbox" />
                                     <TableCell>Apellido Familia</TableCell>
                                     <TableCell>Alumno</TableCell>
                                     <TableCell>Grado</TableCell>
@@ -729,6 +1017,12 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                                     const allHorarioOptions = getScheduleOptionsFromSchool(selectedSchool);
                                     return (
                                         <TableRow key={r.studentId}>
+                                            <TableCell padding="checkbox">
+                                                <Checkbox
+                                                    checked={!!selectedForSaveRoutes[r.studentId]}
+                                                    onChange={() => toggleSelectForSaveRoutes(r.studentId)}
+                                                />
+                                            </TableCell>
                                             <TableCell>{r.familyLastName}</TableCell>
                                             <TableCell>{r.studentName}</TableCell>
                                             <TableCell>{r.grade}</TableCell>
@@ -805,10 +1099,25 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Cerrar</Button>
-                <Button variant="contained" onClick={saveAll} disabled={loading || !selectedSchool}>
+                <Button
+                    variant="contained"
+                    onClick={() => setConfirmOpenRoutes(true)}
+                    disabled={loading || !selectedSchool || Object.keys(selectedForSaveRoutes).filter(id => selectedForSaveRoutes[id]).length === 0}
+                >
                     {loading ? 'Guardando...' : 'Guardar Asignaciones'}
                 </Button>
             </DialogActions>
+
+            <Dialog open={confirmOpenRoutes} onClose={() => setConfirmOpenRoutes(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Confirmar guardado de rutas</DialogTitle>
+                <DialogContent>
+                    <Typography>Se actualizarán las rutas para {Object.keys(selectedForSaveRoutes).filter(id => selectedForSaveRoutes[id]).length} alumnos.</Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmOpenRoutes(false)}>Cancelar</Button>
+                    <Button onClick={async () => { setConfirmOpenRoutes(false); await saveAll(); }} variant="contained" color="primary">Confirmar</Button>
+                </DialogActions>
+            </Dialog>
         </Dialog>
     );
 };
@@ -1018,7 +1327,7 @@ const SendContractDialog = ({ open, onClose, user, contracts, onSent }) => {
 const RolesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const { auth } = useContext(AuthContext);
+    useContext(AuthContext);
 
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
@@ -1072,9 +1381,10 @@ const RolesManagementPage = () => {
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
 
-    const [schoolGrades, setSchoolGrades] = useState([]);
+    const [, setSchoolGrades] = useState([]);
     const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openBulkRouteEditor, setOpenBulkRouteEditor] = useState(false);
+    const [openBulkStopEditor, setOpenBulkStopEditor] = useState(false);
 
     // Submodal para asignar buses (sólo para padres)
     const [assignBusesOpen, setAssignBusesOpen] = useState(false);
@@ -3006,6 +3316,13 @@ const RolesManagementPage = () => {
                     >
                         Edición Masiva Rutas
                     </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => setOpenBulkStopEditor(true)}
+                    >
+                        Edición Masiva Horarios de Parada
+                    </Button>
                 </div>
             </Box>
             {loading ? (
@@ -3282,6 +3599,16 @@ const RolesManagementPage = () => {
                                 fetchUsers();
                                 fetchBuses();
                                 setSnackbar({ open: true, message: 'Asignaciones masivas guardadas', severity: 'success' });
+                            }}
+                        />
+                        {/* Modal de edición masiva de paradas */}
+                        <BulkStopScheduleEditorModal
+                            open={openBulkStopEditor}
+                            onClose={() => setOpenBulkStopEditor(false)}
+                            schools={schools}
+                            onSaved={() => {
+                                fetchUsers();
+                                setSnackbar({ open: true, message: 'Horarios de parada guardados', severity: 'success' });
                             }}
                         />
                 </>
