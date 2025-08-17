@@ -2257,13 +2257,13 @@ const RolesManagementPage = () => {
                                                 const hour = parseInt(timeMatch[1]);
                                                 // Clasificar por hora:
                                                 // AM: 0-11 horas (00:00 - 11:59)
-                                                // MD: 12 horas (12:00 - 12:59)
-                                                // PM: 13-23 horas (13:00 - 23:59)
+                                                // MD: 12:00 - 14:59 (12 <= hour < 15)
+                                                // PM: 15:00 - 23:59 (hour >= 15)
                                                 if (hour >= 0 && hour < 12) {
                                                     routeSummary[routeNumber].cantAM++;
-                                                } else if (hour === 12) {
+                                                } else if (hour >= 12 && hour < 15) {
                                                     routeSummary[routeNumber].cantMD++;
-                                                } else if (hour >= 13 && hour <= 23) {
+                                                } else if (hour >= 15 && hour <= 23) {
                                                     routeSummary[routeNumber].cantPM++;
                                                 } else {
                                                     // Hora inválida, contar como AM por defecto
@@ -2286,13 +2286,13 @@ const RolesManagementPage = () => {
                                                 const hour = parseInt(timeMatch[1]);
                                                 // Clasificar por hora:
                                                 // AM: 0-11 horas (00:00 - 11:59)
-                                                // MD: 12 horas (12:00 - 12:59)
-                                                // PM: 13-23 horas (13:00 - 23:59)
+                                                // MD: 12:00 - 14:59 (12 <= hour < 15)
+                                                // PM: 15:00 - 23:59 (hour >= 15)
                                                 if (hour >= 0 && hour < 12) {
                                                     routeSummary[routeNumber].cantAM++;
-                                                } else if (hour === 12) {
+                                                } else if (hour >= 12 && hour < 15) {
                                                     routeSummary[routeNumber].cantMD++;
-                                                } else if (hour >= 13 && hour <= 23) {
+                                                } else if (hour >= 15 && hour <= 23) {
                                                     routeSummary[routeNumber].cantPM++;
                                                 } else {
                                                     routeSummary[routeNumber].cantAM++;
@@ -2425,9 +2425,9 @@ const RolesManagementPage = () => {
                                                     const hour = parseInt(timeMatch[1]);
                                                     if (hour >= 0 && hour < 12) {
                                                         timeSummary.cantAM++;
-                                                    } else if (hour === 12) {
+                                                    } else if (hour >= 12 && hour < 15) {
                                                         timeSummary.cantMD++;
-                                                    } else if (hour >= 13 && hour <= 23) {
+                                                    } else if (hour >= 15 && hour <= 23) {
                                                         timeSummary.cantPM++;
                                                     } else {
                                                         timeSummary.cantAM++;
@@ -2442,13 +2442,13 @@ const RolesManagementPage = () => {
                                         student.ScheduleSlots.forEach(slot => {
                                             const timeSlot = slot.timeSlot || "";
                                             const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                                            if (timeMatch) {
+                                                if (timeMatch) {
                                                 const hour = parseInt(timeMatch[1]);
                                                 if (hour >= 0 && hour < 12) {
                                                     timeSummary.cantAM++;
-                                                } else if (hour === 12) {
+                                                } else if (hour >= 12 && hour < 15) {
                                                     timeSummary.cantMD++;
-                                                } else if (hour >= 13 && hour <= 23) {
+                                                } else if (hour >= 15 && hour <= 23) {
                                                     timeSummary.cantPM++;
                                                 } else {
                                                     timeSummary.cantAM++;
@@ -2470,9 +2470,9 @@ const RolesManagementPage = () => {
                                         const hour = parseInt(timeMatch[1]);
                                         if (hour >= 0 && hour < 12) {
                                             timeSummary.cantAM++;
-                                        } else if (hour === 12) {
+                                        } else if (hour >= 12 && hour < 15) {
                                             timeSummary.cantMD++;
-                                        } else if (hour >= 13 && hour <= 23) {
+                                        } else if (hour >= 15 && hour <= 23) {
                                             timeSummary.cantPM++;
                                         } else {
                                             timeSummary.cantAM++;
@@ -2689,22 +2689,22 @@ const RolesManagementPage = () => {
 
                         console.log('DEBUG - timeSlot:', timeSlot, 'hour:', hour, 'note:', slot.note);
 
-                        if (hour !== null) {
-                            // Clasificar por hora y asignar a nivel familiar
-                            if (hour >= 0 && hour < 12 && !familyHoraAM) {
-                                familyHoraAM = timeMatch[0];
-                                familyParadaAM = slot.note || "";
-                                console.log('DEBUG - Asignado AM:', familyHoraAM, familyParadaAM);
-                            } else if (hour === 12 && !familyHoraMD) {
-                                familyHoraMD = timeMatch[0];
-                                familyParadaMD = slot.note || "";
-                                console.log('DEBUG - Asignado MD:', familyHoraMD, familyParadaMD);
-                            } else if (hour >= 13 && hour <= 23 && !familyHoraPM) {
-                                familyHoraPM = timeMatch[0];
-                                familyParadaPM = slot.note || "";
-                                console.log('DEBUG - Asignado PM:', familyHoraPM, familyParadaPM);
-                            }
-                        }
+                                        if (hour !== null) {
+                                            // Clasificar por hora y asignar a nivel familiar
+                                            if (hour >= 0 && hour < 12 && !familyHoraAM) {
+                                                familyHoraAM = timeMatch[0];
+                                                familyParadaAM = slot.note || "";
+                                                console.log('DEBUG - Asignado AM:', familyHoraAM, familyParadaAM);
+                                            } else if (hour >= 12 && hour < 15 && !familyHoraMD) {
+                                                familyHoraMD = timeMatch[0];
+                                                familyParadaMD = slot.note || "";
+                                                console.log('DEBUG - Asignado MD:', familyHoraMD, familyParadaMD);
+                                            } else if (hour >= 15 && hour <= 23 && !familyHoraPM) {
+                                                familyHoraPM = timeMatch[0];
+                                                familyParadaPM = slot.note || "";
+                                                console.log('DEBUG - Asignado PM:', familyHoraPM, familyParadaPM);
+                                            }
+                                        }
                     });
                 } else {
                     console.log('DEBUG - Familia no tiene ScheduleSlots');
@@ -2766,9 +2766,9 @@ const RolesManagementPage = () => {
                                                 // Clasificar únicamente por hora para asignar rutas
                                                 if (hour >= 0 && hour < 12 && !rutaAM) {
                                                     rutaAM = routeNumber;
-                                                } else if (hour === 12 && !rutaMD) {
+                                                } else if (hour >= 12 && hour < 15 && !rutaMD) {
                                                     rutaMD = routeNumber;
-                                                } else if (hour >= 13 && hour <= 23 && !rutaPM) {
+                                                } else if (hour >= 15 && hour <= 23 && !rutaPM) {
                                                     rutaPM = routeNumber;
                                                 }
                                             }
@@ -2788,9 +2788,9 @@ const RolesManagementPage = () => {
                                 if (hour !== null) {
                                     if (hour >= 0 && hour < 12 && !rutaAM) {
                                         rutaAM = "";
-                                    } else if (hour === 12 && !rutaMD) {
+                                    } else if (hour >= 12 && hour < 15 && !rutaMD) {
                                         rutaMD = "";
-                                    } else if (hour >= 13 && hour <= 23 && !rutaPM) {
+                                    } else if (hour >= 15 && hour <= 23 && !rutaPM) {
                                         rutaPM = "";
                                     }
                                 }
