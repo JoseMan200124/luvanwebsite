@@ -449,6 +449,7 @@ const BulkStopScheduleEditorModal = ({ open, onClose, schools, onSaved }) => {
     const [selectedForSave, setSelectedForSave] = useState({}); // { parentId: boolean }
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    
 
     useEffect(() => {
         if (!open) return;
@@ -724,67 +725,84 @@ const BulkStopScheduleEditorModal = ({ open, onClose, schools, onSaved }) => {
 
 /* ================== MODAL: Edición Masiva de Rutas (Bulk) ================== */
 const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
-    const [selectedSchool, setSelectedSchool] = useState('');
+    // Now search by family last name instead of selecting a school
+    const [familyLastName, setFamilyLastName] = useState('');
     const [loading, setLoading] = useState(false);
     const [studentsList, setStudentsList] = useState([]); // rows metadata
-    const [schoolSchedules, setSchoolSchedules] = useState([]);
+    // Map schedules per school: { [schoolId]: schedules[] }
+    const [schoolSchedulesById, setSchoolSchedulesById] = useState({});
     const [studentSchedules, setStudentSchedules] = useState({}); // { studentId: [horario,...] }
     const [assignments, setAssignments] = useState({}); // { studentId: [{ horario, buses: [] }, ...] }
     const [selectedForSaveRoutes, setSelectedForSaveRoutes] = useState({}); // { studentId: boolean }
     const [confirmOpenRoutes, setConfirmOpenRoutes] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [localSnackbar, setLocalSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
     useEffect(() => {
         if (!open) return;
-        setSelectedSchool('');
+        setFamilyLastName('');
         setStudentsList([]);
-        setSchoolSchedules([]);
+        setSchoolSchedulesById({});
         setStudentSchedules({});
         setAssignments({});
-    setSelectedForSaveRoutes({});
-    setConfirmOpenRoutes(false);
+        setSelectedForSaveRoutes({});
+        setConfirmOpenRoutes(false);
     }, [open]);
 
     const getScheduleOptionsFromSchool = (schoolId) => {
-        if (!schoolSchedules || !Array.isArray(schoolSchedules)) return [];
-        return schoolSchedules.flatMap(sch => (sch.times || []).map(t => `${sch.day} ${t}`));
+        const schs = schoolSchedulesById[schoolId];
+        if (!schs || !Array.isArray(schs)) return [];
+        return schs.flatMap(sch => (sch.times || []).map(t => `${sch.day} ${t}`));
     };
 
-    const fetchSchoolSchedules = async (schoolId) => {
-        try {
-            const resp = await api.get(`/schools/${schoolId}`);
-            setSchoolSchedules(resp.data.school?.schedules || []);
-        } catch (err) {
-            console.error('[BulkRouteEditorModal] Error fetching school schedules:', err);
-            setSchoolSchedules([]);
-        }
-    };
-
-    const fetchStudentsForSchool = async (schoolId) => {
+    // Fetch students by family last name (search across schools). Also fetch schedules for each school found.
+    const fetchStudentsByLastName = async (lastName) => {
         setLoading(true);
         try {
-            // fetch users in batches
-            let allUsers = [];
-            let page = 0;
-            const limit = 500;
-            let total = 0;
-            let fetched = 0;
-
-            const firstResp = await api.get('/users', { params: { page, limit } });
-            allUsers = firstResp.data.users || [];
-            total = firstResp.data.total || allUsers.length;
-            fetched = allUsers.length;
-
-            while (fetched < total) {
-                page += 1;
-                const resp = await api.get('/users', { params: { page, limit } });
-                const usersBatch = resp.data.users || [];
-                allUsers = allUsers.concat(usersBatch);
-                fetched += usersBatch.length;
-                if (usersBatch.length === 0) break;
+            const normalize = (s) => (s || '').toString().normalize ? s.toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase() : (s || '').toLowerCase();
+            const q = (lastName || '').trim();
+            if (!q || q.length < 1) {
+                setLocalSnackbar({ open: true, message: 'Ingresa al menos un caracter para buscar', severity: 'warning' });
+                setLoading(false);
+                return;
             }
 
-            const parents = allUsers.filter(u => u.Role && u.Role.name === 'Padre' && u.FamilyDetail && String(u.school) === String(schoolId));
+            // 1) Try server-side search first (if API supports filtering by familyLastName)
+            let serverUsers = null;
+            try {
+                const respServer = await api.get('/users', { params: { page: 0, limit: 500, familyLastName: q } });
+                serverUsers = respServer.data.users || null;
+            } catch (e) {
+                // ignore and fallback to client-side
+                serverUsers = null;
+            }
+            // If serverUsers provided results, use them; otherwise fallback to client-side full pagination
+            let allUsers = [];
+            if (serverUsers && Array.isArray(serverUsers) && serverUsers.length > 0) {
+                allUsers = serverUsers;
+            } else {
+                let page = 0;
+                const limit = 500;
+                let total = 0;
+                let fetched = 0;
+
+                const firstResp = await api.get('/users', { params: { page, limit } });
+                allUsers = firstResp.data.users || [];
+                total = firstResp.data.total || allUsers.length;
+                fetched = allUsers.length;
+
+                while (fetched < total) {
+                    page += 1;
+                    const resp = await api.get('/users', { params: { page, limit } });
+                    const usersBatch = resp.data.users || [];
+                    allUsers = allUsers.concat(usersBatch);
+                    fetched += usersBatch.length;
+                    if (usersBatch.length === 0) break;
+                }
+            }
+
+            const qNorm = normalize(lastName);
+            const parents = allUsers.filter(u => u.Role && (u.Role.name === 'Padre' || (u.Role.name || '').toString().toLowerCase() === 'padre') && u.FamilyDetail && normalize(u.FamilyDetail.familyLastName).includes(qNorm));
 
             const rows = [];
             parents.forEach(user => {
@@ -794,12 +812,30 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                         studentId: student.id,
                         familyLastName: fd.familyLastName || '',
                         studentName: student.fullName || '',
-                        grade: student.grade || ''
+                        grade: student.grade || '',
+                        schoolId: user.school // keep school for per-student schedules/buses
                     });
                 });
             });
 
             setStudentsList(rows);
+
+            if (!rows.length) {
+                setLocalSnackbar({ open: true, message: `No se encontraron familias con apellido "${lastName}"`, severity: 'info' });
+            }
+
+            // fetch schedules for each unique school found
+            const uniqueSchoolIds = Array.from(new Set(parents.map(p => String(p.school)).filter(s => s)));
+            const schedulesMap = {};
+            await Promise.all(uniqueSchoolIds.map(async (sid) => {
+                try {
+                    const resp = await api.get(`/schools/${sid}`);
+                    schedulesMap[sid] = resp.data.school?.schedules || [];
+                } catch (err) {
+                    schedulesMap[sid] = [];
+                }
+            }));
+            setSchoolSchedulesById(schedulesMap);
 
             // fetch existing assignments per student to populate studentSchedules & assignments
             const newSchedControls = {};
@@ -831,8 +867,9 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
             setAssignments(newAssignments);
             setStudentSchedules(newSchedControls);
         } catch (err) {
-            console.error('[BulkRouteEditorModal] Error fetching students:', err);
+            console.error('[BulkRouteEditorModal] Error fetching students by last name:', err);
             setStudentsList([]);
+            setSchoolSchedulesById({});
         }
         setLoading(false);
     };
@@ -948,8 +985,7 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
 
     // precompute filtered list for rendering (search)
     const q = (searchQuery || '').trim().toLowerCase();
-    // Apply search filtering only after a school is selected
-    const filteredStudents = selectedSchool && q
+    const filteredStudents = q
         ? studentsList.filter(s =>
             (s.familyLastName || '').toLowerCase().includes(q) ||
             (s.studentName || '').toLowerCase().includes(q) ||
@@ -960,28 +996,16 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl">
             <DialogTitle>Edición Masiva de Rutas</DialogTitle>
             <DialogContent>
-                <Box sx={{ mb: 2 }}>
-                    <FormControl fullWidth>
-                        <InputLabel>Selecciona Colegio</InputLabel>
-                        <Select
-                            value={selectedSchool}
-                            label="Selecciona Colegio"
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setSelectedSchool(val);
-                                // fetch schedules and students
-                                fetchSchoolSchedules(val);
-                                fetchStudentsForSchool(val);
-                            }}
-                        >
-                            <MenuItem value="">
-                                <em>Seleccione</em>
-                            </MenuItem>
-                            {schools.map(s => (
-                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
+                <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+                    <TextField
+                        label="Apellido de Familia"
+                        size="small"
+                        fullWidth
+                        value={familyLastName}
+                        onChange={(e) => setFamilyLastName(e.target.value)}
+                        helperText="Ingresa un apellido y presiona Buscar"
+                    />
+                    <Button variant="outlined" onClick={() => fetchStudentsByLastName(familyLastName)}>Buscar</Button>
                 </Box>
 
                 {loading ? (
@@ -990,15 +1014,7 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                     </Box>
                 ) : (
                     <>
-                        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                            <TextField
-                                label="Buscar familias / alumnos / grado"
-                                size="small"
-                                fullWidth
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </Box>
+                        
                         <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
                         <Table stickyHeader>
                             <TableHead>
@@ -1014,7 +1030,7 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                             <TableBody>
                                 {filteredStudents.map((r) => {
                                     const schedArr = studentSchedules[r.studentId] || [];
-                                    const allHorarioOptions = getScheduleOptionsFromSchool(selectedSchool);
+                                                    const allHorarioOptions = getScheduleOptionsFromSchool(r.schoolId);
                                     return (
                                         <TableRow key={r.studentId}>
                                             <TableCell padding="checkbox">
@@ -1059,7 +1075,7 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                                                 ) : (
                                                     <div style={{ maxHeight: 220, overflow: 'auto' }}>
                                                         {schedArr.map((horario, hIdx) => {
-                                                            const allBusesForSchool = getBusOptionsForSchool(selectedSchool);
+                                                            const allBusesForSchool = getBusOptionsForSchool(r.schoolId);
                                                             const compatibleBuses = allBusesForSchool.filter(bus => {
                                                                 const opts = getBusScheduleOptions(bus);
                                                                 return opts.includes(horario);
@@ -1102,11 +1118,17 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                 <Button
                     variant="contained"
                     onClick={() => setConfirmOpenRoutes(true)}
-                    disabled={loading || !selectedSchool || Object.keys(selectedForSaveRoutes).filter(id => selectedForSaveRoutes[id]).length === 0}
+                    disabled={loading || Object.keys(selectedForSaveRoutes).filter(id => selectedForSaveRoutes[id]).length === 0}
                 >
                     {loading ? 'Guardando...' : 'Guardar Asignaciones'}
                 </Button>
             </DialogActions>
+
+            <Snackbar open={localSnackbar.open} autoHideDuration={6000} onClose={() => setLocalSnackbar(prev => ({ ...prev, open: false }))}>
+                <Alert onClose={() => setLocalSnackbar(prev => ({ ...prev, open: false }))} severity={localSnackbar.severity} sx={{ width: '100%' }}>
+                    {localSnackbar.message}
+                </Alert>
+            </Snackbar>
 
             <Dialog open={confirmOpenRoutes} onClose={() => setConfirmOpenRoutes(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Confirmar guardado de rutas</DialogTitle>
