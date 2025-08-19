@@ -2567,7 +2567,21 @@ const RolesManagementPage = () => {
                         };
                     });
 
-                    // Asegurar que las columnas numéricas sean números (excluir horas)
+                    // Asegurar que las columnas numéricas sean números (No. Ruta y conteos)
+                    // Col 1: intentar extraer número de "routeNumber" (p. ej. 'Ruta 12' -> 12)
+                    try {
+                        const c1 = row.getCell(1);
+                        if (c1 && c1.value != null) {
+                            const m = c1.value.toString().match(/(\d+)/);
+                            if (m) {
+                                c1.value = Number(m[1]);
+                                c1.numFmt = '0';
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[handleDownloadRouteReport] Numeric conversion error for route number:', e);
+                    }
+                    // Cols 2-4: conteos
                     [2, 3, 4].forEach((colIdx) => {
                         try {
                             const c = row.getCell(colIdx);
@@ -2626,7 +2640,8 @@ const RolesManagementPage = () => {
                 studentHeaders.push(`Estudiante ${i} - Ruta PM`);
             }
 
-            const headers = [...baseHeaders, ...studentHeaders, 'Nombre Padre', 'Email Padre'];
+            // Agregar columnas de contacto de la madre y el padre
+            const headers = [...baseHeaders, ...studentHeaders, 'Nombre Padre', 'Email Padre', 'Nombre Mamá', 'Teléfono Mamá', 'Nombre Papá', 'Teléfono Papá'];
             const familiesHeaderRow = familiesWorksheet.addRow(headers);
 
             // Estilo para headers de familias
@@ -2831,8 +2846,16 @@ const RolesManagementPage = () => {
                     }
                 }
 
-                // Agregar Nombre Padre y Email Padre al final según especificación
-                const rowData = [...baseData, ...studentData, user.name || "", user.email || ""]; 
+                // Agregar datos de contacto de la madre y el padre al final según especificación
+                const userName = user.name || "";
+                const userEmail = user.email || "";
+                const motherName = (fd.motherName && fd.motherName.trim()) || '';
+                const motherPhone = (fd.motherCellphone && fd.motherCellphone.trim()) || '';
+                // Preferir los campos en FamilyDetail; si no existen, usar user.name / user.email
+                const fatherName = (fd.fatherName && fd.fatherName.trim()) || '';
+                const fatherPhone = (fd.fatherCellphone && fd.fatherCellphone.trim()) || '';
+
+                const rowData = [...baseData, ...studentData, userName, userEmail, motherName, motherPhone, fatherName, fatherPhone];
                 const row = familiesWorksheet.addRow(rowData);
 
                 // Estilo alternado para filas de familias
@@ -2854,6 +2877,34 @@ const RolesManagementPage = () => {
                         right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                     };
                 });
+
+                // Convertir columnas de ruta de estudiantes a número cuando sea posible
+                try {
+                    const baseLen = baseHeaders.length; // 10
+                    for (let i = 0; i < maxStudents; i++) {
+                        // rutaAM at col = baseLen + i*5 + 3 (1-based indexing)
+                        const colRutaAM = baseLen + i * 5 + 3;
+                        const colRutaMD = baseLen + i * 5 + 4;
+                        const colRutaPM = baseLen + i * 5 + 5;
+
+                        [colRutaAM, colRutaMD, colRutaPM].forEach(colIdx => {
+                            try {
+                                const cell = row.getCell(colIdx);
+                                if (cell && cell.value != null && cell.value !== '') {
+                                    const m = cell.value.toString().match(/(\d+)/);
+                                    if (m) {
+                                        cell.value = Number(m[1]);
+                                        cell.numFmt = '0';
+                                    }
+                                }
+                            } catch (e) {
+                                // ignore per-cell conversion errors
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('[handleDownloadRouteReport] Error converting student route columns to number:', e);
+                }
             });
 
             // Auto-ajustar columnas para la hoja de familias
