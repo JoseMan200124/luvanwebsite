@@ -339,6 +339,7 @@ const SchoolsManagementPage = () => {
             contactPerson: '',
             contactEmail: '',
             contactPhone: '',
+            whatsappLink: '',
             transportFeeComplete: '',
             transportFeeHalf: '',
             duePaymentDay: '',
@@ -360,6 +361,7 @@ const SchoolsManagementPage = () => {
 
         setSelectedSchool({
             ...school,
+            whatsappLink: school.whatsappLink || '',
             transportFeeComplete: transportFeeCompleteValue,
             transportFeeHalf: transportFeeHalfValue,
             duePaymentDay: duePaymentDayValue,
@@ -582,6 +584,7 @@ const SchoolsManagementPage = () => {
                 contactPerson: selectedSchool.contactPerson,
                 contactEmail: selectedSchool.contactEmail,
                 contactPhone: selectedSchool.contactPhone,
+                whatsappLink: selectedSchool.whatsappLink || null,
                 schedules: schoolSchedules, // aquí va el nuevo campo "name" dentro de cada horario
                 grades: schoolGrades,
                 transportFeeComplete:
@@ -1323,6 +1326,17 @@ const SchoolsManagementPage = () => {
                         variant="outlined"
                         value={selectedSchool ? selectedSchool.contactPhone : ''}
                         onChange={handleInputChange}
+                    />
+                    <TextField
+                        margin="dense"
+                        name="whatsappLink"
+                        label="Enlace de WhatsApp"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={selectedSchool ? selectedSchool.whatsappLink : ''}
+                        onChange={handleInputChange}
+                        placeholder="https://wa.me/123456789?text=Hola"
                     />
                     <TextField
                         margin="dense"
