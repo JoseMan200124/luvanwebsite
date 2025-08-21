@@ -160,6 +160,8 @@ function getFieldValue(bus, field) {
             return bus.routeNumber;
         case 'occupation':
             return bus.occupation;
+        case 'school':
+            return bus.school ? bus.school.name : '';
         case 'description':
             return bus.description;
         case 'pilot':
@@ -195,6 +197,9 @@ const BusesManagementPage = () => {
     // Pilotos y Monitores
     const [availablePilots, setAvailablePilots] = useState([]);
     const [availableMonitors, setAvailableMonitors] = useState([]);
+    const [availableSchools, setAvailableSchools] = useState([]);
+    const [originalPilots, setOriginalPilots] = useState([]);
+    const [originalMonitors, setOriginalMonitors] = useState([]);
 
     // Horarios disponibles (según el colegio del piloto)
     const [availableSchedules, setAvailableSchedules] = useState([]);
@@ -236,84 +241,121 @@ const BusesManagementPage = () => {
         }
     };
 
-    const fetchPilots = async () => {
+    const fetchPilots = async (schoolId = null) => {
         try {
-            const response = await api.get('/users/pilots', {
+            // Do not fetch all pilots when no school is selected. Requirement: only load after colegio chosen.
+            if (!schoolId) {
+                setOriginalPilots([]);
+                setAvailablePilots([]);
+                return;
+            }
+
+            const url = `/users/pilots?schoolId=${schoolId}`;
+            const response = await api.get(url, {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             let pilots = Array.isArray(response.data.users) ? response.data.users : [];
 
-            // Para cada piloto, obtener sus horarios según su colegio
+            // For each pilot, obtain schedules for their school (usually same schoolId)
             const pilotsWithSchedules = await Promise.all(
                 pilots.map(async (pilot) => {
-                    if (!pilot.school) {
-                        return { ...pilot, schedules: [] };
-                    }
+                    if (!pilot.school) return { ...pilot, schedules: [] };
                     try {
-                        const schoolId = parseInt(pilot.school, 10);
-                        const resp = await api.get(`/schools/${schoolId}/schedules`, {
+                        const sid = parseInt(pilot.school, 10);
+                        const resp = await api.get(`/schools/${sid}/schedules`, {
                             headers: { Authorization: `Bearer ${auth.token}` }
                         });
-                        return {
-                            ...pilot,
-                            schedules: Array.isArray(resp.data.schedules) ? resp.data.schedules : []
-                        };
+                        return { ...pilot, schedules: Array.isArray(resp.data.schedules) ? resp.data.schedules : [] };
                     } catch (err) {
                         return { ...pilot, schedules: [] };
                     }
                 })
             );
 
+            setOriginalPilots(pilotsWithSchedules);
             setAvailablePilots(pilotsWithSchedules);
         } catch (err) {
             console.error('Error fetching pilots:', err);
+            setOriginalPilots([]);
+            setAvailablePilots([]);
         }
     };
 
-    const fetchMonitors = async () => {
+    const fetchMonitors = async (schoolId = null) => {
         try {
-            const response = await api.get('/users/monitors', {
+            // Only fetch monitors when a school is selected
+            if (!schoolId) {
+                setOriginalMonitors([]);
+                setAvailableMonitors([]);
+                return;
+            }
+
+            const url = `/users/monitors?schoolId=${schoolId}`;
+            const response = await api.get(url, {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            setAvailableMonitors(Array.isArray(response.data.users) ? response.data.users : []);
+            const monitors = Array.isArray(response.data.users) ? response.data.users : [];
+            setOriginalMonitors(monitors);
+            setAvailableMonitors(monitors);
         } catch (err) {
             console.error('Error fetching monitors:', err);
+            setOriginalMonitors([]);
+            setAvailableMonitors([]);
+        }
+    };
+
+    // When selected school's changed, fetch school schedules and filter pilots/monitors
+    useEffect(() => {
+        const schoolId = selectedBus?.schoolId;
+        if (!selectedBus) return;
+
+        const applySchoolFilter = async () => {
+            // Fetch school schedules immediately when school selected
+            if (schoolId) {
+                try {
+                    const resp = await api.get(`/schools/${schoolId}/schedules`, {
+                        headers: { Authorization: `Bearer ${auth.token}` }
+                    });
+                    setAvailableSchedules(Array.isArray(resp.data.schedules) ? resp.data.schedules : []);
+                } catch (err) {
+                    console.error('Error fetching school schedules:', err);
+                    setAvailableSchedules([]);
+                }
+            } else {
+                setAvailableSchedules([]);
+            }
+
+            // Ask server for pilots and monitors filtered by school to avoid client-side heavy filtering
+            await Promise.all([fetchPilots(schoolId), fetchMonitors(schoolId)]);
+            if (selectedBus.pilotId && !originalPilots.some(p => p.id === selectedBus.pilotId) && !availablePilots.some(p => p.id === selectedBus.pilotId)) {
+                setSelectedBus(prev => ({ ...prev, pilotId: '', schedule: [] }));
+            }
+            if (selectedBus.monitoraId && !originalMonitors.some(m => m.id === selectedBus.monitoraId) && !availableMonitors.some(m => m.id === selectedBus.monitoraId)) {
+                setSelectedBus(prev => ({ ...prev, monitoraId: '' }));
+            }
+        };
+
+        applySchoolFilter();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedBus?.schoolId]);
+
+    const fetchSchools = async () => {
+        try {
+            const resp = await api.get('/schools', { headers: { Authorization: `Bearer ${auth.token}` } });
+            setAvailableSchools(Array.isArray(resp.data.schools) ? resp.data.schools : []);
+        } catch (err) {
+            console.error('Error fetching schools:', err);
         }
     };
 
     useEffect(() => {
+        // Only fetch buses and schools at mount. Do NOT fetch pilots/monitors globally.
         fetchBuses();
-        fetchPilots();
-        fetchMonitors();
+        fetchSchools();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [auth.token]);
 
-    const fetchSchedulesByPilot = async (pilotId) => {
-        try {
-            const pilot = availablePilots.find((p) => p.id === pilotId);
-            if (!pilot || !pilot.school) {
-                setAvailableSchedules([]);
-                return;
-            }
-            const schoolId = parseInt(pilot.school, 10);
-            if (!schoolId) {
-                setAvailableSchedules([]);
-                return;
-            }
-
-            const resp = await api.get(`/schools/${schoolId}/schedules`, {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            if (resp.data && Array.isArray(resp.data.schedules)) {
-                setAvailableSchedules(resp.data.schedules);
-            } else {
-                setAvailableSchedules([]);
-            }
-        } catch (error) {
-            console.error('Error fetching schedules:', error);
-            setAvailableSchedules([]);
-        }
-    };
+    // Schedules are now tied to the Bus (school) and are fetched when the bus's school is selected
 
     // =================== CRUD Buses ===================
     const handleAddBus = () => {
@@ -323,6 +365,7 @@ const BusesManagementPage = () => {
             description: '',
             pilotId: '',
             monitoraId: '',
+            schoolId: null,
             routeNumber: '',
             files: [],
             inWorkshop: false,
@@ -340,17 +383,15 @@ const BusesManagementPage = () => {
             description: bus.description || '',
             pilotId: bus.pilotId || '',
             monitoraId: bus.monitoraId || '',
+            schoolId: bus.school ? bus.school.id : null,
             routeNumber: bus.routeNumber || '',
             files: bus.files || [],
             inWorkshop: bus.inWorkshop || false,
             // schedule ahora será un array, si es null lo convertimos en []
             schedule: Array.isArray(bus.schedule) ? bus.schedule : (bus.schedule ? [bus.schedule] : [])
         });
-        if (bus.pilotId) {
-            fetchSchedulesByPilot(bus.pilotId);
-        } else {
-            setAvailableSchedules([]);
-        }
+    // availableSchedules will be populated by the selectedBus.schoolId effect
+    setAvailableSchedules([]);
         setOpenDialog(true);
     };
 
@@ -400,11 +441,8 @@ const BusesManagementPage = () => {
             pilotId,
             schedule: [] // Resetear la selección de horarios
         }));
-        if (pilotId) {
-            await fetchSchedulesByPilot(pilotId);
-        } else {
-            setAvailableSchedules([]);
-        }
+    // Schedules are not tied to the pilot anymore; they belong to the bus (via selected school's schedules)
+    // availableSchedules is managed by the selectedBus.schoolId effect
     };
 
     /**
@@ -451,11 +489,11 @@ const BusesManagementPage = () => {
             formData.append('routeNumber', selectedBus.routeNumber);
             formData.append('inWorkshop', selectedBus.inWorkshop);
 
-            if (selectedBus.pilotId) {
-                formData.append('pilotId', selectedBus.pilotId);
-            }
-            if (selectedBus.monitoraId) {
-                formData.append('monitoraId', selectedBus.monitoraId);
+            // Append pilot/monitora explicitly so the server can clear them when user selects 'Ninguno'
+            formData.append('pilotId', selectedBus.pilotId === '' || selectedBus.pilotId == null ? '' : selectedBus.pilotId);
+            formData.append('monitoraId', selectedBus.monitoraId === '' || selectedBus.monitoraId == null ? '' : selectedBus.monitoraId);
+            if (selectedBus.schoolId) {
+                formData.append('schoolId', selectedBus.schoolId);
             }
 
             // schedule es un array, lo guardamos en JSON
@@ -795,8 +833,8 @@ const BusesManagementPage = () => {
                                             <MobileValue>{bus.routeNumber || 'N/A'}</MobileValue>
                                         </MobileField>
                                         <MobileField>
-                                            <MobileLabel>Ocupación</MobileLabel>
-                                            <MobileValue>{bus.occupation || 0}</MobileValue>
+                                            <MobileLabel>Colegio</MobileLabel>
+                                            <MobileValue>{bus.school ? bus.school.name : 'N/A'}</MobileValue>
                                         </MobileField>
                                         <MobileField>
                                             <MobileLabel>Descripción</MobileLabel>
@@ -925,15 +963,15 @@ const BusesManagementPage = () => {
                                                     Número de Ruta
                                                 </TableSortLabel>
                                             </TableCell>
-                                            <TableCell sortDirection={orderBy === 'occupation' ? order : false}>
+                        <TableCell sortDirection={orderBy === 'school' ? order : false}>
                                                 <TableSortLabel
-                                                    active={orderBy === 'occupation'}
-                                                    direction={orderBy === 'occupation' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('occupation')}
+                                                    active={orderBy === 'school'}
+                                                    direction={orderBy === 'school' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('school')}
                                                     hideSortIcon={false}
                                                     sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
-                                                    Ocupación
+                            Colegio
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell sortDirection={orderBy === 'description' ? order : false}>
@@ -988,8 +1026,8 @@ const BusesManagementPage = () => {
                                                     <ResponsiveTableCell data-label="Número de Ruta">
                                                         {bus.routeNumber || 'N/A'}
                                                     </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Ocupación">
-                                                        {bus.occupation || 0}
+                                                    <ResponsiveTableCell data-label="Colegio">
+                                                        {bus.school ? bus.school.name : 'N/A'}
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Descripción">
                                                         {bus.description}
@@ -1135,6 +1173,22 @@ const BusesManagementPage = () => {
                         value={selectedBus ? selectedBus.routeNumber : ''}
                         onChange={handleInputChange}
                     />
+                    {/* Selección de Colegio */}
+                    <FormControl fullWidth margin="dense">
+                        <InputLabel>Colegio</InputLabel>
+                        <Select
+                            name="schoolId"
+                            value={selectedBus ? selectedBus.schoolId || '' : ''}
+                            onChange={(e) => setSelectedBus(prev => ({ ...prev, schoolId: e.target.value ? parseInt(e.target.value, 10) : null }))}
+                        >
+                            <MenuItem value="">
+                                <em>Global / Ninguno</em>
+                            </MenuItem>
+                            {availableSchools.map((s) => (
+                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                     <TextField
                         margin="dense"
                         name="description"
@@ -1174,7 +1228,8 @@ const BusesManagementPage = () => {
                             onChange={(e) =>
                                 setSelectedBus((prev) => ({
                                     ...prev,
-                                    monitoraId: e.target.value ? parseInt(e.target.value, 10) : null
+                                    // Use empty string when 'Ninguna' is selected so we can explicitly clear on the server
+                                    monitoraId: e.target.value ? parseInt(e.target.value, 10) : ''
                                 }))
                             }
                         >
