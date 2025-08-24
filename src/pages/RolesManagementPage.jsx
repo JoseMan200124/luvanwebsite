@@ -42,6 +42,7 @@ import {
     DirectionsBus,
     Mail
 } from '@mui/icons-material';
+import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
@@ -64,380 +65,6 @@ const roleOptions = [
     { id: 7, name: 'Auxiliar' },
 ];
 
-/* =========================================================================
-   SUBMODAL PARA ASIGNAR BUSES Y MOSTRAR LAS ASIGNACIONES PREVIAS
-   Ahora se agrega un select para elegir el contrato a enviar (opcional)
-   ========================================================================= */
-const AssignBusesModal = ({ open, onClose, parentUser, buses, contracts, onSaveSuccess }) => {
-    const [schoolSchedules, setSchoolSchedules] = useState([]);
-    const [studentSchedules, setStudentSchedules] = useState({});
-
-    const [loading, setLoading] = useState(false);
-    const [students, setStudents] = useState([]);
-    // Estructura: { [studentId]: [ { busId, assignedSchedule: string[] }, ... ] }
-    const [assignments, setAssignments] = useState({});
-    // Nuevo estado para contrato a enviar al asignar buses
-    const [selectedContractForBuses, setSelectedContractForBuses] = useState('');
-    const [loadedExisting, setLoadedExisting] = useState(false);
-
-    // Función para aplanar el schedule del bus en strings tipo "Lunes 08:00"
-    const getScheduleOptions = (bus) => {
-        if (!bus.schedule || !Array.isArray(bus.schedule)) return [];
-        const options = [];
-        bus.schedule.forEach((sch) => {
-            const day = sch.day;
-            sch.times.forEach((t) => {
-                options.push(`${day} ${t}`);
-            });
-        });
-        return options;
-    };
-
-    // Al abrir el modal, cargar los estudiantes y sus asignaciones previas
-    useEffect(() => {
-        if (open && parentUser && parentUser.school) {
-            setStudents(parentUser.FamilyDetail?.Students || []);
-            setAssignments({});
-            setStudentSchedules({});
-            setSelectedContractForBuses('');
-            setLoadedExisting(false);
-            const fetchSchedules = async () => {
-                try {
-                    const resp = await api.get(`/schools/${parentUser.school}`);
-                    setSchoolSchedules(resp.data.school.schedules || []);
-                } catch (error) {
-                    setSchoolSchedules([]);
-                }
-            };
-            const fetchExistingAssignments = async () => {
-                try {
-                    const newAssignments   = {};
-                    const newSchedControls = {};
-
-                    /* Para cada estudiante de la familia */
-                    await Promise.all(
-                        (parentUser.FamilyDetail?.Students || []).map(async (stud) => {
-                            const resp = await api.get(`/students/${stud.id}/assign-buses`);
-                            const { assignments = [] } = resp.data; // ← arreglo de StudentBus
-
-                            /* Reconstruir estructura { horario, buses[] } */
-                            assignments.forEach((asig) => {
-                                (asig.assignedSchedule || []).forEach((horario) => {
-                                    if (!newAssignments[stud.id]) newAssignments[stud.id] = [];
-                                    let hObj = newAssignments[stud.id].find((h) => h.horario === horario);
-                                    if (!hObj) {
-                                        hObj = { horario, buses: [] };
-                                        newAssignments[stud.id].push(hObj);
-                                    }
-                                    hObj.buses.push(asig.busId);
-                                });
-                            });
-
-                            /* Para “pre-seleccionar” los select de horario */
-                            newSchedControls[stud.id] = newAssignments[stud.id]
-                                ? newAssignments[stud.id].map((h) => h.horario)
-                                : [];
-                        })
-                    );
-
-                    setAssignments(newAssignments);
-                    setStudentSchedules(newSchedControls);
-                    setLoadedExisting(true);
-                } catch (err) {
-                    console.error('[AssignBusesModal] error cargando asignaciones:', err);
-                    setLoadedExisting(true);
-                }
-            };
-
-            fetchSchedules();
-            setStudents(parentUser.FamilyDetail?.Students || []);
-            setAssignments({});
-            setSelectedContractForBuses('');
-            setStudentSchedules({});
-            fetchExistingAssignments();
-        }
-    }, [open, parentUser]);
-
-    // Filtrar contratos: solo los del colegio del padre (NO los globales)
-    const filteredContracts = contracts.filter(
-        c =>
-            c.schoolId === null ||
-            Number(c.schoolId) === Number(parentUser.school)
-    );
-
-    // Seleccionar automáticamente el contrato del colegio si existe
-    useEffect(() => {
-        if (open && parentUser && contracts.length > 0) {
-            const contractForSchool = contracts.find(
-                c => Number(c.schoolId) === Number(parentUser.school)
-            );
-            setSelectedContractForBuses(contractForSchool ? contractForSchool.uuid : '');
-        }
-    // eslint-disable-next-line
-    }, [open, parentUser, contracts]);
-
-    // Cambiar un horario en un selector específico
-    const handleStudentScheduleChange = (studentId, idx, value) => {
-        setStudentSchedules(prev => {
-            const arr = prev[studentId] ? [...prev[studentId]] : [];
-            const prevHorario = arr[idx];
-            arr[idx] = value;
-            // Si cambió el horario, elimina la asignación de buses del horario anterior
-            setAssignments(prevAssignments => {
-                const arrAssign = prevAssignments[studentId] ? [...prevAssignments[studentId]] : [];
-                const filtered = arrAssign.filter(h => h.horario !== prevHorario);
-                return { ...prevAssignments, [studentId]: filtered };
-            });
-            return { ...prev, [studentId]: arr };
-        });
-    };
-
-    // Toggle bus para un horario específico
-    const handleToggleBus = (studentId, horario, busId) => {
-        setAssignments(prev => {
-            const arr = prev[studentId] ? [...prev[studentId]] : [];
-            let horarioObj = arr.find(h => h.horario === horario);
-            if (!horarioObj) {
-                // Si no existe, lo creamos
-                horarioObj = { horario, buses: [busId] };
-                return { ...prev, [studentId]: [...arr, horarioObj] };
-            }
-            const buses = horarioObj.buses.includes(busId)
-                ? horarioObj.buses.filter(id => id !== busId)
-                : [...horarioObj.buses, busId];
-            const newArr = arr.map(h =>
-                h.horario === horario ? { ...h, buses } : h
-            ).filter(h => h.buses.length > 0); // Elimina horarios sin buses
-            // Si después de quitar el bus no quedan buses, elimina el objeto
-            if (!buses.length) {
-                return { ...prev, [studentId]: newArr };
-            }
-            return { ...prev, [studentId]: newArr };
-        });
-    };
-
-    // Saber si un bus está asignado a un horario específico
-    const isBusChecked = (studentId, horario, busId) => {
-        const arr = assignments[studentId] || [];
-        const horarioObj = arr.find(h => h.horario === horario);
-        return horarioObj ? horarioObj.buses.includes(busId) : false;
-    };
-
-    // Agregar un nuevo selector de horario
-    const handleAddScheduleSelector = (studentId) => {
-        setStudentSchedules(prev => ({
-            ...prev,
-            [studentId]: [...(prev[studentId] || []), ""]
-        }));
-    };
-
-    // Eliminar un selector de horario
-    const handleRemoveScheduleSelector = (studentId, idx) => {
-        setStudentSchedules(prev => {
-            const arr = prev[studentId] ? [...prev[studentId]] : [];
-            const removed = arr[idx];
-            arr.splice(idx, 1);
-            // Al eliminar, también elimina las asignaciones de ese horario
-            setAssignments(prevAssignments => {
-                const arrAssign = prevAssignments[studentId] ? [...prevAssignments[studentId]] : [];
-                const newArrAssign = arrAssign.filter(h => h.horario !== removed);
-                return { ...prevAssignments, [studentId]: newArrAssign };
-            });
-            return { ...prev, [studentId]: arr };
-        });
-    };
-
-    // (Removed unused helpers to reduce lint noise)
-
-    // Al guardar, transforma assignments al formato esperado por el backend
-    const handleSave = async () => {
-        setLoading(true);
-        try {
-            const promises = Object.keys(assignments).map(async (studId) => {
-                // Agrupar por busId y juntar todos los horarios
-                const busToHorarios = {};
-                (assignments[studId] || []).forEach(h => {
-                    h.buses.forEach(busId => {
-                        if (!busToHorarios[busId]) busToHorarios[busId] = [];
-                        if (!busToHorarios[busId].includes(h.horario)) {
-                            busToHorarios[busId].push(h.horario);
-                        }
-                    });
-                });
-                const assignedBuses = Object.entries(busToHorarios).map(([busId, horarios]) => ({
-                    busId: Number(busId),
-                    assignedSchedule: horarios
-                }));
-                await api.put(`/students/${studId}/assign-buses`, { assignedBuses });
-            });
-            await Promise.all(promises);
-            // Luego, si se seleccionó un contrato, se envía
-            if (selectedContractForBuses) {
-                const contractResp = await api.get(`/contracts/${selectedContractForBuses}`);
-                const contract = contractResp.data;
-                if (contract && parentUser.email) {
-                    const fatherShareUrl = `${contract.url}?parentId=${parentUser.id}`;
-                    await api.post('/mail/send', {
-                        to: parentUser.email,
-                        subject: 'Enlace de Contrato Asignado (Tras asignar rutas)',
-                        html: `
-                            <h1>Hola, ${parentUser.name}</h1>
-                            <p>Te han asignado el contrato <strong>${contract.title}</strong> tras la asignación de rutas.</p>
-                            <p>Puedes llenarlo en el siguiente enlace:
-                            <a href="${fatherShareUrl}" target="_blank">${fatherShareUrl}</a></p>
-                            <br/>
-                            <p>Atentamente, Sistema de Contratos</p>
-                            `
-                    });
-                }
-            }
-            setLoading(false);
-            if (onSaveSuccess) onSaveSuccess();
-            onClose();
-        } catch (error) {
-            console.error('Error al asignar buses:', error);
-            setLoading(false);
-        }
-    };
-
-    if (open && !loadedExisting) {
-        return (
-            <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-                <DialogTitle>Asignar Buses</DialogTitle>
-                <DialogContent sx={{ display:'flex', justifyContent:'center', py:4 }}>
-                    <CircularProgress />
-                </DialogContent>
-            </Dialog>
-        );
-    }
-
-    return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-            <DialogTitle>Asignar Buses</DialogTitle>
-            <DialogContent>
-                {students.length === 0 ? (
-                    <Typography>No hay estudiantes para este padre.</Typography>
-                ) : (
-                    <>
-                        {students.map((stud) => {
-                            const schedulesArr = studentSchedules[stud.id] || [];
-                            const allHorarioOptions = schoolSchedules.flatMap((sch) =>
-                                (sch.times || []).map((time) => `${sch.day} ${time}`)
-                            );
-                            return (
-                                <Box key={stud.id} sx={{ mb: 3, borderBottom: '1px solid #ccc', pb: 2 }}>
-                                    <Typography variant="h6">{stud.fullName}</Typography>
-                                    <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
-                                        Grado: {stud.grade || 'N/A'}
-                                    </Typography>
-                                    {/* Renderiza un selector por cada horario */}
-                                    {schedulesArr.map((selectedSchedule, idx) => {
-                                        const used = schedulesArr.filter((_, i) => i !== idx);
-                                        const availableOptions = allHorarioOptions.filter(opt => !used.includes(opt));
-                                        return (
-                                            <Box key={idx} sx={{ mb: 2 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                                    <FormControl fullWidth>
-                                                        <InputLabel>Horario</InputLabel>
-                                                        <Select
-                                                            value={selectedSchedule}
-                                                            onChange={e => handleStudentScheduleChange(stud.id, idx, e.target.value)}
-                                                            label="Horario"
-                                                        >
-                                                            <MenuItem value="">
-                                                                <em>Seleccione un horario</em>
-                                                            </MenuItem>
-                                                            {availableOptions.map((value) => (
-                                                                <MenuItem key={value} value={value}>
-                                                                    {value}
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                    <IconButton
-                                                        color="error"
-                                                        aria-label="Eliminar horario"
-                                                        onClick={() => handleRemoveScheduleSelector(stud.id, idx)}
-                                                        sx={{ ml: 1 }}
-                                                        disabled={schedulesArr.length === 1}
-                                                    >
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Box>
-                                                {/* Mostrar buses solo si hay horario seleccionado */}
-                                                {selectedSchedule && (
-                                                    <Box sx={{ ml: 2 }}>
-                                                        {buses
-                                                            .filter(bus => {
-                                                                if (!bus.pilot) return false;
-                                                                if (String(bus.pilot.school) !== String(parentUser.school)) return false;
-                                                                const busSchedules = getScheduleOptions(bus);
-                                                                return busSchedules.includes(selectedSchedule);
-                                                            })
-                                                            .map((bus) => {
-                                                                const checked = isBusChecked(stud.id, selectedSchedule, bus.id);
-                                                                return (
-                                                                    <div key={bus.id} style={{ marginBottom: 10 }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                            <Checkbox
-                                                                                checked={checked}
-                                                                                onChange={() => handleToggleBus(stud.id, selectedSchedule, bus.id)}
-                                                                                color="primary"
-                                                                            />
-                                                                            <span>{`Bus [Ruta ${bus.routeNumber}] (Piloto: ${bus.pilot?.name || 'N/A'})`}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                    </Box>
-                                                )}
-                                            </Box>
-                                        );
-                                    })}
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        sx={{ mb: 2 }}
-                                        onClick={() => handleAddScheduleSelector(stud.id)}
-                                        disabled={schedulesArr.length >= allHorarioOptions.length}
-                                    >
-                                        Agregar ruta
-                                    </Button>
-                                </Box>
-                            );
-                        })}
-                        {/* Nuevo select para elegir el contrato a enviar (opcional) */}
-                        <Box sx={{ mt: 2 }}>
-                            <FormControl fullWidth>
-                                <InputLabel>Contrato a enviar (opcional)</InputLabel>
-                                <Select
-                                    value={selectedContractForBuses}
-                                    onChange={(e) => setSelectedContractForBuses(e.target.value)}
-                                    label="Contrato a enviar (opcional)"
-                                >
-                                    <MenuItem value="">
-                                        <em>Ninguno</em>
-                                    </MenuItem>
-                                    {filteredContracts.map((c) => (
-                                        <MenuItem key={c.uuid} value={c.uuid}>
-                                            {c.title}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Box>
-                    </>
-                )}
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Cerrar</Button>
-                <Button variant="contained" onClick={handleSave} disabled={loading}>
-                    {loading ? 'Guardando...' : 'Guardar'}
-                </Button>
-            </DialogActions>
-        </Dialog>
-    );
-};
 
 /* ================== MODAL: Edición Masiva Horarios de Parada (Bulk) ================== */
 const BulkStopScheduleEditorModal = ({ open, onClose, schools, onSaved }) => {
@@ -1093,7 +720,7 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
                                                                                         checked={isBusChecked(r.studentId, horario, bus.id)}
                                                                                         onChange={() => handleToggleBus(r.studentId, horario, bus.id)}
                                                                                     />
-                                                                                    <span>{`Ruta ${bus.routeNumber}${bus.plate ? ` - ${bus.plate}` : ''}`}</span>
+                                                                                    <span>{bus ? `Ruta ${bus.routeNumber}${bus.plate ? ` (${bus.plate})` : ''}` : 'Ruta: —'}</span>
                                                                                 </Box>
                                                                             ))
                                                                         )}
@@ -1378,7 +1005,6 @@ const RolesManagementPage = () => {
     });
     const [originalStudents, setOriginalStudents] = useState([]);
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
-    const [newSlot, setNewSlot] = useState({ time: '', note: '' });
     // Se elimina la gestión de contrato en el diálogo de edición
     // const [selectedContractUuid, setSelectedContractUuid] = useState('');
 
@@ -1407,6 +1033,10 @@ const RolesManagementPage = () => {
     const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openBulkRouteEditor, setOpenBulkRouteEditor] = useState(false);
     const [openBulkStopEditor, setOpenBulkStopEditor] = useState(false);
+    const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
+    const [scheduleStudentId, setScheduleStudentId] = useState(null);
+    const [scheduleSchoolId, setScheduleSchoolId] = useState(null);
+    const [scheduleModalStudents, setScheduleModalStudents] = useState([]);
 
     // Submodal para asignar buses (sólo para padres)
     const [assignBusesOpen, setAssignBusesOpen] = useState(false);
@@ -1737,30 +1367,7 @@ const RolesManagementPage = () => {
         setNewStudent({ fullName: '', grade: '' });
     };
 
-    const handleAddSlot = () => {
-        if (!newSlot.time) return;
-        setFamilyDetail(prev => ({
-            ...prev,
-            scheduleSlots: [...prev.scheduleSlots, newSlot]
-        }));
-        setNewSlot({ time: '', note: '' });
-    };
-
-    const handleEditSlot = (index, field, value) => {
-        setFamilyDetail(prev => {
-            const slots = [...prev.scheduleSlots];
-            slots[index] = { ...slots[index], [field]: value };
-            return { ...prev, scheduleSlots: slots };
-        });
-    };
-
-    const handleDeleteSlot = (index) => {
-        setFamilyDetail(prev => {
-            const slots = [...prev.scheduleSlots];
-            slots.splice(index, 1);
-            return { ...prev, scheduleSlots: slots };
-        });
-    };
+    // Horarios de parada gestionados por el modal por alumno; helpers removidos
 
     const handleSaveUser = async () => {
         try {
@@ -2225,163 +1832,111 @@ const RolesManagementPage = () => {
                 if (usersBatch.length === 0) break;
             }
 
-            // Filtrar solo usuarios padres con FamilyDetail, routeType y del colegio seleccionado
+            // Filtrar solo usuarios padres del colegio seleccionado que tengan ScheduleSlots
+            // (a nivel familiar o por estudiante). Según el requisito, solo usamos ScheduleSlots.
             const parentsWithRoutes = allUsers.filter(u =>
-                u.Role && u.Role.name === 'Padre' &&
+                u.Role && (u.Role.name === 'Padre' || (u.Role.name || '').toString().toLowerCase() === 'padre') &&
                 u.FamilyDetail &&
-                u.FamilyDetail.routeType &&
-                u.school && parseInt(u.school) === parseInt(schoolId)
+                u.school && parseInt(u.school) === parseInt(schoolId) &&
+                (
+                    (Array.isArray(u.FamilyDetail.ScheduleSlots) && u.FamilyDetail.ScheduleSlots.length > 0) ||
+                    (Array.isArray(u.FamilyDetail.Students) && u.FamilyDetail.Students.some(s => Array.isArray(s.ScheduleSlots) && s.ScheduleSlots.length > 0))
+                )
             );
 
-            // Agrupar por número de ruta del bus asignado y contar estudiantes AM/PM
+            // Agrupar por número de ruta del bus asignado y contar estudiantes AM/MD/PM
+            // Contaremos cada estudiante una sola vez por periodo (AM/MD/PM) por ruta.
             const routeSummary = {};
-
+            // Construir resumen basado únicamente en ScheduleSlots (student.ScheduleSlots o, si falta, family ScheduleSlots filtradas por studentId)
             parentsWithRoutes.forEach(user => {
-                const fd = user.FamilyDetail;
+                const fd = user.FamilyDetail || {};
+                if (!fd.Students || fd.Students.length === 0) return;
 
-                if (fd.Students && fd.Students.length > 0) {
-                    fd.Students.forEach(student => {
-                        // Verificar si el estudiante tiene buses asignados específicos
-                        if (student.buses && student.buses.length > 0) {
-                            student.buses.forEach(bus => {
-                                const busId = bus.id;
-                                const routeNumber = bus.routeNumber || `Ruta ${busId}`;
+                fd.Students.forEach(student => {
+                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                    // Incluir sólo los family slots que aplican al estudiante (sin studentId o con studentId igual al estudiante)
+                    const familySlots = Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots.filter(s => !s.studentId || Number(s.studentId) === Number(student.id)) : [];
+                    const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
 
-                                // Inicializar si no existe
-                                if (!routeSummary[routeNumber]) {
-                                    routeSummary[routeNumber] = {
-                                        cantAM: 0,
-                                        cantPM: 0,
-                                        cantMD: 0
-                                    };
-                                }
+                    // Para evitar dobles conteos, acumular por estudiante un conjunto único de (route, period)
+                    const studentRoutePeriodSet = new Set();
 
-                                // Obtener horarios asignados desde la tabla intermedia
-                                let assignedSchedule = [];
-                                if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
-                                    try {
-                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
-                                            ? JSON.parse(bus.AssignedBuses.assignedSchedule)
-                                            : bus.AssignedBuses.assignedSchedule;
-                                    } catch (e) {
-                                        console.warn('Error parsing assignedSchedule:', e);
-                                        assignedSchedule = [];
-                                    }
-                                }
+                    slotsToUse.forEach(slot => {
+                        const timeForPeriod = (slot.schoolSchedule || slot.time || slot.timeSlot || '').toString();
+                        const timeMatch = timeForPeriod.match(/(\d{1,2}):(\d{2})/);
 
-                                // Analizar horarios para determinar AM/PM/MD basado en formato de 24 horas
-                                if (Array.isArray(assignedSchedule) && assignedSchedule.length > 0) {
-                                    assignedSchedule.forEach(schedule => {
-                                        if (schedule && typeof schedule === 'string') {
-                                            // Buscar patrón de hora en formato 24 horas (HH:MM)
-                                            const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
-                                            if (timeMatch) {
-                                                const hour = parseInt(timeMatch[1]);
-                                                // Clasificar por hora:
-                                                // AM: 0-11 horas (00:00 - 11:59)
-                                                // MD: 12:00 - 14:59 (12 <= hour < 15)
-                                                // PM: 15:00 - 23:59 (hour >= 15)
-                                                if (hour >= 0 && hour < 12) {
-                                                    routeSummary[routeNumber].cantAM++;
-                                                } else if (hour >= 12 && hour < 15) {
-                                                    routeSummary[routeNumber].cantMD++;
-                                                } else if (hour >= 15 && hour <= 23) {
-                                                    routeSummary[routeNumber].cantPM++;
-                                                } else {
-                                                    // Hora inválida, contar como AM por defecto
-                                                    routeSummary[routeNumber].cantAM++;
-                                                }
-                                            } else {
-                                                // Si no se encuentra hora, contar como AM por defecto
-                                                routeSummary[routeNumber].cantAM++;
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    // Si no hay horarios específicos, usar ScheduleSlots del estudiante
-                                    if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
-                                        student.ScheduleSlots.forEach(slot => {
-                                            const timeSlot = slot.timeSlot || "";
-                                            // Buscar patrón de hora en formato 24 horas
-                                            const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                                            if (timeMatch) {
-                                                const hour = parseInt(timeMatch[1]);
-                                                // Clasificar por hora:
-                                                // AM: 0-11 horas (00:00 - 11:59)
-                                                // MD: 12:00 - 14:59 (12 <= hour < 15)
-                                                // PM: 15:00 - 23:59 (hour >= 15)
-                                                if (hour >= 0 && hour < 12) {
-                                                    routeSummary[routeNumber].cantAM++;
-                                                } else if (hour >= 12 && hour < 15) {
-                                                    routeSummary[routeNumber].cantMD++;
-                                                } else if (hour >= 15 && hour <= 23) {
-                                                    routeSummary[routeNumber].cantPM++;
-                                                } else {
-                                                    routeSummary[routeNumber].cantAM++;
-                                                }
-                                            } else {
-                                                // Si no se puede extraer hora, contar como AM por defecto
-                                                routeSummary[routeNumber].cantAM++;
-                                            }
-                                        });
-                                    } else {
-                                        // Si no hay horarios, contar como AM por defecto
-                                        routeSummary[routeNumber].cantAM++;
-                                    }
-                                }
-                            });
+                        // Determinar routeNumber a partir de busId si está presente
+                        let routeNumber = '';
+                        if (slot.busId) {
+                            const b = (buses || []).find(x => Number(x.id) === Number(slot.busId));
+                            if (b) routeNumber = b.routeNumber || b.route || (`Ruta ${b.id}`);
                         }
+                        if (!routeNumber) routeNumber = fd.routeType || 'Sin Ruta';
+
+                        let period = 'AM';
+                        if (timeMatch) {
+                            const hour = parseInt(timeMatch[1]);
+                            if (hour >= 0 && hour < 12) period = 'AM';
+                            else if (hour >= 12 && hour < 15) period = 'MD';
+                            else if (hour >= 15 && hour <= 23) period = 'PM';
+                            else period = 'AM';
+                        } else {
+                            period = 'AM';
+                        }
+
+                        // Key único por estudiante para evitar duplicados
+                        const key = `${routeNumber}::${period}`;
+                        studentRoutePeriodSet.add(key);
                     });
-                }
+
+                    // Incrementar el resumen por cada (route, period) único del estudiante
+                    studentRoutePeriodSet.forEach(k => {
+                        const [routeNumber, period] = k.split('::');
+                        if (!routeSummary[routeNumber]) routeSummary[routeNumber] = { cantAM: 0, cantPM: 0, cantMD: 0 };
+                        if (period === 'AM') routeSummary[routeNumber].cantAM++;
+                        else if (period === 'MD') routeSummary[routeNumber].cantMD++;
+                        else if (period === 'PM') routeSummary[routeNumber].cantPM++;
+                    });
+                });
             });
 
             // Determinar el número máximo de estudiantes para crear las columnas dinámicas
-            // Solo considerar familias que tienen al menos un estudiante con ruta
+            // Solo contar familias que tengan al menos un ScheduleSlot (a nivel estudiante o familiar)
             let maxStudents = 0;
 
             parentsWithRoutes.forEach(user => {
-                const fd = user.FamilyDetail;
-                if (fd.Students && fd.Students.length > 0) {
-                    // Verificar si esta familia tiene al menos un estudiante con ruta
-                    const hasStudentWithRoute = fd.Students.some(student => {
-                        // Verificar si tiene buses asignados específicos
-                        if (student.buses && student.buses.length > 0) {
-                            return student.buses.some(bus => {
-                                let assignedSchedule = [];
-                                if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
-                                    try {
-                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
-                                            ? JSON.parse(bus.AssignedBuses.assignedSchedule)
-                                            : bus.AssignedBuses.assignedSchedule;
-                                    } catch (e) {
-                                        return false;
-                                    }
-                                }
-                                return Array.isArray(assignedSchedule) && assignedSchedule.length > 0;
-                            });
-                        }
+                const fd = user.FamilyDetail || {};
+                if (!fd.Students || fd.Students.length === 0) return;
 
-                        // Verificar si tiene ScheduleSlots
-                        if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
-                            return student.ScheduleSlots.some(slot => {
-                                const timeSlot = slot.timeSlot || "";
-                                const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                                return timeMatch !== null;
-                            });
-                        }
-
-                        return false;
-                    });
-
-                    // Solo contar estudiantes si la familia tiene al menos uno con ruta
-                    if (hasStudentWithRoute && fd.Students.length > maxStudents) {
-                        maxStudents = fd.Students.length;
+                const hasStudentWithRoute = fd.Students.some(student => {
+                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                    if (studentSlots.length > 0) {
+                        return studentSlots.some(slot => {
+                            const timeSlot = (slot.time || slot.timeSlot || '').toString();
+                            return /(\d{1,2}):(\d{2})/.test(timeSlot);
+                        });
                     }
+                    // fallback: check family slots
+                    if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
+                        return fd.ScheduleSlots.some(slot => /(\d{1,2}):(\d{2})/.test((slot.time || slot.timeSlot || '').toString()));
+                    }
+                    return false;
+                });
+
+                if (hasStudentWithRoute && fd.Students.length > maxStudents) {
+                    maxStudents = fd.Students.length;
                 }
             });
 
-            // Ordenar las rutas alfabéticamente
-            const sortedRoutes = Object.keys(routeSummary).sort();
+            // Ordenar las rutas numéricamente cuando sea posible, fallback a orden alfabético
+            const sortedRoutes = Object.keys(routeSummary).sort((a, b) => {
+                const ma = (a || '').toString().match(/(\d+)/);
+                const mb = (b || '').toString().match(/(\d+)/);
+                if (ma && mb) return Number(ma[1]) - Number(mb[1]);
+                if (ma && !mb) return -1;
+                if (!ma && mb) return 1;
+                return a.toString().localeCompare(b.toString());
+            });
 
             // Crear Excel con ExcelJS para soporte completo de estilos
             const workbook = new ExcelJS.Workbook();
@@ -2418,96 +1973,42 @@ const RolesManagementPage = () => {
 
             // Agregar datos del resumen
             if (sortedRoutes.length === 0) {
-                // Si no hay rutas específicas, crear un resumen analizando las horas de todos los estudiantes
+                // Si no hay rutas específicas (keys en routeSummary), crear un resumen
+                // analizando únicamente ScheduleSlots a nivel estudiante o familiar
                 const timeSummary = { cantAM: 0, cantPM: 0, cantMD: 0 };
 
                 parentsWithRoutes.forEach(user => {
-                    const fd = user.FamilyDetail;
-                    if (fd.Students && fd.Students.length > 0) {
-                        fd.Students.forEach(student => {
-                            // Analizar horarios de buses asignados
-                            if (student.buses && student.buses.length > 0) {
-                                student.buses.forEach(bus => {
-                                    let assignedSchedule = [];
-                                    if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
-                                        try {
-                                            assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
-                                                ? JSON.parse(bus.AssignedBuses.assignedSchedule)
-                                                : bus.AssignedBuses.assignedSchedule;
-                                        } catch (e) {
-                                            assignedSchedule = [];
-                                        }
-                                    }
+                    const fd = user.FamilyDetail || {};
+                    if (!fd.Students || fd.Students.length === 0) return;
 
-                                    if (Array.isArray(assignedSchedule) && assignedSchedule.length > 0) {
-                                        assignedSchedule.forEach(schedule => {
-                                            if (schedule && typeof schedule === 'string') {
-                                                const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
-                                                if (timeMatch) {
-                                                    const hour = parseInt(timeMatch[1]);
-                                                    if (hour >= 0 && hour < 12) {
-                                                        timeSummary.cantAM++;
-                                                    } else if (hour >= 12 && hour < 15) {
-                                                        timeSummary.cantMD++;
-                                                    } else if (hour >= 15 && hour <= 23) {
-                                                        timeSummary.cantPM++;
-                                                    } else {
-                                                        timeSummary.cantAM++;
-                                                    }
-                                                } else {
-                                                    timeSummary.cantAM++;
-                                                }
-                                            }
-                                        });
-                                    } else if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
-                                        // Usar ScheduleSlots si no hay horarios asignados específicos
-                                        student.ScheduleSlots.forEach(slot => {
-                                            const timeSlot = slot.timeSlot || "";
-                                            const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                                                if (timeMatch) {
-                                                const hour = parseInt(timeMatch[1]);
-                                                if (hour >= 0 && hour < 12) {
-                                                    timeSummary.cantAM++;
-                                                } else if (hour >= 12 && hour < 15) {
-                                                    timeSummary.cantMD++;
-                                                } else if (hour >= 15 && hour <= 23) {
-                                                    timeSummary.cantPM++;
-                                                } else {
-                                                    timeSummary.cantAM++;
-                                                }
-                                            } else {
-                                                timeSummary.cantAM++;
-                                            }
-                                        });
+                    fd.Students.forEach(student => {
+                        const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                        const slotsToUse = studentSlots.length > 0 ? studentSlots : (Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots : []);
+
+                        if (slotsToUse.length === 0) {
+                            // Si no hay slots ni a nivel estudiante ni familiar, contar como AM por defecto
+                            timeSummary.cantAM++;
+                        } else {
+                            slotsToUse.forEach(slot => {
+                                const timeSlot = (slot.time || slot.timeSlot || '').toString();
+                                const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
+                                if (timeMatch) {
+                                    const hour = parseInt(timeMatch[1]);
+                                    if (hour >= 0 && hour < 12) {
+                                        timeSummary.cantAM++;
+                                    } else if (hour >= 12 && hour < 15) {
+                                        timeSummary.cantMD++;
+                                    } else if (hour >= 15 && hour <= 23) {
+                                        timeSummary.cantPM++;
                                     } else {
                                         timeSummary.cantAM++;
                                     }
-                                });
-                            } else if (student.ScheduleSlots && student.ScheduleSlots.length > 0) {
-                                // Si no tiene buses asignados, usar ScheduleSlots
-                                student.ScheduleSlots.forEach(slot => {
-                                    const timeSlot = slot.timeSlot || "";
-                                    const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                                    if (timeMatch) {
-                                        const hour = parseInt(timeMatch[1]);
-                                        if (hour >= 0 && hour < 12) {
-                                            timeSummary.cantAM++;
-                                        } else if (hour >= 12 && hour < 15) {
-                                            timeSummary.cantMD++;
-                                        } else if (hour >= 15 && hour <= 23) {
-                                            timeSummary.cantPM++;
-                                        } else {
-                                            timeSummary.cantAM++;
-                                        }
-                                    } else {
-                                        timeSummary.cantAM++;
-                                    }
-                                });
-                            } else {
-                                timeSummary.cantAM++;
-                            }
-                        });
-                    }
+                                } else {
+                                    timeSummary.cantAM++;
+                                }
+                            });
+                        }
+                    });
                 });
 
                 // Agregar una sola fila con el resumen total
@@ -2568,7 +2069,7 @@ const RolesManagementPage = () => {
                     });
 
                     // Asegurar que las columnas numéricas sean números (No. Ruta y conteos)
-                    // Col 1: intentar extraer número de "routeNumber" (p. ej. 'Ruta 12' -> 12)
+                    // Col 1: intentar extraer número de "routeNumber" solo si contiene dígitos
                     try {
                         const c1 = row.getCell(1);
                         if (c1 && c1.value != null) {
@@ -2597,6 +2098,18 @@ const RolesManagementPage = () => {
                         }
                     });
                 });
+                // Verificación simple: sumar totales desde routeSummary y loggear para detectar discrepancias
+                try {
+                    const totalsFromRoutes = { cantAM: 0, cantMD: 0, cantPM: 0 };
+                    Object.values(routeSummary).forEach(r => {
+                        totalsFromRoutes.cantAM += r.cantAM || 0;
+                        totalsFromRoutes.cantMD += r.cantMD || 0;
+                        totalsFromRoutes.cantPM += r.cantPM || 0;
+                    });
+                    console.log('[handleDownloadRouteReport] Totales calculados desde routeSummary:', totalsFromRoutes);
+                } catch (e) {
+                    // ignore logging errors
+                }
             }
 
             // Auto-ajustar columnas y agregar filtros
@@ -2615,29 +2128,38 @@ const RolesManagementPage = () => {
 
             // Crear headers dinámicos (nuevo orden solicitado)
             // Orden: Apellido Familia, Tipo Ruta, Dirección Principal, Dirección Alterna,
-            // Hora AM, Parada AM, Hora MD, Parada MD, Hora PM, Parada PM,
-            // (Estudiantes...), Nombre Padre, Email Padre
+            // (Estudiantes: Nombre, Grado, Hora AM, Parada AM, Hora MD, Parada MD, Hora PM, Parada PM),
+            // Nombre Padre, Email Padre
             const baseHeaders = [
                 "Apellido Familia",
                 "Tipo Ruta",
                 "Dirección Principal",
-                "Dirección Alterna",
-                "Hora AM",
-                "Parada AM",
-                "Hora MD",
-                "Parada MD",
-                "Hora PM",
-                "Parada PM"
+                "Dirección Alterna"
             ];
 
-            // Agregar columnas para estudiantes (solo nombre, grado y ruta)
+            // Agregar columnas para estudiantes (nombre, grado) y por día Lunes-Viernes: Hora AM, Parada AM, Hora MD, Parada MD, Hora PM, Parada PM
+            const weekdaysMap = [
+                { key: 'monday', label: 'Lunes' },
+                { key: 'tuesday', label: 'Martes' },
+                { key: 'wednesday', label: 'Miércoles' },
+                { key: 'thursday', label: 'Jueves' },
+                { key: 'friday', label: 'Viernes' }
+            ];
             const studentHeaders = [];
             for (let i = 1; i <= maxStudents; i++) {
                 studentHeaders.push(`Estudiante ${i} - Nombre`);
                 studentHeaders.push(`Estudiante ${i} - Grado`);
-                studentHeaders.push(`Estudiante ${i} - Ruta AM`);
-                studentHeaders.push(`Estudiante ${i} - Ruta MD`);
-                studentHeaders.push(`Estudiante ${i} - Ruta PM`);
+                weekdaysMap.forEach(day => {
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora AM`);
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta AM`);
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada AM`);
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora MD`);
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta MD`);
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada MD`);
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora PM`);
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta PM`);
+                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada PM`);
+                });
             }
 
             // Agregar columnas de contacto de la madre y el padre
@@ -2667,103 +2189,42 @@ const RolesManagementPage = () => {
                 };
             });
 
-            // Función para verificar si una familia tiene al menos un estudiante con ruta AM o PM
+            // Función para verificar si una familia tiene al menos un estudiante con ScheduleSlot parseable
+            // Ahora consideramos slot.schoolSchedule (preferido) o slot.time/slot.timeSlot
             const familyHasStudentWithRoute = (user) => {
-                const fd = user.FamilyDetail;
+                const fd = user.FamilyDetail || {};
                 if (!fd.Students || fd.Students.length === 0) return false;
 
-                // Verificar si tiene ScheduleSlots a nivel familiar
-                if (fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
-                    return fd.ScheduleSlots.some(slot => {
-                        const timeSlot = slot.time || "";
-                        const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                        return timeMatch !== null; // Tiene al menos una hora definida
-                    });
+                // Verificar ScheduleSlots a nivel familiar
+                if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
+                    if (fd.ScheduleSlots.some(slot => /(\d{1,2}):(\d{2})/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()))) return true;
                 }
 
+                // Verificar ScheduleSlots a nivel estudiante
                 return fd.Students.some(student => {
-                    // Verificar si tiene buses asignados específicos
-                    if (student.buses && student.buses.length > 0) {
-                        return student.buses.some(bus => {
-                            let assignedSchedule = [];
-                            if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
-                                try {
-                                    assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
-                                        ? JSON.parse(bus.AssignedBuses.assignedSchedule)
-                                        : bus.AssignedBuses.assignedSchedule;
-                                } catch (e) {
-                                    return false;
-                                }
-                            }
-                            return Array.isArray(assignedSchedule) && assignedSchedule.length > 0;
-                        });
-                    }
-
-                    return false;
+                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                    return studentSlots.some(slot => /(\d{1,2}):(\d{2})/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()));
                 });
             };
 
             // Filtrar familias que tienen al menos un estudiante con ruta
             const familiesWithRoutes = parentsWithRoutes.filter(familyHasStudentWithRoute);
 
-            // Procesar solo las familias que tienen estudiantes con rutas
+            // Procesar solo las familias que tienen estudiantes con rutas (ScheduleSlots)
             familiesWithRoutes.forEach((user, familyIndex) => {
-                const fd = user.FamilyDetail;
+                const fd = user.FamilyDetail || {};
 
-                // Extraer horas y paradas a nivel familiar desde ScheduleSlots de todos los estudiantes
-                let familyHoraAM = "", familyParadaAM = "";
-                let familyHoraMD = "", familyParadaMD = "";
-                let familyHoraPM = "", familyParadaPM = "";
+                // Nota: las horas y paradas ahora se registran a nivel estudiante usando ScheduleSlots
 
-                // Extraer horas y paradas a nivel familiar desde ScheduleSlots de la familia
-                if (fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
-                    console.log('DEBUG - ScheduleSlots de la familia:', fd.ScheduleSlots);
-                    fd.ScheduleSlots.forEach(slot => {
-                        console.log('DEBUG - Slot:', slot);
-                        const timeSlot = slot.time || slot.timeSlot || ""; // Verificar ambos campos
-                        const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                        const hour = timeMatch ? parseInt(timeMatch[1]) : null;
-
-                        console.log('DEBUG - timeSlot:', timeSlot, 'hour:', hour, 'note:', slot.note);
-
-                                        if (hour !== null) {
-                                            // Clasificar por hora y asignar a nivel familiar
-                                            if (hour >= 0 && hour < 12 && !familyHoraAM) {
-                                                familyHoraAM = timeMatch[0];
-                                                familyParadaAM = slot.note || "";
-                                                console.log('DEBUG - Asignado AM:', familyHoraAM, familyParadaAM);
-                                            } else if (hour >= 12 && hour < 15 && !familyHoraMD) {
-                                                familyHoraMD = timeMatch[0];
-                                                familyParadaMD = slot.note || "";
-                                                console.log('DEBUG - Asignado MD:', familyHoraMD, familyParadaMD);
-                                            } else if (hour >= 15 && hour <= 23 && !familyHoraPM) {
-                                                familyHoraPM = timeMatch[0];
-                                                familyParadaPM = slot.note || "";
-                                                console.log('DEBUG - Asignado PM:', familyHoraPM, familyParadaPM);
-                                            }
-                                        }
-                    });
-                } else {
-                    console.log('DEBUG - Familia no tiene ScheduleSlots');
-                }
-
-                // Datos base incluyendo horas y paradas familiares
-                // Nuevo orden: Apellido Familia, Tipo Ruta, Dirección Principal, Dirección Alterna,
-                // Hora AM, Parada AM, Hora MD, Parada MD, Hora PM, Parada PM
+                // Mantener solo datos estáticos de la familia; las horas/paradas ahora son por estudiante
                 const baseData = [
                     fd.familyLastName || "",
                     fd.routeType || "",
                     fd.mainAddress || "",
-                    fd.alternativeAddress || "",
-                    familyHoraAM,
-                    familyParadaAM,
-                    familyHoraMD,
-                    familyParadaMD,
-                    familyHoraPM,
-                    familyParadaPM
+                    fd.alternativeAddress || ""
                 ];
 
-                // Datos de estudiantes (solo nombre, grado y rutas)
+                // Datos de estudiantes (solo nombre, grado y rutas basadas en ScheduleSlots)
                 const studentData = [];
                 for (let i = 0; i < maxStudents; i++) {
                     if (fd.Students && fd.Students[i]) {
@@ -2771,72 +2232,101 @@ const RolesManagementPage = () => {
                         studentData.push(student.fullName || "");
                         studentData.push(student.grade || "");
 
-                        // Extraer solo las rutas para este estudiante
-                        let rutaAM = "", rutaMD = "", rutaPM = "";
+                        // Inicializar estructura por día y por periodo (keys en inglés, labels en español para headers)
+                        const dataByDay = {};
+                        weekdaysMap.forEach(d => {
+                            dataByDay[d.key] = {
+                                horaAM: '', paradaAM: '',
+                                horaMD: '', paradaMD: '',
+                                horaPM: '', paradaPM: ''
+                            };
+                        });
 
-                        // Obtener rutas de buses asignados
-                        if (student.buses && student.buses.length > 0) {
-                            student.buses.forEach(bus => {
-                                // Obtener horarios asignados desde la tabla intermedia
-                                let assignedSchedule = [];
-                                if (bus.AssignedBuses && bus.AssignedBuses.assignedSchedule) {
-                                    try {
-                                        assignedSchedule = typeof bus.AssignedBuses.assignedSchedule === 'string'
-                                            ? JSON.parse(bus.AssignedBuses.assignedSchedule)
-                                            : bus.AssignedBuses.assignedSchedule;
-                                    } catch (e) {
-                                        console.warn('Error parsing assignedSchedule for student data:', e);
-                                        assignedSchedule = [];
-                                    }
+                        const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                        // Incluir slots familiares que correspondan a este estudiante (slot.studentId === student.id) o que no tengan studentId
+                        const familySlots = Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots.filter(s => !s.studentId || Number(s.studentId) === Number(student.id)) : [];
+                        // Preferir slots específicos del estudiante; si no hay, usar familySlots (que pueden incluir entries por studentId)
+                        const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
+
+                        slotsToUse.forEach(slot => {
+                            const timeSlot = (slot.schoolSchedule || slot.time || slot.timeSlot || '').toString();
+                            const displayTime = (slot.time || slot.schoolSchedule || slot.timeSlot || '').toString();
+                            const note = slot.note || '';
+
+                            // Parsear slot.days robustamente (array, JSON string, or CSV-like)
+                            let slotDays = [];
+                            if (Array.isArray(slot.days)) {
+                                slotDays = slot.days;
+                            } else if (typeof slot.days === 'string') {
+                                try {
+                                    const parsed = JSON.parse(slot.days);
+                                    if (Array.isArray(parsed)) slotDays = parsed;
+                                    else slotDays = [slot.days];
+                                } catch (e) {
+                                    // fallback: comma separated
+                                    slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days];
                                 }
+                            } else if (slot.days) {
+                                slotDays = [slot.days];
+                            }
 
-                                const routeNumber = bus.routeNumber || `Ruta ${bus.id}`;
+                            // obtener routeNumber desde buses usando busId
+                            let routeLabel = '';
+                            if (slot.busId) {
+                                const b = (buses || []).find(x => Number(x.id) === Number(slot.busId));
+                                if (b) routeLabel = b.routeNumber || b.route || (`Ruta ${b.id}`);
+                            }
+                            if (!routeLabel) routeLabel = fd.routeType || '';
 
-                                // Analizar cada horario asignado para obtener solo las rutas
-                                if (Array.isArray(assignedSchedule)) {
-                                    assignedSchedule.forEach(schedule => {
-                                        if (schedule && typeof schedule === 'string') {
-                                            const timeMatch = schedule.match(/(\d{1,2}):(\d{2})/);
-                                            const hour = timeMatch ? parseInt(timeMatch[1]) : null;
+                            const paradaDisplay = `${note || ''}`;
 
-                                            if (hour !== null) {
-                                                // Clasificar únicamente por hora para asignar rutas
-                                                if (hour >= 0 && hour < 12 && !rutaAM) {
-                                                    rutaAM = routeNumber;
-                                                } else if (hour >= 12 && hour < 15 && !rutaMD) {
-                                                    rutaMD = routeNumber;
-                                                } else if (hour >= 15 && hour <= 23 && !rutaPM) {
-                                                    rutaPM = routeNumber;
-                                                }
-                                            }
-                                        }
-                                    });
-                                }
-                            });
-                        }
+                            // Para cada día del slot, asignar al día correspondiente
+                            slotDays.forEach(rawDay => {
+                                if (!rawDay) return;
+                                const day = rawDay.toString().toLowerCase();
+                                if (!dataByDay[day]) return; // ignorar fines de semana u otros
 
-                        // Si no hay buses asignados pero hay ScheduleSlots familiares con horas, usar N/A para rutas
-                        if (!rutaAM && !rutaMD && !rutaPM && fd.ScheduleSlots && fd.ScheduleSlots.length > 0) {
-                            fd.ScheduleSlots.forEach(slot => {
-                                const timeSlot = slot.time || slot.timeSlot || "";
                                 const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
                                 const hour = timeMatch ? parseInt(timeMatch[1]) : null;
 
                                 if (hour !== null) {
-                                    if (hour >= 0 && hour < 12 && !rutaAM) {
-                                        rutaAM = "";
-                                    } else if (hour >= 12 && hour < 15 && !rutaMD) {
-                                        rutaMD = "";
-                                    } else if (hour >= 15 && hour <= 23 && !rutaPM) {
-                                        rutaPM = "";
+                                    if (hour >= 0 && hour < 12) {
+                                        if (!dataByDay[day].horaAM) dataByDay[day].horaAM = displayTime;
+                                        if (!dataByDay[day].rutaAM) dataByDay[day].rutaAM = routeLabel;
+                                        if (!dataByDay[day].paradaAM) dataByDay[day].paradaAM = paradaDisplay;
+                                    } else if (hour >= 12 && hour < 15) {
+                                        if (!dataByDay[day].horaMD) dataByDay[day].horaMD = displayTime;
+                                        if (!dataByDay[day].rutaMD) dataByDay[day].rutaMD = routeLabel;
+                                        if (!dataByDay[day].paradaMD) dataByDay[day].paradaMD = paradaDisplay;
+                                    } else if (hour >= 15 && hour <= 23) {
+                                        if (!dataByDay[day].horaPM) dataByDay[day].horaPM = displayTime;
+                                        if (!dataByDay[day].rutaPM) dataByDay[day].rutaPM = routeLabel;
+                                        if (!dataByDay[day].paradaPM) dataByDay[day].paradaPM = paradaDisplay;
+                                    }
+                                } else {
+                                    // Si no es parseable, asignar a AM si está vacío
+                                    if (!dataByDay[day].horaAM) {
+                                        dataByDay[day].horaAM = displayTime;
+                                        if (!dataByDay[day].rutaAM) dataByDay[day].rutaAM = routeLabel;
+                                        dataByDay[day].paradaAM = paradaDisplay;
                                     }
                                 }
                             });
-                        }
+                        });
 
-                        studentData.push(rutaAM);
-                        studentData.push(rutaMD);
-                        studentData.push(rutaPM);
+                        // Push en orden Lunes..Viernes los pares Hora/Parada por periodo
+                        weekdaysMap.forEach(d => {
+                            const dd = dataByDay[d.key];
+                            studentData.push(dd.horaAM);
+                            studentData.push(dd.rutaAM || '');
+                            studentData.push(dd.paradaAM);
+                            studentData.push(dd.horaMD);
+                            studentData.push(dd.rutaMD || '');
+                            studentData.push(dd.paradaMD);
+                            studentData.push(dd.horaPM);
+                            studentData.push(dd.rutaPM || '');
+                            studentData.push(dd.paradaPM);
+                        });
                     } else {
                         studentData.push(""); // Nombre vacío
                         studentData.push(""); // Grado vacío
@@ -2880,25 +2370,75 @@ const RolesManagementPage = () => {
 
                 // Convertir columnas de ruta de estudiantes a número cuando sea posible
                 try {
-                    const baseLen = baseHeaders.length; // 10
+                    const baseLen = baseHeaders.length; // now 4
+                    // Each student block: name(1), grade(1) + for each weekday 9 columns (hora,ruta,parada for AM/MD/PM) => 2 + 9*weekdays
+                    const perStudentCols = 2 + weekdaysMap.length * 9;
                     for (let i = 0; i < maxStudents; i++) {
-                        // rutaAM at col = baseLen + i*5 + 3 (1-based indexing)
-                        const colRutaAM = baseLen + i * 5 + 3;
-                        const colRutaMD = baseLen + i * 5 + 4;
-                        const colRutaPM = baseLen + i * 5 + 5;
+                        const studentStart = baseLen + i * perStudentCols;
+                        weekdaysMap.forEach((d, dayIdx) => {
+                            const dayOffset = dayIdx * 9; // 9 columns per day
+                            // Ruta columns are at offsets relative to studentStart:
+                            // name(1), grade(2) then per day: horaAM(3), rutaAM(4), paradaAM(5), horaMD(6), rutaMD(7), paradaMD(8), horaPM(9), rutaPM(10), paradaPM(11)
+                            // Correct offsets: after name(1) and grade(2), per day the columns are:
+                            // horaAM(+1), rutaAM(+2), paradaAM(+3), horaMD(+4), rutaMD(+5), paradaMD(+6), horaPM(+7), rutaPM(+8), paradaPM(+9)
+                            const colRutaAM = studentStart + 2 + dayOffset + 2;
+                            const colRutaMD = studentStart + 2 + dayOffset + 5;
+                            const colRutaPM = studentStart + 2 + dayOffset + 8;
 
-                        [colRutaAM, colRutaMD, colRutaPM].forEach(colIdx => {
-                            try {
-                                const cell = row.getCell(colIdx);
-                                if (cell && cell.value != null && cell.value !== '') {
-                                    const m = cell.value.toString().match(/(\d+)/);
-                                    if (m) {
-                                        cell.value = Number(m[1]);
-                                        cell.numFmt = '0';
+                            [colRutaAM, colRutaMD, colRutaPM].forEach(colIdx => {
+                                try {
+                                    const cell = row.getCell(colIdx);
+                                    if (cell && cell.value != null && cell.value !== '') {
+                                        const raw = cell.value.toString();
+                                        // 1) Buscar primer grupo de dígitos
+                                        let m = raw.match(/(\d+)/);
+                                        let num = null;
+                                        if (m) {
+                                            num = Number(m[1]);
+                                        } else {
+                                            // 2) Intentar parsear el string completo
+                                            const n = Number(raw);
+                                            if (!Number.isNaN(n)) num = n;
+                                            else {
+                                                // 3) Fallback: eliminar todos los no-dígitos y parsear
+                                                const digitsOnly = raw.replace(/\D+/g, '');
+                                                if (digitsOnly) num = Number(digitsOnly);
+                                            }
+                                        }
+
+                                        if (num !== null && !Number.isNaN(num)) {
+                                            cell.value = num;
+                                            cell.numFmt = '0';
+                                        } else {
+                                            // If no numeric value found, leave as-is (string)
+                                            // but do not set numeric format
+                                            cell.value = raw;
+                                            cell.numFmt = 'General';
+                                        }
                                     }
+                                } catch (e) {
+                                    // ignore per-cell conversion errors
                                 }
+                            });
+                            // Ensure Hora columns remain as General/text (no numeric format)
+                            try {
+                                const colHoraAM = studentStart + 2 + dayOffset + 1;
+                                const colHoraMD = studentStart + 2 + dayOffset + 4;
+                                const colHoraPM = studentStart + 2 + dayOffset + 7;
+                                [colHoraAM, colHoraMD, colHoraPM].forEach(hIdx => {
+                                    try {
+                                        const hCell = row.getCell(hIdx);
+                                        if (hCell && hCell.value != null && hCell.value !== '') {
+                                            // Preserve value as string and set format to General to avoid number formatting
+                                            hCell.value = hCell.value.toString();
+                                            hCell.numFmt = 'General';
+                                        }
+                                    } catch (inner) {
+                                        // ignore
+                                    }
+                                });
                             } catch (e) {
-                                // ignore per-cell conversion errors
+                                // ignore
                             }
                         });
                     }
@@ -3466,7 +3006,10 @@ const RolesManagementPage = () => {
                                                     <Tooltip title="Asignar Buses">
                                                         <IconButton onClick={() => {
                                                             setSelectedUser(user);
-                                                            setAssignBusesOpen(true);
+                                                            // open the student schedule modal for this family's students
+                                                            setScheduleModalStudents(user.FamilyDetail?.Students || []);
+                                                            setScheduleSchoolId(Number(user?.school) || null);
+                                                            setOpenStudentScheduleModal(true);
                                                         }}>
                                                             <DirectionsBus />
                                                         </IconButton>
@@ -3621,13 +3164,16 @@ const RolesManagementPage = () => {
                                                     {user.roleId === 3 && (
                                                         <>
                                                             <Tooltip title="Asignar Buses">
-                                                                <IconButton onClick={() => {
-                                                                    setSelectedUser(user);
-                                                                    setAssignBusesOpen(true);
-                                                                }}>
-                                                                    <DirectionsBus />
-                                                                </IconButton>
-                                                            </Tooltip>
+                                                                    <IconButton onClick={() => {
+                                                                        setSelectedUser(user);
+                                                                        // open the student schedule modal for this family's students
+                                                                        setScheduleModalStudents(user.FamilyDetail?.Students || []);
+                                                                        setScheduleSchoolId(Number(user?.school) || null);
+                                                                        setOpenStudentScheduleModal(true);
+                                                                    }}>
+                                                                        <DirectionsBus />
+                                                                    </IconButton>
+                                                                </Tooltip>
                                                             <Tooltip title="Enviar Contrato Manualmente">
                                                                 <IconButton onClick={() => handleSendContractManually(user)}>
                                                                     <Mail />
@@ -3967,13 +3513,15 @@ const RolesManagementPage = () => {
                                                 />
                                             </Grid>
                                             <Grid item xs={2} md={2} display="flex" alignItems="center">
-                                                <IconButton
-                                                    color="error"
-                                                    aria-label="Eliminar alumno"
-                                                    onClick={() => handleRemoveStudent(idx)}
-                                                >
-                                                    <Delete />
-                                                </IconButton>
+                                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                                    <IconButton
+                                                        color="error"
+                                                        aria-label="Eliminar alumno"
+                                                        onClick={() => handleRemoveStudent(idx)}
+                                                    >
+                                                        <Delete />
+                                                    </IconButton>
+                                                </Box>
                                             </Grid>
                                         </React.Fragment>
                                     ))}
@@ -4003,75 +3551,7 @@ const RolesManagementPage = () => {
                                         </Button>
                                     </Grid>
                                 </Grid>
-                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
-                                    Horarios de Parada
-                                </Typography>
-                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
-                                    {familyDetail.scheduleSlots.map((slot, idx) => (
-                                        <Grid item xs={12} key={idx}>
-                                            <Typography variant="body2">
-                                                • {slot.time} {slot.note && `(${slot.note})`}
-                                            </Typography>
-                                            <Grid container spacing={1} alignItems="center" key={idx} sx={{ mb: 1 }}>
-                                                {/* Campo hora editable */}
-                                                <Grid item xs={12} md={4}>
-                                                    <TextField
-                                                        label="Hora"
-                                                        type="time"
-                                                        fullWidth
-                                                        variant="outlined"
-                                                        value={slot.time}
-                                                        onChange={e => handleEditSlot(idx, 'time', e.target.value)}
-                                                        InputLabelProps={{ shrink: true }}
-                                                    />
-                                                </Grid>
-                                                {/* Campo nota editable */}
-                                                <Grid item xs={12} md={6}>
-                                                    <TextField
-                                                        label="Nota"
-                                                        fullWidth
-                                                        variant="outlined"
-                                                        value={slot.note}
-                                                        onChange={e => handleEditSlot(idx, 'note', e.target.value)}
-                                                    />
-                                                </Grid>
-                                                {/* Botón borrar */}
-                                                <Grid item xs={12} md={2} display="flex" justifyContent="center">
-                                                    <IconButton color="error" onClick={() => handleDeleteSlot(idx)}>
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Grid>
-                                            </Grid>
-                                        </Grid>
-                                    ))}
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="time"
-                                            label="Hora (HH:MM)"
-                                            type="time"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={newSlot.time}
-                                            onChange={(e) => setNewSlot({ ...newSlot, time: e.target.value })}
-                                            InputLabelProps={{ shrink: true }}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={6}>
-                                        <TextField
-                                            name="note"
-                                            label="Nota / Parada"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={newSlot.note}
-                                            onChange={(e) => setNewSlot({ ...newSlot, note: e.target.value })}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={2} display="flex" alignItems="center">
-                                        <Button variant="outlined" onClick={handleAddSlot} sx={{ mt: 1 }}>
-                                            Agregar
-                                        </Button>
-                                    </Grid>
-                                </Grid>
+                                {/* Sección 'Horarios de Parada' removida: gestionada ahora por el modal por alumno */}
                             </>
                         )}
                         {Number(selectedUser?.roleId) === 6 && (
@@ -4232,19 +3712,21 @@ const RolesManagementPage = () => {
                 onSuccess={() => {}}
             />
 
-            {/* Submodal para asignar buses al padre */}
-            {selectedUser && (
-                <AssignBusesModal
-                    open={assignBusesOpen}
-                    onClose={() => setAssignBusesOpen(false)}
-                    parentUser={selectedUser}
-                    buses={buses}
-                    contracts={contracts}
-                    onSaveSuccess={async () => {
-                        fetchUsers();
-                    }}
-                />
-            )}
+            {/* Modal para editar horario por alumno (StudentScheduleModal) */}
+            <StudentScheduleModal
+                studentId={scheduleStudentId}
+                students={scheduleModalStudents}
+                schoolId={scheduleSchoolId}
+                open={openStudentScheduleModal}
+                onClose={() => {
+                    setOpenStudentScheduleModal(false);
+                    setScheduleStudentId(null);
+                    setScheduleSchoolId(null);
+                    setScheduleModalStudents([]);
+                    // refresh users to reflect any schedule changes
+                    fetchUsers();
+                }}
+            />
 
             {/* Diálogo para envío manual de contrato */}
             {openSendContractDialog && selectedUserForManualSend && (
