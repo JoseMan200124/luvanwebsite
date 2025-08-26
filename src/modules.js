@@ -6,7 +6,8 @@ import {
     Payments,
     People,
     Security,
-    Description
+    Description,
+    CloudUpload
 } from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
@@ -21,6 +22,7 @@ import ContractsManagementPage from './pages/ContractsManagementPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import PaymentsManagementPage from './pages/PaymentsManagementPage';
 import ActivityLogPage from './pages/ActivityLogPage';
+import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 
 export const modules = [
     {
@@ -54,6 +56,13 @@ export const modules = [
                 name: 'Buses',
                 path: 'buses',
                 component: BusesManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'carga-masiva-horarios',
+                name: 'Carga Masiva de Horarios',
+                path: 'carga-masiva-horarios',
+                component: BulkScheduleUpdatePage,
                 roles: ['Administrador', 'Gestor'],
             },
         ],

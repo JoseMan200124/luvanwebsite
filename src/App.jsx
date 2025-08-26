@@ -25,6 +25,7 @@ import UpdateParentInfoPage from './pages/UpdateParentInfoPage';
 import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
+import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 import { modules } from './modules';
 
 function App() {
@@ -121,6 +122,16 @@ function App() {
                             element={
                                 <ProtectedRoute roles={['Gestor','Administrador']}>
                                     <PermissionsManagementPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        {/* Carga Masiva de Horarios */}
+                        <Route
+                            path="carga-masiva-horarios"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <BulkScheduleUpdatePage />
                                 </ProtectedRoute>
                             }
                         />
