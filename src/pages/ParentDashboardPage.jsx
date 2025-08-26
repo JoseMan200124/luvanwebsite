@@ -15,6 +15,12 @@ import {
   Chip,
   Stack,
   Tooltip,
+  ToggleButtonGroup,
+  ToggleButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
@@ -160,6 +166,10 @@ const ParentDashboardPage = () => {
   const [parentInfo, setParentInfo] = useState(() => normalizeParentInfo({}));
   const [slotsByStudent, setSlotsByStudent] = useState({}); // { [studentId]: Slot[] }
 
+  // Filtros
+  const [selectedDay, setSelectedDay] = useState('all'); // 'all' | monday | ... | friday
+  const [selectedStudent, setSelectedStudent] = useState('all'); // 'all' | <id>
+
   // Llama /parents/:id/route-info y, si hay estudiantes con id, trae sus slots
   const loadAll = async () => {
     setLoading(true);
@@ -201,10 +211,6 @@ const ParentDashboardPage = () => {
   }, [auth?.user?.id]);
 
   // ---------- Derivados (listas para mostrar) ----------
-
-  // Rutas construidas a partir de:
-  //   a) parentInfo.routes (si el endpoint ya te lo da)
-  //   b) y además, cualquier bus encontrado en los scheduleSlots por alumno
   const derivedRoutes = useMemo(() => {
     const fromInfo = toArray(parentInfo.routes)
       .filter((r) => nonEmpty(r.routeNumber) || nonEmpty(r.stopPoint) || (r.schedules?.length))
@@ -223,9 +229,9 @@ const ParentDashboardPage = () => {
         if (!bus) return;
         fromSlots.push({
           routeNumber: safeStr(bus?.routeNumber || ''),
-          stopPoint: '', // se podría mapear si lo guardas como note o extra
+          stopPoint: '',
           schedules: s?.schoolSchedule ? [safeStr(s.schoolSchedule)] : [],
-          monitoraName: '', // solo si el include del backend trae monitora asociada
+          monitoraName: '',
           monitoraContact: '',
         });
       });
@@ -241,6 +247,19 @@ const ParentDashboardPage = () => {
     });
     return [...map.values()];
   }, [parentInfo.routes, slotsByStudent]);
+
+  // Estudiantes filtrados
+  const studentsToRender = useMemo(() => {
+    const id = selectedStudent === 'all' ? null : Number(selectedStudent);
+    if (!id) return parentInfo.students;
+    return parentInfo.students.filter((s) => s.id === id);
+  }, [parentInfo.students, selectedStudent]);
+
+  // Días filtrados
+  const daysToRender = useMemo(() => {
+    if (selectedDay === 'all') return DAYS;
+    return DAYS.filter((d) => d.key === selectedDay);
+  }, [selectedDay]);
 
   // ---------- Render ----------
   if (loading) {
@@ -437,12 +456,56 @@ const ParentDashboardPage = () => {
           <Grid item xs={12}>
             <SectionCard elevation={3}>
               <CardContent>
-                <Typography variant="h5" gutterBottom>Horarios de Parada por Estudiante</Typography>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  alignItems={{ xs: 'stretch', md: 'center' }}
+                  justifyContent="space-between"
+                  sx={{ mb: 2 }}
+                >
+                  {/* Filtro por día */}
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <Typography variant="h6" sx={{ mr: 1 }}>Horarios de Parada</Typography>
+                    <ToggleButtonGroup
+                      exclusive
+                      value={selectedDay}
+                      onChange={(_, v) => v && setSelectedDay(v)}
+                      size="small"
+                    >
+                      <ToggleButton value="all">Semana</ToggleButton>
+                      {DAYS.map((d) => (
+                        <ToggleButton key={d.key} value={d.key}>{d.label}</ToggleButton>
+                      ))}
+                    </ToggleButtonGroup>
+                  </Stack>
 
-                {parentInfo.students.length === 0 ? (
+                  {/* Filtro por estudiante */}
+                  <FormControl size="small" sx={{ minWidth: 240 }}>
+                    <InputLabel id="student-filter-label">Estudiante</InputLabel>
+                    <Select
+                      labelId="student-filter-label"
+                      label="Estudiante"
+                      value={selectedStudent}
+                      onChange={(e) => setSelectedStudent(e.target.value)}
+                    >
+                      <MenuItem value="all">Todos</MenuItem>
+                      {parentInfo.students.map((st, idx) => (
+                        <MenuItem
+                          key={`opt-${st.id ?? idx}`}
+                          value={st.id ?? `noid-${idx}`}
+                          disabled={!st.id}
+                        >
+                          {st.fullName}{nonEmpty(st.grade) ? ` — ${st.grade}` : ''}{!st.id ? ' (sin ID)' : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Stack>
+
+                {studentsToRender.length === 0 ? (
                   <Typography fontStyle="italic">No hay estudiantes para mostrar horarios.</Typography>
                 ) : (
-                  parentInfo.students.map((st, idx) => {
+                  studentsToRender.map((st, idx) => {
                     const slots = st.id ? toArray(slotsByStudent[st.id]) : [];
                     const hasAny = slots.length > 0;
 
@@ -460,7 +523,7 @@ const ParentDashboardPage = () => {
                     });
 
                     return (
-                      <MuiBox key={`sched-${st.id ?? idx}`} sx={{ mb: idx < parentInfo.students.length - 1 ? 3 : 0 }}>
+                      <MuiBox key={`sched-${st.id ?? idx}`} sx={{ mb: idx < studentsToRender.length - 1 ? 3 : 0 }}>
                         <Typography variant="h6" sx={{ mb: 1 }}>
                           {st.fullName || 'Estudiante'}{nonEmpty(st.grade) ? ` — ${st.grade}` : ''}
                         </Typography>
@@ -472,7 +535,7 @@ const ParentDashboardPage = () => {
                         ) : (
                           <MuiBox sx={{ overflowX: 'auto' }}>
                             <Stack direction="row" spacing={2} sx={{ minHeight: 1, pb: 1 }}>
-                              {DAYS.map(({ key, label }) => {
+                              {daysToRender.map(({ key, label }) => {
                                 const items = byDay[key];
                                 return (
                                   <DayCol key={key}>
@@ -539,7 +602,7 @@ const ParentDashboardPage = () => {
                             </Stack>
                           </MuiBox>
                         )}
-                        {idx < parentInfo.students.length - 1 && <Divider sx={{ mt: 2 }} />}
+                        {idx < studentsToRender.length - 1 && <Divider sx={{ mt: 2 }} />}
                       </MuiBox>
                     );
                   })
