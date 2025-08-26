@@ -2274,9 +2274,8 @@ const RolesManagementPage = () => {
                             let routeLabel = '';
                             if (slot.busId) {
                                 const b = (buses || []).find(x => Number(x.id) === Number(slot.busId));
-                                if (b) routeLabel = b.routeNumber || b.route || (`Ruta ${b.id}`);
+                                if (b) routeLabel = b.routeNumber || '';
                             }
-                            if (!routeLabel) routeLabel = fd.routeType || '';
 
                             const paradaDisplay = `${note || ''}`;
 

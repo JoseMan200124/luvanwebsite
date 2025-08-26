@@ -13,6 +13,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   const { fetchSlots: loadSlots, fetchSchoolSchedules: loadSchoolSchedules, fetchRoutesByTime: loadRoutesByTime, createSlot: createRemoteSlot, deleteSlot: deleteRemoteSlot, updateSlot: updateRemoteSlot } = useScheduleSlots();
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignTargetStudentId, setAssignTargetStudentId] = useState(null); // current student for the assign popup
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState({ slotId: null, day: null, studentId: null });
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   // Assign Route form state (separate popup)
   const [assignForm, setAssignForm] = useState({ schoolSchedule: '', routeId: '', paradaTime: '', note: '', days: [] });
@@ -346,7 +349,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                             <div style={{ fontSize: 15, fontWeight: 700 }}>{s.time}</div>
                             <div style={{ display: 'flex', gap: 8 }}>
-                              <button type="button" onClick={()=>{ removeSlotForDay(s.id, day, st.id); }} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer' }} title="Eliminar">🗑</button>
+                                    <button type="button" onClick={()=>{ setConfirmTarget({ slotId: s.id, day, studentId: st.id }); setConfirmDeleteOpen(true); }} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer' }} title="Eliminar">🗑</button>
                               <button type="button" onClick={()=>{ openAssignPopup(s, day, st.id); }} style={{ background: 'transparent', border: 'none', color: '#2563EB', cursor: 'pointer' }} title="Editar">✏️</button>
                             </div>
                           </div>
@@ -433,6 +436,34 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
                   <button type='button' onClick={()=>setAssignOpen(false)} style={{ padding: '8px 12px', borderRadius: 6 }}>Cancelar</button>
                   <button type='button' onClick={saveAssignedRoute} style={{ padding: '8px 12px', borderRadius: 6, background: '#059669', color: '#fff' }}>Guardar</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Confirm delete popup */}
+          {confirmDeleteOpen && (
+            <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 32000 }}>
+              <div style={{ background: '#fff', padding: 20, borderRadius: 8, width: 'min(520px, 95vw)', boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
+                <h3 style={{ marginTop: 0 }}>Confirmar eliminación</h3>
+                <div style={{ marginTop: 8 }}>¿Estás seguro que deseas eliminar esta parada?</div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                  <button type='button' onClick={() => { if (confirmLoading) return; setConfirmDeleteOpen(false); setConfirmTarget({ slotId: null, day: null, studentId: null }); }} style={{ padding: '8px 12px', borderRadius: 6 }}>Cancelar</button>
+                  <button type='button' onClick={async () => {
+                    if (confirmLoading) return;
+                    setConfirmLoading(true);
+                    try {
+                      await removeSlotForDay(confirmTarget.slotId, confirmTarget.day, confirmTarget.studentId);
+                      setConfirmDeleteOpen(false);
+                      setConfirmTarget({ slotId: null, day: null, studentId: null });
+                    } catch (err) {
+                      console.error('[confirmDelete] Error deleting slot:', err);
+                    } finally {
+                      setConfirmLoading(false);
+                    }
+                  }} style={{ padding: '8px 12px', borderRadius: 6, background: '#DC2626', color: '#fff' }}>
+                    {confirmLoading ? 'Eliminando...' : 'Eliminar'}
+                  </button>
                 </div>
               </div>
             </div>
