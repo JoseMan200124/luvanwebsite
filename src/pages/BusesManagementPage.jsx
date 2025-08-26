@@ -376,6 +376,30 @@ const BusesManagementPage = () => {
     };
 
     const handleEditClick = (bus) => {
+        // Normalize schedule into canonical array of objects { code?, name?, times: [] }
+        const normalizeScheduleEntry = (entry) => {
+            if (!entry) return null;
+            if (typeof entry === 'string') {
+                // try parse JSON
+                try { const p = JSON.parse(entry); entry = p; } catch (e) { /* keep string */ }
+            }
+            if (typeof entry === 'string') {
+                // legacy string: try extract time
+                const tMatch = entry.match(/(\d{1,2}:\d{2})/);
+                return { name: entry, times: tMatch ? [tMatch[0]] : [entry] };
+            }
+            // object
+            return {
+                code: entry.code || null,
+                name: entry.name || entry.label || '',
+                times: Array.isArray(entry.times) ? entry.times : (entry.time ? [entry.time] : [])
+            };
+        };
+
+        const normalizedSchedule = Array.isArray(bus.schedule)
+            ? bus.schedule.map(normalizeScheduleEntry).filter(Boolean)
+            : (bus.schedule ? [normalizeScheduleEntry(bus.schedule)].filter(Boolean) : []);
+
         setSelectedBus({
             id: bus.id,
             plate: bus.plate,
@@ -387,8 +411,7 @@ const BusesManagementPage = () => {
             routeNumber: bus.routeNumber || '',
             files: bus.files || [],
             inWorkshop: bus.inWorkshop || false,
-            // schedule ahora será un array, si es null lo convertimos en []
-            schedule: Array.isArray(bus.schedule) ? bus.schedule : (bus.schedule ? [bus.schedule] : [])
+            schedule: normalizedSchedule
         });
     // availableSchedules will be populated by the selectedBus.schoolId effect
     setAvailableSchedules([]);
@@ -443,6 +466,39 @@ const BusesManagementPage = () => {
         }));
     // Schedules are not tied to the pilot anymore; they belong to the bus (via selected school's schedules)
     // availableSchedules is managed by the selectedBus.schoolId effect
+    };
+
+    // Helper to compare a selected schedule entry with an available schedule option
+    const extractCodeFromName = (name) => {
+        if (!name || typeof name !== 'string') return null;
+        const m = name.match(/\b(AM|MD|PM|EX)\b/i);
+        return m ? m[1].toUpperCase() : null;
+    };
+
+    const scheduleMatches = (selectedEntry, availableEntry) => {
+        if (!selectedEntry || !availableEntry) return false;
+        // if selectedEntry is a string, try parse
+        let sel = selectedEntry;
+        if (typeof sel === 'string') {
+            try { sel = JSON.parse(sel); } catch (e) { /* keep string */ }
+        }
+
+        // if both have code, match by code
+        const selCode = sel && sel.code ? sel.code : (sel && sel.name ? extractCodeFromName(sel.name) : null);
+        const availCode = availableEntry.code ? availableEntry.code : extractCodeFromName(availableEntry.name);
+        if (selCode && availCode && selCode === availCode) return true;
+
+    // match by name if present (exact)
+    if (sel && sel.name && availableEntry.name && sel.name === availableEntry.name) return true;
+
+        // compare times arrays
+    const selTimes = Array.isArray(sel?.times) ? sel.times : (sel && sel.time ? [sel.time] : (typeof sel === 'string' ? [sel] : []));
+        const availTimes = Array.isArray(availableEntry.times) ? availableEntry.times : (availableEntry.time ? [availableEntry.time] : []);
+        if (selTimes.length > 0 && availTimes.length > 0) {
+            return selTimes.some(t => availTimes.includes(t));
+        }
+
+        return false;
     };
 
     /**
@@ -1269,11 +1325,7 @@ const BusesManagementPage = () => {
                                 const valueKey = JSON.stringify(sch);
                                 const label = `${sch.name} - ${(sch.times || []).join(', ')}`;
                                 const isChecked = selectedBus?.schedule
-                                    ? selectedBus.schedule.some(
-                                        (s) =>
-                                            s.name === sch.name &&
-                                            JSON.stringify(s.times) === JSON.stringify(sch.times)
-                                    )
+                                    ? selectedBus.schedule.some((s) => scheduleMatches(s, sch))
                                     : false;
 
                                 return (

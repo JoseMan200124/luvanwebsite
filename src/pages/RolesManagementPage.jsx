@@ -51,6 +51,21 @@ import CircularMasivaModal from '../components/CircularMasivaModal';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 
+// Helper: extract time and code from strings like "07:15 AM" or "Horario X 07:15"
+function extractTime(str) {
+    if (!str) return '';
+    const s = String(str);
+    const m = s.match(/(\d{1,2}:\d{2})/);
+    return m ? m[1] : '';
+}
+
+function extractCode(str) {
+    if (!str) return null;
+    const s = String(str).toUpperCase();
+    const m = s.match(/\b(AM|PM|MD|EX)\b/);
+    return m ? m[1] : null;
+}
+
 const RolesContainer = tw.div`
   p-8 bg-gray-100 min-h-screen w-full
 `;
@@ -1862,7 +1877,7 @@ const RolesManagementPage = () => {
                     const studentRoutePeriodSet = new Set();
 
                     slotsToUse.forEach(slot => {
-                        const timeForPeriod = (slot.schoolSchedule || slot.time || slot.timeSlot || '').toString();
+                        const timeForPeriod = extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '');
                         const timeMatch = timeForPeriod.match(/(\d{1,2}):(\d{2})/);
 
                         // Determinar routeNumber a partir de busId si está presente
@@ -1912,13 +1927,13 @@ const RolesManagementPage = () => {
                     const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
                     if (studentSlots.length > 0) {
                         return studentSlots.some(slot => {
-                            const timeSlot = (slot.time || slot.timeSlot || '').toString();
+                            const timeSlot = extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '');
                             return /(\d{1,2}):(\d{2})/.test(timeSlot);
                         });
                     }
                     // fallback: check family slots
                     if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
-                        return fd.ScheduleSlots.some(slot => /(\d{1,2}):(\d{2})/.test((slot.time || slot.timeSlot || '').toString()));
+                        return fd.ScheduleSlots.some(slot => /(\d{1,2}):(\d{2})/.test(extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '')));
                     }
                     return false;
                 });
@@ -1990,7 +2005,7 @@ const RolesManagementPage = () => {
                             timeSummary.cantAM++;
                         } else {
                             slotsToUse.forEach(slot => {
-                                const timeSlot = (slot.time || slot.timeSlot || '').toString();
+                                const timeSlot = extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '');
                                 const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
                                 if (timeMatch) {
                                     const hour = parseInt(timeMatch[1]);
@@ -2197,13 +2212,13 @@ const RolesManagementPage = () => {
 
                 // Verificar ScheduleSlots a nivel familiar
                 if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
-                    if (fd.ScheduleSlots.some(slot => /(\d{1,2}):(\d{2})/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()))) return true;
+                    if (fd.ScheduleSlots.some(slot => /(\d{1,2}):(\d{2})/.test(extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '')))) return true;
                 }
 
                 // Verificar ScheduleSlots a nivel estudiante
                 return fd.Students.some(student => {
                     const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                    return studentSlots.some(slot => /(\d{1,2}):(\d{2})/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()));
+                    return studentSlots.some(slot => /(\d{1,2}):(\d{2})/.test(extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '')));
                 });
             };
 
@@ -2249,7 +2264,7 @@ const RolesManagementPage = () => {
                         const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
 
                         slotsToUse.forEach(slot => {
-                            const timeSlot = (slot.schoolSchedule || slot.time || slot.timeSlot || '').toString();
+                            const timeSlot = extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '');
                             const displayTime = (slot.time || slot.schoolSchedule || slot.timeSlot || '').toString();
                             const note = slot.note || '';
 

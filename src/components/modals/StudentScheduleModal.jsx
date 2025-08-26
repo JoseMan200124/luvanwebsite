@@ -52,6 +52,22 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     })();
   }, [open, studentId, students, schoolId, loadSlots, loadSchoolSchedules]);
 
+  // Helper: parse a stored schoolSchedule string like "07:15 AM" or "07:15" into { time, code }
+  function parseSchoolScheduleString(s) {
+    if (!s) return { time: null, code: null };
+    const str = String(s).trim();
+    const timeMatch = str.match(/(\d{1,2}:\d{2})/);
+    const time = timeMatch ? timeMatch[1] : null;
+    // try to extract code (AM/MD/PM/EX) after the time
+    let code = null;
+    if (time) {
+      const after = str.slice(str.indexOf(time) + time.length).trim().toUpperCase();
+      const m = after.match(/\b(AM|PM|MD|EX)\b/);
+      if (m) code = m[1];
+    }
+    return { time, code };
+  }
+
   // week day labels (UI labels are defined inline where needed)
 
   // Validate assignment before save: time format and conflicts with existing slots
@@ -98,7 +114,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       console.log('[StudentScheduleModal] resolved targetStudent=', targetStudent.id);
     }
 
-  if (slot && day) {
+      if (slot && day) {
       // open as edit for a specific day
     const editing = { studentId: targetStudent ? targetStudent.id : (studentId || null), slotId: slot.id, day };
     setAssignEditing(editing);
@@ -107,19 +123,22 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       let parsed = {};
       try { parsed = typeof slot.note === 'string' ? JSON.parse(slot.note) : slot.note || {}; } catch(e) {}
       const ss = slot.schoolSchedule || parsed.schoolSchedule || '';
+      const parsedSS = parseSchoolScheduleString(ss);
+      const ssTime = parsedSS.time || '';
       setAssignForm({
-        schoolSchedule: ss,
+        // keep select values as time-only so existing option values still match
+        schoolSchedule: ssTime,
         routeId: slot.busId ? String(slot.busId) : '',
         paradaTime: slot.time || '',
         note: parsed.note || (slot.note && typeof slot.note === 'string' ? slot.note : ''),
         days: [day]
       });
-      // load routes for the schoolSchedule (use column or parsed fallback)
-      if (ss) {
+      // load routes for the time-only value
+      if (ssTime) {
         try {
-          const r = await loadRoutesByTime(schoolId, ss);
+          const r = await loadRoutesByTime(schoolId, ssTime);
           setAssignRoutesOptions(r || []);
-          console.log('[StudentScheduleModal] loaded routes for schoolSchedule=', ss, r);
+          console.log('[StudentScheduleModal] loaded routes for schoolSchedule(time)=', ssTime, r);
         } catch (err) {
           console.error(err);
           setAssignRoutesOptions([]);

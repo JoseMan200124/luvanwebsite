@@ -64,7 +64,6 @@ import {
     CartesianGrid
 } from 'recharts';
 import SubmissionPreview from './SubmissionPreview';
-import { CalendarToday as CalendarIcon } from '@mui/icons-material'
 // ───────────────────────────────
 // Estilos generales
 // ───────────────────────────────
@@ -89,11 +88,7 @@ const getFormattedDateTime = () => {
 // ───────────────────────────────
 // Estilos para la tabla en desktop (vista tradicional)
 // ───────────────────────────────
-const ResponsiveTableHead = styled(TableHead)`
-    @media (max-width: 600px) {
-        display: none;
-    }
-`;
+// ResponsiveTableHead removed (not used) to fix linter warning
 
 const ResponsiveTableCell = styled(TableCell)`
     @media (max-width: 600px) {
@@ -221,7 +216,7 @@ const SchoolsManagementPage = () => {
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
 
-    const [selectedSchoolForSubmissions, setSelectedSchoolForSubmissions] = useState(null);
+    // removed selectedSchoolForSubmissions state (not used elsewhere)
     const [submissions, setSubmissions] = useState([]);
 
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
@@ -346,7 +341,13 @@ const SchoolsManagementPage = () => {
             bankName: '',
             bankAccount: ''
         });
-        setSchoolSchedules([]);
+        // Initialize the 4 fixed schedules (AM, MD, PM, EX) with N/A times
+        setSchoolSchedules([
+            { code: 'AM', name: 'HORARIO AM', times: ['N/A'] },
+            { code: 'MD', name: 'HORARIO MD', times: ['N/A'] },
+            { code: 'PM', name: 'HORARIO PM', times: ['N/A'] },
+            { code: 'EX', name: 'HORARIO EX', times: ['N/A'] }
+        ]);
         setSchoolGrades([]);
         setSchoolExtraFields([]);
         setOpenDialog(true);
@@ -379,7 +380,9 @@ const SchoolsManagementPage = () => {
                 parsedSchedules = [];
             }
         }
-        setSchoolSchedules(parsedSchedules);
+        // Normalize to 4 fixed schedules
+        const normalized = ensureFourSchedules(parsedSchedules);
+        setSchoolSchedules(normalized);
 
         let parsedGrades = [];
         if (Array.isArray(school.grades)) {
@@ -448,60 +451,53 @@ const SchoolsManagementPage = () => {
 
     // ────── Horarios ──────────────────────────────────────────
     // [ADDED] Ahora cada horario tendrá también un "name"
-    const handleAddSchedule = () => {
-        setSchoolSchedules((prev) => [...prev, { day: '', name: '', times: [''] }]);
-    };
-
-    const handleRemoveSchedule = (scheduleIndex) => {
-        setSchoolSchedules((prev) => {
-            const newArr = [...prev];
-            newArr.splice(scheduleIndex, 1);
-            return newArr;
-        });
-    };
-
-    // [ADDED] Manejar cambio en el nombre del horario
-    const handleScheduleNameChange = (e, scheduleIndex) => {
-        const { value } = e.target;
-        setSchoolSchedules((prev) => {
-            const clone = [...prev];
-            clone[scheduleIndex].name = value;
-            return clone;
-        });
-    };
-
-    const handleScheduleDayChange = (e, scheduleIndex) => {
-        const { value } = e.target;
-        setSchoolSchedules((prev) => {
-            const clone = [...prev];
-            clone[scheduleIndex].day = value;
-            return clone;
-        });
-    };
-
-    const handleAddTime = (scheduleIndex) => {
-        setSchoolSchedules((prev) => {
-            const clone = [...prev];
-            clone[scheduleIndex].times.push('');
-            return clone;
-        });
-    };
-
-    const handleRemoveTime = (scheduleIndex, timeIndex) => {
-        setSchoolSchedules((prev) => {
-            const clone = [...prev];
-            clone[scheduleIndex].times.splice(timeIndex, 1);
-            return clone;
-        });
-    };
+    // Schedules are fixed (AM/MD/PM/EX). Time changes handled in handleTimeChange.
 
     const handleTimeChange = (e, scheduleIndex, timeIndex) => {
         const { value } = e.target;
         setSchoolSchedules((prev) => {
             const clone = [...prev];
-            clone[scheduleIndex].times[timeIndex] = value;
+            // Only allow one time entry per schedule. If empty, set to 'N/A'
+            clone[scheduleIndex].times = [value ? value : 'N/A'];
             return clone;
         });
+    };
+
+    // Helper to ensure schedules array has 4 fixed slots (AM, MD, PM, EX)
+    const ensureFourSchedules = (schedules) => {
+        const codes = ['AM', 'MD', 'PM', 'EX'];
+        const result = codes.map((code) => ({ code, name: `HORARIO ${code}`, times: ['N/A'] }));
+
+        if (!Array.isArray(schedules)) return result;
+
+        // Try to fill by code (if schedule.name contains the code) or by index
+        schedules.forEach((s) => {
+            if (!s) return;
+            // Determine code from name if possible
+            const name = (s.name || '').toString().toUpperCase();
+            let matched = null;
+            ['AM', 'MD', 'PM', 'EX'].forEach((c) => {
+                if (name.includes(c)) matched = c;
+            });
+            if (matched) {
+                const idx = codes.indexOf(matched);
+                if (idx !== -1) {
+                    result[idx].times = Array.isArray(s.times) && s.times.length > 0 ? [s.times[0]] : ['N/A'];
+                }
+            }
+        });
+
+        // If none matched by name, try to map by order
+        const anyMatched = result.some((r, i) => r.times[0] !== 'N/A');
+        if (!anyMatched) {
+            schedules.forEach((s, i) => {
+                if (i < 4) {
+                    result[i].times = Array.isArray(s.times) && s.times.length > 0 ? [s.times[0]] : ['N/A'];
+                }
+            });
+        }
+
+        return result;
     };
 
     // ────── Grados ────────────────────────────────────────────
@@ -577,6 +573,13 @@ const SchoolsManagementPage = () => {
         }
 
         try {
+            // Normalize schedules to required shape: 4 entries AM/MD/PM/EX with name 'HORARIO XX' and single time or 'N/A'
+            const normalizedSchedules = ensureFourSchedules(schoolSchedules).map(s => ({
+                code: s.code,
+                name: `HORARIO ${s.code}`,
+                times: Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? [s.times[0]] : ['N/A']
+            }));
+
             const payload = {
                 name: selectedSchool.name,
                 address: selectedSchool.address,
@@ -585,7 +588,7 @@ const SchoolsManagementPage = () => {
                 contactEmail: selectedSchool.contactEmail,
                 contactPhone: selectedSchool.contactPhone,
                 whatsappLink: selectedSchool.whatsappLink || null,
-                schedules: schoolSchedules, // aquí va el nuevo campo "name" dentro de cada horario
+                schedules: normalizedSchedules,
                 grades: schoolGrades,
                 transportFeeComplete:
                     Number(selectedSchool.transportFeeComplete) || 0.0,
@@ -723,8 +726,7 @@ const SchoolsManagementPage = () => {
 
     // Función auxiliar para ver formularios de inscripción de un colegio
     const handleViewSubmissions = async (school) => {
-        setSelectedSchoolForSubmissions(school);
-        setSubmissions([]);
+    setSubmissions([]);
 
         try {
             setLoading(true);
@@ -762,54 +764,13 @@ const SchoolsManagementPage = () => {
         }
     };
 
-    const handleOpenSubmissionDialog = (submission) => {
-        setSubmissionDetail(submission);
-        setOpenSubmissionDialog(true);
-    };
+    // Using setSubmissionDetail directly where needed; helper removed to avoid linter warning.
     const handleCloseSubmissionDialog = () => {
         setSubmissionDetail(null);
         setOpenSubmissionDialog(false);
     };
 
-    const getRouteTypeStats = () => {
-        const counts = {};
-        submissions.forEach((sub) => {
-            const rt = sub.data.routeType || 'Desconocido';
-            counts[rt] = (counts[rt] || 0) + 1;
-        });
-        return Object.entries(counts).map(([name, value]) => ({ name, value }));
-    };
-
-    const totalAlumnos = submissions.reduce((acc, sub) => {
-        return acc + (Number(sub.data.studentsCount) || 0);
-    }, 0);
-
-    const getGradeCounts = () => {
-        if (!selectedSchoolForSubmissions) return [];
-        if (!Array.isArray(selectedSchoolForSubmissions.grades)) return [];
-        const counts = {};
-        selectedSchoolForSubmissions.grades.forEach((g) => {
-            if (g.name) {
-                counts[g.name] = 0;
-            }
-        });
-        submissions.forEach((sub) => {
-            if (Array.isArray(sub.data.students)) {
-                sub.data.students.forEach((st) => {
-                    const gName = st.grade;
-                    if (counts[gName] !== undefined) {
-                        counts[gName]++;
-                    }
-                });
-            }
-        });
-        return Object.entries(counts).map(([gradeName, count]) => ({
-            name: gradeName,
-            value: count
-        }));
-    };
-
-    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
+    // Submission stats helpers removed because not used in this component UI path.
 
     return (
         <SchoolsContainer>
@@ -1410,80 +1371,26 @@ const SchoolsManagementPage = () => {
                     </Typography>
                     {schoolSchedules.map((sch, scheduleIndex) => (
                         <Paper key={scheduleIndex} style={{ padding: '1rem', marginTop: '1rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography variant="subtitle1">
-                                    Horario #{scheduleIndex + 1}
+                                    {sch.code ? `Horario ${sch.code}` : `Horario #${scheduleIndex + 1}`}
                                 </Typography>
-                                <IconButton
-                                    onClick={() => handleRemoveSchedule(scheduleIndex)}
-                                    color="error"
-                                    size="small"
-                                >
-                                    <Delete />
-                                </IconButton>
                             </div>
 
-                            {/* [ADDED] Nuevo campo para el nombre del horario */}
-                            <TextField
-                                margin="dense"
-                                name="scheduleName"
-                                label="Nombre del Horario"
-                                type="text"
-                                fullWidth
-                                variant="outlined"
-                                value={sch.name}
-                                onChange={(e) => handleScheduleNameChange(e, scheduleIndex)}
-                            />
+                            {/* Nombre fijo: se guarda como 'HORARIO XX' en el backend */}
 
-                            <Typography variant="subtitle2" style={{ marginTop: '0.5rem' }}>
-                                Horas
-                            </Typography>
-                            {sch.times.map((timeValue, timeIndex) => (
-                                <div
-                                    key={timeIndex}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '1rem',
-                                        marginBottom: '0.5rem'
-                                    }}
-                                >
-                                    <TextField
-                                        label="Hora (HH:MM)"
-                                        variant="outlined"
-                                        type="time"
-                                        value={timeValue}
-                                        onChange={(e) => handleTimeChange(e, scheduleIndex, timeIndex)}
-                                        InputLabelProps={{
-                                            shrink: true,
-                                        }}
-                                    />
-                                    <IconButton
-                                        onClick={() => handleRemoveTime(scheduleIndex, timeIndex)}
-                                        color="error"
-                                        size="small"
-                                    >
-                                        <Delete />
-                                    </IconButton>
-                                </div>
-                            ))}
-                            <Button
-                                variant="outlined"
-                                startIcon={<Add />}
-                                onClick={() => handleAddTime(scheduleIndex)}
-                            >
-                                Agregar hora
-                            </Button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.3rem', marginTop: '0.5rem' }}>
+                                <TextField
+                                    label="Hora (HH:mm)"
+                                    variant="outlined"
+                                    type="time"
+                                    value={Array.isArray(sch.times) ? (sch.times[0] === 'N/A' ? '' : sch.times[0]) : ''}
+                                    onChange={(e) => handleTimeChange(e, scheduleIndex, 0)}
+                                    InputLabelProps={{ shrink: true }}
+                                />
+                            </div>
                         </Paper>
                     ))}
-                    <Button
-                        variant="contained"
-                        style={{ marginTop: '1rem' }}
-                        onClick={handleAddSchedule}
-                        startIcon={<Add />}
-                    >
-                        Agregar Horario
-                    </Button>
 
                     <Typography variant="h6" style={{ marginTop: '2rem' }}>
                         Grados del Colegio
