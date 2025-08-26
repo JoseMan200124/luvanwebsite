@@ -1,8 +1,7 @@
 // src/pages/ParentDashboardPage.jsx
 import React, { useEffect, useMemo, useState, useContext } from 'react';
 import {
-    Box, Card, CardContent, Typography, Divider,
-  Box,
+  Box as MuiBox,
   Card,
   CardContent,
   Typography,
@@ -24,8 +23,8 @@ import api from '../utils/axiosConfig';
 
 // ---------- Estilos ----------
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
-const LoaderBox   = styled(Box)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
-const DayCol      = styled(Box)`min-width:190px;`;
+const LoaderBox   = styled(MuiBox)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
+const DayCol      = styled(MuiBox)`min-width:190px;`;
 
 // ---------- Utilidades ----------
 const toArray = (v) => (Array.isArray(v) ? v : []);
@@ -404,7 +403,7 @@ const ParentDashboardPage = () => {
                 ) : (
                   <Stack spacing={2}>
                     {derivedRoutes.map((r, i) => (
-                      <Box key={`route-${i}`}>
+                      <MuiBox key={`route-${i}`}>
                         <Grid container spacing={1}>
                           {nonEmpty(r.routeNumber) && (
                             <Grid item xs={12} md={3}><b>Ruta:</b> {r.routeNumber}</Grid>
@@ -426,7 +425,7 @@ const ParentDashboardPage = () => {
                           )}
                         </Grid>
                         {i < derivedRoutes.length - 1 && <Divider sx={{ mt: 2 }} />}
-                      </Box>
+                      </MuiBox>
                     ))}
                   </Stack>
                 )}
@@ -461,7 +460,7 @@ const ParentDashboardPage = () => {
                     });
 
                     return (
-                      <Box key={`sched-${st.id ?? idx}`} sx={{ mb: idx < parentInfo.students.length - 1 ? 3 : 0 }}>
+                      <MuiBox key={`sched-${st.id ?? idx}`} sx={{ mb: idx < parentInfo.students.length - 1 ? 3 : 0 }}>
                         <Typography variant="h6" sx={{ mb: 1 }}>
                           {st.fullName || 'Estudiante'}{nonEmpty(st.grade) ? ` — ${st.grade}` : ''}
                         </Typography>
@@ -471,7 +470,7 @@ const ParentDashboardPage = () => {
                             Sin horarios registrados para este estudiante.
                           </Typography>
                         ) : (
-                          <Box sx={{ overflowX: 'auto' }}>
+                          <MuiBox sx={{ overflowX: 'auto' }}>
                             <Stack direction="row" spacing={2} sx={{ minHeight: 1, pb: 1 }}>
                               {DAYS.map(({ key, label }) => {
                                 const items = byDay[key];
@@ -538,10 +537,10 @@ const ParentDashboardPage = () => {
                                 );
                               })}
                             </Stack>
-                          </Box>
+                          </MuiBox>
                         )}
                         {idx < parentInfo.students.length - 1 && <Divider sx={{ mt: 2 }} />}
-                      </Box>
+                      </MuiBox>
                     );
                   })
                 )}
