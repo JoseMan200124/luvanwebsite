@@ -1435,16 +1435,6 @@ const SchoolsManagementPage = () => {
                                 onChange={(e) => handleScheduleNameChange(e, scheduleIndex)}
                             />
 
-                            <TextField
-                                margin="dense"
-                                name="day"
-                                label="Día (ej: Lunes)"
-                                type="text"
-                                fullWidth
-                                variant="outlined"
-                                value={sch.day}
-                                onChange={(e) => handleScheduleDayChange(e, scheduleIndex)}
-                            />
                             <Typography variant="subtitle2" style={{ marginTop: '0.5rem' }}>
                                 Horas
                             </Typography>

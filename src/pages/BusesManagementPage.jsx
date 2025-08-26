@@ -447,7 +447,7 @@ const BusesManagementPage = () => {
 
     /**
      * NUEVA forma de manejar la MULTI-SELECCIÓN de horarios:
-     * Guardamos la estructura completa { day, times, name } en selectedBus.schedule.
+     * Guardamos la estructura completa { times, name } en selectedBus.schedule.
      */
     const handleScheduleChange = (e) => {
         // e.target.value será un array de strings, cada string es la representación JSON de un horario
@@ -664,7 +664,7 @@ const BusesManagementPage = () => {
         const pilotosConHorarios = availablePilots.map(p => {
             const horarios = Array.isArray(p.schedules)
                 ? p.schedules.map(
-                    sch => `${sch.name} - ${sch.day} - ${(sch.times || []).join(', ')}`
+                    sch => `${sch.name} - ${(sch.times || []).join(', ')}`
                 )
                 : [];
             if (horarios.length > maxHorarios) maxHorarios = horarios.length;
@@ -1244,7 +1244,7 @@ const BusesManagementPage = () => {
                         </Select>
                     </FormControl>
 
-                    {/* MULTI-SELECCIÓN de horarios con day, times, name */}
+                    {/* MULTI-SELECCIÓN de horarios con times, name */}
                     <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
                         <InputLabel>Horarios (puede seleccionar varios)</InputLabel>
                         <Select
@@ -1260,19 +1260,18 @@ const BusesManagementPage = () => {
                                 selected
                                     .map((val) => {
                                         const sch = JSON.parse(val);
-                                        return `${sch.name} - ${sch.day} - ${sch.times.join(', ')}`;
+                                        return `${sch.name} - ${sch.times.join(', ')}`;
                                     })
                                     .join(', ')
                             }
                         >
                             {availableSchedules.map((sch, idx) => {
                                 const valueKey = JSON.stringify(sch);
-                                const label = `${sch.name} - ${sch.day} - ${(sch.times || []).join(', ')}`;
+                                const label = `${sch.name} - ${(sch.times || []).join(', ')}`;
                                 const isChecked = selectedBus?.schedule
                                     ? selectedBus.schedule.some(
                                         (s) =>
                                             s.name === sch.name &&
-                                            s.day === sch.day &&
                                             JSON.stringify(s.times) === JSON.stringify(sch.times)
                                     )
                                     : false;

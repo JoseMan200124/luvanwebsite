@@ -379,7 +379,7 @@ const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
     const getScheduleOptionsFromSchool = (schoolId) => {
         const schs = schoolSchedulesById[schoolId];
         if (!schs || !Array.isArray(schs)) return [];
-        return schs.flatMap(sch => (sch.times || []).map(t => `${sch.day} ${t}`));
+        return schs.flatMap(sch => (sch.times || []).map(t => `${sch.name} ${t}`));
     };
 
     // Fetch students by family last name (search across schools). Also fetch schedules for each school found.
