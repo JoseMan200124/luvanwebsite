@@ -373,7 +373,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                             </div>
                           </div>
                           <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>Hora colegio: {(() => { try { const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note; return s.schoolSchedule || (parsed && parsed.schoolSchedule) || '—'; } catch(e) { return s.schoolSchedule || '—'; } })()}</div>
-                          <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>{s.bus ? `Ruta ${s.bus.routeNumber || s.bus.id}${s.bus.plate ? ` (${s.bus.plate})` : ''}` : 'Ruta: —'}</div>
+                          <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>{s.bus ? `Ruta ${s.bus.routeNumber || s.bus.id}` : 'Ruta: —'}</div>
                           <div style={{ fontSize: 12, color: '#6B7280' }}>Hora parada: {s.time}</div>
                           <div style={{ fontSize: 12, color: '#6B7280' }}>Nota parada: {(() => { try { const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note; return parsed && parsed.note ? parsed.note : (s.note && typeof s.note === 'string' ? s.note : ''); } catch(e) { return s.note || ''; } })()}</div>
                         </div>
@@ -427,8 +427,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                       <option value=''>-- seleccionar --</option>
                       {assignRoutesOptions.map(r=> {
                         const routeNum = r.routeNumber || r.id;
-                        const plate = r.plate || '';
-                        const label = plate ? `Ruta ${routeNum} (${plate})` : `Ruta ${routeNum}`;
+                        const label = `Ruta ${routeNum}`;
                         return (<option key={r.id} value={String(r.id)}>{label}</option>);
                       })}
                     </select>
