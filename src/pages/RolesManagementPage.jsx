@@ -1064,6 +1064,7 @@ const RolesManagementPage = () => {
     const [openRouteReportDialog, setOpenRouteReportDialog] = useState(false);
     const [selectedSchoolForReport, setSelectedSchoolForReport] = useState('');
     const [routeReportLoading, setRouteReportLoading] = useState(false);
+    const [downloadMode, setDownloadMode] = useState('report'); // 'report' | 'new' | 'all'
 
     // Filtros
     const [newUsersFilter, setNewUsersFilter] = useState('all');
@@ -1516,8 +1517,12 @@ const RolesManagementPage = () => {
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
 
-    const handleDownloadNewUsers = () => {
-        const newUsers = users.filter(isUserNew);
+    const handleDownloadNewUsers = (schoolId) => {
+        if (!schoolId) {
+            setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+            return;
+        }
+        const newUsers = users.filter(u => isUserNew(u) && String(u.school) === String(schoolId));
         const headers = [
             "Nombre",
             "Apellido Familia",
@@ -1646,7 +1651,7 @@ const RolesManagementPage = () => {
         URL.revokeObjectURL(url);
     };
 
-    const handleDownloadAllUsers = async () => {
+    const handleDownloadAllUsers = async (schoolId) => {
         try {
             let allUsers = [];
             let page = 0;
@@ -1669,6 +1674,13 @@ const RolesManagementPage = () => {
                 fetched += usersBatch.length;
                 if (usersBatch.length === 0) break;
             }
+
+            // Filtrar por colegio seleccionado
+            if (!schoolId) {
+                setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+                return;
+            }
+            allUsers = allUsers.filter(u => String(u.school) === String(schoolId));
 
             // Generar Excel
             const headers = [
@@ -2918,14 +2930,15 @@ const RolesManagementPage = () => {
                     <Button
                         variant="contained"
                         color="success"
-                        onClick={handleDownloadNewUsers}
+                        onClick={() => { setDownloadMode('new'); setOpenRouteReportDialog(true); }}
                     >
                         Descargar Nuevos
                     </Button>
                     <Button
                         variant="contained"
                         color="success"
-                        onClick={handleDownloadAllUsers}
+                        onClick={() => { setDownloadMode('all'); setOpenRouteReportDialog(true); }}
+                        sx={{ ml: 2 }}
                     >
                         Descargar Todos
                     </Button>
@@ -3786,12 +3799,25 @@ const RolesManagementPage = () => {
                         Cancelar
                     </Button>
                     <Button
-                        onClick={() => handleDownloadRouteReport(selectedSchoolForReport)}
+                        onClick={async () => {
+                            if (!selectedSchoolForReport) {
+                                setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+                                return;
+                            }
+                            if (downloadMode === 'report') {
+                                await handleDownloadRouteReport(selectedSchoolForReport);
+                            } else if (downloadMode === 'new') {
+                                handleDownloadNewUsers(selectedSchoolForReport);
+                            } else if (downloadMode === 'all') {
+                                await handleDownloadAllUsers(selectedSchoolForReport);
+                            }
+                            setOpenRouteReportDialog(false);
+                        }}
                         color="primary"
                         variant="contained"
                         disabled={!selectedSchoolForReport || routeReportLoading}
                     >
-                        {routeReportLoading ? 'Generando...' : 'Descargar Reporte'}
+                        {routeReportLoading ? 'Generando...' : (downloadMode === 'report' ? 'Descargar Reporte' : (downloadMode === 'new' ? 'Descargar Nuevos' : 'Descargar Todos'))}
                     </Button>
                 </DialogActions>
             </Dialog>
