@@ -69,11 +69,6 @@ const getFormattedDateTime = () => {
 };
 
 // ======== Estilos para vista desktop (tabla) ========
-const ResponsiveTableHead = styled(TableHead)`
-    @media (max-width: 600px) {
-        display: none;
-    }
-`;
 
 const ResponsiveTableCell = styled(TableCell)`
     @media (max-width: 600px) {
@@ -203,6 +198,7 @@ const BusesManagementPage = () => {
 
     // Horarios disponibles (según el colegio del piloto)
     const [availableSchedules, setAvailableSchedules] = useState([]);
+    const [availableRouteNumbers, setAvailableRouteNumbers] = useState([]);
 
     // Carga masiva
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
@@ -323,6 +319,25 @@ const BusesManagementPage = () => {
                 }
             } else {
                 setAvailableSchedules([]);
+            }
+
+            // Fetch school's route numbers
+            if (schoolId) {
+                try {
+                    const rresp = await api.get(`/schools/${schoolId}`, { headers: { Authorization: `Bearer ${auth.token}` } });
+                    const schoolData = rresp.data.school || rresp.data;
+                    let routeNumbers = [];
+                    if (Array.isArray(schoolData.routeNumbers)) routeNumbers = schoolData.routeNumbers;
+                    else if (typeof schoolData.routeNumbers === 'string' && schoolData.routeNumbers.trim()) {
+                        try { routeNumbers = JSON.parse(schoolData.routeNumbers); } catch { routeNumbers = []; }
+                    }
+                    setAvailableRouteNumbers(Array.isArray(routeNumbers) ? routeNumbers : []);
+                } catch (err) {
+                    console.error('Error fetching school route numbers:', err);
+                    setAvailableRouteNumbers([]);
+                }
+            } else {
+                setAvailableRouteNumbers([]);
             }
 
             // Ask server for pilots and monitors filtered by school to avoid client-side heavy filtering
@@ -603,28 +618,7 @@ const BusesManagementPage = () => {
         }
     };
 
-    const handleDeleteFile = async (busId, fileId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este archivo?')) {
-            try {
-                await api.delete(`/buses/${busId}/files/${fileId}`, {
-                    headers: { Authorization: `Bearer ${auth.token}` }
-                });
-                setSnackbar({
-                    open: true,
-                    message: 'Archivo eliminado exitosamente',
-                    severity: 'success'
-                });
-                fetchBuses();
-            } catch (err) {
-                console.error('Error deleting file:', err);
-                setSnackbar({
-                    open: true,
-                    message: 'Error al eliminar el archivo',
-                    severity: 'error'
-                });
-            }
-        }
-    };
+    // file delete endpoint left intentionally out of UI for now (server API exists). Use bus file deletion via server routes if needed.
 
     const handleSnackbarClose = () => {
         setSnackbar({ ...snackbar, open: false });
@@ -1197,6 +1191,51 @@ const BusesManagementPage = () => {
                     {selectedBus && selectedBus.id ? 'Editar Bus' : 'Añadir Bus'}
                 </DialogTitle>
                 <DialogContent>
+                    {/* Selección de Colegio */}
+                    <FormControl fullWidth margin="dense">
+                        <InputLabel>Colegio</InputLabel>
+                        <Select
+                            name="schoolId"
+                            value={selectedBus ? selectedBus.schoolId || '' : ''}
+                            onChange={(e) => setSelectedBus(prev => ({ ...prev, schoolId: e.target.value ? parseInt(e.target.value, 10) : null }))}
+                        >
+                            <MenuItem value="">
+                                <em>Global / Ninguno</em>
+                            </MenuItem>
+                            {availableSchools.map((s) => (
+                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    {/* Selección de Número de Ruta basada en los números del colegio seleccionado */}
+                    <FormControl fullWidth margin="dense">
+                        <InputLabel>Número de Ruta</InputLabel>
+                        <Select
+                            name="routeNumber"
+                            value={selectedBus ? selectedBus.routeNumber || '' : ''}
+                            onChange={(e) => setSelectedBus(prev => ({ ...prev, routeNumber: e.target.value }))}
+                        >
+                            <MenuItem value="">
+                                <em>Sin asignar</em>
+                            </MenuItem>
+                            {availableRouteNumbers && availableRouteNumbers.length > 0 ? (
+                                // Filter out route numbers already taken by other buses in the same school
+                                availableRouteNumbers
+                                    .filter((rn) => {
+                                        // if route not used by any bus in same school, keep it
+                                        const usedByOther = buses.some(b => b.school && b.school.id === selectedBus?.schoolId && b.routeNumber === rn && b.id !== selectedBus?.id);
+                                        return !usedByOther || rn === selectedBus?.routeNumber;
+                                    })
+                                    .map((rn, idx) => (
+                                        <MenuItem key={idx} value={rn}>{rn}</MenuItem>
+                                    ))
+                            ) : (
+                                <MenuItem disabled value="">
+                                    No hay números de ruta definidos para este colegio
+                                </MenuItem>
+                            )}
+                        </Select>
+                    </FormControl>
                     <TextField
                         autoFocus
                         margin="dense"
@@ -1219,32 +1258,6 @@ const BusesManagementPage = () => {
                         value={selectedBus ? selectedBus.capacity : ''}
                         onChange={handleInputChange}
                     />
-                    <TextField
-                        margin="dense"
-                        name="routeNumber"
-                        label="Número de Ruta"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={selectedBus ? selectedBus.routeNumber : ''}
-                        onChange={handleInputChange}
-                    />
-                    {/* Selección de Colegio */}
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Colegio</InputLabel>
-                        <Select
-                            name="schoolId"
-                            value={selectedBus ? selectedBus.schoolId || '' : ''}
-                            onChange={(e) => setSelectedBus(prev => ({ ...prev, schoolId: e.target.value ? parseInt(e.target.value, 10) : null }))}
-                        >
-                            <MenuItem value="">
-                                <em>Global / Ninguno</em>
-                            </MenuItem>
-                            {availableSchools.map((s) => (
-                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
                     <TextField
                         margin="dense"
                         name="description"

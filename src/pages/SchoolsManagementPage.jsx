@@ -31,9 +31,7 @@ import {
     InputLabel,
     Select,
     MenuItem,
-    Card,
-    CardContent,
-    CardActions,
+    
     DialogContentText,
     useTheme,
     useMediaQuery,
@@ -51,18 +49,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
 import styled from 'styled-components';
-import {
-    PieChart,
-    Pie,
-    Tooltip as ReTooltip,
-    Legend,
-    Cell,
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid
-} from 'recharts';
+// recharts removed from this file (not used here)
 import SubmissionPreview from './SubmissionPreview';
 // ───────────────────────────────
 // Estilos generales
@@ -206,6 +193,7 @@ const SchoolsManagementPage = () => {
 
     const [schoolSchedules, setSchoolSchedules] = useState([]);
     const [schoolGrades, setSchoolGrades] = useState([]);
+    const [schoolRouteNumbers, setSchoolRouteNumbers] = useState([]);
     const [schoolExtraFields, setSchoolExtraFields] = useState([]);
 
     const [anchorEl, setAnchorEl] = useState(null);
@@ -290,10 +278,21 @@ const SchoolsManagementPage = () => {
                 } else if (Array.isArray(school.extraEnrollmentFields)) {
                     parsedExtraFields = school.extraEnrollmentFields;
                 }
+                let parsedRouteNumbers = [];
+                if (typeof school.routeNumbers === 'string' && school.routeNumbers.trim()) {
+                    try {
+                        parsedRouteNumbers = JSON.parse(school.routeNumbers);
+                    } catch {
+                        parsedRouteNumbers = [];
+                    }
+                } else if (Array.isArray(school.routeNumbers)) {
+                    parsedRouteNumbers = school.routeNumbers;
+                }
                 return {
                     ...school,
                     schedules: parsedSchedules,
                     grades: parsedGrades,
+                    routeNumbers: parsedRouteNumbers,
                     extraEnrollmentFields: parsedExtraFields,
                     studentsCount: Number(school.studentsCount) || 0
                 };
@@ -349,7 +348,8 @@ const SchoolsManagementPage = () => {
             { code: 'EX', name: 'HORARIO EX', times: ['N/A'] }
         ]);
         setSchoolGrades([]);
-        setSchoolExtraFields([]);
+    setSchoolExtraFields([]);
+    setSchoolRouteNumbers([]);
         setOpenDialog(true);
     };
 
@@ -396,6 +396,18 @@ const SchoolsManagementPage = () => {
         }
         setSchoolGrades(parsedGrades);
 
+        let parsedRouteNumbers = [];
+        if (Array.isArray(school.routeNumbers)) {
+            parsedRouteNumbers = school.routeNumbers;
+        } else {
+            try {
+                parsedRouteNumbers = JSON.parse(school.routeNumbers) || [];
+            } catch {
+                parsedRouteNumbers = [];
+            }
+        }
+        setSchoolRouteNumbers(parsedRouteNumbers);
+
         let parsedExtraFields = [];
         if (Array.isArray(school.extraEnrollmentFields)) {
             parsedExtraFields = school.extraEnrollmentFields;
@@ -416,7 +428,8 @@ const SchoolsManagementPage = () => {
         setSelectedSchool(null);
         setSchoolSchedules([]);
         setSchoolGrades([]);
-        setSchoolExtraFields([]);
+    setSchoolExtraFields([]);
+    setSchoolRouteNumbers([]);
     };
 
     const handleDeleteClick = async (schoolId) => {
@@ -522,6 +535,27 @@ const SchoolsManagementPage = () => {
         });
     };
 
+    // Route numbers management (array of strings)
+    const handleAddRouteNumber = () => {
+        setSchoolRouteNumbers((prev) => [...prev, '']);
+    };
+
+    const handleRemoveRouteNumber = (index) => {
+        setSchoolRouteNumbers((prev) => {
+            const clone = [...prev];
+            clone.splice(index, 1);
+            return clone;
+        });
+    };
+
+    const handleChangeRouteNumber = (index, value) => {
+        setSchoolRouteNumbers((prev) => {
+            const clone = [...prev];
+            clone[index] = value;
+            return clone;
+        });
+    };
+
     // ────── Campos Extra ──────────────────────────────────────
     const handleAddExtraField = () => {
         setSchoolExtraFields((prev) => [
@@ -574,7 +608,7 @@ const SchoolsManagementPage = () => {
 
         try {
             // Normalize schedules to required shape: 4 entries AM/MD/PM/EX with name 'HORARIO XX' and single time or 'N/A'
-            const normalizedSchedules = ensureFourSchedules(schoolSchedules).map(s => ({
+                const normalizedSchedules = ensureFourSchedules(schoolSchedules).map(s => ({
                 code: s.code,
                 name: `HORARIO ${s.code}`,
                 times: Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? [s.times[0]] : ['N/A']
@@ -597,6 +631,7 @@ const SchoolsManagementPage = () => {
                 duePaymentDay:
                     Number(selectedSchool.duePaymentDay) || 1,
                 extraEnrollmentFields: schoolExtraFields,
+                routeNumbers: schoolRouteNumbers,
                 bankName: selectedSchool.bankName || '',
                 bankAccount: selectedSchool.bankAccount || ''
             };
@@ -1428,6 +1463,26 @@ const SchoolsManagementPage = () => {
                         startIcon={<Add />}
                     >
                         Agregar Grado
+                    </Button>
+
+                    <Typography variant="h6" style={{ marginTop: '2rem' }}>
+                        Números de Ruta del Colegio
+                    </Typography>
+                    {schoolRouteNumbers.map((rn, idx) => (
+                        <Paper key={idx} style={{ padding: '0.75rem', marginTop: '0.5rem', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <TextField
+                                fullWidth
+                                value={rn}
+                                onChange={(e) => handleChangeRouteNumber(idx, e.target.value)}
+                                label={`Número de Ruta #${idx + 1}`}
+                            />
+                            <IconButton size="small" color="error" onClick={() => handleRemoveRouteNumber(idx)}>
+                                <Delete />
+                            </IconButton>
+                        </Paper>
+                    ))}
+                    <Button variant="outlined" style={{ marginTop: '0.75rem' }} onClick={handleAddRouteNumber} startIcon={<Add />}>
+                        Agregar Número de Ruta
                     </Button>
 
                     <Typography variant="h6" style={{ marginTop: '2rem' }}>
