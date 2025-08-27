@@ -14,6 +14,7 @@ import {
   Container,
   Chip,
   Stack,
+  Link,
   Tooltip,
   ToggleButtonGroup,
   ToggleButton,
@@ -94,8 +95,14 @@ const normalizeParentInfo = (raw) => {
 
     // Colegio / banco
     schoolName: safeStr(data.schoolName),
+    contactPhone: safeStr(data.contactPhone),
+    contactEmail: safeStr(data.contactEmail),
+    whatsappLink: safeStr(data.whatsappLink),
     bankName:   safeStr(data.bankName),
     bankAccount: safeStr(data.bankAccount),
+    duePaymentDay: safeStr(data.duePaymentDay),
+    transportFeeComplete: safeStr(data.transportFeeComplete),
+    transportFeeHalf: safeStr(data.transportFeeHalf),
 
     // Emergencias
     emergencyContact:  safeStr(data.emergencyContact),
@@ -211,42 +218,7 @@ const ParentDashboardPage = () => {
   }, [auth?.user?.id]);
 
   // ---------- Derivados (listas para mostrar) ----------
-  const derivedRoutes = useMemo(() => {
-    const fromInfo = toArray(parentInfo.routes)
-      .filter((r) => nonEmpty(r.routeNumber) || nonEmpty(r.stopPoint) || (r.schedules?.length))
-      .map((r) => ({
-        routeNumber: r.routeNumber || '',
-        stopPoint: r.stopPoint || '',
-        schedules: toArray(r.schedules),
-        monitoraName: r.monitoraName || '',
-        monitoraContact: r.monitoraContact || '',
-      }));
-
-    const fromSlots = [];
-    Object.values(slotsByStudent).forEach((slots) => {
-      toArray(slots).forEach((s) => {
-        const bus = s?.bus;
-        if (!bus) return;
-        fromSlots.push({
-          routeNumber: safeStr(bus?.routeNumber || ''),
-          stopPoint: '',
-          schedules: s?.schoolSchedule ? [safeStr(s.schoolSchedule)] : [],
-          monitoraName: '',
-          monitoraContact: '',
-        });
-      });
-    });
-
-    // Unir por routeNumber + schedules (simple)
-    const keyOf = (r) => `${r.routeNumber}|${r.stopPoint}|${(r.schedules || []).join(',')}`;
-    const map = new Map();
-    [...fromInfo, ...fromSlots].forEach((r) => {
-      if (!nonEmpty(r.routeNumber) && !nonEmpty(r.stopPoint) && (!r.schedules || r.schedules.length === 0)) return;
-      const k = keyOf(r);
-      if (!map.has(k)) map.set(k, { ...r });
-    });
-    return [...map.values()];
-  }, [parentInfo.routes, slotsByStudent]);
+  // ...existing code... (derivedRoutes removed because not used)
 
   // Estudiantes filtrados
   const studentsToRender = useMemo(() => {
@@ -344,6 +316,39 @@ const ParentDashboardPage = () => {
                       <Grid item xs={6}>{parentInfo.bankAccount}</Grid>
                     </>
                   )}
+
+                  {nonEmpty(parentInfo.duePaymentDay) && (
+                    <>
+                      <Grid item xs={6}><b>Fecha Máxima de Pago:</b></Grid>
+                      <Grid item xs={6}>{parentInfo.duePaymentDay} de cada mes</Grid>
+                    </>
+                  )}
+
+                  {nonEmpty(parentInfo.transportFeeComplete) && (
+                    <>
+                      <Grid item xs={6}><b>Cuota de Transporte Completa (Q):</b></Grid>
+                      <Grid item xs={6}>{parentInfo.transportFeeComplete}</Grid>
+                    </>
+                  )}
+
+                  {nonEmpty(parentInfo.transportFeeHalf) && (
+                    <>
+                      <Grid item xs={6}><b>Cuota de Transporte Media (Q):</b></Grid>
+                      <Grid item xs={6}>{parentInfo.transportFeeHalf}</Grid>
+                    </>
+                  )}
+
+                  {/* ---------------- Acción de pagos ---------------- */}
+                  <Grid item xs={12} textAlign="center">
+                    <Button
+                      variant="contained"
+                      size="small"
+                      sx={{ backgroundColor: '#007BFF' }}
+                      onClick={() => { window.location.href = '/parent/payment'; }}
+                    >
+                      Subir Boleta de Pago
+                    </Button>
+                  </Grid>
                 </Grid>
 
                 {(nonEmpty(parentInfo.emergencyContact) ||
@@ -374,6 +379,44 @@ const ParentDashboardPage = () => {
                     </Grid>
                   </>
                 )}
+
+                {(nonEmpty(parentInfo.contactPhone) ||
+                  nonEmpty(parentInfo.contactEmail) ||
+                  nonEmpty(parentInfo.whatsappLink)) && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6" sx={{ mb: 1 }}>Contáctanos</Typography>
+                    <Grid container columnSpacing={2} rowSpacing={1}>
+                      {nonEmpty(parentInfo.contactPhone) && (
+                        <>
+                          <Grid item xs={6}><b>Teléfono:</b></Grid>
+                          <Grid item xs={6}>{parentInfo.contactPhone}</Grid>
+                        </>
+                      )}
+                      {nonEmpty(parentInfo.contactEmail) && (
+                        <>
+                          <Grid item xs={6}><b>Email:</b></Grid>
+                          <Grid item xs={6}>{parentInfo.contactEmail}</Grid>
+                        </>
+                      )}
+                      {nonEmpty(parentInfo.whatsappLink) && (
+                        <>
+                          <Grid item xs={6}><b>WhatsApp:</b></Grid>
+                          <Grid item xs={6}>
+                            <Link
+                              href={parentInfo.whatsappLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              sx={{ color: 'primary.main', textDecoration: 'underline' }}
+                            >
+                              {parentInfo.whatsappLink}
+                            </Link>
+                          </Grid>
+                        </>
+                      )}
+                    </Grid>
+                  </>
+                )}
               </CardContent>
             </SectionCard>
           </Grid>
@@ -398,55 +441,11 @@ const ParentDashboardPage = () => {
                                 Grado: {st.grade}
                               </Typography>
                             )}
-                            {st.id && (
-                              <Chip size="small" sx={{ mt: 1 }} label={`ID: ${st.id}`} />
-                            )}
                           </CardContent>
                         </Card>
                       </Grid>
                     ))}
                   </Grid>
-                )}
-              </CardContent>
-            </SectionCard>
-          </Grid>
-
-          {/* ---------------- Rutas (unificadas) ---------------- */}
-          <Grid item xs={12}>
-            <SectionCard elevation={3}>
-              <CardContent>
-                <Typography variant="h5" gutterBottom>Rutas</Typography>
-
-                {derivedRoutes.length === 0 ? (
-                  <Typography fontStyle="italic">No se encontraron rutas asignadas.</Typography>
-                ) : (
-                  <Stack spacing={2}>
-                    {derivedRoutes.map((r, i) => (
-                      <MuiBox key={`route-${i}`}>
-                        <Grid container spacing={1}>
-                          {nonEmpty(r.routeNumber) && (
-                            <Grid item xs={12} md={3}><b>Ruta:</b> {r.routeNumber}</Grid>
-                          )}
-                          {nonEmpty(r.stopPoint) && (
-                            <Grid item xs={12} md={3}><b>Punto:</b> {r.stopPoint}</Grid>
-                          )}
-                          {toArray(r.schedules).length > 0 && (
-                            <Grid item xs={12} md={3}>
-                              <b>Horario(s):</b> {toArray(r.schedules).join(', ')}
-                            </Grid>
-                          )}
-                          {(nonEmpty(r.monitoraName) || nonEmpty(r.monitoraContact)) && (
-                            <Grid item xs={12} md={3}>
-                              <b>Monitora:</b>{' '}
-                              {r.monitoraName}
-                              {nonEmpty(r.monitoraContact) ? ` (${r.monitoraContact})` : ''}
-                            </Grid>
-                          )}
-                        </Grid>
-                        {i < derivedRoutes.length - 1 && <Divider sx={{ mt: 2 }} />}
-                      </MuiBox>
-                    ))}
-                  </Stack>
                 )}
               </CardContent>
             </SectionCard>
@@ -609,18 +608,6 @@ const ParentDashboardPage = () => {
                 )}
               </CardContent>
             </SectionCard>
-          </Grid>
-
-          {/* ---------------- Acción de pagos ---------------- */}
-          <Grid item xs={12} textAlign="center">
-            <Button
-              variant="contained"
-              size="large"
-              sx={{ backgroundColor: '#007BFF' }}
-              onClick={() => { window.location.href = '/parent/payment'; }}
-            >
-              Subir Boleta de Pago
-            </Button>
           </Grid>
         </Grid>
       </Container>
