@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import api from '../utils/axiosConfig';
 import moment from 'moment';
 import copy from 'copy-to-clipboard';
+import axios from 'axios';
 
 // NOT LINKED anywhere; direct access only via URL path you configure below in App.jsx
 export default function AdminAuditHidden() {
@@ -130,6 +131,31 @@ export default function AdminAuditHidden() {
 		fetchData();
 	};
 
+	const downloadCsv = async () => {
+		const params = new URLSearchParams();
+		Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
+		const baseURL = api.defaults.baseURL?.replace(/\/$/, '') || '';
+		const url = `${baseURL}/audit/export/csv?${params.toString()}`;
+		const token = localStorage.getItem('token');
+		try {
+			const response = await axios.get(url, {
+				responseType: 'blob',
+				headers: { Authorization: token ? `Bearer ${token}` : undefined }
+			});
+			const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8' });
+			const link = document.createElement('a');
+			const dl = window.URL.createObjectURL(blob);
+			link.href = dl;
+			link.download = `audit-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'')}.csv`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			setTimeout(() => URL.revokeObjectURL(dl), 2000);
+		} catch (e) {
+			alert(e?.response?.data?.message || e?.message || 'Error al descargar CSV');
+		}
+	};
+
 	const deleteOne = async (id) => {
 		if (!window.confirm('¿Eliminar este log?')) return;
 		await api.delete(`/audit/${id}`);
@@ -143,6 +169,13 @@ export default function AdminAuditHidden() {
 		const { data } = await api.post('/audit/delete-by-filter', body);
 		alert(`Eliminados: ${data.deleted}`);
 		setPage(1);
+		fetchData();
+	};
+
+	const deleteGroup = async (ids) => {
+		if (!ids || ids.length === 0) return;
+		if (!window.confirm(`¿Eliminar los ${ids.length} logs de este grupo?`)) return;
+		await api.post('/audit/delete-by-ids', { ids });
 		fetchData();
 	};
 
@@ -207,6 +240,7 @@ export default function AdminAuditHidden() {
 						<select value={pageSize} onChange={(e)=>{setPageSize(parseInt(e.target.value)||20); setPage(1);}} className="border rounded px-2 py-1">
 							{[20,50,100,200].map(s=> <option key={s} value={s}>{s}/página</option>)}
 						</select>
+						<button type="button" className="bg-emerald-600 text-white px-3 py-1 rounded" onClick={downloadCsv}>Descargar CSV</button>
 						<button type="button" className="bg-red-600 text-white px-3 py-1 rounded" onClick={deleteByFilter}>Eliminar por Filtros</button>
 					</div>
 				</div>
@@ -303,11 +337,12 @@ export default function AdminAuditHidden() {
 										<th className="text-left p-2">Antes</th>
 										<th className="text-left p-2">Después</th>
 										<th className="text-left p-2">Acciones</th>
+										<th className="text-left p-2">#</th>
 									</tr>
 					</thead>
 					<tbody>
 						{items.map((row)=> (
-							<tr key={row.id} className="border-t">
+							<tr key={row.id || (row._ids && row._ids[0])} className="border-t">
 												<td className="p-2 whitespace-nowrap">
 													<span>{moment(row.createdAt).format('YYYY-MM-DD HH:mm:ss')}</span>
 												</td>
@@ -377,9 +412,13 @@ export default function AdminAuditHidden() {
 														</div>
 													</div>
 												</td>
-												<td className="p-2">
-													<button className="bg-red-600 text-white px-2 py-1 rounded" onClick={()=>deleteOne(row.id)}>Eliminar</button>
+												<td className="p-2 space-x-2">
+													<button className="bg-red-600 text-white px-2 py-1 rounded" onClick={()=>deleteOne(row.id || (row._ids && row._ids[0]))}>Eliminar</button>
+													{row._ids && row._ids.length > 1 && (
+														<button className="bg-red-700 text-white px-2 py-1 rounded" title="Eliminar todo el grupo" onClick={()=>deleteGroup(row._ids)}>Eliminar grupo</button>
+													)}
 												</td>
+												<td className="p-2 text-center whitespace-nowrap">{row._count || 1}</td>
 							</tr>
 						))}
 						{items.length === 0 && !loading && (
