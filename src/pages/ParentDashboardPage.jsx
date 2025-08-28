@@ -134,6 +134,7 @@ const fetchSlotsByStudentIds = async (ids) => {
             time: safeStr(s?.time),
             note: safeStr(s?.note),
             schoolSchedule: safeStr(s?.schoolSchedule),
+            routeNumber: safeStr(s?.routeNumber),
             days: daysArr,
             bus: s?.bus || null, // incluye Bus (con routeNumber, plate, etc.) si viene
           };
@@ -569,10 +570,10 @@ const ParentDashboardPage = () => {
                                                   </>
                                                 )}
 
-                                                {nonEmpty(bus.routeNumber) && (
+                        {nonEmpty(slot.routeNumber) && (
                                                   <>
                                                     <Grid item xs={6}><Typography variant="body2"><b>Ruta:</b></Typography></Grid>
-                                                    <Grid item xs={6}><Typography variant="body2">{bus.routeNumber}</Typography></Grid>
+                          <Grid item xs={6}><Typography variant="body2">{slot.routeNumber}</Typography></Grid>
                                                   </>
                                                 )}
 

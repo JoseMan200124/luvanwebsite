@@ -24,14 +24,14 @@ import {
     DialogContentText,
     CircularProgress,
     Grid,
-    Checkbox,
     Box,
     // Link,
     useMediaQuery,
     useTheme,
     Chip,
     TableSortLabel,
-    FormControlLabel
+    FormControlLabel,
+    Checkbox
 } from '@mui/material';
 import { Snackbar, Alert } from '@mui/material';
 import {
@@ -43,750 +43,30 @@ import {
     Mail
 } from '@mui/icons-material';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
+import styled from 'styled-components';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import tw from 'twin.macro';
-import styled from 'styled-components';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 
-// Helper: extract time and code from strings like "07:15 AM" or "Horario X 07:15"
-function extractTime(str) {
-    if (!str) return '';
-    const s = String(str);
-    const m = s.match(/(\d{1,2}:\d{2})/);
-    return m ? m[1] : '';
-}
-
-function extractCode(str) {
-    if (!str) return null;
-    const s = String(str).toUpperCase();
-    const m = s.match(/\b(AM|PM|MD|EX)\b/);
-    return m ? m[1] : null;
-}
-
-const RolesContainer = tw.div`
-  p-8 bg-gray-100 min-h-screen w-full
+/* ================== Responsive Table & Mobile Cards =================== */
+// Contenedor principal de la página
+const RolesContainer = styled.div`
+    padding: 16px;
 `;
 
+// Opciones de roles disponibles en el sistema
 const roleOptions = [
-    { id: 1, name: 'Gestor' },
-    { id: 2, name: 'Administrador' },
+    { id: 1, name: 'Administrador' },
+    { id: 2, name: 'Gestor' },
     { id: 3, name: 'Padre' },
     { id: 4, name: 'Monitora' },
     { id: 5, name: 'Piloto' },
     { id: 6, name: 'Supervisor' },
-    { id: 7, name: 'Auxiliar' },
+    { id: 7, name: 'Auxiliar' }
 ];
 
-
-/* ================== MODAL: Edición Masiva Horarios de Parada (Bulk) ================== */
-const BulkStopScheduleEditorModal = ({ open, onClose, schools, onSaved }) => {
-    const [selectedSchool, setSelectedSchool] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [familiesList, setFamiliesList] = useState([]); // rows metadata: { parentId, familyLastName, students }
-    const [schoolSchedules, setSchoolSchedules] = useState([]);
-    const [familySlots, setFamilySlots] = useState({}); // { parentId: [{ time, note }, ...] }
-    const [selectedForSave, setSelectedForSave] = useState({}); // { parentId: boolean }
-    const [confirmOpen, setConfirmOpen] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    
-
-    useEffect(() => {
-        if (!open) return;
-        setSelectedSchool('');
-        setFamiliesList([]);
-        setSchoolSchedules([]);
-        setFamilySlots({});
-    }, [open]);
-
-    const fetchSchoolSchedules = async (schoolId) => {
-        try {
-            const resp = await api.get(`/schools/${schoolId}`);
-            setSchoolSchedules(resp.data.school?.schedules || []);
-        } catch (err) {
-            console.error('[BulkStopScheduleEditorModal] Error fetching school schedules:', err);
-            setSchoolSchedules([]);
-        }
-    };
-
-    const fetchFamiliesForSchool = async (schoolId) => {
-        setLoading(true);
-        try {
-            let allUsers = [];
-            let page = 0;
-            const limit = 500;
-            let total = 0;
-            let fetched = 0;
-
-            const firstResp = await api.get('/users', { params: { page, limit } });
-            allUsers = firstResp.data.users || [];
-            total = firstResp.data.total || allUsers.length;
-            fetched = allUsers.length;
-
-            while (fetched < total) {
-                page += 1;
-                const resp = await api.get('/users', { params: { page, limit } });
-                const usersBatch = resp.data.users || [];
-                allUsers = allUsers.concat(usersBatch);
-                fetched += usersBatch.length;
-                if (usersBatch.length === 0) break;
-            }
-
-            const parents = allUsers.filter(u => u.Role && u.Role.name === 'Padre' && u.FamilyDetail && String(u.school) === String(schoolId));
-
-            const rows = parents.map(user => {
-                const fd = user.FamilyDetail || {};
-                const students = (fd.Students || []).map(s => s.fullName).join(', ');
-                return { parentId: user.id, familyLastName: fd.familyLastName || '', students };
-            });
-
-            setFamiliesList(rows);
-
-            const slotsObj = {};
-            parents.forEach(user => {
-                const fd = user.FamilyDetail || {};
-                const slots = (fd.ScheduleSlots || []).map(s => ({ time: s.time || '', note: s.note || '' }));
-                slotsObj[user.id] = slots;
-            });
-            setFamilySlots(slotsObj);
-        } catch (err) {
-            console.error('[BulkStopScheduleEditorModal] Error fetching families:', err);
-            setFamiliesList([]);
-            setFamilySlots({});
-        }
-        setLoading(false);
-    };
-
-    // (removed unused getScheduleOptionsFromSchool)
-
-    const handleSlotChange = (parentId, idx, field, value) => {
-        setFamilySlots(prev => {
-            const arr = prev[parentId] ? [...prev[parentId]] : [];
-            if (!arr[idx]) arr[idx] = { time: '', note: '' };
-            arr[idx] = { ...arr[idx], [field]: value };
-            // mark as modified only if not already marked to avoid re-renders on each keystroke
-            setSelectedForSave(sel => {
-                if (sel && sel[parentId]) return sel;
-                return { ...sel, [parentId]: true };
-            });
-            return { ...prev, [parentId]: arr };
-        });
-    };
-
-    const handleAddSlot = (parentId) => {
-        setFamilySlots(prev => ({ ...prev, [parentId]: [...(prev[parentId] || []), { time: '', note: '' }] }));
-    // mark added slot; only set if not already marked
-    setSelectedForSave(sel => {
-        if (sel && sel[parentId]) return sel;
-        return { ...sel, [parentId]: true };
-    });
-    };
-
-    const handleRemoveSlot = (parentId, idx) => {
-        setFamilySlots(prev => {
-            const arr = prev[parentId] ? [...prev[parentId]] : [];
-            arr.splice(idx, 1);
-            // mark removed slot; only set if not already marked
-            setSelectedForSave(sel => {
-                if (sel && sel[parentId]) return sel;
-                return { ...sel, [parentId]: true };
-            });
-            return { ...prev, [parentId]: arr };
-        });
-    };
-
-    const toggleSelectForSave = (parentId) => {
-        setSelectedForSave(prev => ({ ...prev, [parentId]: !prev[parentId] }));
-    };
-
-    const saveAll = async () => {
-        setLoading(true);
-        try {
-            const toProcess = familiesList.filter(r => selectedForSave[r.parentId]);
-            if (toProcess.length === 0) {
-                setLoading(false);
-                return;
-            }
-            await Promise.all(toProcess.map(async (r) => {
-                const parentId = r.parentId;
-                const slots = (familySlots[parentId] || []).filter(s => s.time || s.note).map(s => ({ time: s.time, note: s.note }));
-                try {
-                    // Use PATCH to update only scheduleSlots and avoid fetching full user
-                    await api.patch(`/users/${parentId}`, { familyDetail: { scheduleSlots: slots } });
-                } catch (err) {
-                    console.error(`[BulkStopScheduleEditorModal] Error patching parent ${parentId}:`, err);
-                }
-            }));
-            setLoading(false);
-            if (onSaved) onSaved();
-            onClose();
-        } catch (err) {
-            console.error('[BulkStopScheduleEditorModal] Save error:', err);
-            setLoading(false);
-        }
-    };
-
-    // precompute filtered list only after school selected
-    const q = (searchQuery || '').trim().toLowerCase();
-    const filteredFamilies = selectedSchool && q
-        ? familiesList.filter(f => (f.familyLastName || '').toLowerCase().includes(q) || (f.students || '').toLowerCase().includes(q))
-        : familiesList;
-
-    return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl">
-            <DialogTitle>Edición Masiva Horarios de Parada</DialogTitle>
-            <DialogContent>
-                <Box sx={{ mb: 2 }}>
-                    <FormControl fullWidth>
-                        <InputLabel>Selecciona Colegio</InputLabel>
-                        <Select
-                            value={selectedSchool}
-                            label="Selecciona Colegio"
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setSelectedSchool(val);
-                                fetchSchoolSchedules(val);
-                                fetchFamiliesForSchool(val);
-                            }}
-                        >
-                            <MenuItem value="">
-                                <em>Seleccione</em>
-                            </MenuItem>
-                            {schools.map(s => (
-                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                </Box>
-
-                {loading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                        <CircularProgress />
-                    </Box>
-                ) : (
-                    <>
-                        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                            <TextField
-                                label="Buscar familias / alumnos"
-                                size="small"
-                                fullWidth
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </Box>
-                        <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
-                            <Table stickyHeader>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell padding="checkbox" />
-                                        <TableCell>Apellido Familia</TableCell>
-                                        <TableCell>Alumnos</TableCell>
-                                        <TableCell>Horarios & Paradas</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {filteredFamilies.map(f => {
-                                        const slots = familySlots[f.parentId] || [];
-                                        return (
-                                            <TableRow key={f.parentId}>
-                                                <TableCell padding="checkbox">
-                                                    <Checkbox
-                                                        checked={!!selectedForSave[f.parentId]}
-                                                        onChange={() => toggleSelectForSave(f.parentId)}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>{f.familyLastName}</TableCell>
-                                                <TableCell>{f.students}</TableCell>
-                                                <TableCell>
-                                                    {slots.map((s, idx) => {
-                                                        const used = slots.filter((_, i) => i !== idx).map(x => x.time);
-                                                        const isDup = s.time && used.includes(s.time);
-                                                        return (
-                                                            <Box key={idx} sx={{ mb: 1, display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                                <TextField
-                                                                    type="time"
-                                                                    label="Horario"
-                                                                    size="small"
-                                                                    value={s.time || ''}
-                                                                    onChange={(e) => handleSlotChange(f.parentId, idx, 'time', e.target.value)}
-                                                                    sx={{ minWidth: 160 }}
-                                                                    InputLabelProps={{ shrink: true }}
-                                                                    error={isDup}
-                                                                    helperText={isDup ? 'Horario duplicado' : ''}
-                                                                />
-                                                                <TextField
-                                                                    label="Nota / Parada"
-                                                                    size="small"
-                                                                    value={s.note}
-                                                                    onChange={(e) => handleSlotChange(f.parentId, idx, 'note', e.target.value)}
-                                                                    sx={{ flex: 1 }}
-                                                                />
-                                                                <IconButton color="error" onClick={() => handleRemoveSlot(f.parentId, idx)}>
-                                                                    <Delete />
-                                                                </IconButton>
-                                                            </Box>
-                                                        );
-                                                    })}
-                                                    <Button size="small" variant="outlined" onClick={() => handleAddSlot(f.parentId)}>Agregar Parada</Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </>
-                )}
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Cerrar</Button>
-                <Button
-                    variant="contained"
-                    onClick={() => setConfirmOpen(true)}
-                    disabled={loading || !selectedSchool || Object.keys(selectedForSave).filter(id => selectedForSave[id]).length === 0}
-                >
-                    {loading ? 'Guardando...' : 'Guardar Paradas'}
-                </Button>
-            </DialogActions>
-
-            <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Confirmar guardado de paradas</DialogTitle>
-                <DialogContent>
-                    <Typography>Se actualizarán las paradas para {Object.keys(selectedForSave).filter(id => selectedForSave[id]).length} familias.</Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setConfirmOpen(false)}>Cancelar</Button>
-                    <Button onClick={async () => { setConfirmOpen(false); await saveAll(true); }} variant="contained" color="primary">Confirmar</Button>
-                </DialogActions>
-            </Dialog>
-        </Dialog>
-    );
-};
-
-/* ================== MODAL: Edición Masiva de Rutas (Bulk) ================== */
-const BulkRouteEditorModal = ({ open, onClose, buses, schools, onSaved }) => {
-    // Now search by family last name instead of selecting a school
-    const [familyLastName, setFamilyLastName] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [studentsList, setStudentsList] = useState([]); // rows metadata
-    // Map schedules per school: { [schoolId]: schedules[] }
-    const [schoolSchedulesById, setSchoolSchedulesById] = useState({});
-    const [studentSchedules, setStudentSchedules] = useState({}); // { studentId: [horario,...] }
-    const [assignments, setAssignments] = useState({}); // { studentId: [{ horario, buses: [] }, ...] }
-    const [selectedForSaveRoutes, setSelectedForSaveRoutes] = useState({}); // { studentId: boolean }
-    const [confirmOpenRoutes, setConfirmOpenRoutes] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [localSnackbar, setLocalSnackbar] = useState({ open: false, message: '', severity: 'info' });
-
-    useEffect(() => {
-        if (!open) return;
-        setFamilyLastName('');
-        setStudentsList([]);
-        setSchoolSchedulesById({});
-        setStudentSchedules({});
-        setAssignments({});
-        setSelectedForSaveRoutes({});
-        setConfirmOpenRoutes(false);
-    }, [open]);
-
-    const getScheduleOptionsFromSchool = (schoolId) => {
-        const schs = schoolSchedulesById[schoolId];
-        if (!schs || !Array.isArray(schs)) return [];
-        return schs.flatMap(sch => (sch.times || []).map(t => `${sch.name} ${t}`));
-    };
-
-    // Fetch students by family last name (search across schools). Also fetch schedules for each school found.
-    const fetchStudentsByLastName = async (lastName) => {
-        setLoading(true);
-        try {
-            const normalize = (s) => (s || '').toString().normalize ? s.toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase() : (s || '').toLowerCase();
-            const q = (lastName || '').trim();
-            if (!q || q.length < 1) {
-                setLocalSnackbar({ open: true, message: 'Ingresa al menos un caracter para buscar', severity: 'warning' });
-                setLoading(false);
-                return;
-            }
-
-            // 1) Try server-side search first (if API supports filtering by familyLastName)
-            let serverUsers = null;
-            try {
-                const respServer = await api.get('/users', { params: { page: 0, limit: 500, familyLastName: q } });
-                serverUsers = respServer.data.users || null;
-            } catch (e) {
-                // ignore and fallback to client-side
-                serverUsers = null;
-            }
-            // If serverUsers provided results, use them; otherwise fallback to client-side full pagination
-            let allUsers = [];
-            if (serverUsers && Array.isArray(serverUsers) && serverUsers.length > 0) {
-                allUsers = serverUsers;
-            } else {
-                let page = 0;
-                const limit = 500;
-                let total = 0;
-                let fetched = 0;
-
-                const firstResp = await api.get('/users', { params: { page, limit } });
-                allUsers = firstResp.data.users || [];
-                total = firstResp.data.total || allUsers.length;
-                fetched = allUsers.length;
-
-                while (fetched < total) {
-                    page += 1;
-                    const resp = await api.get('/users', { params: { page, limit } });
-                    const usersBatch = resp.data.users || [];
-                    allUsers = allUsers.concat(usersBatch);
-                    fetched += usersBatch.length;
-                    if (usersBatch.length === 0) break;
-                }
-            }
-
-            const qNorm = normalize(lastName);
-            const parents = allUsers.filter(u => u.Role && (u.Role.name === 'Padre' || (u.Role.name || '').toString().toLowerCase() === 'padre') && u.FamilyDetail && normalize(u.FamilyDetail.familyLastName).includes(qNorm));
-
-            const rows = [];
-            parents.forEach(user => {
-                const fd = user.FamilyDetail || {};
-                (fd.Students || []).forEach(student => {
-                    rows.push({
-                        studentId: student.id,
-                        familyLastName: fd.familyLastName || '',
-                        studentName: student.fullName || '',
-                        grade: student.grade || '',
-                        schoolId: user.school // keep school for per-student schedules/buses
-                    });
-                });
-            });
-
-            setStudentsList(rows);
-
-            if (!rows.length) {
-                setLocalSnackbar({ open: true, message: `No se encontraron familias con apellido "${lastName}"`, severity: 'info' });
-            }
-
-            // fetch schedules for each unique school found
-            const uniqueSchoolIds = Array.from(new Set(parents.map(p => String(p.school)).filter(s => s)));
-            const schedulesMap = {};
-            await Promise.all(uniqueSchoolIds.map(async (sid) => {
-                try {
-                    const resp = await api.get(`/schools/${sid}`);
-                    schedulesMap[sid] = resp.data.school?.schedules || [];
-                } catch (err) {
-                    schedulesMap[sid] = [];
-                }
-            }));
-            setSchoolSchedulesById(schedulesMap);
-
-            // fetch existing assignments per student to populate studentSchedules & assignments
-            const newSchedControls = {};
-            const newAssignments = {};
-            await Promise.all(rows.map(async (r) => {
-                try {
-                    const resp = await api.get(`/students/${r.studentId}/assign-buses`);
-                    const asgs = resp.data.assignments || [];
-                    // build assignments structure
-                    const arr = [];
-                    asgs.forEach(a => {
-                        (a.assignedSchedule || []).forEach(h => {
-                            let hObj = arr.find(x => x.horario === h);
-                            if (!hObj) {
-                                hObj = { horario: h, buses: [] };
-                                arr.push(hObj);
-                            }
-                            if (!hObj.buses.includes(a.busId)) hObj.buses.push(a.busId);
-                        });
-                    });
-                    newAssignments[r.studentId] = arr;
-                    newSchedControls[r.studentId] = arr.map(x => x.horario);
-                } catch (err) {
-                    newAssignments[r.studentId] = [];
-                    newSchedControls[r.studentId] = [];
-                }
-            }));
-
-            setAssignments(newAssignments);
-            setStudentSchedules(newSchedControls);
-        } catch (err) {
-            console.error('[BulkRouteEditorModal] Error fetching students by last name:', err);
-            setStudentsList([]);
-            setSchoolSchedulesById({});
-        }
-        setLoading(false);
-    };
-
-    const getBusScheduleOptions = (bus) => {
-        if (!bus.schedule || !Array.isArray(bus.schedule)) return [];
-        const opts = [];
-        bus.schedule.forEach(sch => {
-            (sch.times || []).forEach(t => opts.push(`${sch.day} ${t}`));
-        });
-        return opts;
-    };
-
-    const handleStudentScheduleChange = (studentId, idx, value) => {
-        setStudentSchedules(prev => {
-            const arr = prev[studentId] ? [...prev[studentId]] : [];
-            const prevHorario = arr[idx];
-            arr[idx] = value;
-            // remove assignments tied to previousHorario
-            setAssignments(prevA => {
-                const arrAssign = prevA[studentId] ? [...prevA[studentId]] : [];
-                const filtered = arrAssign.filter(h => h.horario !== prevHorario);
-                return { ...prevA, [studentId]: filtered };
-            });
-            // mark student as selected for save only once to avoid re-renders
-            setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
-            return { ...prev, [studentId]: arr };
-        });
-    };
-
-    const handleAddScheduleSelector = (studentId) => {
-        setStudentSchedules(prev => ({ ...prev, [studentId]: [...(prev[studentId] || []), ''] }));
-    setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
-    };
-
-    const handleRemoveScheduleSelector = (studentId, idx) => {
-        setStudentSchedules(prev => {
-            const arr = prev[studentId] ? [...prev[studentId]] : [];
-            const removed = arr[idx];
-            arr.splice(idx, 1);
-            setAssignments(prevA => {
-                const arrAssign = prevA[studentId] ? [...prevA[studentId]] : [];
-                const newArrAssign = arrAssign.filter(h => h.horario !== removed);
-                return { ...prevA, [studentId]: newArrAssign };
-            });
-            setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
-            return { ...prev, [studentId]: arr };
-        });
-    };
-
-    const handleToggleBus = (studentId, horario, busId) => {
-        setAssignments(prev => {
-            const arr = prev[studentId] ? [...prev[studentId]] : [];
-            let horarioObj = arr.find(h => h.horario === horario);
-            if (!horarioObj) {
-                horarioObj = { horario, buses: [busId] };
-                // mark student as selected for save only once
-                setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
-                return { ...prev, [studentId]: [...arr, horarioObj] };
-            }
-            const busesArr = horarioObj.buses.includes(busId) ? horarioObj.buses.filter(id => id !== busId) : [...horarioObj.buses, busId];
-            const newArr = arr.map(h => h.horario === horario ? { ...h, buses: busesArr } : h).filter(h => h.buses.length > 0);
-            // mark student as selected for save only once
-            setSelectedForSaveRoutes(sel => (sel && sel[studentId]) ? sel : { ...sel, [studentId]: true });
-            return { ...prev, [studentId]: newArr };
-        });
-    };
-
-    const toggleSelectForSaveRoutes = (studentId) => {
-        setSelectedForSaveRoutes(prev => ({ ...prev, [studentId]: !prev[studentId] }));
-    };
-
-    const isBusChecked = (studentId, horario, busId) => {
-        const arr = assignments[studentId] || [];
-        const horarioObj = arr.find(h => h.horario === horario);
-        return horarioObj ? horarioObj.buses.includes(busId) : false;
-    };
-
-    const getBusOptionsForSchool = (schoolId) => {
-        return (buses || []).filter(bus => bus.pilot && String(bus.pilot.school) === String(schoolId));
-    };
-
-    const saveAll = async () => {
-        setLoading(true);
-        try {
-            const toProcess = studentsList.filter(r => selectedForSaveRoutes[r.studentId]);
-            if (toProcess.length === 0) {
-                setLoading(false);
-                return;
-            }
-            await Promise.all(toProcess.map(async (r) => {
-                const studId = r.studentId;
-                const studentAssign = assignments[studId] || [];
-                // regroup by busId
-                const busToHorarios = {};
-                studentAssign.forEach(h => {
-                    h.buses.forEach(busId => {
-                        if (!busToHorarios[busId]) busToHorarios[busId] = [];
-                        if (!busToHorarios[busId].includes(h.horario)) busToHorarios[busId].push(h.horario);
-                    });
-                });
-                const assignedBuses = Object.entries(busToHorarios).map(([busId, horarios]) => ({ busId: Number(busId), assignedSchedule: horarios }));
-                await api.put(`/students/${studId}/assign-buses`, { assignedBuses });
-            }));
-            setLoading(false);
-            if (onSaved) onSaved();
-            onClose();
-        } catch (err) {
-            console.error('[BulkRouteEditorModal] Save error:', err);
-            setLoading(false);
-        }
-    };
-
-    // precompute filtered list for rendering (search)
-    const q = (searchQuery || '').trim().toLowerCase();
-    const filteredStudents = q
-        ? studentsList.filter(s =>
-            (s.familyLastName || '').toLowerCase().includes(q) ||
-            (s.studentName || '').toLowerCase().includes(q) ||
-            (s.grade || '').toLowerCase().includes(q)
-        ) : studentsList;
-
-    return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl">
-            <DialogTitle>Edición Masiva de Rutas</DialogTitle>
-            <DialogContent>
-                <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
-                    <TextField
-                        label="Apellido de Familia"
-                        size="small"
-                        fullWidth
-                        value={familyLastName}
-                        onChange={(e) => setFamilyLastName(e.target.value)}
-                        helperText="Ingresa un apellido y presiona Buscar"
-                    />
-                    <Button variant="outlined" onClick={() => fetchStudentsByLastName(familyLastName)}>Buscar</Button>
-                </Box>
-
-                {loading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                        <CircularProgress />
-                    </Box>
-                ) : (
-                    <>
-                        
-                        <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
-                        <Table stickyHeader>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell padding="checkbox" />
-                                    <TableCell>Apellido Familia</TableCell>
-                                    <TableCell>Alumno</TableCell>
-                                    <TableCell>Grado</TableCell>
-                                    <TableCell>Horarios</TableCell>
-                                    <TableCell>Buses</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {filteredStudents.map((r) => {
-                                    const schedArr = studentSchedules[r.studentId] || [];
-                                                    const allHorarioOptions = getScheduleOptionsFromSchool(r.schoolId);
-                                    return (
-                                        <TableRow key={r.studentId}>
-                                            <TableCell padding="checkbox">
-                                                <Checkbox
-                                                    checked={!!selectedForSaveRoutes[r.studentId]}
-                                                    onChange={() => toggleSelectForSaveRoutes(r.studentId)}
-                                                />
-                                            </TableCell>
-                                            <TableCell>{r.familyLastName}</TableCell>
-                                            <TableCell>{r.studentName}</TableCell>
-                                            <TableCell>{r.grade}</TableCell>
-                                            <TableCell>
-                                                {schedArr.map((selectedSchedule, idx) => {
-                                                    const used = schedArr.filter((_, i) => i !== idx);
-                                                    const availableOptions = allHorarioOptions.filter(opt => !used.includes(opt));
-                                                    return (
-                                                        <Box key={idx} sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-                                                            <FormControl sx={{ flex: 1 }} size="small">
-                                                                <InputLabel>Horario</InputLabel>
-                                                                <Select
-                                                                    value={selectedSchedule}
-                                                                    label="Horario"
-                                                                    onChange={(e) => handleStudentScheduleChange(r.studentId, idx, e.target.value)}
-                                                                >
-                                                                    <MenuItem value=""><em>Seleccione</em></MenuItem>
-                                                                    {availableOptions.map(opt => (
-                                                                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                                                                    ))}
-                                                                </Select>
-                                                            </FormControl>
-                                                            <IconButton color="error" onClick={() => handleRemoveScheduleSelector(r.studentId, idx)} sx={{ ml: 1 }}>
-                                                                <Delete />
-                                                            </IconButton>
-                                                        </Box>
-                                                    );
-                                                })}
-                                                <Button size="small" variant="outlined" onClick={() => handleAddScheduleSelector(r.studentId)}>Agregar horario</Button>
-                                            </TableCell>
-                                            <TableCell>
-                                                {schedArr.length === 0 ? (
-                                                    <Typography variant="body2" color="textSecondary">Agrega un horario para asignar buses</Typography>
-                                                ) : (
-                                                    <div style={{ maxHeight: 220, overflow: 'auto' }}>
-                                                        {schedArr.map((horario, hIdx) => {
-                                                            const allBusesForSchool = getBusOptionsForSchool(r.schoolId);
-                                                            const compatibleBuses = allBusesForSchool.filter(bus => {
-                                                                const opts = getBusScheduleOptions(bus);
-                                                                return opts.includes(horario);
-                                                            });
-                                                            return (
-                                                                <Box key={hIdx} sx={{ mb: 1, p: 1, border: '1px solid #eee', borderRadius: 1 }}>
-                                                                    <Typography variant="subtitle2" sx={{ mb: 0.5 }}>{horario}</Typography>
-                                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                                                        {compatibleBuses.length === 0 ? (
-                                                                            <Typography variant="body2" color="textSecondary">No hay buses compatibles con este horario</Typography>
-                                                                        ) : (
-                                                                            compatibleBuses.map(bus => (
-                                                                                <Box key={bus.id} sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                                    <Checkbox
-                                                                                        checked={isBusChecked(r.studentId, horario, bus.id)}
-                                                                                        onChange={() => handleToggleBus(r.studentId, horario, bus.id)}
-                                                                                    />
-                                                                                    <span>{bus ? `Ruta ${bus.routeNumber}${bus.plate ? ` (${bus.plate})` : ''}` : 'Ruta: —'}</span>
-                                                                                </Box>
-                                                                            ))
-                                                                        )}
-                                                                    </div>
-                                                                </Box>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                        </>
-                )}
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Cerrar</Button>
-                <Button
-                    variant="contained"
-                    onClick={() => setConfirmOpenRoutes(true)}
-                    disabled={loading || Object.keys(selectedForSaveRoutes).filter(id => selectedForSaveRoutes[id]).length === 0}
-                >
-                    {loading ? 'Guardando...' : 'Guardar Asignaciones'}
-                </Button>
-            </DialogActions>
-
-            <Snackbar open={localSnackbar.open} autoHideDuration={6000} onClose={() => setLocalSnackbar(prev => ({ ...prev, open: false }))}>
-                <Alert onClose={() => setLocalSnackbar(prev => ({ ...prev, open: false }))} severity={localSnackbar.severity} sx={{ width: '100%' }}>
-                    {localSnackbar.message}
-                </Alert>
-            </Snackbar>
-
-            <Dialog open={confirmOpenRoutes} onClose={() => setConfirmOpenRoutes(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Confirmar guardado de rutas</DialogTitle>
-                <DialogContent>
-                    <Typography>Se actualizarán las rutas para {Object.keys(selectedForSaveRoutes).filter(id => selectedForSaveRoutes[id]).length} alumnos.</Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setConfirmOpenRoutes(false)}>Cancelar</Button>
-                    <Button onClick={async () => { setConfirmOpenRoutes(false); await saveAll(); }} variant="contained" color="primary">Confirmar</Button>
-                </DialogActions>
-            </Dialog>
-        </Dialog>
-    );
-};
-
-/* ================== Responsive Table & Mobile Cards =================== */
 const ResponsiveTableHead = styled(TableHead)`
     @media (max-width: 600px) {
         display: none;
@@ -828,6 +108,58 @@ const MobileLabel = styled(Typography)`
 const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
+
+// Helper para extraer un horario HH:mm de diferentes formatos de valores
+function extractTime(val) {
+    if (!val) return '';
+    if (typeof val === 'string') {
+        const m = val.match(/(\d{1,2}):(\d{2})/);
+        if (m) {
+            const hh = m[1].padStart(2, '0');
+            const mm = m[2];
+            return `${hh}:${mm}`;
+        }
+        return '';
+    }
+    if (typeof val === 'number') {
+        // e.g., 730 -> 07:30
+        const s = String(val);
+        if (s.length >= 3) {
+            const mm = s.slice(-2);
+            const hh = s.slice(0, -2).padStart(2, '0');
+            return `${hh}:${mm}`;
+        }
+        return '';
+    }
+    if (typeof val === 'object') {
+        // Intentar algunas claves comunes
+        if (val.time) return extractTime(val.time);
+        if (val.start) return extractTime(val.start);
+        if (val.hour) return extractTime(val.hour);
+        if (val.value) return extractTime(val.value);
+        try {
+            const str = JSON.stringify(val);
+            return extractTime(str);
+        } catch (_) {
+            return '';
+        }
+    }
+    return '';
+}
+
+// Helper para extraer el código de periodo (AM/MD/PM/EX) priorizando schoolSchedule.
+// No infiere por hora; solo usa el código explícito si está presente.
+function extractPeriodCode(slot) {
+    if (!slot) return null;
+    const ss = (slot.schoolSchedule ?? '').toString();
+    const mSS = ss.match(/\b(AM|MD|PM|EX)\b/i);
+    if (mSS && mSS[1]) return mSS[1].toUpperCase();
+    // Fallback legacy: si no viene en schoolSchedule, buscar token en slot.time/timeSlot
+    const t = (slot.time ?? slot.timeSlot ?? '').toString();
+    const mT = t.match(/\b(AM|MD|PM|EX)\b/i);
+    if (mT && mT[1]) return mT[1].toUpperCase();
+    return null;
+}
 
 // Helper para saber si un usuario es "nuevo"
 function isUserNew(user) {
@@ -995,7 +327,7 @@ const RolesManagementPage = () => {
 
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
-    const [buses, setBuses] = useState([]);
+    // Buses no longer needed for route report generation (slots carry routeNumber)
     const [contracts, setContracts] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
@@ -1046,15 +378,13 @@ const RolesManagementPage = () => {
 
     const [, setSchoolGrades] = useState([]);
     const [openCircularModal, setOpenCircularModal] = useState(false);
-    const [openBulkRouteEditor, setOpenBulkRouteEditor] = useState(false);
-    const [openBulkStopEditor, setOpenBulkStopEditor] = useState(false);
+    // bulk editors removed
     const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
     const [scheduleStudentId, setScheduleStudentId] = useState(null);
     const [scheduleSchoolId, setScheduleSchoolId] = useState(null);
     const [scheduleModalStudents, setScheduleModalStudents] = useState([]);
 
-    // Submodal para asignar buses (sólo para padres)
-    const [assignBusesOpen, setAssignBusesOpen] = useState(false);
+    // Submodal para asignar buses (sólo para padres) - removed unused state
 
     // Nuevo diálogo para envío manual de contrato
     const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
@@ -1085,7 +415,7 @@ const RolesManagementPage = () => {
     useEffect(() => {
         fetchUsers();
         fetchSchools();
-        fetchBuses();
+    // fetchBuses removed: not needed for route report
         fetchContracts();
         fetchAllPilots();
         fetchAllMonitoras();
@@ -1137,15 +467,7 @@ const RolesManagementPage = () => {
         }
     };
 
-    const fetchBuses = async () => {
-        try {
-            const resp = await api.get('/buses');
-            setBuses(resp.data.buses || []);
-        } catch (error) {
-            console.error('[fetchBuses] Error:', error);
-            setSnackbar({ open: true, message: 'Error al obtener buses', severity: 'error' });
-        }
-    };
+    // Removed fetchBuses
 
     const fetchContracts = async () => {
         try {
@@ -1871,7 +1193,7 @@ const RolesManagementPage = () => {
                 )
             );
 
-            // Agrupar por número de ruta del bus asignado y contar estudiantes AM/MD/PM
+            // Agrupar por número de ruta (routeNumber en ScheduleSlots) y contar estudiantes AM/MD/PM
             // Contaremos cada estudiante una sola vez por periodo (AM/MD/PM) por ruta.
             const routeSummary = {};
             // Construir resumen basado únicamente en ScheduleSlots (student.ScheduleSlots o, si falta, family ScheduleSlots filtradas por studentId)
@@ -1889,27 +1211,17 @@ const RolesManagementPage = () => {
                     const studentRoutePeriodSet = new Set();
 
                     slotsToUse.forEach(slot => {
-                        const timeForPeriod = extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '');
-                        const timeMatch = timeForPeriod.match(/(\d{1,2}):(\d{2})/);
-
-                        // Determinar routeNumber a partir de busId si está presente
+                        // Determinar routeNumber directamente desde el slot
                         let routeNumber = '';
-                        if (slot.busId) {
-                            const b = (buses || []).find(x => Number(x.id) === Number(slot.busId));
-                            if (b) routeNumber = b.routeNumber || b.route || (`Ruta ${b.id}`);
+                        if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') {
+                            routeNumber = String(slot.routeNumber);
                         }
-                        if (!routeNumber) routeNumber = fd.routeType || 'Sin Ruta';
+                        // Fallback: si no hay routeNumber definido en el slot, usar una etiqueta neutral
+                        if (!routeNumber) routeNumber = 'Sin Ruta';
 
-                        let period = 'AM';
-                        if (timeMatch) {
-                            const hour = parseInt(timeMatch[1]);
-                            if (hour >= 0 && hour < 12) period = 'AM';
-                            else if (hour >= 12 && hour < 15) period = 'MD';
-                            else if (hour >= 15 && hour <= 23) period = 'PM';
-                            else period = 'AM';
-                        } else {
-                            period = 'AM';
-                        }
+                        // Detectar periodo únicamente por código explícito (AM/MD/PM/EX)
+                        const period = extractPeriodCode(slot);
+                        if (!period) return; // si no hay código, no contar este slot
 
                         // Key único por estudiante para evitar duplicados
                         const key = `${routeNumber}::${period}`;
@@ -1919,10 +1231,11 @@ const RolesManagementPage = () => {
                     // Incrementar el resumen por cada (route, period) único del estudiante
                     studentRoutePeriodSet.forEach(k => {
                         const [routeNumber, period] = k.split('::');
-                        if (!routeSummary[routeNumber]) routeSummary[routeNumber] = { cantAM: 0, cantPM: 0, cantMD: 0 };
+                        if (!routeSummary[routeNumber]) routeSummary[routeNumber] = { cantAM: 0, cantPM: 0, cantMD: 0, cantEX: 0 };
                         if (period === 'AM') routeSummary[routeNumber].cantAM++;
                         else if (period === 'MD') routeSummary[routeNumber].cantMD++;
                         else if (period === 'PM') routeSummary[routeNumber].cantPM++;
+                        else if (period === 'EX') routeSummary[routeNumber].cantEX++;
                     });
                 });
             });
@@ -1972,7 +1285,8 @@ const RolesManagementPage = () => {
             const summaryWorksheet = workbook.addWorksheet('OCUPACIÓN POR RUTA');
 
             // Agregar headers con estilo
-            const summaryHeaders = ["No. Ruta", "Cant. AM", "Cant. PM", "Cant. MD"];
+            // Incluir EX como franja adicional
+            const summaryHeaders = ["No. Ruta", "Cant. AM", "Cant. PM", "Cant. MD", "Cant. EX"];
             const summaryHeaderRow = summaryWorksheet.addRow(summaryHeaders);
 
             // Estilo para headers del resumen
@@ -2002,7 +1316,7 @@ const RolesManagementPage = () => {
             if (sortedRoutes.length === 0) {
                 // Si no hay rutas específicas (keys en routeSummary), crear un resumen
                 // analizando únicamente ScheduleSlots a nivel estudiante o familiar
-                const timeSummary = { cantAM: 0, cantPM: 0, cantMD: 0 };
+                const timeSummary = { cantAM: 0, cantPM: 0, cantMD: 0, cantEX: 0 };
 
                 parentsWithRoutes.forEach(user => {
                     const fd = user.FamilyDetail || {};
@@ -2017,29 +1331,18 @@ const RolesManagementPage = () => {
                             timeSummary.cantAM++;
                         } else {
                             slotsToUse.forEach(slot => {
-                                const timeSlot = extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '');
-                                const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                                if (timeMatch) {
-                                    const hour = parseInt(timeMatch[1]);
-                                    if (hour >= 0 && hour < 12) {
-                                        timeSummary.cantAM++;
-                                    } else if (hour >= 12 && hour < 15) {
-                                        timeSummary.cantMD++;
-                                    } else if (hour >= 15 && hour <= 23) {
-                                        timeSummary.cantPM++;
-                                    } else {
-                                        timeSummary.cantAM++;
-                                    }
-                                } else {
-                                    timeSummary.cantAM++;
-                                }
+                                const code = extractPeriodCode(slot);
+                                if (code === 'AM') timeSummary.cantAM++;
+                                else if (code === 'MD') timeSummary.cantMD++;
+                                else if (code === 'PM') timeSummary.cantPM++;
+                                else if (code === 'EX') timeSummary.cantEX++;
                             });
                         }
                     });
                 });
 
                 // Agregar una sola fila con el resumen total
-                const rowData = ["Total", timeSummary.cantAM, timeSummary.cantPM, timeSummary.cantMD];
+                const rowData = ["Total", timeSummary.cantAM, timeSummary.cantPM, timeSummary.cantMD, timeSummary.cantEX];
                 const row = summaryWorksheet.addRow(rowData);
                 row.eachCell((cell) => {
                     cell.fill = {
@@ -2056,7 +1359,7 @@ const RolesManagementPage = () => {
                     };
                 });
                 // Asegurar que las columnas numéricas sean números (excluir horas)
-                [2, 3, 4].forEach((colIdx) => {
+                [2, 3, 4, 5].forEach((colIdx) => {
                     try {
                         const c = row.getCell(colIdx);
                         if (c && c.value != null) {
@@ -2075,7 +1378,7 @@ const RolesManagementPage = () => {
                 // Usar el resumen por rutas específicas
                 sortedRoutes.forEach((routeNumber, index) => {
                     const routeData = routeSummary[routeNumber];
-                    const rowData = [routeNumber, routeData.cantAM, routeData.cantPM, routeData.cantMD];
+                    const rowData = [routeNumber, routeData.cantAM, routeData.cantPM, routeData.cantMD, routeData.cantEX || 0];
                     const row = summaryWorksheet.addRow(rowData);
 
                     // Estilo alternado para filas
@@ -2109,8 +1412,8 @@ const RolesManagementPage = () => {
                     } catch (e) {
                         console.warn('[handleDownloadRouteReport] Numeric conversion error for route number:', e);
                     }
-                    // Cols 2-4: conteos
-                    [2, 3, 4].forEach((colIdx) => {
+                    // Cols 2-5: conteos
+                    [2, 3, 4, 5].forEach((colIdx) => {
                         try {
                             const c = row.getCell(colIdx);
                             if (c && c.value != null) {
@@ -2127,11 +1430,12 @@ const RolesManagementPage = () => {
                 });
                 // Verificación simple: sumar totales desde routeSummary y loggear para detectar discrepancias
                 try {
-                    const totalsFromRoutes = { cantAM: 0, cantMD: 0, cantPM: 0 };
+                    const totalsFromRoutes = { cantAM: 0, cantMD: 0, cantPM: 0, cantEX: 0 };
                     Object.values(routeSummary).forEach(r => {
                         totalsFromRoutes.cantAM += r.cantAM || 0;
                         totalsFromRoutes.cantMD += r.cantMD || 0;
                         totalsFromRoutes.cantPM += r.cantPM || 0;
+                        totalsFromRoutes.cantEX += r.cantEX || 0;
                     });
                     console.log('[handleDownloadRouteReport] Totales calculados desde routeSummary:', totalsFromRoutes);
                 } catch (e) {
@@ -2143,7 +1447,7 @@ const RolesManagementPage = () => {
             summaryWorksheet.columns.forEach(column => {
                 column.width = Math.max(15, column.header ? column.header.length : 10);
             });
-            summaryWorksheet.autoFilter = 'A1:D' + summaryWorksheet.rowCount;
+            summaryWorksheet.autoFilter = 'A1:E' + summaryWorksheet.rowCount;
 
             // Congelar la primera fila (encabezados) para que sea sticky
             summaryWorksheet.views = [
@@ -2164,7 +1468,7 @@ const RolesManagementPage = () => {
                 "Dirección Alterna"
             ];
 
-            // Agregar columnas para estudiantes (nombre, grado) y por día Lunes-Viernes: Hora AM, Parada AM, Hora MD, Parada MD, Hora PM, Parada PM
+        // Agregar columnas para estudiantes (nombre, grado) y por día Lunes-Viernes: Hora/Ruta/Parada para AM, MD, PM, EX
             const weekdaysMap = [
                 { key: 'monday', label: 'Lunes' },
                 { key: 'tuesday', label: 'Martes' },
@@ -2186,6 +1490,9 @@ const RolesManagementPage = () => {
                     studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora PM`);
                     studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta PM`);
                     studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada PM`);
+            studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora EX`);
+            studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta EX`);
+            studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada EX`);
                 });
             }
 
@@ -2260,12 +1567,13 @@ const RolesManagementPage = () => {
                         studentData.push(student.grade || "");
 
                         // Inicializar estructura por día y por periodo (keys en inglés, labels en español para headers)
-                        const dataByDay = {};
+            const dataByDay = {};
                         weekdaysMap.forEach(d => {
                             dataByDay[d.key] = {
-                                horaAM: '', paradaAM: '',
-                                horaMD: '', paradaMD: '',
-                                horaPM: '', paradaPM: ''
+                horaAM: '', paradaAM: '',
+                horaMD: '', paradaMD: '',
+                horaPM: '', paradaPM: '',
+                horaEX: '', paradaEX: ''
                             };
                         });
 
@@ -2276,7 +1584,6 @@ const RolesManagementPage = () => {
                         const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
 
                         slotsToUse.forEach(slot => {
-                            const timeSlot = extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '');
                             const displayTime = (slot.time || slot.schoolSchedule || slot.timeSlot || '').toString();
                             const note = slot.note || '';
 
@@ -2297,11 +1604,10 @@ const RolesManagementPage = () => {
                                 slotDays = [slot.days];
                             }
 
-                            // obtener routeNumber desde buses usando busId
+                            // obtener routeNumber directamente del slot
                             let routeLabel = '';
-                            if (slot.busId) {
-                                const b = (buses || []).find(x => Number(x.id) === Number(slot.busId));
-                                if (b) routeLabel = b.routeNumber || '';
+                            if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') {
+                                routeLabel = String(slot.routeNumber);
                             }
 
                             const paradaDisplay = `${note || ''}`;
@@ -2312,30 +1618,27 @@ const RolesManagementPage = () => {
                                 const day = rawDay.toString().toLowerCase();
                                 if (!dataByDay[day]) return; // ignorar fines de semana u otros
 
-                                const timeMatch = timeSlot.match(/(\d{1,2}):(\d{2})/);
-                                const hour = timeMatch ? parseInt(timeMatch[1]) : null;
+                                // Priorizar código explícito (AM/MD/PM/EX); si no existe, usar hora
+                                const period = extractPeriodCode(slot);
 
-                                if (hour !== null) {
-                                    if (hour >= 0 && hour < 12) {
-                                        if (!dataByDay[day].horaAM) dataByDay[day].horaAM = displayTime;
-                                        if (!dataByDay[day].rutaAM) dataByDay[day].rutaAM = routeLabel;
-                                        if (!dataByDay[day].paradaAM) dataByDay[day].paradaAM = paradaDisplay;
-                                    } else if (hour >= 12 && hour < 15) {
-                                        if (!dataByDay[day].horaMD) dataByDay[day].horaMD = displayTime;
-                                        if (!dataByDay[day].rutaMD) dataByDay[day].rutaMD = routeLabel;
-                                        if (!dataByDay[day].paradaMD) dataByDay[day].paradaMD = paradaDisplay;
-                                    } else if (hour >= 15 && hour <= 23) {
-                                        if (!dataByDay[day].horaPM) dataByDay[day].horaPM = displayTime;
-                                        if (!dataByDay[day].rutaPM) dataByDay[day].rutaPM = routeLabel;
-                                        if (!dataByDay[day].paradaPM) dataByDay[day].paradaPM = paradaDisplay;
-                                    }
+                                if (period === 'AM') {
+                                    if (!dataByDay[day].horaAM) dataByDay[day].horaAM = displayTime;
+                                    if (!dataByDay[day].rutaAM) dataByDay[day].rutaAM = routeLabel;
+                                    if (!dataByDay[day].paradaAM) dataByDay[day].paradaAM = paradaDisplay;
+                                } else if (period === 'MD') {
+                                    if (!dataByDay[day].horaMD) dataByDay[day].horaMD = displayTime;
+                                    if (!dataByDay[day].rutaMD) dataByDay[day].rutaMD = routeLabel;
+                                    if (!dataByDay[day].paradaMD) dataByDay[day].paradaMD = paradaDisplay;
+                                } else if (period === 'PM') {
+                                    if (!dataByDay[day].horaPM) dataByDay[day].horaPM = displayTime;
+                                    if (!dataByDay[day].rutaPM) dataByDay[day].rutaPM = routeLabel;
+                                    if (!dataByDay[day].paradaPM) dataByDay[day].paradaPM = paradaDisplay;
+                                } else if (period === 'EX') {
+                                    if (!dataByDay[day].horaEX) dataByDay[day].horaEX = displayTime;
+                                    if (!dataByDay[day].rutaEX) dataByDay[day].rutaEX = routeLabel;
+                                    if (!dataByDay[day].paradaEX) dataByDay[day].paradaEX = paradaDisplay;
                                 } else {
-                                    // Si no es parseable, asignar a AM si está vacío
-                                    if (!dataByDay[day].horaAM) {
-                                        dataByDay[day].horaAM = displayTime;
-                                        if (!dataByDay[day].rutaAM) dataByDay[day].rutaAM = routeLabel;
-                                        dataByDay[day].paradaAM = paradaDisplay;
-                                    }
+                                    // Si no hay código de periodo, no colocamos nada para evitar interpretaciones erróneas
                                 }
                             });
                         });
@@ -2352,13 +1655,18 @@ const RolesManagementPage = () => {
                             studentData.push(dd.horaPM);
                             studentData.push(dd.rutaPM || '');
                             studentData.push(dd.paradaPM);
+                            studentData.push(dd.horaEX);
+                            studentData.push(dd.rutaEX || '');
+                            studentData.push(dd.paradaEX);
                         });
                     } else {
+                        // Rellenar con vacíos equivalentes a: nombre, grado, y 12 columnas por día
                         studentData.push(""); // Nombre vacío
                         studentData.push(""); // Grado vacío
-                        studentData.push(""); // Ruta AM vacía
-                        studentData.push(""); // Ruta MD vacía
-                        studentData.push(""); // Ruta PM vacía
+                        const emptyPerDay = 12; // Hora/Ruta/Parada AM, MD, PM, EX
+                        for (let d = 0; d < weekdaysMap.length; d++) {
+                            for (let k = 0; k < emptyPerDay; k++) studentData.push("");
+                        }
                     }
                 }
 
@@ -2397,21 +1705,20 @@ const RolesManagementPage = () => {
                 // Convertir columnas de ruta de estudiantes a número cuando sea posible
                 try {
                     const baseLen = baseHeaders.length; // now 4
-                    // Each student block: name(1), grade(1) + for each weekday 9 columns (hora,ruta,parada for AM/MD/PM) => 2 + 9*weekdays
-                    const perStudentCols = 2 + weekdaysMap.length * 9;
+                    // Each student block: name(1), grade(1) + for each weekday 12 columns (hora,ruta,parada for AM/MD/PM/EX) => 2 + 12*weekdays
+                    const perStudentCols = 2 + weekdaysMap.length * 12;
                     for (let i = 0; i < maxStudents; i++) {
                         const studentStart = baseLen + i * perStudentCols;
                         weekdaysMap.forEach((d, dayIdx) => {
-                            const dayOffset = dayIdx * 9; // 9 columns per day
-                            // Ruta columns are at offsets relative to studentStart:
-                            // name(1), grade(2) then per day: horaAM(3), rutaAM(4), paradaAM(5), horaMD(6), rutaMD(7), paradaMD(8), horaPM(9), rutaPM(10), paradaPM(11)
-                            // Correct offsets: after name(1) and grade(2), per day the columns are:
-                            // horaAM(+1), rutaAM(+2), paradaAM(+3), horaMD(+4), rutaMD(+5), paradaMD(+6), horaPM(+7), rutaPM(+8), paradaPM(+9)
+                            const dayOffset = dayIdx * 12; // 12 columns per day
+                            // Offsets after name(1) and grade(2), per day:
+                            // horaAM(+1), rutaAM(+2), paradaAM(+3), horaMD(+4), rutaMD(+5), paradaMD(+6), horaPM(+7), rutaPM(+8), paradaPM(+9), horaEX(+10), rutaEX(+11), paradaEX(+12)
                             const colRutaAM = studentStart + 2 + dayOffset + 2;
                             const colRutaMD = studentStart + 2 + dayOffset + 5;
                             const colRutaPM = studentStart + 2 + dayOffset + 8;
+                            const colRutaEX = studentStart + 2 + dayOffset + 11;
 
-                            [colRutaAM, colRutaMD, colRutaPM].forEach(colIdx => {
+                            [colRutaAM, colRutaMD, colRutaPM, colRutaEX].forEach(colIdx => {
                                 try {
                                     const cell = row.getCell(colIdx);
                                     if (cell && cell.value != null && cell.value !== '') {
@@ -2451,7 +1758,8 @@ const RolesManagementPage = () => {
                                 const colHoraAM = studentStart + 2 + dayOffset + 1;
                                 const colHoraMD = studentStart + 2 + dayOffset + 4;
                                 const colHoraPM = studentStart + 2 + dayOffset + 7;
-                                [colHoraAM, colHoraMD, colHoraPM].forEach(hIdx => {
+                                const colHoraEX = studentStart + 2 + dayOffset + 10;
+                                [colHoraAM, colHoraMD, colHoraPM, colHoraEX].forEach(hIdx => {
                                     try {
                                         const hCell = row.getCell(hIdx);
                                         if (hCell && hCell.value != null && hCell.value !== '') {
@@ -2949,20 +2257,7 @@ const RolesManagementPage = () => {
                     >
                         Reporte de Rutas
                     </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={() => setOpenBulkRouteEditor(true)}
-                    >
-                        Edición Masiva Rutas
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={() => setOpenBulkStopEditor(true)}
-                    >
-                        Edición Masiva Horarios de Parada
-                    </Button>
+                    {/* bulk editors removed */}
                 </div>
             </Box>
             {loading ? (
@@ -3234,29 +2529,7 @@ const RolesManagementPage = () => {
                         </Paper>
                     )}
 
-                        {/* Modal de edición masiva de rutas */}
-                        <BulkRouteEditorModal
-                            open={openBulkRouteEditor}
-                            onClose={() => setOpenBulkRouteEditor(false)}
-                            buses={buses}
-                            schools={schools}
-                            onSaved={() => {
-                                // refrescar usuarios y buses
-                                fetchUsers();
-                                fetchBuses();
-                                setSnackbar({ open: true, message: 'Asignaciones masivas guardadas', severity: 'success' });
-                            }}
-                        />
-                        {/* Modal de edición masiva de paradas */}
-                        <BulkStopScheduleEditorModal
-                            open={openBulkStopEditor}
-                            onClose={() => setOpenBulkStopEditor(false)}
-                            schools={schools}
-                            onSaved={() => {
-                                fetchUsers();
-                                setSnackbar({ open: true, message: 'Horarios de parada guardados', severity: 'success' });
-                            }}
-                        />
+                        {/* bulk editors removed */}
                 </>
             )}
 

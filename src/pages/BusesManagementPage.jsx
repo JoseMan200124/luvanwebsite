@@ -35,8 +35,7 @@ import {
     Switch,
     useTheme,
     useMediaQuery,
-    TableSortLabel,
-    Checkbox
+    TableSortLabel
 } from '@mui/material';
 import {
     Edit,
@@ -196,8 +195,7 @@ const BusesManagementPage = () => {
     const [originalPilots, setOriginalPilots] = useState([]);
     const [originalMonitors, setOriginalMonitors] = useState([]);
 
-    // Horarios disponibles (según el colegio del piloto)
-    const [availableSchedules, setAvailableSchedules] = useState([]);
+    // Bus schedule deprecated. No schedules managed per bus anymore.
     const [availableRouteNumbers, setAvailableRouteNumbers] = useState([]);
 
     // Carga masiva
@@ -306,20 +304,7 @@ const BusesManagementPage = () => {
         if (!selectedBus) return;
 
         const applySchoolFilter = async () => {
-            // Fetch school schedules immediately when school selected
-            if (schoolId) {
-                try {
-                    const resp = await api.get(`/schools/${schoolId}/schedules`, {
-                        headers: { Authorization: `Bearer ${auth.token}` }
-                    });
-                    setAvailableSchedules(Array.isArray(resp.data.schedules) ? resp.data.schedules : []);
-                } catch (err) {
-                    console.error('Error fetching school schedules:', err);
-                    setAvailableSchedules([]);
-                }
-            } else {
-                setAvailableSchedules([]);
-            }
+            // No per-bus schedules to fetch
 
             // Fetch school's route numbers
             if (schoolId) {
@@ -383,38 +368,12 @@ const BusesManagementPage = () => {
             schoolId: null,
             routeNumber: '',
             files: [],
-            inWorkshop: false,
-            schedule: [] // <-- Array de varios horarios
+            inWorkshop: false
         });
-        setAvailableSchedules([]);
         setOpenDialog(true);
     };
 
     const handleEditClick = (bus) => {
-        // Normalize schedule into canonical array of objects { code?, name?, times: [] }
-        const normalizeScheduleEntry = (entry) => {
-            if (!entry) return null;
-            if (typeof entry === 'string') {
-                // try parse JSON
-                try { const p = JSON.parse(entry); entry = p; } catch (e) { /* keep string */ }
-            }
-            if (typeof entry === 'string') {
-                // legacy string: try extract time
-                const tMatch = entry.match(/(\d{1,2}:\d{2})/);
-                return { name: entry, times: tMatch ? [tMatch[0]] : [entry] };
-            }
-            // object
-            return {
-                code: entry.code || null,
-                name: entry.name || entry.label || '',
-                times: Array.isArray(entry.times) ? entry.times : (entry.time ? [entry.time] : [])
-            };
-        };
-
-        const normalizedSchedule = Array.isArray(bus.schedule)
-            ? bus.schedule.map(normalizeScheduleEntry).filter(Boolean)
-            : (bus.schedule ? [normalizeScheduleEntry(bus.schedule)].filter(Boolean) : []);
-
         setSelectedBus({
             id: bus.id,
             plate: bus.plate,
@@ -425,11 +384,8 @@ const BusesManagementPage = () => {
             schoolId: bus.school ? bus.school.id : null,
             routeNumber: bus.routeNumber || '',
             files: bus.files || [],
-            inWorkshop: bus.inWorkshop || false,
-            schedule: normalizedSchedule
+            inWorkshop: bus.inWorkshop || false
         });
-    // availableSchedules will be populated by the selectedBus.schoolId effect
-    setAvailableSchedules([]);
         setOpenDialog(true);
     };
 
@@ -476,55 +432,13 @@ const BusesManagementPage = () => {
         const pilotId = e.target.value ? parseInt(e.target.value, 10) : '';
         setSelectedBus((prev) => ({
             ...prev,
-            pilotId,
-            schedule: [] // Resetear la selección de horarios
+            pilotId
         }));
-    // Schedules are not tied to the pilot anymore; they belong to the bus (via selected school's schedules)
-    // availableSchedules is managed by the selectedBus.schoolId effect
     };
 
-    // Helper to compare a selected schedule entry with an available schedule option
-    const extractCodeFromName = (name) => {
-        if (!name || typeof name !== 'string') return null;
-        const m = name.match(/\b(AM|MD|PM|EX)\b/i);
-        return m ? m[1].toUpperCase() : null;
-    };
+    // schedules removed
 
-    const scheduleMatches = (selectedEntry, availableEntry) => {
-        if (!selectedEntry || !availableEntry) return false;
-        // if selectedEntry is a string, try parse
-        let sel = selectedEntry;
-        if (typeof sel === 'string') {
-            try { sel = JSON.parse(sel); } catch (e) { /* keep string */ }
-        }
-
-        // if both have code, match by code
-        const selCode = sel && sel.code ? sel.code : (sel && sel.name ? extractCodeFromName(sel.name) : null);
-        const availCode = availableEntry.code ? availableEntry.code : extractCodeFromName(availableEntry.name);
-        if (selCode && availCode && selCode === availCode) return true;
-
-    // match by name if present (exact)
-    if (sel && sel.name && availableEntry.name && sel.name === availableEntry.name) return true;
-
-        // compare times arrays
-    const selTimes = Array.isArray(sel?.times) ? sel.times : (sel && sel.time ? [sel.time] : (typeof sel === 'string' ? [sel] : []));
-        const availTimes = Array.isArray(availableEntry.times) ? availableEntry.times : (availableEntry.time ? [availableEntry.time] : []);
-        if (selTimes.length > 0 && availTimes.length > 0) {
-            return selTimes.some(t => availTimes.includes(t));
-        }
-
-        return false;
-    };
-
-    /**
-     * NUEVA forma de manejar la MULTI-SELECCIÓN de horarios:
-     * Guardamos la estructura completa { times, name } en selectedBus.schedule.
-     */
-    const handleScheduleChange = (e) => {
-        // e.target.value será un array de strings, cada string es la representación JSON de un horario
-        const newSchedules = e.target.value.map((val) => JSON.parse(val));
-        setSelectedBus((prev) => ({ ...prev, schedule: newSchedules }));
-    };
+    // schedule removed
 
     const handleFileChange = (e) => {
         const files = e.target.files;
@@ -567,10 +481,7 @@ const BusesManagementPage = () => {
                 formData.append('schoolId', selectedBus.schoolId);
             }
 
-            // schedule es un array, lo guardamos en JSON
-            if (selectedBus.schedule && Array.isArray(selectedBus.schedule)) {
-                formData.append('schedule', JSON.stringify(selectedBus.schedule));
-            }
+            // no schedule
 
             if (selectedBus.files && selectedBus.files.length > 0) {
                 Array.from(selectedBus.files).forEach((file) => {
@@ -1313,43 +1224,7 @@ const BusesManagementPage = () => {
                         </Select>
                     </FormControl>
 
-                    {/* MULTI-SELECCIÓN de horarios con times, name */}
-                    <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
-                        <InputLabel>Horarios (puede seleccionar varios)</InputLabel>
-                        <Select
-                            multiple
-                            name="schedule"
-                            value={
-                                selectedBus?.schedule
-                                    ? selectedBus.schedule.map((sch) => JSON.stringify(sch))
-                                    : []
-                            }
-                            onChange={handleScheduleChange}
-                            renderValue={(selected) =>
-                                selected
-                                    .map((val) => {
-                                        const sch = JSON.parse(val);
-                                        return `${sch.name} - ${sch.times.join(', ')}`;
-                                    })
-                                    .join(', ')
-                            }
-                        >
-                            {availableSchedules.map((sch, idx) => {
-                                const valueKey = JSON.stringify(sch);
-                                const label = `${sch.name} - ${(sch.times || []).join(', ')}`;
-                                const isChecked = selectedBus?.schedule
-                                    ? selectedBus.schedule.some((s) => scheduleMatches(s, sch))
-                                    : false;
-
-                                return (
-                                    <MenuItem key={idx} value={valueKey}>
-                                        <Checkbox checked={isChecked} />
-                                        <ListItemText primary={label} />
-                                    </MenuItem>
-                                );
-                            })}
-                        </Select>
-                    </FormControl>
+                    {/* Horarios por bus eliminados; se manejan por colegio/ruta */}
 
                     {/* Switch para inWorkshop */}
                     <FormControlLabel

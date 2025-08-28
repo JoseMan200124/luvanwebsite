@@ -48,10 +48,16 @@ export default function useScheduleSlots() {
   return (res.data && res.data.school && Array.isArray(res.data.school.schedules)) ? res.data.school.schedules : [];
   }, []);
 
+  const fetchSchoolRouteNumbers = useCallback(async (schoolId) => {
+    const res = await axios.get(`/schools/${schoolId}`);
+    // API returns { school: { routeNumbers: [...] } }
+    return (res.data && res.data.school && Array.isArray(res.data.school.routeNumbers)) ? res.data.school.routeNumbers : [];
+  }, []);
+
   const fetchRoutesByTime = useCallback(async (schoolId, time) => {
     const res = await axios.get(`/schools/${schoolId}/routes-by-schedule?time=${encodeURIComponent(time)}`);
     return res.data.routes || [];
   }, []);
 
-  return { fetchSlots, createSlot, updateSlot, deleteSlot, fetchSchoolSchedules, fetchRoutesByTime };
+  return { fetchSlots, createSlot, updateSlot, deleteSlot, fetchSchoolSchedules, fetchSchoolRouteNumbers, fetchRoutesByTime };
 }

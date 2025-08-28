@@ -10,7 +10,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   // form (quick-add) removed — assignments handled via popup
   const [schoolSchedules, setSchoolSchedules] = useState([]);
 
-  const { fetchSlots: loadSlots, fetchSchoolSchedules: loadSchoolSchedules, fetchRoutesByTime: loadRoutesByTime, createSlot: createRemoteSlot, deleteSlot: deleteRemoteSlot, updateSlot: updateRemoteSlot } = useScheduleSlots();
+  const { fetchSlots: loadSlots, fetchSchoolSchedules: loadSchoolSchedules, fetchRoutesByTime: loadRoutesByTime, createSlot: createRemoteSlot, deleteSlot: deleteRemoteSlot, updateSlot: updateRemoteSlot, fetchSchoolRouteNumbers: loadSchoolRouteNumbers } = useScheduleSlots();
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignTargetStudentId, setAssignTargetStudentId] = useState(null); // current student for the assign popup
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -30,6 +30,10 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
         // load school schedules
         const sch = schoolId ? await loadSchoolSchedules(schoolId) : [];
         setSchoolSchedules(sch);
+  // load canonical routeNumbers for this school
+  const canonical = schoolId ? await loadSchoolRouteNumbers(schoolId) : [];
+  // canonical is an array of route numbers (strings or numbers)
+  setAssignRoutesOptions((canonical || []).map(rn => ({ routeNumber: rn, id: `school-${String(rn)}` })));
   console.log('[StudentScheduleModal] loaded schoolSchedules for schoolId=', schoolId, sch);
         // load slots for all students in the family
         const map = {};
@@ -50,7 +54,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
         setLoading(false);
       }
     })();
-  }, [open, studentId, students, schoolId, loadSlots, loadSchoolSchedules]);
+  }, [open, studentId, students, schoolId, loadSlots, loadSchoolSchedules, loadSchoolRouteNumbers]);
 
   // Helper: parse a stored schoolSchedule string like "07:15 AM" or "07:15" into { time, code }
   function parseSchoolScheduleString(s) {
@@ -114,7 +118,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       console.log('[StudentScheduleModal] resolved targetStudent=', targetStudent.id);
     }
 
-      if (slot && day) {
+  if (slot && day) {
       // open as edit for a specific day
     const editing = { studentId: targetStudent ? targetStudent.id : (studentId || null), slotId: slot.id, day };
     setAssignEditing(editing);
@@ -128,17 +132,27 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       setAssignForm({
         // keep select values as time-only so existing option values still match
         schoolSchedule: ssTime,
-        routeId: slot.busId ? String(slot.busId) : '',
+        // prefer routeNumber stored on slot
+        routeId: slot.routeNumber ? String(slot.routeNumber) : '',
         paradaTime: slot.time || '',
         note: parsed.note || (slot.note && typeof slot.note === 'string' ? slot.note : ''),
         days: [day]
       });
-      // load routes for the time-only value
+      // load routes for the time-only value and intersect with canonical routeNumbers
       if (ssTime) {
         try {
-          const r = await loadRoutesByTime(schoolId, ssTime);
-          setAssignRoutesOptions(r || []);
-          console.log('[StudentScheduleModal] loaded routes for schoolSchedule(time)=', ssTime, r);
+          const timeRoutes = await loadRoutesByTime(schoolId, ssTime);
+          // If we already have canonical routeNumbers loaded, prefer those and intersect
+          const canonicalRNs = Array.isArray(assignRoutesOptions) && assignRoutesOptions.length > 0 ? assignRoutesOptions.map(x => String(x.routeNumber)) : [];
+          if (canonicalRNs.length > 0) {
+            const intersect = (timeRoutes || []).filter(r => canonicalRNs.includes(String(r.routeNumber)));
+            // If intersection empty, fallback to timeRoutes
+            setAssignRoutesOptions(intersect.length > 0 ? intersect : (timeRoutes || []));
+            console.log('[StudentScheduleModal] intersected canonical and timeRoutes:', intersect);
+          } else {
+            setAssignRoutesOptions(timeRoutes || []);
+            console.log('[StudentScheduleModal] loaded routes for schoolSchedule(time)=', ssTime, timeRoutes);
+          }
         } catch (err) {
           console.error(err);
           setAssignRoutesOptions([]);
@@ -149,7 +163,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     }
 
     // new assignment
-    setAssignForm({ schoolSchedule: '', routeId: '', paradaTime: '', note: '', days: [] });
+  setAssignForm({ schoolSchedule: '', routeId: '', paradaTime: '', note: '', days: [] });
     setAssignOpen(true);
   }
 
@@ -178,13 +192,21 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   // validate time format and conflicts
   const validation = validateAssign({ time: paradaTime, days }, assignEditing);
   if (!validation.ok) return alert(validation.message);
-    // build payload: store schoolSchedule and note inside note JSON to preserve structure
+    // Build schoolSchedule string including code (AM/MD/PM/EX) when possible
+    const matchedSchedule = (schoolSchedules || []).find(s => {
+      const times = Array.isArray(s && s.times) ? s.times : (s && s.times ? [s.times] : []);
+      return times.includes(schoolSchedule);
+    });
+    const matchedCode = matchedSchedule && matchedSchedule.code ? String(matchedSchedule.code).toUpperCase() : null;
+    const schoolScheduleOut = schoolSchedule ? (matchedCode ? `${schoolSchedule} ${matchedCode}` : schoolSchedule) : null;
+
+    // build payload: routeId represents the routeNumber. Send only routeNumber.
     const payload = {
       time: paradaTime,
       note: noteText || '',
-      schoolSchedule: schoolSchedule || null,
+      schoolSchedule: schoolScheduleOut,
       days,
-      busId: routeId ? Number(routeId) : null
+      routeNumber: routeId ? String(routeId) : null
     };
     console.log('[StudentScheduleModal] payload prepared=', payload);
     try {
@@ -192,7 +214,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       if (!assignEditing) {
         // create new slot (may include multiple days)
         console.log('[StudentScheduleModal] creating new slot for student=', targetStudent);
-        await createRemoteSlot(targetStudent, payload);
+    await createRemoteSlot(targetStudent, payload);
       } else {
         // editing a specific day of an existing slot
         const { slotId, day } = assignEditing;
@@ -205,10 +227,10 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
         } else {
           const currentDays = Array.isArray(original.days) ? original.days : [];
           const editedDays = Array.isArray(days) ? days : [day];
-          if (currentDays.length <= 1) {
+            if (currentDays.length <= 1) {
             // original only for this day; update it to reflect new selection (may include multiple days)
-            console.log('[StudentScheduleModal] updating original slot (single-day) slotId=', slotId, 'editedDays=', editedDays);
-            await updateRemoteSlot(targetStudent, slotId, { time: paradaTime, note: payload.note, days: editedDays, busId: payload.busId });
+            console.log('[StudentScheduleModal] updating original slot (single-day) slotId=', slotId, 'editedDays=', editedDays, 'routeNumber=', payload.routeNumber);
+            await updateRemoteSlot(targetStudent, slotId, { time: paradaTime, note: payload.note, days: editedDays, routeNumber: payload.routeNumber, schoolSchedule: payload.schoolSchedule });
           } else {
             // original spans multiple days. Remove the original day being edited and any days
             // that are being moved to the new slot (editedDays). Then create a new slot for editedDays.
@@ -373,7 +395,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                             </div>
                           </div>
                           <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>Hora colegio: {(() => { try { const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note; return s.schoolSchedule || (parsed && parsed.schoolSchedule) || '—'; } catch(e) { return s.schoolSchedule || '—'; } })()}</div>
-                          <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>{s.bus ? `Ruta ${s.bus.routeNumber || s.bus.id}` : 'Ruta: —'}</div>
+                          <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>{s.routeNumber ? `Ruta ${s.routeNumber}` : 'Ruta: —'}</div>
                           <div style={{ fontSize: 12, color: '#6B7280' }}>Hora parada: {s.time}</div>
                           <div style={{ fontSize: 12, color: '#6B7280' }}>Nota parada: {(() => { try { const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note; return parsed && parsed.note ? parsed.note : (s.note && typeof s.note === 'string' ? s.note : ''); } catch(e) { return s.note || ''; } })()}</div>
                         </div>
@@ -425,10 +447,16 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                     <label style={{ fontSize: 13 }}>Número de Ruta</label>
                     <select style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d1d5db' }} value={assignForm.routeId} onChange={e=>setAssignForm(f=>({...f, routeId: e.target.value}))}>
                       <option value=''>-- seleccionar --</option>
-                      {assignRoutesOptions.map(r=> {
-                        const routeNum = r.routeNumber || r.id;
-                        const label = `Ruta ${routeNum}`;
-                        return (<option key={r.id} value={String(r.id)}>{label}</option>);
+                      {assignRoutesOptions.map(r => {
+                        // Prefer an explicit routeNumber. If missing, mark option as disabled
+                        const hasRouteNumber = r && r.routeNumber !== undefined && r.routeNumber !== null && String(r.routeNumber).trim() !== '';
+                        const value = hasRouteNumber ? String(r.routeNumber) : '';
+                        const label = hasRouteNumber ? `Ruta ${r.routeNumber}` : `Ruta (sin número) — ID ${r.id || '—'}`;
+                        // Use r.id or a fallback for key stability
+                        const key = r && (r.id || (r.routeNumber || String(Math.random())));
+                        return (
+                          <option key={key} value={value} disabled={!hasRouteNumber}>{label}</option>
+                        );
                       })}
                     </select>
                   </div>

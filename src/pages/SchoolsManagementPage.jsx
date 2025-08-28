@@ -194,6 +194,7 @@ const SchoolsManagementPage = () => {
     const [schoolSchedules, setSchoolSchedules] = useState([]);
     const [schoolGrades, setSchoolGrades] = useState([]);
     const [schoolRouteNumbers, setSchoolRouteNumbers] = useState([]);
+    const [schoolRouteSchedules, setSchoolRouteSchedules] = useState([]); // [{ routeNumber, schedules: [{code,name,times:["HH:mm" ]}] }]
     const [schoolExtraFields, setSchoolExtraFields] = useState([]);
 
     const [anchorEl, setAnchorEl] = useState(null);
@@ -350,10 +351,11 @@ const SchoolsManagementPage = () => {
         setSchoolGrades([]);
     setSchoolExtraFields([]);
     setSchoolRouteNumbers([]);
+    setSchoolRouteSchedules([]);
         setOpenDialog(true);
     };
 
-    const handleEditClick = (school) => {
+    const handleEditClick = async (school) => {
         const transportFeeCompleteValue = school.transportFeeComplete ?? '';
         const transportFeeHalfValue = school.transportFeeHalf ?? '';
         const duePaymentDayValue = school.duePaymentDay ?? '';
@@ -408,6 +410,49 @@ const SchoolsManagementPage = () => {
         }
         setSchoolRouteNumbers(parsedRouteNumbers);
 
+        // Load routeSchedules from backend detail
+        try {
+            const detail = await api.get(`/schools/${school.id}`);
+            const rs = (detail.data && detail.data.school && Array.isArray(detail.data.school.routeSchedules)) ? detail.data.school.routeSchedules : [];
+            // Normalize backend entries to the new shape with schedules[]
+            const normalizeEntry = (x) => {
+                if (!x) return { routeNumber: '', schedules: [] };
+                if (Array.isArray(x.schedules)) {
+                    // Ensure each schedule has {code,name,times[0]}
+                    const cleaned = x.schedules.map(s => ({
+                        code: s && s.code ? s.code : null,
+                        name: s && s.name ? s.name : (s && s.code ? `HORARIO ${s.code}` : 'HORARIO'),
+                        times: Array.isArray(s && s.times) && s.times[0] ? [String(s.times[0])] : []
+                    }));
+                    return { routeNumber: String(x.routeNumber), schedules: cleaned };
+                }
+                // Legacy times[] -> map to school schedules by matching times
+                const times = Array.isArray(x.times) ? x.times.filter(Boolean).map(String) : [];
+                const schedulesForTimes = times.map(t => {
+                    // Try to find a school schedule that has this time to derive code/name
+                    const sch = (schoolSchedules || []).find(ss => Array.isArray(ss.times) && ss.times.includes(t));
+                    return {
+                        code: sch ? sch.code : null,
+                        name: sch ? sch.name : 'HORARIO',
+                        times: [t]
+                    };
+                });
+                return { routeNumber: String(x.routeNumber), schedules: schedulesForTimes };
+            };
+
+            const rnSet = new Set((parsedRouteNumbers || []).map(r => String(r)));
+            const existingMap = new Map((rs || []).map(x => [String(x.routeNumber), normalizeEntry(x).schedules]));
+            const aligned = Array.from(rnSet).map(rn => ({ routeNumber: rn, schedules: existingMap.get(String(rn)) || [] }));
+            // Also include any backend entries that aren't in routeNumbers (to not lose data)
+            (rs || []).forEach(x => {
+                const key = String(x.routeNumber);
+                if (!rnSet.has(key)) aligned.push({ routeNumber: key, schedules: normalizeEntry(x).schedules });
+            });
+            setSchoolRouteSchedules(aligned);
+        } catch (e) {
+        setSchoolRouteSchedules((parsedRouteNumbers || []).map(rn => ({ routeNumber: String(rn), schedules: [] })));
+        }
+
         let parsedExtraFields = [];
         if (Array.isArray(school.extraEnrollmentFields)) {
             parsedExtraFields = school.extraEnrollmentFields;
@@ -430,6 +475,7 @@ const SchoolsManagementPage = () => {
         setSchoolGrades([]);
     setSchoolExtraFields([]);
     setSchoolRouteNumbers([]);
+    setSchoolRouteSchedules([]);
     };
 
     const handleDeleteClick = async (schoolId) => {
@@ -537,13 +583,21 @@ const SchoolsManagementPage = () => {
 
     // Route numbers management (array of strings)
     const handleAddRouteNumber = () => {
-        setSchoolRouteNumbers((prev) => [...prev, '']);
+        setSchoolRouteNumbers((prev) => {
+            const next = [...prev, ''];
+            return next;
+        });
+        // create an empty route schedule entry for new route
+    setSchoolRouteSchedules(prev => ([...(Array.isArray(prev) ? prev : []), { routeNumber: '', schedules: [] }]));
     };
 
     const handleRemoveRouteNumber = (index) => {
         setSchoolRouteNumbers((prev) => {
             const clone = [...prev];
+            const removed = clone[index];
             clone.splice(index, 1);
+            // also remove corresponding route schedule entry
+            setSchoolRouteSchedules(prevRS => (Array.isArray(prevRS) ? prevRS.filter(x => String(x.routeNumber) !== String(removed)) : []));
             return clone;
         });
     };
@@ -551,7 +605,16 @@ const SchoolsManagementPage = () => {
     const handleChangeRouteNumber = (index, value) => {
         setSchoolRouteNumbers((prev) => {
             const clone = [...prev];
+            const oldVal = clone[index];
             clone[index] = value;
+            // keep routeSchedules key in sync
+            setSchoolRouteSchedules(prevRS => {
+                const arr = Array.isArray(prevRS) ? [...prevRS] : [];
+                const idx = arr.findIndex(x => String(x.routeNumber) === String(oldVal));
+                if (idx !== -1) arr[idx] = { routeNumber: String(value), schedules: Array.isArray(arr[idx].schedules) ? arr[idx].schedules : [] };
+                else arr.push({ routeNumber: String(value), schedules: [] });
+                return arr;
+            });
             return clone;
         });
     };
@@ -614,6 +677,23 @@ const SchoolsManagementPage = () => {
                 times: Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? [s.times[0]] : ['N/A']
             }));
 
+            // Build routeSchedules payload aligned to current routeNumbers
+            // Build routeSchedules payload aligned to current routeNumbers, now storing full schedule objects
+            const routeSchedulesPayload = (schoolRouteNumbers || []).map(rn => {
+                const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn));
+                const schedules = Array.isArray(entry && entry.schedules) ? entry.schedules : [];
+                // Clean schedules: ensure unique by code (AM/MD/PM/EX), keep only first time if present
+                const byCode = new Map();
+                (schedules || []).forEach(s => {
+                    if (!s) return;
+                    const code = s.code || (s.name && s.name.includes('AM') ? 'AM' : s.name && s.name.includes('MD') ? 'MD' : s.name && s.name.includes('PM') ? 'PM' : s.name && s.name.includes('EX') ? 'EX' : null);
+                    const time = Array.isArray(s.times) && s.times[0] ? String(s.times[0]) : null;
+                    const name = s.name || (code ? `HORARIO ${code}` : 'HORARIO');
+                    if (code) byCode.set(code, { code, name, times: time ? [time] : [] });
+                });
+                return { routeNumber: String(rn), schedules: Array.from(byCode.values()) };
+            });
+
             const payload = {
                 name: selectedSchool.name,
                 address: selectedSchool.address,
@@ -632,6 +712,7 @@ const SchoolsManagementPage = () => {
                     Number(selectedSchool.duePaymentDay) || 1,
                 extraEnrollmentFields: schoolExtraFields,
                 routeNumbers: schoolRouteNumbers,
+                routeSchedules: routeSchedulesPayload,
                 bankName: selectedSchool.bankName || '',
                 bankAccount: selectedSchool.bankAccount || ''
             };
@@ -1468,22 +1549,63 @@ const SchoolsManagementPage = () => {
                     <Typography variant="h6" style={{ marginTop: '2rem' }}>
                         Números de Ruta del Colegio
                     </Typography>
-                    {schoolRouteNumbers.map((rn, idx) => (
-                        <Paper key={idx} style={{ padding: '0.75rem', marginTop: '0.5rem', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <TextField
-                                fullWidth
-                                value={rn}
-                                onChange={(e) => handleChangeRouteNumber(idx, e.target.value)}
-                                label={`Número de Ruta #${idx + 1}`}
-                            />
-                            <IconButton size="small" color="error" onClick={() => handleRemoveRouteNumber(idx)}>
-                                <Delete />
-                            </IconButton>
-                        </Paper>
-                    ))}
+                    {schoolRouteNumbers.map((rn, idx) => {
+                        const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
+                        const selectedByCode = new Set((entry.schedules || []).map(s => s && s.code).filter(Boolean));
+                        const toggleSchedule = (code, schObj, checked) => {
+                            setSchoolRouteSchedules(prev => {
+                                const arr = Array.isArray(prev) ? [...prev] : [];
+                                let i = arr.findIndex(x => String(x.routeNumber) === String(rn));
+                                if (i === -1) { arr.push({ routeNumber: String(rn), schedules: [] }); i = arr.length - 1; }
+                                const curr = Array.isArray(arr[i].schedules) ? [...arr[i].schedules] : [];
+                                const idxByCode = curr.findIndex(s => s && s.code === code);
+                                if (checked) {
+                                    const cleaned = { code: schObj.code, name: schObj.name || `HORARIO ${schObj.code}`, times: Array.isArray(schObj.times) && schObj.times[0] ? [String(schObj.times[0])] : [] };
+                                    if (idxByCode === -1) curr.push(cleaned); else curr[idxByCode] = cleaned;
+                                } else {
+                                    if (idxByCode !== -1) curr.splice(idxByCode, 1);
+                                }
+                                arr[i] = { routeNumber: String(rn), schedules: curr };
+                                return arr;
+                            });
+                        };
+                        return (
+                            <Paper key={idx} style={{ padding: '0.75rem', marginTop: '0.5rem' }}>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                    <TextField
+                                        fullWidth
+                                        value={rn}
+                                        onChange={(e) => handleChangeRouteNumber(idx, e.target.value)}
+                                        label={`Número de Ruta #${idx + 1}`}
+                                    />
+                                    <IconButton size="small" color="error" onClick={() => handleRemoveRouteNumber(idx)}>
+                                        <Delete />
+                                    </IconButton>
+                                </Box>
+                                {/* Checkbox group for assigning school schedules to this route */}
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1 }}>
+                                    {(schoolSchedules || []).map((sch, si) => {
+                                        const timeVal = Array.isArray(sch.times) && sch.times[0] && sch.times[0] !== 'N/A' ? sch.times[0] : '';
+                                        const label = `${sch.code || sch.name || 'Horario'}${timeVal ? ` — ${timeVal}` : ''}`;
+                                        const disabled = !timeVal;
+                                        const checked = sch.code ? selectedByCode.has(sch.code) : false;
+                                        return (
+                                            <FormControlLabel
+                                                key={`rn-${idx}-sch-${si}`}
+                                                control={<Checkbox size="small" disabled={disabled} checked={checked} onChange={(e) => toggleSchedule(sch.code, sch, e.target.checked)} />}
+                                                label={label}
+                                            />
+                                        );
+                                    })}
+                                </Box>
+                            </Paper>
+                        );
+                    })}
                     <Button variant="outlined" style={{ marginTop: '0.75rem' }} onClick={handleAddRouteNumber} startIcon={<Add />}>
                         Agregar Número de Ruta
                     </Button>
+
+                    {/* Removed separate route schedules free-form times; schedules are assigned via checkboxes above */}
 
                     <Typography variant="h6" style={{ marginTop: '2rem' }}>
                         Campos Extra de Inscripción
