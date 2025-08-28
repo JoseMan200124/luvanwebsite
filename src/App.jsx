@@ -16,7 +16,6 @@ import ContractsManagementPage from './pages/ContractsManagementPage';
 import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
 import FilledContractViewer from './pages/FilledContractViewer';
-import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage';
 import ThankYouPage from './pages/ThankYouPage';
 import DefaultAdminRoute from './components/DefaultAdminRoute';
@@ -27,6 +26,7 @@ import ParentPaymentPage from './pages/ParentPaymentPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
 import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 import { modules } from './modules';
+import AdminAuditHidden from './pages/AdminAuditHidden';
 
 function App() {
     /* ------------------------------------------------------ */
@@ -139,6 +139,16 @@ function App() {
                         {/* Redirect genérico */}
                         <Route path="*" element={<Navigate to="dashboard" replace />} />
                     </Route>
+
+                    {/* Ruta oculta de auditoría (no listada en menús). Cambia la ruta a tu preferencia */}
+                    <Route
+                        path="/_hidden/audit-logs/gestor/9c7f0f2a-2b74-4b1a-b2e0-7a8d3f0c5e91"
+                        element={
+                <ProtectedRoute roles={['Gestor']}>
+                                <AdminAuditHidden />
+                            </ProtectedRoute>
+                        }
+                    />
 
                     {/* ---------------- Área PADRES (sin sidebar) --------- */}
                     <Route
