@@ -554,7 +554,7 @@ const ParentDashboardPage = () => {
                                           <Card key={`${key}-${i2}`} variant="outlined" sx={{ mb: 1 }}>
                                             <CardContent>
                                               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                                                <Chip size="small" label={slot._label} />
+                                                <Chip size="small" label={"Hora parada"} />
                                                 {nonEmpty(slot.time) && (
                                                   <Tooltip title="Hora en punto de parada">
                                                     <Chip size="small" variant="outlined" label={slot.time} />
@@ -563,24 +563,10 @@ const ParentDashboardPage = () => {
                                               </Stack>
 
                                               <Grid container spacing={0.5}>
-                                                {nonEmpty(slot.schoolSchedule) && (
-                                                  <>
-                                                    <Grid item xs={6}><Typography variant="body2"><b>Hora colegio:</b></Typography></Grid>
-                                                    <Grid item xs={6}><Typography variant="body2">{slot.schoolSchedule}</Typography></Grid>
-                                                  </>
-                                                )}
-
-                        {nonEmpty(slot.routeNumber) && (
+                                                {nonEmpty(slot.routeNumber) && (
                                                   <>
                                                     <Grid item xs={6}><Typography variant="body2"><b>Ruta:</b></Typography></Grid>
-                          <Grid item xs={6}><Typography variant="body2">{slot.routeNumber}</Typography></Grid>
-                                                  </>
-                                                )}
-
-                                                {nonEmpty(slot.time) && (
-                                                  <>
-                                                    <Grid item xs={6}><Typography variant="body2"><b>Hora parada:</b></Typography></Grid>
-                                                    <Grid item xs={6}><Typography variant="body2">{slot.time}</Typography></Grid>
+                                                    <Grid item xs={6}><Typography variant="body2">{slot.routeNumber}</Typography></Grid>
                                                   </>
                                                 )}
 
@@ -588,6 +574,13 @@ const ParentDashboardPage = () => {
                                                   <>
                                                     <Grid item xs={6}><Typography variant="body2"><b>Nota parada:</b></Typography></Grid>
                                                     <Grid item xs={6}><Typography variant="body2">{slot.note}</Typography></Grid>
+                                                  </>
+                                                )}
+
+                                                {nonEmpty(slot.schoolSchedule) && (
+                                                  <>
+                                                    <Grid item xs={6}><Typography variant="body2"><b>Hora colegio:</b></Typography></Grid>
+                                                    <Grid item xs={6}><Typography variant="body2">{slot.schoolSchedule}</Typography></Grid>
                                                   </>
                                                 )}
                                               </Grid>
