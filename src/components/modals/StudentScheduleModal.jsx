@@ -16,6 +16,10 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState({ slotId: null, day: null, studentId: null });
   const [confirmLoading, setConfirmLoading] = useState(false);
+  // Confirm delete-all for a student
+  const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false);
+  const [confirmDeleteAllLoading, setConfirmDeleteAllLoading] = useState(false);
+  const [confirmDeleteAllStudentId, setConfirmDeleteAllStudentId] = useState(null);
 
   // Assign Route form state (separate popup)
   const [assignForm, setAssignForm] = useState({ schoolSchedule: '', routeId: '', paradaTime: '', note: '', days: [] });
@@ -337,6 +341,31 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     }
   }
 
+  // Remove all slots for a given student
+  async function removeAllSlotsForStudent(targetStudentId) {
+    try {
+      if (!targetStudentId) return;
+      const studentSlots = Array.isArray(slotsMap[targetStudentId]) ? slotsMap[targetStudentId] : [];
+      // Delete sequentially to avoid server overload; handle 404 by skipping
+      for (const s of studentSlots) {
+        try {
+          await deleteRemoteSlot(targetStudentId, s.id);
+        } catch (err) {
+          // If slot not found, ignore; otherwise rethrow
+          if (!(err && err.response && err.response.status === 404)) {
+            console.error('[removeAllSlotsForStudent] error deleting slot', s.id, err);
+          }
+        }
+      }
+      const map = { ...slotsMap };
+      map[targetStudentId] = await loadSlots(targetStudentId);
+      setSlotsMap(map);
+    } catch (err) {
+      console.error('[removeAllSlotsForStudent] unexpected error:', err);
+      throw err;
+    }
+  }
+
   
 
   
@@ -363,7 +392,18 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ fontSize: 15, fontWeight: 700 }}>{st.fullName || `Alumno ${st.id}`}</div>
                     <div>
-                      <button type="button" onClick={()=>openAssignPopup(st)} style={{ background: '#0ea5a4', color: '#fff', padding: '6px 10px', borderRadius: 6 }}>Asignar Ruta</button>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button type="button" onClick={()=>openAssignPopup(st)} style={{ background: '#0ea5a4', color: '#fff', padding: '6px 10px', borderRadius: 6 }}>Asignar Ruta</button>
+                        <button
+                          type="button"
+                          onClick={() => { setConfirmDeleteAllStudentId(st.id); setConfirmDeleteAllOpen(true); }}
+                          style={{ background: '#ffffff', color: '#DC2626', padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca' }}
+                          disabled={!slotsMap[st.id] || slotsMap[st.id].length === 0}
+                          title={(!slotsMap[st.id] || slotsMap[st.id].length === 0) ? 'Sin paradas para eliminar' : 'Eliminar todas las paradas'}
+                        >
+                          Eliminar todo
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
@@ -509,6 +549,52 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                     }
                   }} style={{ padding: '8px 12px', borderRadius: 6, background: '#DC2626', color: '#fff' }}>
                     {confirmLoading ? 'Eliminando...' : 'Eliminar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Confirm delete-all popup */}
+          {confirmDeleteAllOpen && (
+            <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 32000 }}>
+              <div style={{ background: '#fff', padding: 20, borderRadius: 8, width: 'min(520px, 95vw)', boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
+                <h3 style={{ marginTop: 0 }}>Eliminar todas las paradas</h3>
+                <div style={{ marginTop: 8 }}>
+                  {(() => {
+                    const st = (Array.isArray(students) ? students : []).find(x => x.id === confirmDeleteAllStudentId);
+                    const name = st && st.fullName ? st.fullName : `Alumno ${confirmDeleteAllStudentId || ''}`;
+                    return `¿Seguro que deseas eliminar todas las paradas de ${name}?`;
+                  })()}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                  <button
+                    type='button'
+                    onClick={() => { if (confirmDeleteAllLoading) return; setConfirmDeleteAllOpen(false); setConfirmDeleteAllStudentId(null); }}
+                    style={{ padding: '8px 12px', borderRadius: 6 }}
+                    disabled={confirmDeleteAllLoading}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type='button'
+                    onClick={async () => {
+                      if (confirmDeleteAllLoading) return;
+                      setConfirmDeleteAllLoading(true);
+                      try {
+                        await removeAllSlotsForStudent(confirmDeleteAllStudentId);
+                        setConfirmDeleteAllOpen(false);
+                        setConfirmDeleteAllStudentId(null);
+                      } catch (err) {
+                        console.error('[confirmDeleteAll] Error deleting all slots:', err);
+                      } finally {
+                        setConfirmDeleteAllLoading(false);
+                      }
+                    }}
+                    style={{ padding: '8px 12px', borderRadius: 6, background: '#DC2626', color: '#fff' }}
+                    disabled={confirmDeleteAllLoading}
+                  >
+                    {confirmDeleteAllLoading ? 'Eliminando...' : 'Eliminar todo'}
                   </button>
                 </div>
               </div>
