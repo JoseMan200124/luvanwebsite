@@ -332,7 +332,6 @@ export default function AdminAuditHidden() {
 										<th className="text-left p-2">ID</th>
 										<th className="text-left p-2">Usuario</th>
 										<th className="text-left p-2">Ruta</th>
-										<th className="text-left p-2">IP</th>
 										<th className="text-left p-2">UA</th>
 										<th className="text-left p-2">Antes</th>
 										<th className="text-left p-2">Después</th>
@@ -360,9 +359,6 @@ export default function AdminAuditHidden() {
 												</td>
 												<td className="p-2 max-w-[420px] truncate" title={row.path}>
 													<span className="truncate">{row.path || '-'}</span>
-												</td>
-												<td className="p-2">
-													<span>{row.ip || '-'}</span>
 												</td>
 												<td className="p-2 max-w-[420px] truncate" title={row.userAgent}>
 													<div className="flex items-center gap-2 w-full">
