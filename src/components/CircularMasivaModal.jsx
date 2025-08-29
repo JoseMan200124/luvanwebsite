@@ -49,6 +49,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             formData.append('subject', subject);
             formData.append('body', message);
             formData.append('schoolId', selectedSchool);
+            formData.append('useSmtp', true);
             if (file) {
                 formData.append('file', file);
             }
