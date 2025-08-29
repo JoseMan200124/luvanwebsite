@@ -709,11 +709,44 @@ const RolesManagementPage = () => {
 
     const handleSaveUser = async () => {
         try {
-            // Si la lista de estudiantes no cambió, no enviar ese campo
+            // Normaliza alumnos a un formato comparable y ordenado
+            const normalizeStudents = (arr = []) =>
+                (arr || [])
+                    .map(s => ({
+                        fullName: (s?.fullName ?? '').trim(),
+                        grade: (s?.grade ?? '').trim()
+                    }))
+                    .sort((a, b) => {
+                        const byName = a.fullName.localeCompare(b.fullName);
+                        if (byName !== 0) return byName;
+                        return a.grade.localeCompare(b.grade);
+                    });
+
+            // Construye el payload de FamilyDetail SIN schedules desde este modal
             const familyDetailPayload = { ...familyDetail };
-            if (JSON.stringify(familyDetail.students) === JSON.stringify(originalStudents)) {
+
+            // Este modal NO edita horarios: nunca los envíes
+            delete familyDetailPayload.scheduleSlots;
+            delete familyDetailPayload.ScheduleSlots; // por si acaso
+
+            // Solo envía students si realmente hubo cambios
+            const currentStudentsNorm  = normalizeStudents(familyDetail?.students);
+            const originalStudentsNorm = normalizeStudents(originalStudents);
+
+            if (
+                JSON.stringify(currentStudentsNorm) === JSON.stringify(originalStudentsNorm)
+            ) {
+                // No hubo cambios de alumnos: no enviar
                 delete familyDetailPayload.students;
+                delete familyDetailPayload.Students; // por si acaso
+            } else {
+                // Hubo cambios: envía en minúsculas (lo que espera el backend)
+                familyDetailPayload.students = currentStudentsNorm;
+                // Opcional de compatibilidad:
+                delete familyDetailPayload.Students;
             }
+
+            // Arma el payload del usuario
             let payload = {
                 id: selectedUser.id,
                 name: selectedUser.name,
@@ -722,18 +755,27 @@ const RolesManagementPage = () => {
                 school: selectedUser.school,
                 phoneNumber: selectedUser.phoneNumber || null
             };
+
             if (selectedUser.password && selectedUser.password.trim() !== '') {
                 payload.password = selectedUser.password;
             }
+
+            // Solo incluye familyDetail si es Padre
             if (payload.roleId === 3) {
                 payload.familyDetail = familyDetailPayload;
             }
+
+            // Supervisor: pilotos a cargo
             if (payload.roleId === 6) {
                 payload.supervisorPilots = selectedSupervisorPilots;
             }
+
+            // Auxiliar: monitoras asignadas
             if (selectedUser?.roleId === 7) {
                 payload.monitorasAsignadas = selectedAuxiliarMonitoras;
             }
+
+            // Crear o actualizar
             if (selectedUser.id) {
                 await api.put(`/users/${selectedUser.id}`, payload);
                 setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
@@ -741,6 +783,8 @@ const RolesManagementPage = () => {
                 await api.post('/users', payload);
                 setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
             }
+
+            // Refresca y cierra
             fetchUsers();
             handleDialogClose();
         } catch (err) {
