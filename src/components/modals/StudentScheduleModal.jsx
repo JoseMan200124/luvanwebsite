@@ -373,6 +373,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   if (!open) return null;
 
   // week constant no longer used; grid renders only mon-fri
+  const DAYS = ['monday','tuesday','wednesday','thursday','friday'];
 
   const modalContent = (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30000 }}>
@@ -511,7 +512,18 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                   <div style={{ gridColumn: '1 / span 2' }}>
                     <label style={{ fontSize: 13 }}>Días</label>
                     <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      {['monday','tuesday','wednesday','thursday','friday'].map(day => (
+                      {/* Select all / deselect all button */}
+                      <button
+                        type='button'
+                        onClick={() => {
+                          const allSelected = DAYS.every(d => Array.isArray(assignForm.days) && assignForm.days.includes(d));
+                          setAssignForm(f => ({ ...f, days: allSelected ? [] : [...DAYS] }));
+                        }}
+                        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: (Array.isArray(assignForm.days) && assignForm.days.length === DAYS.length) ? '#2563EB' : '#fff', color: (Array.isArray(assignForm.days) && assignForm.days.length === DAYS.length) ? '#fff' : '#374151' }}
+                      >
+                        Todos
+                      </button>
+                      {DAYS.map(day => (
                         <button key={day} type='button' onClick={()=>{
                           setAssignForm(f=>({ ...f, days: f.days.includes(day) ? f.days.filter(d=>d!==day) : [...f.days, day] }));
                         }} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: assignForm.days.includes(day)?'#2563EB':'#fff', color: assignForm.days.includes(day)?'#fff':'#374151' }}>{day.substring(0,3)}</button>
