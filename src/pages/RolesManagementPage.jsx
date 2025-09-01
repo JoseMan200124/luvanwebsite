@@ -709,25 +709,28 @@ const RolesManagementPage = () => {
 
     const handleSaveUser = async () => {
         try {
-            // Normaliza alumnos a un formato comparable y ordenado
+            // === Normaliza alumnos CONSERVANDO el id para evitar borrar rutas al editar ===
             const normalizeStudents = (arr = []) =>
                 (arr || [])
                     .map(s => ({
+                        id: (s?.id ?? null),                         // <<-- clave para que el backend haga match y no borre slots
                         fullName: (s?.fullName ?? '').trim(),
                         grade: (s?.grade ?? '').trim()
                     }))
+                    // Orden estable: primero por id (si existe), luego por nombre y grado
                     .sort((a, b) => {
+                        const ai = a.id ?? Number.POSITIVE_INFINITY;
+                        const bi = b.id ?? Number.POSITIVE_INFINITY;
+                        if (ai !== bi) return ai - bi;
                         const byName = a.fullName.localeCompare(b.fullName);
                         if (byName !== 0) return byName;
                         return a.grade.localeCompare(b.grade);
                     });
 
-            // Construye el payload de FamilyDetail SIN schedules desde este modal
+            // Construye el payload de FamilyDetail SIN schedules (este modal no los edita)
             const familyDetailPayload = { ...familyDetail };
-
-            // Este modal NO edita horarios: nunca los envíes
             delete familyDetailPayload.scheduleSlots;
-            delete familyDetailPayload.ScheduleSlots; // por si acaso
+            delete familyDetailPayload.ScheduleSlots; // por compatibilidad
 
             // Solo envía students si realmente hubo cambios
             const currentStudentsNorm  = normalizeStudents(familyDetail?.students);
@@ -738,49 +741,56 @@ const RolesManagementPage = () => {
             ) {
                 // No hubo cambios de alumnos: no enviar
                 delete familyDetailPayload.students;
-                delete familyDetailPayload.Students; // por si acaso
+                delete familyDetailPayload.Students; // por compatibilidad
             } else {
-                // Hubo cambios: envía en minúsculas (lo que espera el backend)
+                // Hubo cambios: enviar con id para preservar rutas
                 familyDetailPayload.students = currentStudentsNorm;
-                // Opcional de compatibilidad:
-                delete familyDetailPayload.Students;
+                delete familyDetailPayload.Students; // por compatibilidad
             }
+
+            const roleIdNum = Number(selectedUser.roleId);
 
             // Arma el payload del usuario
             let payload = {
                 id: selectedUser.id,
                 name: selectedUser.name,
                 email: selectedUser.email,
-                roleId: Number(selectedUser.roleId),
-                school: selectedUser.school,
-                phoneNumber: selectedUser.phoneNumber || null
+                roleId: roleIdNum,
+                // Asegura tipo numérico para school
+                school: selectedUser.school ? Number(selectedUser.school) : null
             };
 
             if (selectedUser.password && selectedUser.password.trim() !== '') {
                 payload.password = selectedUser.password;
             }
 
+            // Evita pisar phoneNumber si no se está editando
+            if (typeof selectedUser.phoneNumber !== 'undefined') {
+                payload.phoneNumber = selectedUser.phoneNumber;
+            }
+
             // Solo incluye familyDetail si es Padre
-            if (payload.roleId === 3) {
+            if (roleIdNum === 3) {
                 payload.familyDetail = familyDetailPayload;
             }
 
             // Supervisor: pilotos a cargo
-            if (payload.roleId === 6) {
+            if (roleIdNum === 6) {
                 payload.supervisorPilots = selectedSupervisorPilots;
             }
 
-            // Auxiliar: monitoras asignadas
-            if (selectedUser?.roleId === 7) {
+            // Auxiliar: monitoras asignadas (comparar con roleId numérico del payload)
+            if (roleIdNum === 7) {
                 payload.monitorasAsignadas = selectedAuxiliarMonitoras;
             }
 
-            // Crear o actualizar
+            // Crear o actualizar (no envíes id en POST)
             if (selectedUser.id) {
                 await api.put(`/users/${selectedUser.id}`, payload);
                 setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
             } else {
-                await api.post('/users', payload);
+                const { id, ...payloadForPost } = payload;
+                await api.post('/users', payloadForPost);
                 setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
             }
 
@@ -792,6 +802,7 @@ const RolesManagementPage = () => {
             setSnackbar({ open: true, message: 'Error al guardar usuario', severity: 'error' });
         }
     };
+
 
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
