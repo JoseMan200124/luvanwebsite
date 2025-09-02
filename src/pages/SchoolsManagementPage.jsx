@@ -43,7 +43,8 @@ import {
     Add,
     ContentCopy,
     FileUpload,
-    Visibility
+    Visibility,
+    Assessment
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -210,6 +211,12 @@ const SchoolsManagementPage = () => {
 
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissionDetail, setSubmissionDetail] = useState(null);
+    const [occupancyDialogOpen, setOccupancyDialogOpen] = useState(false);
+    const [occupancyLoading, setOccupancyLoading] = useState(false);
+    const [occupancyData, setOccupancyData] = useState(null);
+    const [occupancyDayFilter, setOccupancyDayFilter] = useState('Todas');
+    const [occupancyRouteFilter, setOccupancyRouteFilter] = useState('Todas');
+    const [availableRoutes, setAvailableRoutes] = useState([]);
 
     const downloadFilename = `colegios_template_${getFormattedDateTime()}.xlsx`;
 
@@ -880,6 +887,62 @@ const SchoolsManagementPage = () => {
         }
     };
 
+    // Nueva acción: ver ocupación por ruta/horario
+    const handleViewOccupancy = async (school) => {
+        try {
+            setOccupancyLoading(true);
+            setOccupancyData(null);
+            setOccupancyDialogOpen(true);
+            const resp = await api.get(`/schools/${school.id}/occupancy-by-route`, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            const occ = resp.data && resp.data.occupancy ? resp.data.occupancy : {};
+            setOccupancyData(occ);
+            // compute available routes across all days
+            try {
+                const routes = new Set();
+                Object.values(occ || {}).forEach(dayObj => {
+                    Object.keys(dayObj || {}).forEach(r => routes.add(String(r)));
+                });
+                const sorted = Array.from(routes).sort((a,b)=>{
+                    const na = Number(a); const nb = Number(b);
+                    if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+                    return String(a).localeCompare(String(b));
+                });
+                setAvailableRoutes(sorted);
+                setOccupancyRouteFilter('Todas');
+                setOccupancyDayFilter('Todas');
+            } catch (e) {
+                setAvailableRoutes([]);
+            }
+        } catch (err) {
+            console.error('Error fetching occupancy:', err);
+            setSnackbar({ open: true, message: 'Error al obtener ocupación', severity: 'error' });
+            setOccupancyData({});
+        } finally {
+            setOccupancyLoading(false);
+        }
+    };
+
+    // Mappings/helpers for day names (English -> Spanish). Accepts already-Spanish keys too.
+    const EN_TO_ES_DAY = {
+        monday: 'Lunes',
+        tuesday: 'Martes',
+        wednesday: 'Miércoles',
+        thursday: 'Jueves',
+        friday: 'Viernes',
+        saturday: 'Sábado',
+        sunday: 'Domingo'
+    };
+    const toSpanishDay = (raw) => {
+        if (!raw && raw !== 0) return raw;
+        const s = String(raw).trim();
+        const key = s.toLowerCase();
+        if (EN_TO_ES_DAY[key]) return EN_TO_ES_DAY[key];
+        // If it's already Spanish or a capitalized weekday, normalize capitalization
+        return s.charAt(0).toUpperCase() + s.slice(1);
+    };
+
     // Using setSubmissionDetail directly where needed; helper removed to avoid linter warning.
     const handleCloseSubmissionDialog = () => {
         setSubmissionDetail(null);
@@ -1038,6 +1101,11 @@ const SchoolsManagementPage = () => {
                                             <Tooltip title="Ver Formularios Llenados">
                                                 <IconButton onClick={() => handleViewSubmissions(school)}>
                                                     <Visibility />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Ver Ocupación por Ruta/Horario">
+                                                <IconButton onClick={() => handleViewOccupancy(school)}>
+                                                    <Assessment />
                                                 </IconButton>
                                             </Tooltip>
                                         </Box>
@@ -1225,6 +1293,11 @@ const SchoolsManagementPage = () => {
                                                                     <Visibility />
                                                                 </IconButton>
                                                             </Tooltip>
+                                                            <Tooltip title="Ver Ocupación por Ruta/Horario">
+                                                                <IconButton onClick={() => handleViewOccupancy(school)}>
+                                                                    <Assessment />
+                                                                </IconButton>
+                                                            </Tooltip>
                                                         </ResponsiveTableCell>
                                                     </TableRow>
                                                 );
@@ -1347,6 +1420,90 @@ const SchoolsManagementPage = () => {
                         </Button>
                     )}
                     <Button onClick={handleCloseSubmissionDialog}>Cerrar</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog para mostrar ocupación */}
+            <Dialog open={occupancyDialogOpen} onClose={() => { setOccupancyDialogOpen(false); setOccupancyData(null); }} maxWidth="md" fullWidth>
+                <DialogTitle>Ocupación por Ruta / Horario</DialogTitle>
+                <DialogContent>
+                    {occupancyLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : (
+                        <Box>
+                            {(!occupancyData || Object.keys(occupancyData).length === 0) ? (
+                                <Typography variant="body1">No hay datos de ocupación disponibles.</Typography>
+                            ) : (
+                                <>
+                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+                                        <FormControl size="small" sx={{ minWidth: 160 }}>
+                                            <InputLabel>Día</InputLabel>
+                                            <Select
+                                                value={occupancyDayFilter}
+                                                label="Día"
+                                                onChange={(e) => setOccupancyDayFilter(e.target.value)}
+                                            >
+                                                <MenuItem value="Todas">Todas</MenuItem>
+                                                {Object.keys(occupancyData).map(d => (
+                                                    <MenuItem key={d} value={d}>{toSpanishDay(d)}</MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                        <FormControl size="small" sx={{ minWidth: 160 }}>
+                                            <InputLabel>Ruta</InputLabel>
+                                            <Select
+                                                value={occupancyRouteFilter}
+                                                label="Ruta"
+                                                onChange={(e) => setOccupancyRouteFilter(e.target.value)}
+                                            >
+                                                <MenuItem value="Todas">Todas</MenuItem>
+                                                {availableRoutes.map(r => (
+                                                    <MenuItem key={r} value={r}>{r}</MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Box>
+
+                                    {Object.keys(occupancyData).filter(dayKey => occupancyDayFilter === 'Todas' || String(dayKey) === String(occupancyDayFilter)).map((day) => (
+                                        <Box key={day} sx={{ mb: 2 }}>
+                                            <Typography variant="h6">{toSpanishDay(day)}</Typography>
+                                            <Table size="small">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell>Ruta</TableCell>
+                                                        <TableCell align="right">AM</TableCell>
+                                                        <TableCell align="right">MD</TableCell>
+                                                        <TableCell align="right">PM</TableCell>
+                                                        <TableCell align="right">EX</TableCell>
+                                                        <TableCell align="right">Total</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {Object.entries(occupancyData[day])
+                                                        .filter(([route]) => occupancyRouteFilter === 'Todas' || String(route) === String(occupancyRouteFilter))
+                                                        .map(([route, stats]) => (
+                                                            <TableRow key={route}>
+                                                                <TableCell>{route}</TableCell>
+                                                                <TableCell align="right">{stats.AM || 0}</TableCell>
+                                                                <TableCell align="right">{stats.MD || 0}</TableCell>
+                                                                <TableCell align="right">{stats.PM || 0}</TableCell>
+                                                                <TableCell align="right">{stats.EX || 0}</TableCell>
+                                                                <TableCell align="right">{stats.total || 0}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                </TableBody>
+                                            </Table>
+                                        </Box>
+                                    ))}
+                                </>
+                            )}
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => { setOccupancyDialogOpen(false); setOccupancyData(null); }}>Cerrar</Button>
                 </DialogActions>
             </Dialog>
 
