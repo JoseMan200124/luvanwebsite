@@ -7,13 +7,6 @@ import {
     TableHead,
     TableRow,
     Button,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    TextField,
-    IconButton,
-    Tooltip,
     Paper,
     TableContainer,
     TablePagination,
@@ -31,7 +24,14 @@ import {
     Chip,
     TableSortLabel,
     FormControlLabel,
-    Checkbox
+    Checkbox,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    TextField,
+    Tooltip,
+    IconButton
 } from '@mui/material';
 import { Snackbar, Alert } from '@mui/material';
 import {
@@ -40,7 +40,8 @@ import {
     Add,
     FileUpload,
     DirectionsBus,
-    Mail
+    Mail,
+    FileDownload
 } from '@mui/icons-material';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import styled from 'styled-components';
@@ -48,7 +49,6 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
 
 /* ================== Responsive Table & Mobile Cards =================== */
 // Contenedor principal de la página
@@ -56,11 +56,10 @@ const RolesContainer = styled.div`
     padding: 16px;
 `;
 
-// Opciones de roles disponibles en el sistema
+// Opciones de roles disponibles en el sistema (sin incluir Padre)
 const roleOptions = [
     { id: 1, name: 'Administrador' },
     { id: 2, name: 'Gestor' },
-    { id: 3, name: 'Padre' },
     { id: 4, name: 'Monitora' },
     { id: 5, name: 'Piloto' },
     { id: 6, name: 'Supervisor' },
@@ -109,57 +108,7 @@ const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
 
-// Helper para extraer un horario HH:mm de diferentes formatos de valores
-function extractTime(val) {
-    if (!val) return '';
-    if (typeof val === 'string') {
-        const m = val.match(/(\d{1,2}):(\d{2})/);
-        if (m) {
-            const hh = m[1].padStart(2, '0');
-            const mm = m[2];
-            return `${hh}:${mm}`;
-        }
-        return '';
-    }
-    if (typeof val === 'number') {
-        // e.g., 730 -> 07:30
-        const s = String(val);
-        if (s.length >= 3) {
-            const mm = s.slice(-2);
-            const hh = s.slice(0, -2).padStart(2, '0');
-            return `${hh}:${mm}`;
-        }
-        return '';
-    }
-    if (typeof val === 'object') {
-        // Intentar algunas claves comunes
-        if (val.time) return extractTime(val.time);
-        if (val.start) return extractTime(val.start);
-        if (val.hour) return extractTime(val.hour);
-        if (val.value) return extractTime(val.value);
-        try {
-            const str = JSON.stringify(val);
-            return extractTime(str);
-        } catch (_) {
-            return '';
-        }
-    }
-    return '';
-}
-
-// Helper para extraer el código de periodo (AM/MD/PM/EX) priorizando schoolSchedule.
-// No infiere por hora; solo usa el código explícito si está presente.
-function extractPeriodCode(slot) {
-    if (!slot) return null;
-    const ss = (slot.schoolSchedule ?? '').toString();
-    const mSS = ss.match(/\b(AM|MD|PM|EX)\b/i);
-    if (mSS && mSS[1]) return mSS[1].toUpperCase();
-    // Fallback legacy: si no viene en schoolSchedule, buscar token en slot.time/timeSlot
-    const t = (slot.time ?? slot.timeSlot ?? '').toString();
-    const mT = t.match(/\b(AM|MD|PM|EX)\b/i);
-    if (mT && mT[1]) return mT[1].toUpperCase();
-    return null;
-}
+// (helpers de tiempo y periodo eliminados porque ya no se usan en esta página)
 
 // Helper para saber si un usuario es "nuevo"
 function isUserNew(user) {
@@ -390,11 +339,12 @@ const RolesManagementPage = () => {
     const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
     const [selectedUserForManualSend, setSelectedUserForManualSend] = useState(null);
 
-    // Modal para selección de colegio en reporte de rutas
-    const [openRouteReportDialog, setOpenRouteReportDialog] = useState(false);
-    const [selectedSchoolForReport, setSelectedSchoolForReport] = useState('');
-    const [routeReportLoading, setRouteReportLoading] = useState(false);
-    const [downloadMode, setDownloadMode] = useState('report'); // 'report' | 'new' | 'all'
+    // Dialogs para descargar usuarios (nuevos / todos)
+    const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+    const [downloadAllDialogOpen, setDownloadAllDialogOpen] = useState(false);
+    const [selectedSchoolForDownload, setSelectedSchoolForDownload] = useState('');
+
+    // (Reporte de rutas removido de la página)
 
     // Filtros
     const [newUsersFilter, setNewUsersFilter] = useState('all');
@@ -810,6 +760,9 @@ const RolesManagementPage = () => {
 
     // --- MODIFICACIÓN: Se actualiza el filtrado para considerar además el apellido de la familia ---
     const filteredUsers = users.filter((u) => {
+        // Ocultar todos los usuarios con rol "Padre" (roleId 3)
+        if (Number(u.roleId) === 3) return false;
+        
         const matchesSearch =
             (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -899,7 +852,9 @@ const RolesManagementPage = () => {
             setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
             return;
         }
-        const newUsers = users.filter(u => isUserNew(u) && String(u.school) === String(schoolId));
+    let newUsers = users.filter(u => isUserNew(u) && String(u.school) === String(schoolId));
+    // Excluir usuarios con rol 'Padre' (roleId === 3)
+    newUsers = newUsers.filter(u => Number(u.roleId) !== 3);
         const headers = [
             "Nombre",
             "Apellido Familia",
@@ -1058,6 +1013,8 @@ const RolesManagementPage = () => {
                 return;
             }
             allUsers = allUsers.filter(u => String(u.school) === String(schoolId));
+            // Excluir usuarios con rol 'Padre' (roleId === 3)
+            allUsers = allUsers.filter(u => Number(u.roleId) !== 3);
 
             // Generar Excel
             const headers = [
@@ -1189,758 +1146,6 @@ const RolesManagementPage = () => {
                 message: 'Error al descargar todos los usuarios',
                 severity: 'error'
             });
-        }
-    };
-
-    const handleOpenRouteReportDialog = () => {
-        setSelectedSchoolForReport('');
-        setOpenRouteReportDialog(true);
-    };
-
-    const handleCloseRouteReportDialog = () => {
-        setOpenRouteReportDialog(false);
-        setSelectedSchoolForReport('');
-    };
-
-    const handleDownloadRouteReport = async (schoolId) => {
-        if (!schoolId) {
-            setSnackbar({
-                open: true,
-                message: 'Por favor selecciona un colegio.',
-                severity: 'warning'
-            });
-            return;
-        }
-
-        setRouteReportLoading(true);
-        try {
-            let allUsers = [];
-            let page = 0;
-            const limit = 500;
-            let total = 0;
-            let fetched = 0;
-
-            // Primera petición para saber el total
-            const firstResp = await api.get('/users', { params: { page, limit } });
-            allUsers = firstResp.data.users || [];
-            total = firstResp.data.total || allUsers.length;
-            fetched = allUsers.length;
-
-            // Si hay más, sigue pidiendo en lotes
-            while (fetched < total) {
-                page += 1;
-                const resp = await api.get('/users', { params: { page, limit } });
-                const usersBatch = resp.data.users || [];
-                allUsers = allUsers.concat(usersBatch);
-                fetched += usersBatch.length;
-                if (usersBatch.length === 0) break;
-            }
-
-            // Filtrar solo usuarios padres del colegio seleccionado que tengan ScheduleSlots
-            // (a nivel familiar o por estudiante). Según el requisito, solo usamos ScheduleSlots.
-            const parentsWithRoutes = allUsers.filter(u =>
-                u.Role && (u.Role.name === 'Padre' || (u.Role.name || '').toString().toLowerCase() === 'padre') &&
-                u.FamilyDetail &&
-                u.school && parseInt(u.school) === parseInt(schoolId) &&
-                (
-                    (Array.isArray(u.FamilyDetail.ScheduleSlots) && u.FamilyDetail.ScheduleSlots.length > 0) ||
-                    (Array.isArray(u.FamilyDetail.Students) && u.FamilyDetail.Students.some(s => Array.isArray(s.ScheduleSlots) && s.ScheduleSlots.length > 0))
-                )
-            );
-
-            // Agrupar por número de ruta (routeNumber en ScheduleSlots) y contar estudiantes AM/MD/PM
-            // Contaremos cada estudiante una sola vez por periodo (AM/MD/PM) por ruta.
-            const routeSummary = {};
-            // Construir resumen basado únicamente en ScheduleSlots (student.ScheduleSlots o, si falta, family ScheduleSlots filtradas por studentId)
-            parentsWithRoutes.forEach(user => {
-                const fd = user.FamilyDetail || {};
-                if (!fd.Students || fd.Students.length === 0) return;
-
-                fd.Students.forEach(student => {
-                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                    // Incluir sólo los family slots que aplican al estudiante (sin studentId o con studentId igual al estudiante)
-                    const familySlots = Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots.filter(s => !s.studentId || Number(s.studentId) === Number(student.id)) : [];
-                    const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
-
-                    // Para evitar dobles conteos, acumular por estudiante un conjunto único de (route, period)
-                    const studentRoutePeriodSet = new Set();
-
-                    slotsToUse.forEach(slot => {
-                        // Determinar routeNumber directamente desde el slot
-                        let routeNumber = '';
-                        if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') {
-                            routeNumber = String(slot.routeNumber);
-                        }
-                        // Fallback: si no hay routeNumber definido en el slot, usar una etiqueta neutral
-                        if (!routeNumber) routeNumber = 'Sin Ruta';
-
-                        // Detectar periodo únicamente por código explícito (AM/MD/PM/EX)
-                        const period = extractPeriodCode(slot);
-                        if (!period) return; // si no hay código, no contar este slot
-
-                        // Key único por estudiante para evitar duplicados
-                        const key = `${routeNumber}::${period}`;
-                        studentRoutePeriodSet.add(key);
-                    });
-
-                    // Incrementar el resumen por cada (route, period) único del estudiante
-                    studentRoutePeriodSet.forEach(k => {
-                        const [routeNumber, period] = k.split('::');
-                        if (!routeSummary[routeNumber]) routeSummary[routeNumber] = { cantAM: 0, cantPM: 0, cantMD: 0, cantEX: 0 };
-                        if (period === 'AM') routeSummary[routeNumber].cantAM++;
-                        else if (period === 'MD') routeSummary[routeNumber].cantMD++;
-                        else if (period === 'PM') routeSummary[routeNumber].cantPM++;
-                        else if (period === 'EX') routeSummary[routeNumber].cantEX++;
-                    });
-                });
-            });
-
-            // Determinar el número máximo de estudiantes para crear las columnas dinámicas
-            // Solo contar familias que tengan al menos un ScheduleSlot (a nivel estudiante o familiar)
-            let maxStudents = 0;
-
-            parentsWithRoutes.forEach(user => {
-                const fd = user.FamilyDetail || {};
-                if (!fd.Students || fd.Students.length === 0) return;
-
-                const hasStudentWithRoute = fd.Students.some(student => {
-                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                    if (studentSlots.length > 0) {
-                        return studentSlots.some(slot => {
-                            const timeSlot = extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '');
-                            return /(\d{1,2}):(\d{2})/.test(timeSlot);
-                        });
-                    }
-                    // fallback: check family slots
-                    if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
-                        return fd.ScheduleSlots.some(slot => /(\d{1,2}):(\d{2})/.test(extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '')));
-                    }
-                    return false;
-                });
-
-                if (hasStudentWithRoute && fd.Students.length > maxStudents) {
-                    maxStudents = fd.Students.length;
-                }
-            });
-
-            // Ordenar las rutas numéricamente cuando sea posible, fallback a orden alfabético
-            const sortedRoutes = Object.keys(routeSummary).sort((a, b) => {
-                const ma = (a || '').toString().match(/(\d+)/);
-                const mb = (b || '').toString().match(/(\d+)/);
-                if (ma && mb) return Number(ma[1]) - Number(mb[1]);
-                if (ma && !mb) return -1;
-                if (!ma && mb) return 1;
-                return a.toString().localeCompare(b.toString());
-            });
-
-            // Crear Excel con ExcelJS para soporte completo de estilos
-            const workbook = new ExcelJS.Workbook();
-
-            // Hoja resumen por rutas (ocupacion)
-            const summaryWorksheet = workbook.addWorksheet('OCUPACIÓN POR RUTA');
-
-            // Agregar headers con estilo
-            // Incluir EX como franja adicional
-            const summaryHeaders = ["No. Ruta", "Cant. AM", "Cant. PM", "Cant. MD", "Cant. EX"];
-            const summaryHeaderRow = summaryWorksheet.addRow(summaryHeaders);
-
-            // Estilo para headers del resumen
-            summaryHeaderRow.eachCell((cell) => {
-                cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FF4472C4' } // Azul
-                };
-                cell.font = {
-                    color: { argb: 'FFFFFFFF' },
-                    bold: true
-                };
-                cell.alignment = {
-                    horizontal: 'center',
-                    vertical: 'middle'
-                };
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-            });
-
-            // Agregar datos del resumen
-            if (sortedRoutes.length === 0) {
-                // Si no hay rutas específicas (keys en routeSummary), crear un resumen
-                // analizando únicamente ScheduleSlots a nivel estudiante o familiar
-                const timeSummary = { cantAM: 0, cantPM: 0, cantMD: 0, cantEX: 0 };
-
-                parentsWithRoutes.forEach(user => {
-                    const fd = user.FamilyDetail || {};
-                    if (!fd.Students || fd.Students.length === 0) return;
-
-                    fd.Students.forEach(student => {
-                        const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                        const slotsToUse = studentSlots.length > 0 ? studentSlots : (Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots : []);
-
-                        if (slotsToUse.length === 0) {
-                            // Si no hay slots ni a nivel estudiante ni familiar, contar como AM por defecto
-                            timeSummary.cantAM++;
-                        } else {
-                            slotsToUse.forEach(slot => {
-                                const code = extractPeriodCode(slot);
-                                if (code === 'AM') timeSummary.cantAM++;
-                                else if (code === 'MD') timeSummary.cantMD++;
-                                else if (code === 'PM') timeSummary.cantPM++;
-                                else if (code === 'EX') timeSummary.cantEX++;
-                            });
-                        }
-                    });
-                });
-
-                // Agregar una sola fila con el resumen total
-                const rowData = ["Total", timeSummary.cantAM, timeSummary.cantPM, timeSummary.cantMD, timeSummary.cantEX];
-                const row = summaryWorksheet.addRow(rowData);
-                row.eachCell((cell) => {
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFF2F2F2' }
-                    };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                        right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
-                    };
-                });
-                // Asegurar que las columnas numéricas sean números (excluir horas)
-                [2, 3, 4, 5].forEach((colIdx) => {
-                    try {
-                        const c = row.getCell(colIdx);
-                        if (c && c.value != null) {
-                            const n = Number(c.value);
-                            if (!Number.isNaN(n)) {
-                                c.value = n;
-                                c.numFmt = '0';
-                            }
-                        }
-                    } catch (e) {
-                        // no bloquear si hay error en conversión
-                        console.warn('[handleDownloadRouteReport] Numeric conversion error for total row:', e);
-                    }
-                });
-            } else {
-                // Usar el resumen por rutas específicas
-                sortedRoutes.forEach((routeNumber, index) => {
-                    const routeData = routeSummary[routeNumber];
-                    const rowData = [routeNumber, routeData.cantAM, routeData.cantPM, routeData.cantMD, routeData.cantEX || 0];
-                    const row = summaryWorksheet.addRow(rowData);
-
-                    // Estilo alternado para filas
-                    const isEven = (index + 1) % 2 === 0;
-                    row.eachCell((cell) => {
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
-                        };
-                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                            left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                            bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                            right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
-                        };
-                    });
-
-                    // Asegurar que las columnas numéricas sean números (No. Ruta y conteos)
-                    // Col 1: intentar extraer número de "routeNumber" solo si contiene dígitos
-                    try {
-                        const c1 = row.getCell(1);
-                        if (c1 && c1.value != null) {
-                            const m = c1.value.toString().match(/(\d+)/);
-                            if (m) {
-                                c1.value = Number(m[1]);
-                                c1.numFmt = '0';
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('[handleDownloadRouteReport] Numeric conversion error for route number:', e);
-                    }
-                    // Cols 2-5: conteos
-                    [2, 3, 4, 5].forEach((colIdx) => {
-                        try {
-                            const c = row.getCell(colIdx);
-                            if (c && c.value != null) {
-                                const n = Number(c.value);
-                                if (!Number.isNaN(n)) {
-                                    c.value = n;
-                                    c.numFmt = '0';
-                                }
-                            }
-                        } catch (e) {
-                            console.warn('[handleDownloadRouteReport] Numeric conversion error for route row:', e);
-                        }
-                    });
-                });
-                // Verificación simple: sumar totales desde routeSummary y loggear para detectar discrepancias
-                try {
-                    const totalsFromRoutes = { cantAM: 0, cantMD: 0, cantPM: 0, cantEX: 0 };
-                    Object.values(routeSummary).forEach(r => {
-                        totalsFromRoutes.cantAM += r.cantAM || 0;
-                        totalsFromRoutes.cantMD += r.cantMD || 0;
-                        totalsFromRoutes.cantPM += r.cantPM || 0;
-                        totalsFromRoutes.cantEX += r.cantEX || 0;
-                    });
-                    console.log('[handleDownloadRouteReport] Totales calculados desde routeSummary:', totalsFromRoutes);
-                } catch (e) {
-                    // ignore logging errors
-                }
-            }
-
-            // Auto-ajustar columnas y agregar filtros
-            summaryWorksheet.columns.forEach(column => {
-                column.width = Math.max(15, column.header ? column.header.length : 10);
-            });
-            summaryWorksheet.autoFilter = 'A1:E' + summaryWorksheet.rowCount;
-
-            // Congelar la primera fila (encabezados) para que sea sticky
-            summaryWorksheet.views = [
-                { state: 'frozen', ySplit: 1 }
-            ];
-
-            // Hoja de datos de familias
-            const familiesWorksheet = workbook.addWorksheet('DATA');
-
-            // Crear headers dinámicos (nuevo orden solicitado)
-            // Orden: Apellido Familia, Tipo Ruta, Dirección Principal, Dirección Alterna,
-            // (Estudiantes: Nombre, Grado, Hora AM, Parada AM, Hora MD, Parada MD, Hora PM, Parada PM),
-            // Nombre Padre, Email Padre
-            const baseHeaders = [
-                "Apellido Familia",
-                "Tipo Ruta",
-                "Dirección Principal",
-                "Dirección Alterna"
-            ];
-
-        // Agregar columnas para estudiantes (nombre, grado) y por día Lunes-Viernes: Hora/Ruta/Parada para AM, MD, PM, EX
-            const weekdaysMap = [
-                { key: 'monday', label: 'Lunes' },
-                { key: 'tuesday', label: 'Martes' },
-                { key: 'wednesday', label: 'Miércoles' },
-                { key: 'thursday', label: 'Jueves' },
-                { key: 'friday', label: 'Viernes' }
-            ];
-            const studentHeaders = [];
-            for (let i = 1; i <= maxStudents; i++) {
-                studentHeaders.push(`Estudiante ${i} - Nombre`);
-                studentHeaders.push(`Estudiante ${i} - Grado`);
-                weekdaysMap.forEach(day => {
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora AM`);
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta AM`);
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada AM`);
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora MD`);
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta MD`);
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada MD`);
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora PM`);
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta PM`);
-                    studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada PM`);
-            studentHeaders.push(`Estudiante ${i} - ${day.label} - Hora EX`);
-            studentHeaders.push(`Estudiante ${i} - ${day.label} - Ruta EX`);
-            studentHeaders.push(`Estudiante ${i} - ${day.label} - Parada EX`);
-                });
-            }
-
-            // Agregar columnas de contacto de la madre y el padre
-            const headers = [...baseHeaders, ...studentHeaders, 'Nombre Padre', 'Email Padre', 'Nombre Mamá', 'Teléfono Mamá', 'Nombre Papá', 'Teléfono Papá'];
-            const familiesHeaderRow = familiesWorksheet.addRow(headers);
-
-            // Estilo para headers de familias
-            familiesHeaderRow.eachCell((cell) => {
-                cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FF70AD47' } // Verde
-                };
-                cell.font = {
-                    color: { argb: 'FFFFFFFF' },
-                    bold: true
-                };
-                cell.alignment = {
-                    horizontal: 'center',
-                    vertical: 'middle'
-                };
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-            });
-
-            // Función para verificar si una familia tiene al menos un estudiante con ScheduleSlot parseable
-            // Ahora consideramos slot.schoolSchedule (preferido) o slot.time/slot.timeSlot
-            const familyHasStudentWithRoute = (user) => {
-                const fd = user.FamilyDetail || {};
-                if (!fd.Students || fd.Students.length === 0) return false;
-
-                // Verificar ScheduleSlots a nivel familiar
-                if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
-                    if (fd.ScheduleSlots.some(slot => /(\d{1,2}):(\d{2})/.test(extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '')))) return true;
-                }
-
-                // Verificar ScheduleSlots a nivel estudiante
-                return fd.Students.some(student => {
-                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                    return studentSlots.some(slot => /(\d{1,2}):(\d{2})/.test(extractTime(slot.schoolSchedule || slot.time || slot.timeSlot || '')));
-                });
-            };
-
-            // Filtrar familias que tienen al menos un estudiante con ruta
-            const familiesWithRoutes = parentsWithRoutes.filter(familyHasStudentWithRoute);
-
-            // Procesar solo las familias que tienen estudiantes con rutas (ScheduleSlots)
-            familiesWithRoutes.forEach((user, familyIndex) => {
-                const fd = user.FamilyDetail || {};
-
-                // Nota: las horas y paradas ahora se registran a nivel estudiante usando ScheduleSlots
-
-                // Mantener solo datos estáticos de la familia; las horas/paradas ahora son por estudiante
-                const baseData = [
-                    fd.familyLastName || "",
-                    fd.routeType || "",
-                    fd.mainAddress || "",
-                    fd.alternativeAddress || ""
-                ];
-
-                // Datos de estudiantes (solo nombre, grado y rutas basadas en ScheduleSlots)
-                const studentData = [];
-                for (let i = 0; i < maxStudents; i++) {
-                    if (fd.Students && fd.Students[i]) {
-                        const student = fd.Students[i];
-                        studentData.push(student.fullName || "");
-                        studentData.push(student.grade || "");
-
-                        // Inicializar estructura por día y por periodo (keys en inglés, labels en español para headers)
-            const dataByDay = {};
-                        weekdaysMap.forEach(d => {
-                            dataByDay[d.key] = {
-                horaAM: '', paradaAM: '',
-                horaMD: '', paradaMD: '',
-                horaPM: '', paradaPM: '',
-                horaEX: '', paradaEX: ''
-                            };
-                        });
-
-                        const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                        // Incluir slots familiares que correspondan a este estudiante (slot.studentId === student.id) o que no tengan studentId
-                        const familySlots = Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots.filter(s => !s.studentId || Number(s.studentId) === Number(student.id)) : [];
-                        // Preferir slots específicos del estudiante; si no hay, usar familySlots (que pueden incluir entries por studentId)
-                        const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
-
-                        slotsToUse.forEach(slot => {
-                            const displayTime = (slot.time || slot.schoolSchedule || slot.timeSlot || '').toString();
-                            const note = slot.note || '';
-
-                            // Parsear slot.days robustamente (array, JSON string, or CSV-like)
-                            let slotDays = [];
-                            if (Array.isArray(slot.days)) {
-                                slotDays = slot.days;
-                            } else if (typeof slot.days === 'string') {
-                                try {
-                                    const parsed = JSON.parse(slot.days);
-                                    if (Array.isArray(parsed)) slotDays = parsed;
-                                    else slotDays = [slot.days];
-                                } catch (e) {
-                                    // fallback: comma separated
-                                    slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days];
-                                }
-                            } else if (slot.days) {
-                                slotDays = [slot.days];
-                            }
-
-                            // obtener routeNumber directamente del slot
-                            let routeLabel = '';
-                            if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') {
-                                routeLabel = String(slot.routeNumber);
-                            }
-
-                            const paradaDisplay = `${note || ''}`;
-
-                            // Para cada día del slot, asignar al día correspondiente
-                            slotDays.forEach(rawDay => {
-                                if (!rawDay) return;
-                                const day = rawDay.toString().toLowerCase();
-                                if (!dataByDay[day]) return; // ignorar fines de semana u otros
-
-                                // Priorizar código explícito (AM/MD/PM/EX); si no existe, usar hora
-                                const period = extractPeriodCode(slot);
-
-                                if (period === 'AM') {
-                                    if (!dataByDay[day].horaAM) dataByDay[day].horaAM = displayTime;
-                                    if (!dataByDay[day].rutaAM) dataByDay[day].rutaAM = routeLabel;
-                                    if (!dataByDay[day].paradaAM) dataByDay[day].paradaAM = paradaDisplay;
-                                } else if (period === 'MD') {
-                                    if (!dataByDay[day].horaMD) dataByDay[day].horaMD = displayTime;
-                                    if (!dataByDay[day].rutaMD) dataByDay[day].rutaMD = routeLabel;
-                                    if (!dataByDay[day].paradaMD) dataByDay[day].paradaMD = paradaDisplay;
-                                } else if (period === 'PM') {
-                                    if (!dataByDay[day].horaPM) dataByDay[day].horaPM = displayTime;
-                                    if (!dataByDay[day].rutaPM) dataByDay[day].rutaPM = routeLabel;
-                                    if (!dataByDay[day].paradaPM) dataByDay[day].paradaPM = paradaDisplay;
-                                } else if (period === 'EX') {
-                                    if (!dataByDay[day].horaEX) dataByDay[day].horaEX = displayTime;
-                                    if (!dataByDay[day].rutaEX) dataByDay[day].rutaEX = routeLabel;
-                                    if (!dataByDay[day].paradaEX) dataByDay[day].paradaEX = paradaDisplay;
-                                } else {
-                                    // Si no hay código de periodo, no colocamos nada para evitar interpretaciones erróneas
-                                }
-                            });
-                        });
-
-                        // Push en orden Lunes..Viernes los pares Hora/Parada por periodo
-                        weekdaysMap.forEach(d => {
-                            const dd = dataByDay[d.key];
-                            studentData.push(dd.horaAM);
-                            studentData.push(dd.rutaAM || '');
-                            studentData.push(dd.paradaAM);
-                            studentData.push(dd.horaMD);
-                            studentData.push(dd.rutaMD || '');
-                            studentData.push(dd.paradaMD);
-                            studentData.push(dd.horaPM);
-                            studentData.push(dd.rutaPM || '');
-                            studentData.push(dd.paradaPM);
-                            studentData.push(dd.horaEX);
-                            studentData.push(dd.rutaEX || '');
-                            studentData.push(dd.paradaEX);
-                        });
-                    } else {
-                        // Rellenar con vacíos equivalentes a: nombre, grado, y 12 columnas por día
-                        studentData.push(""); // Nombre vacío
-                        studentData.push(""); // Grado vacío
-                        const emptyPerDay = 12; // Hora/Ruta/Parada AM, MD, PM, EX
-                        for (let d = 0; d < weekdaysMap.length; d++) {
-                            for (let k = 0; k < emptyPerDay; k++) studentData.push("");
-                        }
-                    }
-                }
-
-                // Agregar datos de contacto de la madre y el padre al final según especificación
-                const userName = user.name || "";
-                const userEmail = user.email || "";
-                const motherName = (fd.motherName && fd.motherName.trim()) || '';
-                const motherPhone = (fd.motherCellphone && fd.motherCellphone.trim()) || '';
-                // Preferir los campos en FamilyDetail; si no existen, usar user.name / user.email
-                const fatherName = (fd.fatherName && fd.fatherName.trim()) || '';
-                const fatherPhone = (fd.fatherCellphone && fd.fatherCellphone.trim()) || '';
-
-                const rowData = [...baseData, ...studentData, userName, userEmail, motherName, motherPhone, fatherName, fatherPhone];
-                const row = familiesWorksheet.addRow(rowData);
-
-                // Estilo alternado para filas de familias
-                const isEven = (familyIndex + 1) % 2 === 0;
-                row.eachCell((cell) => {
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
-                    };
-                    cell.alignment = {
-                        horizontal: 'center',
-                        vertical: 'middle'
-                    };
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
-                        right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
-                    };
-                });
-
-                // Convertir columnas de ruta de estudiantes a número cuando sea posible
-                try {
-                    const baseLen = baseHeaders.length; // now 4
-                    // Each student block: name(1), grade(1) + for each weekday 12 columns (hora,ruta,parada for AM/MD/PM/EX) => 2 + 12*weekdays
-                    const perStudentCols = 2 + weekdaysMap.length * 12;
-                    for (let i = 0; i < maxStudents; i++) {
-                        const studentStart = baseLen + i * perStudentCols;
-                        weekdaysMap.forEach((d, dayIdx) => {
-                            const dayOffset = dayIdx * 12; // 12 columns per day
-                            // Offsets after name(1) and grade(2), per day:
-                            // horaAM(+1), rutaAM(+2), paradaAM(+3), horaMD(+4), rutaMD(+5), paradaMD(+6), horaPM(+7), rutaPM(+8), paradaPM(+9), horaEX(+10), rutaEX(+11), paradaEX(+12)
-                            const colRutaAM = studentStart + 2 + dayOffset + 2;
-                            const colRutaMD = studentStart + 2 + dayOffset + 5;
-                            const colRutaPM = studentStart + 2 + dayOffset + 8;
-                            const colRutaEX = studentStart + 2 + dayOffset + 11;
-
-                            [colRutaAM, colRutaMD, colRutaPM, colRutaEX].forEach(colIdx => {
-                                try {
-                                    const cell = row.getCell(colIdx);
-                                    if (cell && cell.value != null && cell.value !== '') {
-                                        const raw = cell.value.toString();
-                                        // 1) Buscar primer grupo de dígitos
-                                        let m = raw.match(/(\d+)/);
-                                        let num = null;
-                                        if (m) {
-                                            num = Number(m[1]);
-                                        } else {
-                                            // 2) Intentar parsear el string completo
-                                            const n = Number(raw);
-                                            if (!Number.isNaN(n)) num = n;
-                                            else {
-                                                // 3) Fallback: eliminar todos los no-dígitos y parsear
-                                                const digitsOnly = raw.replace(/\D+/g, '');
-                                                if (digitsOnly) num = Number(digitsOnly);
-                                            }
-                                        }
-
-                                        if (num !== null && !Number.isNaN(num)) {
-                                            cell.value = num;
-                                            cell.numFmt = '0';
-                                        } else {
-                                            // If no numeric value found, leave as-is (string)
-                                            // but do not set numeric format
-                                            cell.value = raw;
-                                            cell.numFmt = 'General';
-                                        }
-                                    }
-                                } catch (e) {
-                                    // ignore per-cell conversion errors
-                                }
-                            });
-                            // Ensure Hora columns remain as General/text (no numeric format)
-                            try {
-                                const colHoraAM = studentStart + 2 + dayOffset + 1;
-                                const colHoraMD = studentStart + 2 + dayOffset + 4;
-                                const colHoraPM = studentStart + 2 + dayOffset + 7;
-                                const colHoraEX = studentStart + 2 + dayOffset + 10;
-                                [colHoraAM, colHoraMD, colHoraPM, colHoraEX].forEach(hIdx => {
-                                    try {
-                                        const hCell = row.getCell(hIdx);
-                                        if (hCell && hCell.value != null && hCell.value !== '') {
-                                            // Preserve value as string and set format to General to avoid number formatting
-                                            hCell.value = hCell.value.toString();
-                                            hCell.numFmt = 'General';
-                                        }
-                                    } catch (inner) {
-                                        // ignore
-                                    }
-                                });
-                            } catch (e) {
-                                // ignore
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.warn('[handleDownloadRouteReport] Error converting student route columns to number:', e);
-                }
-            });
-
-            // Auto-ajustar columnas para la hoja de familias
-            familiesWorksheet.columns.forEach((column, index) => {
-                const header = headers[index];
-                let maxWidth = header ? header.length : 10;
-
-                // Calcular ancho basado en contenido
-                familiesWorksheet.eachRow((row, rowNumber) => {
-                    if (rowNumber > 1) { // Skip header row
-                        const cell = row.getCell(index + 1);
-                        const cellLength = String(cell.value || "").length;
-                        if (cellLength > maxWidth) {
-                            maxWidth = cellLength;
-                        }
-                    }
-                });
-
-                column.width = Math.min(Math.max(maxWidth, 10), 50);
-            });
-
-            // Configurar filtros para TODAS las columnas en la hoja "Datos Familias"
-            // Primero asegurar que hay datos antes de configurar filtros
-            if (familiesWorksheet.rowCount > 1 && headers.length > 0) {
-                // Función para convertir número de columna a letra de Excel
-                const getColumnLetter = (columnNumber) => {
-                    let letter = '';
-                    while (columnNumber > 0) {
-                        const remainder = (columnNumber - 1) % 26;
-                        letter = String.fromCharCode(65 + remainder) + letter;
-                        columnNumber = Math.floor((columnNumber - 1) / 26);
-                    }
-                    return letter;
-                };
-
-                // Validar que no excedamos el límite de Excel (1024 columnas = AMJ)
-                const maxColumns = Math.min(headers.length, 1024);
-                const lastColumnLetter = getColumnLetter(maxColumns);
-                const filterRange = `A1:${lastColumnLetter}${familiesWorksheet.rowCount}`;
-
-                // Configurar autoFilter para toda la tabla de familias
-                familiesWorksheet.autoFilter = filterRange;
-
-                // Configurar cada columna individualmente para asegurar que tenga filtro
-                for (let i = 0; i < maxColumns; i++) {
-                    const columnLetter = getColumnLetter(i + 1);
-                    try {
-                        const column = familiesWorksheet.getColumn(columnLetter);
-                        if (column) {
-                            // Asegurar que la columna tenga filtro habilitado
-                            column.filterButton = true;
-                        }
-                    } catch (error) {
-                        console.warn(`Error configurando filtro para columna ${columnLetter}:`, error);
-                        break; // Salir del loop si hay error
-                    }
-                }
-
-                // Log para debugging
-                console.log('Headers count:', headers.length);
-                console.log('Max columns processed:', maxColumns);
-                console.log('AutoFilter range:', filterRange);
-                console.log('Last column letter:', lastColumnLetter);
-            } else {
-                console.warn('No hay suficientes datos para configurar filtros');
-            }
-
-            // Congelar la primera fila (encabezados) para que sea sticky en la hoja de familias
-            familiesWorksheet.views = [
-                { state: 'frozen', ySplit: 1 }
-            ];
-
-            // Generar archivo
-            const selectedSchool = schools.find(s => s.id === parseInt(schoolId));
-            const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
-            const fileName = `reporte_rutas_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
-
-            // Escribir archivo
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            setSnackbar({
-                open: true,
-                message: `Reporte de rutas para ${schoolName} descargado exitosamente`,
-                severity: 'success'
-            });
-
-            // Cerrar el modal después de la descarga exitosa
-            handleCloseRouteReportDialog();
-
-        } catch (error) {
-            console.error('[handleDownloadRouteReport] Error:', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al descargar el reporte de rutas',
-                severity: 'error'
-            });
-        } finally {
-            setRouteReportLoading(false);
         }
     };
 
@@ -2291,27 +1496,24 @@ const RolesManagementPage = () => {
                         Enviar Circular Masiva
                     </Button>
                     <Button
-                        variant="contained"
-                        color="success"
-                        onClick={() => { setDownloadMode('new'); setOpenRouteReportDialog(true); }}
+                        variant="outlined"
+                        color="primary"
+                        startIcon={<FileDownload />}
+                        onClick={() => setDownloadDialogOpen(true)}
+                        sx={{ ml: 1 }}
                     >
                         Descargar Nuevos
                     </Button>
                     <Button
-                        variant="contained"
-                        color="success"
-                        onClick={() => { setDownloadMode('all'); setOpenRouteReportDialog(true); }}
-                        sx={{ ml: 2 }}
+                        variant="outlined"
+                        color="primary"
+                        startIcon={<FileDownload />}
+                        onClick={() => setDownloadAllDialogOpen(true)}
+                        sx={{ ml: 1 }}
                     >
                         Descargar Todos
                     </Button>
-                    <Button
-                        variant="contained"
-                        color="success"
-                        onClick={handleOpenRouteReportDialog}
-                    >
-                        Reporte de Rutas
-                    </Button>
+                    {/* Reporte de rutas removido */}
                     {/* bulk editors removed */}
                 </div>
             </Box>
@@ -3097,56 +2299,57 @@ const RolesManagementPage = () => {
                 />
             )}
 
-            {/* Modal para selección de colegio en reporte de rutas */}
-            <Dialog open={openRouteReportDialog} onClose={handleCloseRouteReportDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>Reporte de Rutas por Colegio</DialogTitle>
+            {/* Reporte de rutas eliminado */}
+
+            {/* Diálogo para descargar usuarios nuevos */}
+            <Dialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Descargar Usuarios Nuevos</DialogTitle>
                 <DialogContent>
-                    <DialogContentText>
-                        Selecciona el colegio para el cual deseas generar el reporte de rutas.
-                    </DialogContentText>
-                    <FormControl fullWidth sx={{ mt: 2 }}>
+                    <FormControl fullWidth>
                         <InputLabel>Colegio</InputLabel>
                         <Select
+                            value={selectedSchoolForDownload}
                             label="Colegio"
-                            value={selectedSchoolForReport}
-                            onChange={(e) => setSelectedSchoolForReport(e.target.value)}
+                            onChange={(e) => setSelectedSchoolForDownload(e.target.value)}
                         >
                             <MenuItem value="">
-                                <em>Seleccione un colegio</em>
+                                <em>Selecciona un colegio</em>
                             </MenuItem>
-                            {schools.map((school) => (
-                                <MenuItem key={school.id} value={school.id}>
-                                    {school.name}
-                                </MenuItem>
+                            {schools.map(s => (
+                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleCloseRouteReportDialog} color="primary">
-                        Cancelar
-                    </Button>
-                    <Button
-                        onClick={async () => {
-                            if (!selectedSchoolForReport) {
-                                setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
-                                return;
-                            }
-                            if (downloadMode === 'report') {
-                                await handleDownloadRouteReport(selectedSchoolForReport);
-                            } else if (downloadMode === 'new') {
-                                handleDownloadNewUsers(selectedSchoolForReport);
-                            } else if (downloadMode === 'all') {
-                                await handleDownloadAllUsers(selectedSchoolForReport);
-                            }
-                            setOpenRouteReportDialog(false);
-                        }}
-                        color="primary"
-                        variant="contained"
-                        disabled={!selectedSchoolForReport || routeReportLoading}
-                    >
-                        {routeReportLoading ? 'Generando...' : (downloadMode === 'report' ? 'Descargar Reporte' : (downloadMode === 'new' ? 'Descargar Nuevos' : 'Descargar Todos'))}
-                    </Button>
+                    <Button onClick={() => setDownloadDialogOpen(false)}>Cancelar</Button>
+                    <Button onClick={() => { handleDownloadNewUsers(selectedSchoolForDownload); setDownloadDialogOpen(false); }} variant="contained">Descargar</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Diálogo para descargar todos los usuarios */}
+            <Dialog open={downloadAllDialogOpen} onClose={() => setDownloadAllDialogOpen(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Descargar Todos los Usuarios</DialogTitle>
+                <DialogContent>
+                    <FormControl fullWidth>
+                        <InputLabel>Colegio</InputLabel>
+                        <Select
+                            value={selectedSchoolForDownload}
+                            label="Colegio"
+                            onChange={(e) => setSelectedSchoolForDownload(e.target.value)}
+                        >
+                            <MenuItem value="">
+                                <em>Selecciona un colegio</em>
+                            </MenuItem>
+                            {schools.map(s => (
+                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDownloadAllDialogOpen(false)}>Cancelar</Button>
+                    <Button onClick={() => { handleDownloadAllUsers(selectedSchoolForDownload); setDownloadAllDialogOpen(false); }} variant="contained">Descargar</Button>
                 </DialogActions>
             </Dialog>
 

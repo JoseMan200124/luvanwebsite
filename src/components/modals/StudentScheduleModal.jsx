@@ -391,7 +391,10 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
               {(Array.isArray(students) && students.length > 0 ? students : (studentId ? [{ id: studentId, fullName: 'Alumno' }] : [])).map(st => (
                 <div key={st.id} style={{ border: '1px solid #eef2f7', borderRadius: 8, padding: 12, background: '#FBFDFF' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700 }}>{st.fullName || `Alumno ${st.id}`}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700 }}>{st.fullName || `Alumno ${st.id}`}</div>
+                      <div style={{ fontSize: 15, color: '#6B7280' }}>{st.grade || '—'}</div>
+                    </div>
                     <div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button type="button" onClick={()=>openAssignPopup(st)} style={{ background: '#0ea5a4', color: '#fff', padding: '6px 10px', borderRadius: 6 }}>Asignar Ruta</button>

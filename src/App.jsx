@@ -25,6 +25,10 @@ import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
 import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
+import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
+import SchoolDashboardPage from './pages/SchoolDashboardPage';
+import SchoolUsersPage from './pages/SchoolUsersPage';
+import SchoolBusesPage from './pages/SchoolBusesPage';
 import { modules } from './modules';
 import AdminAuditHidden from './pages/AdminAuditHidden';
 
@@ -132,6 +136,40 @@ function App() {
                             element={
                                 <ProtectedRoute roles={['Gestor','Administrador']}>
                                     <BulkScheduleUpdatePage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        {/* Nuevas rutas para gestión de escuelas por ciclo escolar */}
+                        <Route
+                            path="escuelas"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <SchoolYearSelectionPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="escuelas/:schoolYear/:schoolId"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <SchoolDashboardPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="escuelas/:schoolYear/:schoolId/usuarios"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <SchoolUsersPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="escuelas/:schoolYear/:schoolId/buses-gestion"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <SchoolBusesPage />
                                 </ProtectedRoute>
                             }
                         />

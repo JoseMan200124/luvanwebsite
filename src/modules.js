@@ -6,8 +6,7 @@ import {
     Payments,
     People,
     Security,
-    Description,
-    CloudUpload
+    Description
 } from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
@@ -23,6 +22,7 @@ import BusesManagementPage from './pages/BusesManagementPage';
 import PaymentsManagementPage from './pages/PaymentsManagementPage';
 import ActivityLogPage from './pages/ActivityLogPage';
 import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
+import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
 
 export const modules = [
     {
@@ -44,6 +44,13 @@ export const modules = [
         name: 'Gestión de Colegios y Rutas',
         icon: School,
         submodules: [
+            {
+                key: 'escuelas',
+                name: 'Gestión de Escuelas',
+                path: 'escuelas',
+                component: SchoolYearSelectionPage,
+                roles: ['Administrador', 'Gestor'],
+            },
             {
                 key: 'colegios',
                 name: 'Colegios',

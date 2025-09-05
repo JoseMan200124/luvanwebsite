@@ -22,10 +22,6 @@ import {
     Snackbar,
     Alert,
     CircularProgress,
-    InputLabel,
-    FormControl,
-    Select,
-    MenuItem,
     List,
     ListItem,
     ListItemText,
@@ -150,18 +146,8 @@ function getFieldValue(bus, field) {
             return bus.plate;
         case 'capacity':
             return bus.capacity;
-        case 'routeNumber':
-            return bus.routeNumber;
-        case 'occupation':
-            return bus.occupation;
-        case 'school':
-            return bus.school ? bus.school.name : '';
         case 'description':
             return bus.description;
-        case 'pilot':
-            return bus.pilot ? bus.pilot.name : '';
-        case 'monitora':
-            return bus.monitora ? bus.monitora.name : '';
         default:
             return '';
     }
@@ -188,15 +174,8 @@ const BusesManagementPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // Pilotos y Monitores
-    const [availablePilots, setAvailablePilots] = useState([]);
-    const [availableMonitors, setAvailableMonitors] = useState([]);
-    const [availableSchools, setAvailableSchools] = useState([]);
-    const [originalPilots, setOriginalPilots] = useState([]);
-    const [originalMonitors, setOriginalMonitors] = useState([]);
-
-    // Bus schedule deprecated. No schedules managed per bus anymore.
-    const [availableRouteNumbers, setAvailableRouteNumbers] = useState([]);
+    // Removed: Assignment-related state variables (pilots, monitors, schools, route numbers)
+    // BusesManagementPage now only handles basic bus fleet management
 
     // Carga masiva
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
@@ -235,123 +214,9 @@ const BusesManagementPage = () => {
         }
     };
 
-    const fetchPilots = async (schoolId = null) => {
-        try {
-            // Do not fetch all pilots when no school is selected. Requirement: only load after colegio chosen.
-            if (!schoolId) {
-                setOriginalPilots([]);
-                setAvailablePilots([]);
-                return;
-            }
-
-            const url = `/users/pilots?schoolId=${schoolId}`;
-            const response = await api.get(url, {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            let pilots = Array.isArray(response.data.users) ? response.data.users : [];
-
-            // For each pilot, obtain schedules for their school (usually same schoolId)
-            const pilotsWithSchedules = await Promise.all(
-                pilots.map(async (pilot) => {
-                    if (!pilot.school) return { ...pilot, schedules: [] };
-                    try {
-                        const sid = parseInt(pilot.school, 10);
-                        const resp = await api.get(`/schools/${sid}/schedules`, {
-                            headers: { Authorization: `Bearer ${auth.token}` }
-                        });
-                        return { ...pilot, schedules: Array.isArray(resp.data.schedules) ? resp.data.schedules : [] };
-                    } catch (err) {
-                        return { ...pilot, schedules: [] };
-                    }
-                })
-            );
-
-            setOriginalPilots(pilotsWithSchedules);
-            setAvailablePilots(pilotsWithSchedules);
-        } catch (err) {
-            console.error('Error fetching pilots:', err);
-            setOriginalPilots([]);
-            setAvailablePilots([]);
-        }
-    };
-
-    const fetchMonitors = async (schoolId = null) => {
-        try {
-            // Only fetch monitors when a school is selected
-            if (!schoolId) {
-                setOriginalMonitors([]);
-                setAvailableMonitors([]);
-                return;
-            }
-
-            const url = `/users/monitors?schoolId=${schoolId}`;
-            const response = await api.get(url, {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            const monitors = Array.isArray(response.data.users) ? response.data.users : [];
-            setOriginalMonitors(monitors);
-            setAvailableMonitors(monitors);
-        } catch (err) {
-            console.error('Error fetching monitors:', err);
-            setOriginalMonitors([]);
-            setAvailableMonitors([]);
-        }
-    };
-
-    // When selected school's changed, fetch school schedules and filter pilots/monitors
     useEffect(() => {
-        const schoolId = selectedBus?.schoolId;
-        if (!selectedBus) return;
-
-        const applySchoolFilter = async () => {
-            // No per-bus schedules to fetch
-
-            // Fetch school's route numbers
-            if (schoolId) {
-                try {
-                    const rresp = await api.get(`/schools/${schoolId}`, { headers: { Authorization: `Bearer ${auth.token}` } });
-                    const schoolData = rresp.data.school || rresp.data;
-                    let routeNumbers = [];
-                    if (Array.isArray(schoolData.routeNumbers)) routeNumbers = schoolData.routeNumbers;
-                    else if (typeof schoolData.routeNumbers === 'string' && schoolData.routeNumbers.trim()) {
-                        try { routeNumbers = JSON.parse(schoolData.routeNumbers); } catch { routeNumbers = []; }
-                    }
-                    setAvailableRouteNumbers(Array.isArray(routeNumbers) ? routeNumbers : []);
-                } catch (err) {
-                    console.error('Error fetching school route numbers:', err);
-                    setAvailableRouteNumbers([]);
-                }
-            } else {
-                setAvailableRouteNumbers([]);
-            }
-
-            // Ask server for pilots and monitors filtered by school to avoid client-side heavy filtering
-            await Promise.all([fetchPilots(schoolId), fetchMonitors(schoolId)]);
-            if (selectedBus.pilotId && !originalPilots.some(p => p.id === selectedBus.pilotId) && !availablePilots.some(p => p.id === selectedBus.pilotId)) {
-                setSelectedBus(prev => ({ ...prev, pilotId: '', schedule: [] }));
-            }
-            if (selectedBus.monitoraId && !originalMonitors.some(m => m.id === selectedBus.monitoraId) && !availableMonitors.some(m => m.id === selectedBus.monitoraId)) {
-                setSelectedBus(prev => ({ ...prev, monitoraId: '' }));
-            }
-        };
-
-        applySchoolFilter();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedBus?.schoolId]);
-
-    const fetchSchools = async () => {
-        try {
-            const resp = await api.get('/schools', { headers: { Authorization: `Bearer ${auth.token}` } });
-            setAvailableSchools(Array.isArray(resp.data.schools) ? resp.data.schools : []);
-        } catch (err) {
-            console.error('Error fetching schools:', err);
-        }
-    };
-
-    useEffect(() => {
-        // Only fetch buses and schools at mount. Do NOT fetch pilots/monitors globally.
+        // Only fetch buses at mount
         fetchBuses();
-        fetchSchools();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [auth.token]);
 
@@ -363,10 +228,6 @@ const BusesManagementPage = () => {
             plate: '',
             capacity: '',
             description: '',
-            pilotId: '',
-            monitoraId: '',
-            schoolId: null,
-            routeNumber: '',
             files: [],
             inWorkshop: false
         });
@@ -379,10 +240,6 @@ const BusesManagementPage = () => {
             plate: bus.plate,
             capacity: bus.capacity || '',
             description: bus.description || '',
-            pilotId: bus.pilotId || '',
-            monitoraId: bus.monitoraId || '',
-            schoolId: bus.school ? bus.school.id : null,
-            routeNumber: bus.routeNumber || '',
             files: bus.files || [],
             inWorkshop: bus.inWorkshop || false
         });
@@ -425,21 +282,6 @@ const BusesManagementPage = () => {
         }));
     };
 
-    /**
-     * Al cambiar piloto, recargamos horarios
-     */
-    const handlePilotChange = async (e) => {
-        const pilotId = e.target.value ? parseInt(e.target.value, 10) : '';
-        setSelectedBus((prev) => ({
-            ...prev,
-            pilotId
-        }));
-    };
-
-    // schedules removed
-
-    // schedule removed
-
     const handleFileChange = (e) => {
         const files = e.target.files;
         const maxSize = 5 * 1024 * 1024; // 5MB
@@ -471,17 +313,7 @@ const BusesManagementPage = () => {
             formData.append('plate', selectedBus.plate);
             formData.append('capacity', selectedBus.capacity);
             formData.append('description', selectedBus.description);
-            formData.append('routeNumber', selectedBus.routeNumber);
             formData.append('inWorkshop', selectedBus.inWorkshop);
-
-            // Append pilot/monitora explicitly so the server can clear them when user selects 'Ninguno'
-            formData.append('pilotId', selectedBus.pilotId === '' || selectedBus.pilotId == null ? '' : selectedBus.pilotId);
-            formData.append('monitoraId', selectedBus.monitoraId === '' || selectedBus.monitoraId == null ? '' : selectedBus.monitoraId);
-            if (selectedBus.schoolId) {
-                formData.append('schoolId', selectedBus.schoolId);
-            }
-
-            // no schedule
 
             if (selectedBus.files && selectedBus.files.length > 0) {
                 Array.from(selectedBus.files).forEach((file) => {
@@ -544,9 +376,7 @@ const BusesManagementPage = () => {
         const inPlate = bus.plate.toLowerCase().includes(searchQuery.toLowerCase());
         const inDesc =
             bus.description && bus.description.toLowerCase().includes(searchQuery.toLowerCase());
-        const inRouteNumber =
-            bus.routeNumber && bus.routeNumber.toLowerCase().includes(searchQuery.toLowerCase());
-        return inPlate || inDesc || inRouteNumber;
+        return inPlate || inDesc;
     });
 
     // =================== Paginación ===================
@@ -616,98 +446,26 @@ const BusesManagementPage = () => {
 
     // Función para descargar la plantilla personalizada de buses
     const handleDownloadTemplate = () => {
-        // 1. Prepara los datos de Pilotos y Monitoras (ID y Nombre en columnas separadas)
-        const pilotos = availablePilots.map(p => [p.id, p.name]);
-        const monitoras = availableMonitors.map(m => [m.id, m.name]);
-
-        // 2. Prepara los horarios por piloto (cada horario en una columna distinta)
-        let maxHorarios = 0;
-        const pilotosConHorarios = availablePilots.map(p => {
-            const horarios = Array.isArray(p.schedules)
-                ? p.schedules.map(
-                    sch => `${sch.name} - ${(sch.times || []).join(', ')}`
-                )
-                : [];
-            if (horarios.length > maxHorarios) maxHorarios = horarios.length;
-            return {
-                id: p.id,
-                name: p.name,
-                horarios
-            };
-        });
-
-        const horariosHeaders = [];
-        for (let i = 1; i <= maxHorarios; i++) {
-            horariosHeaders.push(`Horario ${i}`);
-        }
-
-        // 3. Define las columnas y una fila de ejemplo vacía
+        // Simple template for basic bus information only
         const headers = [
             "Placa",
-            "Capacidad",
-            "Descripción",
-            "Piloto (ID)",
-            "Monitora (ID)",
-            "Número de Ruta",
-            "Horarios (Nombre - Día - Horas)"
+            "Capacidad", 
+            "Descripción"
         ];
         const exampleRow = [
             "PlacaEjemplo",
             40,
-            "Descripción de Ejemplo. Esta fila es solo un ejemplo.",
-            pilotos[0]?.[0] || "",
-            monitoras[0]?.[0] || "",
-            "R-01",
-            pilotosConHorarios[0]?.horarios[0] || ""
+            "Descripción de Ejemplo. Esta fila es solo un ejemplo."
         ];
 
         const data = [headers, exampleRow];
 
-        // 4. Crea la hoja de cálculo principal
+        // Create the spreadsheet
         const ws = XLSX.utils.aoa_to_sheet(data);
-
-        // 5. Agrega una hoja con las listas de referencia (ID, Nombre, Horarios) en columnas separadas y con columnas en blanco entre bloques
-        // Encuentra el máximo de filas para alinear verticalmente
-        const maxRows = Math.max(
-            pilotosConHorarios.length,
-            monitoras.length
-        );
-
-        const wsListasData = [
-            [
-                "Pilotos (ID)", "Pilotos (Nombre)", ...horariosHeaders, "", // columna en blanco
-                "Monitoras (ID)", "Monitoras (Nombre)"
-            ]
-        ];
-
-        for (let i = 0; i < maxRows; i++) {
-            wsListasData.push([
-                pilotosConHorarios[i]?.id ?? "", pilotosConHorarios[i]?.name ?? "",
-                ...(pilotosConHorarios[i]?.horarios ?? []),
-                ...Array(maxHorarios - (pilotosConHorarios[i]?.horarios?.length || 0)).fill(""),
-                "", // columna en blanco
-                monitoras[i]?.[0] ?? "", monitoras[i]?.[1] ?? ""
-            ]);
-        }
-
-        const wsLists = XLSX.utils.aoa_to_sheet(wsListasData);
-
-        // Ajusta el ancho de cada columna de la hoja Listas
-        const cols = [
-            { wch: Math.max("Pilotos (ID)".length + 2, 15) },
-            { wch: Math.max("Pilotos (Nombre)".length + 2, 20) },
-            ...horariosHeaders.map(h => ({ wch: Math.max(h.length + 2, 20) })),
-            { wch: 2 }, // columna en blanco
-            { wch: Math.max("Monitoras (ID)".length + 2, 15) },
-            { wch: Math.max("Monitoras (Nombre)".length + 2, 20) }
-        ];
-        wsLists['!cols'] = cols;
-
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Buses");
-        XLSX.utils.book_append_sheet(wb, wsLists, "Listas");
 
-        // 6. Descarga el archivo
+        // Download the file
         const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
         const blob = new Blob([wbout], { type: "application/octet-stream" });
         const fileName = `buses_template_${getFormattedDateTime()}.xlsx`;
@@ -790,24 +548,8 @@ const BusesManagementPage = () => {
                                             <MobileValue>{bus.capacity}</MobileValue>
                                         </MobileField>
                                         <MobileField>
-                                            <MobileLabel>Número de Ruta</MobileLabel>
-                                            <MobileValue>{bus.routeNumber || 'N/A'}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Colegio</MobileLabel>
-                                            <MobileValue>{bus.school ? bus.school.name : 'N/A'}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
                                             <MobileLabel>Descripción</MobileLabel>
                                             <MobileValue>{bus.description}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Piloto</MobileLabel>
-                                            <MobileValue>{bus.pilot ? bus.pilot.name : ''}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Monitora</MobileLabel>
-                                            <MobileValue>{bus.monitora ? bus.monitora.name : ''}</MobileValue>
                                         </MobileField>
                                         <MobileField>
                                             <MobileLabel>Estado</MobileLabel>
@@ -913,28 +655,6 @@ const BusesManagementPage = () => {
                                                     Capacidad
                                                 </TableSortLabel>
                                             </TableCell>
-                                            <TableCell sortDirection={orderBy === 'routeNumber' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'routeNumber'}
-                                                    direction={orderBy === 'routeNumber' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('routeNumber')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Número de Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                        <TableCell sortDirection={orderBy === 'school' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'school'}
-                                                    direction={orderBy === 'school' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('school')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                            Colegio
-                                                </TableSortLabel>
-                                            </TableCell>
                                             <TableCell sortDirection={orderBy === 'description' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'description'}
@@ -944,28 +664,6 @@ const BusesManagementPage = () => {
                                                     sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
                                                     Descripción
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'pilot' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'pilot'}
-                                                    direction={orderBy === 'pilot' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('pilot')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Piloto
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'monitora' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'monitora'}
-                                                    direction={orderBy === 'monitora' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('monitora')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Monitora
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell>Estado</TableCell>
@@ -984,20 +682,8 @@ const BusesManagementPage = () => {
                                                     <ResponsiveTableCell data-label="Capacidad">
                                                         {bus.capacity}
                                                     </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Número de Ruta">
-                                                        {bus.routeNumber || 'N/A'}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Colegio">
-                                                        {bus.school ? bus.school.name : 'N/A'}
-                                                    </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Descripción">
                                                         {bus.description}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Piloto">
-                                                        {bus.pilot ? bus.pilot.name : ''}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Monitora">
-                                                        {bus.monitora ? bus.monitora.name : ''}
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Estado">
                                                         {bus.inWorkshop ? (
@@ -1073,7 +759,7 @@ const BusesManagementPage = () => {
                                             ))}
                                         {sortedBuses.length === 0 && (
                                             <TableRow>
-                                                <ResponsiveTableCell colSpan={10} align="center">
+                                                <ResponsiveTableCell colSpan={6} align="center">
                                                     No se encontraron buses.
                                                 </ResponsiveTableCell>
                                             </TableRow>
@@ -1102,51 +788,6 @@ const BusesManagementPage = () => {
                     {selectedBus && selectedBus.id ? 'Editar Bus' : 'Añadir Bus'}
                 </DialogTitle>
                 <DialogContent>
-                    {/* Selección de Colegio */}
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Colegio</InputLabel>
-                        <Select
-                            name="schoolId"
-                            value={selectedBus ? selectedBus.schoolId || '' : ''}
-                            onChange={(e) => setSelectedBus(prev => ({ ...prev, schoolId: e.target.value ? parseInt(e.target.value, 10) : null }))}
-                        >
-                            <MenuItem value="">
-                                <em>Global / Ninguno</em>
-                            </MenuItem>
-                            {availableSchools.map((s) => (
-                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    {/* Selección de Número de Ruta basada en los números del colegio seleccionado */}
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Número de Ruta</InputLabel>
-                        <Select
-                            name="routeNumber"
-                            value={selectedBus ? selectedBus.routeNumber || '' : ''}
-                            onChange={(e) => setSelectedBus(prev => ({ ...prev, routeNumber: e.target.value }))}
-                        >
-                            <MenuItem value="">
-                                <em>Sin asignar</em>
-                            </MenuItem>
-                            {availableRouteNumbers && availableRouteNumbers.length > 0 ? (
-                                // Filter out route numbers already taken by other buses in the same school
-                                availableRouteNumbers
-                                    .filter((rn) => {
-                                        // if route not used by any bus in same school, keep it
-                                        const usedByOther = buses.some(b => b.school && b.school.id === selectedBus?.schoolId && b.routeNumber === rn && b.id !== selectedBus?.id);
-                                        return !usedByOther || rn === selectedBus?.routeNumber;
-                                    })
-                                    .map((rn, idx) => (
-                                        <MenuItem key={idx} value={rn}>{rn}</MenuItem>
-                                    ))
-                            ) : (
-                                <MenuItem disabled value="">
-                                    No hay números de ruta definidos para este colegio
-                                </MenuItem>
-                            )}
-                        </Select>
-                    </FormControl>
                     <TextField
                         autoFocus
                         margin="dense"
@@ -1179,52 +820,6 @@ const BusesManagementPage = () => {
                         value={selectedBus ? selectedBus.description : ''}
                         onChange={handleInputChange}
                     />
-
-                    {/* Selección de Piloto */}
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Piloto</InputLabel>
-                        <Select
-                            name="pilotId"
-                            value={selectedBus ? selectedBus.pilotId || '' : ''}
-                            onChange={handlePilotChange}
-                        >
-                            <MenuItem value="">
-                                <em>Ninguno</em>
-                            </MenuItem>
-                            {availablePilots.map((pilot) => (
-                                <MenuItem key={pilot.id} value={pilot.id}>
-                                    {pilot.email}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-
-                    {/* Selección de Monitora */}
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Monitora</InputLabel>
-                        <Select
-                            name="monitoraId"
-                            value={selectedBus ? selectedBus.monitoraId || '' : ''}
-                            onChange={(e) =>
-                                setSelectedBus((prev) => ({
-                                    ...prev,
-                                    // Use empty string when 'Ninguna' is selected so we can explicitly clear on the server
-                                    monitoraId: e.target.value ? parseInt(e.target.value, 10) : ''
-                                }))
-                            }
-                        >
-                            <MenuItem value="">
-                                <em>Ninguna</em>
-                            </MenuItem>
-                            {availableMonitors.map((monitor) => (
-                                <MenuItem key={monitor.id} value={monitor.id}>
-                                    {monitor.email}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-
-                    {/* Horarios por bus eliminados; se manejan por colegio/ruta */}
 
                     {/* Switch para inWorkshop */}
                     <FormControlLabel
@@ -1309,9 +904,8 @@ const BusesManagementPage = () => {
                 <DialogTitle>Carga Masiva de Buses</DialogTitle>
                 <DialogContent>
                     <Typography variant="body1" sx={{ mb: 1 }}>
-                        Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial.<br />
-                        <br />
-                        Las listas de Pilotos, Monitoras y Horarios están en la hoja "Listas" de la plantilla.<br />
+                        Sube un archivo Excel/CSV con las columnas necesarias (Placa, Capacidad, Descripción). 
+                        Usa la plantilla oficial.<br />
                         <br />
                         El límite de archivo es 5 MB.
                     </Typography>
