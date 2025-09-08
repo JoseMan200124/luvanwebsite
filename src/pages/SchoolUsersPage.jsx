@@ -343,17 +343,48 @@ const SchoolUsersPage = () => {
     useEffect(() => {
         let filtered = users;
 
-        // Filtrar por búsqueda
+        // Filtrar por búsqueda (case-insensitive y sin acentos). Soporta búsqueda por varias palabras.
         if (searchQuery) {
-            filtered = filtered.filter(user => 
-                user.familyLastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                user.motherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                user.fatherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                user.motherEmail?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                user.fatherEmail?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                user.email?.toLowerCase().includes(searchQuery.toLowerCase())
-            );
+            const normalize = (str) => {
+                if (!str) return '';
+                try {
+                    return str
+                        .toString()
+                        .normalize('NFD')
+                        .replace(/\p{Diacritic}/gu, '')
+                        .toLowerCase();
+                } catch (e) {
+                    // Fallback for environments without Unicode property escapes
+                    return str
+                        .toString()
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .toLowerCase();
+                }
+            };
+
+            const tokens = normalize(searchQuery).split(/\s+/).filter(Boolean);
+
+            filtered = filtered.filter(user => {
+                const familyLast = normalize(user.FamilyDetail?.familyLastName || user.familyLastName || '');
+                const motherName = normalize(user.motherName || user.FamilyDetail?.motherName || '');
+                const fatherName = normalize(user.fatherName || user.FamilyDetail?.fatherName || '');
+                const motherEmail = normalize(user.motherEmail || '');
+                const fatherEmail = normalize(user.fatherEmail || '');
+                const name = normalize(user.name || '');
+                const email = normalize(user.email || '');
+
+                // For each token, ensure it matches at least one field
+                return tokens.every(token => (
+                    familyLast.includes(token) ||
+                    motherName.includes(token) ||
+                    fatherName.includes(token) ||
+                    motherEmail.includes(token) ||
+                    fatherEmail.includes(token) ||
+                    name.includes(token) ||
+                    email.includes(token)
+                ));
+            });
         }
 
         // Filtrar por estado
