@@ -44,6 +44,7 @@ import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import RouteStudentsModal from '../components/modals/RouteStudentsModal';
+import { generateRouteOccupancyPDF } from '../utils/pdfExport';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -93,6 +94,7 @@ const SchoolDashboardPage = () => {
     
     // Estado para el filtro de día (default Lunes)
     const [selectedDay, setSelectedDay] = useState('monday');
+    const weekdays = ['monday','tuesday','wednesday','thursday','friday'];
 
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
@@ -237,6 +239,39 @@ const SchoolDashboardPage = () => {
     const currentSchool = schoolData || stateSchool;
     const currentSchoolYear = schoolYear || stateSchoolYear;
 
+    const dayLabels = {
+        'monday': 'Lunes',
+        'tuesday': 'Martes',
+        'wednesday': 'Miércoles',
+        'thursday': 'Jueves',
+        'friday': 'Viernes'
+    };
+
+    const exportAllDaysPDF = async () => {
+        if (!schoolId) return;
+        try {
+            const dayMap = {};
+            // fetch occupancy for each weekday
+            await Promise.all(weekdays.map(async (d) => {
+                const resp = await api.get(`/routes/occupancy/${schoolId}`, {
+                    headers: { Authorization: `Bearer ${auth.token}` },
+                    params: { schoolYear: schoolYear, day: d }
+                });
+                dayMap[d] = resp.data.routes || [];
+            }));
+
+            generateRouteOccupancyPDF(dayMap, {
+                schoolName: currentSchool?.name || '',
+                schoolYear: currentSchoolYear || '',
+                generatedAt: new Date(),
+                dayLabels
+            });
+        } catch (err) {
+            console.error('Error fetching occupancy for all days:', err);
+            setSnackbar({ open: true, message: 'Error al generar PDF de todos los días', severity: 'error' });
+        }
+    };
+
     // Totals for route occupancy columns
     const totals = routeOccupancy.reduce((acc, r) => ({
         AM: acc.AM + (Number(r.AM) || 0),
@@ -320,6 +355,14 @@ const SchoolDashboardPage = () => {
                                 <Typography variant="body2" color="textSecondary">
                                     {`Mostrando solo ${getDayLabel(selectedDay)}`}
                                 </Typography>
+                                <Button
+                                    variant="contained"
+                                    size="small"
+                                    color="primary"
+                                    onClick={exportAllDaysPDF}
+                                >
+                                    Exportar PDF (Todos los días)
+                                </Button>
                                 {selectedDay !== 'monday' && (
                                     <Chip 
                                         label={`Filtro: ${getDayLabel(selectedDay)}`}
