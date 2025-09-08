@@ -17,10 +17,7 @@ import {
     Paper,
     Snackbar,
     Alert,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
+    // FormControl, InputLabel, Select, MenuItem removed - replaced by Autocomplete
     TextField,
     Autocomplete,
     Chip
@@ -93,7 +90,7 @@ const SchoolBusesPage = () => {
     const fetchBuses = useCallback(async () => {
         if (!schoolId) return;
         try {
-            const resp = await api.get('/buses', {
+            const resp = await api.get('/buses/simple', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             const allBuses = resp.data.buses || resp.data || [];
@@ -405,42 +402,48 @@ const SchoolBusesPage = () => {
                                                     />
                                                 </TableCell>
                                                 <TableCell>
-                                                    <FormControl fullWidth disabled={!assignedBusId}>
-                                                        <InputLabel>Seleccionar Piloto</InputLabel>
-                                                        <Select
-                                                            value={assignedBusId ? (pilotAssignments[assignedBusId] || '') : ''}
-                                                            label="Seleccionar Piloto"
-                                                            onChange={(e) => assignedBusId && handlePilotAssignmentChange(assignedBusId, e.target.value)}
-                                                        >
-                                                            <MenuItem value="">
-                                                                <em>Sin asignar</em>
-                                                            </MenuItem>
-                                                            {availablePilots.map((pilot) => (
-                                                                <MenuItem key={pilot.id} value={pilot.id}>
-                                                                    {pilot.name || pilot.email}
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
+                                                    <Autocomplete
+                                                        disabled={!assignedBusId}
+                                                        options={availablePilots.slice().sort((a,b)=>{
+                                                            const an = (a.name || a.email || '').toLowerCase();
+                                                            const bn = (b.name || b.email || '').toLowerCase();
+                                                            return an < bn ? -1 : an > bn ? 1 : 0;
+                                                        })}
+                                                        getOptionLabel={(option) => option ? (option.name || option.email) : ''}
+                                                        isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
+                                                        value={assignedBusId ? availablePilots.find(p => p.id === pilotAssignments[assignedBusId]) || null : null}
+                                                        onChange={(_, newValue) => assignedBusId && handlePilotAssignmentChange(assignedBusId, newValue ? newValue.id : null)}
+                                                        renderInput={(params) => (
+                                                            <TextField
+                                                                {...params}
+                                                                label="Seleccionar Piloto"
+                                                                variant="outlined"
+                                                            />
+                                                        )}
+                                                        clearOnEscape
+                                                    />
                                                 </TableCell>
                                                 <TableCell>
-                                                    <FormControl fullWidth disabled={!assignedBusId}>
-                                                        <InputLabel>Seleccionar Monitora</InputLabel>
-                                                        <Select
-                                                            value={assignedBusId ? (monitorAssignments[assignedBusId] || '') : ''}
-                                                            label="Seleccionar Monitora"
-                                                            onChange={(e) => assignedBusId && handleMonitorAssignmentChange(assignedBusId, e.target.value)}
-                                                        >
-                                                            <MenuItem value="">
-                                                                <em>Sin asignar</em>
-                                                            </MenuItem>
-                                                            {availableMonitors.map((monitor) => (
-                                                                <MenuItem key={monitor.id} value={monitor.id}>
-                                                                    {monitor.name || monitor.email}
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
+                                                    <Autocomplete
+                                                        disabled={!assignedBusId}
+                                                        options={availableMonitors.slice().sort((a,b)=>{
+                                                            const an = (a.name || a.email || '').toLowerCase();
+                                                            const bn = (b.name || b.email || '').toLowerCase();
+                                                            return an < bn ? -1 : an > bn ? 1 : 0;
+                                                        })}
+                                                        getOptionLabel={(option) => option ? (option.name || option.email) : ''}
+                                                        isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
+                                                        value={assignedBusId ? availableMonitors.find(m => m.id === monitorAssignments[assignedBusId]) || null : null}
+                                                        onChange={(_, newValue) => assignedBusId && handleMonitorAssignmentChange(assignedBusId, newValue ? newValue.id : null)}
+                                                        renderInput={(params) => (
+                                                            <TextField
+                                                                {...params}
+                                                                label="Seleccionar Monitora"
+                                                                variant="outlined"
+                                                            />
+                                                        )}
+                                                        clearOnEscape
+                                                    />
                                                 </TableCell>
                                                 <TableCell>
                                                     {assignedBusId ? (
