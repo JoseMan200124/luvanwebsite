@@ -19,22 +19,21 @@ import {
     TableHead,
     TableRow,
     Paper,
-    
-    TextField,
-    InputAdornment,
-    IconButton,
-    TableSortLabel,
-    MenuItem,
     FormControl,
     InputLabel,
     Select,
+    MenuItem,
+    TablePagination,
+    InputAdornment,
+    TableSortLabel,
+    TextField,
+    IconButton,
     Dialog,
     DialogTitle,
     DialogContent,
     DialogActions,
-    DialogContentText,
-    Checkbox,
-    FormControlLabel
+    DialogContentText
+    ,Checkbox, FormControlLabel
 } from '@mui/material';
 import { 
     School as SchoolIcon, 
@@ -97,7 +96,7 @@ const SchoolUsersPage = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [page, setPage] = useState(0);
-    const [rowsPerPage] = useState(10);
+    const [rowsPerPage, setRowsPerPage] = useState(10);
     const [selectedUser, setSelectedUser] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
@@ -981,6 +980,16 @@ const SchoolUsersPage = () => {
 
     const paginatedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
+    const handleChangePage = (event, newPage) => {
+        setPage(newPage);
+    };
+
+    const handleChangeRowsPerPage = (event) => {
+    const v = parseInt(event.target.value, 10);
+    setRowsPerPage(Number.isNaN(v) ? 10 : v);
+    setPage(0);
+    };
+
     return (
         <PageContainer>
             {/* Header */}
@@ -1294,7 +1303,17 @@ const SchoolUsersPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
+                                </TableContainer>
+
+                                <TablePagination
+                                    component="div"
+                                    count={sortedUsers.length}
+                                    page={page}
+                                    onPageChange={handleChangePage}
+                                    rowsPerPage={rowsPerPage}
+                                    onRowsPerPageChange={handleChangeRowsPerPage}
+                                    rowsPerPageOptions={[5,10,25,50]}
+                                />
                         </>
                     )}
                 </CardContent>
