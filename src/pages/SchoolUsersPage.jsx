@@ -1498,17 +1498,35 @@ const SchoolUsersPage = () => {
                     </DialogContentText>
                     <Grid container spacing={2} sx={{ mt: 1 }}>
                         <Grid item xs={12} md={6}>
-                            <TextField
-                                autoFocus={!!selectedUser?.id}
-                                name="name"
-                                label="Nombre Completo"
-                                type="text"
-                                fullWidth
-                                variant="outlined"
-                                value={selectedUser?.name || ''}
-                                onChange={handleUserChange}
-                                required
-                            />
+                            <Grid container spacing={2}>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        autoFocus={!!selectedUser?.id}
+                                        name="name"
+                                        label="Nombre Completo"
+                                        type="text"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={selectedUser?.name || ''}
+                                        onChange={handleUserChange}
+                                        required
+                                    />
+                                </Grid>
+                                {selectedUser?.id && (
+                                    <Grid item xs={12}>
+                                        <TextField
+                                            name="password"
+                                            label="Nueva Contraseña (opcional)"
+                                            type="password"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={selectedUser?.password || ''}
+                                            onChange={handleUserChange}
+                                            helperText="Dejarlo en blanco para mantener la contraseña actual"
+                                        />
+                                    </Grid>
+                                )}
+                            </Grid>
                         </Grid>
                         <Grid item xs={12} md={6}>
                             <TextField
