@@ -186,6 +186,11 @@ const BusesManagementPage = () => {
     // Ordenamiento
     const [order, setOrder] = useState('asc');
     const [orderBy, setOrderBy] = useState('');
+    // Delete file dialog state
+    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [deleteTargetIndex, setDeleteTargetIndex] = useState(null);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
     // =================== Efectos y funciones ===================
     const handleRequestSort = (property) => {
@@ -295,16 +300,90 @@ const BusesManagementPage = () => {
                         message: `El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`,
                         severity: 'error'
                     });
+                    // reset input and stop
                     e.target.value = null;
                     return;
                 }
             }
         }
 
-        setSelectedBus((prev) => ({
-            ...prev,
-            files
-        }));
+        // Append newly selected files to existing ones so they don't disappear from the list
+        setSelectedBus((prev) => {
+            const existing = prev && prev.files ? Array.from(prev.files) : [];
+            // Convert FileList to array and filter duplicates by name+size
+            const newFiles = Array.from(files).filter((nf) => {
+                return !existing.some((ef) => ef.name === nf.name && ef.size === nf.size);
+            });
+            return {
+                ...prev,
+                files: [...existing, ...newFiles]
+            };
+        });
+
+        // reset the input so the same file can be selected again if needed
+        e.target.value = null;
+    };
+
+    // Open confirm dialog to remove a file (local or server). The actual deletion runs in confirmRemoveFile.
+    const handleRemoveFile = (file, index) => {
+        setDeleteTarget(file);
+        setDeleteTargetIndex(index);
+        setOpenDeleteDialog(true);
+    };
+
+    // Perform the actual removal after confirmation
+    const confirmRemoveFile = async () => {
+        const file = deleteTarget;
+        const index = deleteTargetIndex;
+        if (!file) return;
+        setDeleteLoading(true);
+
+        // If file has an id, it's already on the server
+        if (file && file.id) {
+            // backend expects a busId in the route: DELETE /buses/:busId/files/:fileId
+            if (!selectedBus || !selectedBus.id) {
+                setSnackbar({ open: true, message: 'No se pudo determinar el bus para eliminar el archivo.', severity: 'error' });
+                setDeleteLoading(false);
+                setOpenDeleteDialog(false);
+                setDeleteTarget(null);
+                setDeleteTargetIndex(null);
+                return;
+            }
+            try {
+                await api.delete(`/buses/${selectedBus.id}/files/${file.id}`, {
+                    headers: { Authorization: `Bearer ${auth.token}` }
+                });
+                setSnackbar({ open: true, message: 'Archivo eliminado', severity: 'success' });
+                // refresh the buses list so outer view stays in sync
+                fetchBuses();
+            } catch (err) {
+                console.error('Error deleting file on server:', err);
+                setSnackbar({ open: true, message: 'No se pudo eliminar el archivo en el servidor', severity: 'error' });
+                setDeleteLoading(false);
+                setOpenDeleteDialog(false);
+                setDeleteTarget(null);
+                setDeleteTargetIndex(null);
+                return;
+            }
+        }
+
+        // Remove locally (works for both existing and newly added files)
+        setSelectedBus((prev) => {
+            if (!prev) return prev;
+            const filesArr = prev.files ? Array.from(prev.files) : [];
+            if (typeof index === 'number') {
+                filesArr.splice(index, 1);
+            } else {
+                const idx = filesArr.findIndex((f) => f === file || (f.id && file.id && file.id === f.id));
+                if (idx !== -1) filesArr.splice(idx, 1);
+            }
+            return { ...prev, files: filesArr };
+        });
+
+        setDeleteLoading(false);
+        setOpenDeleteDialog(false);
+        setDeleteTarget(null);
+        setDeleteTargetIndex(null);
     };
 
     const handleSave = async () => {
@@ -856,35 +935,35 @@ const BusesManagementPage = () => {
                     {selectedBus && selectedBus.files && selectedBus.files.length > 0 && (
                         <List sx={{ mt: 2 }}>
                             {[...selectedBus.files].map((file, index) => {
-                                if (file.id) {
-                                    // Archivos que ya existen en el servidor
-                                    return (
-                                        <ListItem key={file.id} disableGutters>
-                                            {file.fileType === 'application/pdf' ? (
+                                const isServerFile = !!file.id;
+                                const label = isServerFile ? file.fileName.split('/').pop() : file.name;
+                                return (
+                                    <ListItem key={isServerFile ? `sf-${file.id}` : `nf-${index}`} disableGutters sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            {isServerFile && file.fileType === 'application/pdf' ? (
+                                                <InsertDriveFile />
+                                            ) : !isServerFile && file.type === 'application/pdf' ? (
                                                 <InsertDriveFile />
                                             ) : (
                                                 <ImageIcon />
                                             )}
-                                            <ListItemText>
-                                                <Link href={file.fileUrl} target="_blank" rel="noopener noreferrer">
-                                                    {file.fileName.split('/').pop()}
-                                                </Link>
-                                            </ListItemText>
-                                        </ListItem>
-                                    );
-                                } else {
-                                    // Archivos recién seleccionados (File objeto en memoria)
-                                    return (
-                                        <ListItem key={index} disableGutters>
-                                            {file.type === 'application/pdf' ? (
-                                                <InsertDriveFile />
+                                            {isServerFile ? (
+                                                <ListItemText>
+                                                    <Link href={file.fileUrl} target="_blank" rel="noopener noreferrer">
+                                                        {label}
+                                                    </Link>
+                                                </ListItemText>
                                             ) : (
-                                                <ImageIcon />
+                                                <ListItemText primary={label} />
                                             )}
-                                            <ListItemText primary={file.name} />
-                                        </ListItem>
-                                    );
-                                }
+                                        </Box>
+                                        <Box>
+                                            <IconButton size="small" onClick={() => handleRemoveFile(file, index)} aria-label="Eliminar archivo">
+                                                <Delete fontSize="small" />
+                                            </IconButton>
+                                        </Box>
+                                    </ListItem>
+                                );
                             })}
                         </List>
                     )}
@@ -974,6 +1053,29 @@ const BusesManagementPage = () => {
                         disabled={!bulkFile || bulkLoading}
                     >
                         Subir
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Confirmar eliminación de archivo */}
+            <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Confirmar eliminación</DialogTitle>
+                <DialogContent>
+                    <Typography>
+                        ¿Estás seguro de que deseas eliminar este archivo? Esta acción no se puede deshacer.
+                    </Typography>
+                    {deleteTarget && (
+                        <Box sx={{ mt: 2 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                {deleteTarget.fileName ? deleteTarget.fileName.split('/').pop() : deleteTarget.name}
+                            </Typography>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenDeleteDialog(false)} disabled={deleteLoading}>Cancelar</Button>
+                    <Button onClick={confirmRemoveFile} variant="contained" color="error" disabled={deleteLoading}>
+                        {deleteLoading ? 'Eliminando...' : 'Eliminar'}
                     </Button>
                 </DialogActions>
             </Dialog>
