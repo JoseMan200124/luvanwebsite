@@ -151,6 +151,11 @@ const SchoolYearSelectionPage = () => {
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissions, setSubmissions] = useState([]);
     const [submissionDetail, setSubmissionDetail] = useState(null);
+    // Bulk upload states
+    const [openBulkDialog, setOpenBulkDialog] = useState(false);
+    const [bulkFile, setBulkFile] = useState(null);
+    const [bulkResults, setBulkResults] = useState(null);
+    const [bulkLoading, setBulkLoading] = useState(false);
     
     // Estados para edición de colegio
     const [schoolSchedules, setSchoolSchedules] = useState([]);
@@ -476,6 +481,73 @@ const SchoolYearSelectionPage = () => {
             setLoading(false);
         }
     };
+    // Bulk upload handlers
+    const handleOpenBulkUpload = () => {
+        setBulkFile(null);
+        setBulkResults(null);
+        setOpenBulkDialog(true);
+    };
+    const handleCloseBulkDialog = () => {
+        setOpenBulkDialog(false);
+    };
+    const handleFileChange = (e) => {
+        const file = e.target.files && e.target.files[0];
+        setBulkFile(file || null);
+    };
+    const handleUploadBulk = async () => {
+        if (!bulkFile) return;
+        setBulkLoading(true);
+        setBulkResults(null);
+        try {
+            const formData = new FormData();
+            formData.append('file', bulkFile);
+            const resp = await api.post('/schools/bulk-upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${auth.token}`
+                }
+            });
+            setBulkResults(resp.data || null);
+            // Refresh list after upload
+            fetchSchoolsByYear();
+            setSnackbar({ open: true, message: 'Carga masiva procesada', severity: 'success' });
+        } catch (err) {
+            console.error('Error al subir colegios masivamente:', err);
+            setSnackbar({ open: true, message: 'Error al procesar la carga masiva', severity: 'error' });
+        } finally {
+            setBulkLoading(false);
+        }
+    };
+
+    // Add school handler (reuse existing edit dialog)
+    const handleAddSchool = () => {
+        setSelectedSchool({
+            id: null,
+            name: '',
+            address: '',
+            city: '',
+            contactPerson: '',
+            contactEmail: '',
+            contactPhone: '',
+            whatsappLink: '',
+            transportFeeComplete: '',
+            transportFeeHalf: '',
+            duePaymentDay: '',
+            bankName: '',
+            bankAccount: ''
+        });
+        setSchoolSchedules([
+            { code: 'AM', name: 'HORARIO AM', times: ['N/A'] },
+            { code: 'MD', name: 'HORARIO MD', times: ['N/A'] },
+            { code: 'PM', name: 'HORARIO PM', times: ['N/A'] },
+            { code: 'EX', name: 'HORARIO EX', times: ['N/A'] }
+        ]);
+        setSchoolGrades([]);
+        setSchoolExtraFields([]);
+        setSchoolRouteNumbers([]);
+        setSchoolRouteSchedules([]);
+        setOpenEditDialog(true);
+    };
 
     const handleCloseEditDialog = () => {
         setOpenEditDialog(false);
@@ -737,25 +809,124 @@ const SchoolYearSelectionPage = () => {
             {/* Selector de Ciclo Escolar */}
             <Card sx={{ mb: 4 }}>
                 <CardContent>
-                    <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-                        Ciclo Escolar
-                    </Typography>
-                    <FormControl fullWidth variant="outlined" sx={{ maxWidth: 300 }}>
-                        <InputLabel>Seleccionar Ciclo Escolar</InputLabel>
-                        <Select
-                            value={selectedSchoolYear}
-                            onChange={handleSchoolYearChange}
-                            label="Seleccionar Ciclo Escolar"
-                        >
-                            {schoolYears.map((year) => (
-                                <MenuItem key={year.id} value={year.id}>
-                                    {year.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
+                    <Box>
+                        <Typography variant="h6" gutterBottom sx={{ mb: 1 }}>
+                            Ciclo Escolar
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                            <FormControl fullWidth variant="outlined" sx={{ maxWidth: 300 }}>
+                                <InputLabel>Seleccionar Ciclo Escolar</InputLabel>
+                                <Select
+                                    value={selectedSchoolYear}
+                                    onChange={handleSchoolYearChange}
+                                    label="Seleccionar Ciclo Escolar"
+                                >
+                                    {schoolYears.map((year) => (
+                                        <MenuItem key={year.id} value={year.id}>
+                                            {year.name}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                    variant="outlined"
+                                    color="primary"
+                                    onClick={handleOpenBulkUpload}
+                                >
+                                    Carga Masiva
+                                </Button>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={handleAddSchool}
+                                >
+                                    Añadir Colegio
+                                </Button>
+                            </Box>
+                        </Box>
+                    </Box>
                 </CardContent>
             </Card>
+
+            {/* Bulk upload dialog copied/adapted from SchoolsManagementPage */}
+            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Carga Masiva de Colegios</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body1" sx={{ mb: 1 }}>
+                        Sube un archivo Excel/CSV con las columnas necesarias.
+                        <br />
+                        Para <em>Horarios</em> puedes escribir algo como: <br />
+                        <code>Lunes=08:00,09:00;Martes=07:00,09:30</code> <br />
+                        Para <em>Grados</em>: <br />
+                        <code>Kinder,Primero,Segundo</code>
+                    </Typography>
+                    <Button
+                        variant="outlined"
+                        color="success"
+                        href="/plantillas/plantilla_colegios.xlsx"
+                        download
+                        sx={{ mr: 2 }}
+                    >
+                        Descargar Plantilla
+                    </Button>
+                    <Button variant="outlined" component="label" startIcon={<Add />}>
+                        Seleccionar Archivo
+                        <input
+                            type="file"
+                            hidden
+                            onChange={handleFileChange}
+                            accept=".xlsx, .xls, .csv"
+                        />
+                    </Button>
+                    {bulkFile && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            {bulkFile.name}
+                        </Typography>
+                    )}
+                    {bulkLoading && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+                            <CircularProgress size={24} />
+                            <Typography variant="body2" sx={{ ml: 2 }}>
+                                Procesando archivo...
+                            </Typography>
+                        </Box>
+                    )}
+                    {bulkResults && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="info">
+                                <Typography>
+                                    <strong>Colegios creados/actualizados:</strong> {bulkResults.successCount}
+                                </Typography>
+                                <Typography>
+                                    <strong>Errores:</strong> {bulkResults.errorsCount}
+                                </Typography>
+                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
+                                    <ul>
+                                        {bulkResults.errorsList.map((err, idx) => (
+                                            <li key={idx}>
+                                                Fila {err.row}: {err.errorMessage}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </Alert>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
+                    <Button
+                        onClick={handleUploadBulk}
+                        variant="contained"
+                        color="primary"
+                        disabled={!bulkFile || bulkLoading}
+                    >
+                        Subir
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             {/* Lista de Colegios */}
             <Card>

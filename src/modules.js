@@ -10,7 +10,7 @@ import {
 } from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
-import SchoolsManagementPage from './pages/SchoolsManagementPage';
+//import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import MonitorsManagementPage from './pages/MonitorsManagementPage';
 import PilotsManagementPage from './pages/PilotsManagementPage';
 import SupervisorsManagementPage from './pages/SupervisorsManagementPage';
@@ -45,17 +45,10 @@ export const modules = [
         icon: School,
         submodules: [
             {
-                key: 'escuelas',
-                name: 'Gestión de Escuelas',
-                path: 'escuelas',
-                component: SchoolYearSelectionPage,
-                roles: ['Administrador', 'Gestor'],
-            },
-            {
                 key: 'colegios',
                 name: 'Colegios',
                 path: 'colegios',
-                component: SchoolsManagementPage,
+                component: SchoolYearSelectionPage,
                 roles: ['Administrador', 'Gestor'],
             },
             {
