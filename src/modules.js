@@ -18,6 +18,7 @@ import AuxiliaresManagementPage from './pages/AuxiliaresManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import ContractsManagementPage from './pages/ContractsManagementPage';
+import ProtocolsManagementPage from './pages/ProtocolsManagementPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import PaymentsManagementPage from './pages/PaymentsManagementPage';
 import ActivityLogPage from './pages/ActivityLogPage';
@@ -161,6 +162,13 @@ export const modules = [
                 name: 'Gestión de Contratos',
                 path: 'contratos',
                 component: ContractsManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'gestion-protocolos',
+                name: 'Protocolos y Reglamentos',
+                path: 'protocolos',
+                component: ProtocolsManagementPage,
                 roles: ['Administrador', 'Gestor'],
             },
         ],
