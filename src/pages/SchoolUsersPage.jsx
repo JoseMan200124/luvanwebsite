@@ -223,35 +223,7 @@ const SchoolUsersPage = () => {
 
             const finalColumns = baseHeaders.concat(studentCols);
             sheet.columns = finalColumns.map(col => ({ header: col.header, key: col.key, width: Math.min(Math.max(col.header.length + 6, 12), 40) }));
-
-            // Rellenar filas
-            newParents.forEach((u) => {
-                const fd = u.FamilyDetail || {};
-                const row = {
-                    apellidoFamilia: fd.familyLastName ?? '',
-                    nombre: u.name ?? '',
-                    email: u.email ?? '',
-                    madreNombre: fd.motherName ?? '',
-                    madreCelular: fd.motherCellphone ?? '',
-                    madreEmail: fd.motherEmail ?? '',
-                    padreNombre: fd.fatherName ?? '',
-                    padreCelular: fd.fatherCellphone ?? '',
-                    padreEmail: fd.fatherEmail ?? '',
-                    direccionPrincipal: fd.mainAddress ?? '',
-                    direccionAlterna: fd.alternativeAddress ?? '',
-                    tipoRuta: fd.routeType ?? ''
-                };
-
-                const students = Array.isArray(fd.Students) ? fd.Students : [];
-                for (let i = 1; i <= maxStudents; i++) {
-                    const s = students[i - 1];
-                    row[`est_${i}_nombre`] = s ? (s.fullName || '') : '';
-                    row[`est_${i}_grado`] = s ? (s.grade || '') : '';
-                }
-
-                sheet.addRow(row);
-            });
-
+            
             // Formato
             sheet.getRow(1).eachCell((cell) => {
                 cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -624,34 +596,6 @@ const SchoolUsersPage = () => {
 
             const finalColumns = baseHeaders.concat(studentCols);
             sheet.columns = finalColumns.map(col => ({ header: col.header, key: col.key, width: Math.min(Math.max(col.header.length + 6, 12), 40) }));
-
-            // Rellenar filas
-            parents.forEach((u) => {
-                const fd = u.FamilyDetail || {};
-                const row = {
-                    nombre: u.name ?? '',
-                    email: u.email ?? '',
-                    apellidoFamilia: fd.familyLastName ?? '',
-                    madreNombre: fd.motherName ?? '',
-                    madreCelular: fd.motherCellphone ?? '',
-                    madreEmail: fd.motherEmail ?? '',
-                    padreNombre: fd.fatherName ?? '',
-                    padreCelular: fd.fatherCellphone ?? '',
-                    padreEmail: fd.fatherEmail ?? '',
-                    direccionPrincipal: fd.mainAddress ?? '',
-                    direccionAlterna: fd.alternativeAddress ?? '',
-                    tipoRuta: fd.routeType ?? ''
-                };
-
-                const students = Array.isArray(fd.Students) ? fd.Students : [];
-                for (let i = 1; i <= maxStudents; i++) {
-                    const s = students[i - 1];
-                    row[`est_${i}_nombre`] = s ? (s.fullName || '') : '';
-                    row[`est_${i}_grado`] = s ? (s.grade || '') : '';
-                }
-
-                sheet.addRow(row);
-            });
 
             // Formato: cabecera en negrita y relleno
             sheet.getRow(1).eachCell((cell) => {
@@ -1197,206 +1141,108 @@ const SchoolUsersPage = () => {
         setOpenEditDialog(true);
     };
 
-    const handleDownloadUserTemplate = () => {
-        // 1. Prepara listas de referencia
-        const colegios = schools.map(s => [s.id, s.name]);
-        const tiposRuta = [
-            ["Completa"],
-            ["Media AM"],
-            ["Media PM"]
+    // Descargar plantilla sólo para padres. Si hay un colegio seleccionado, prefill del campo Colegio (ID)
+    const handleDownloadParentsTemplate = () => {
+
+        const headers = [
+            "Apellido Familia",
+            "Nombre Completo",
+            "Correo electrónico",
+            "Contraseña",
+            "Nombre de la Madre",
+            "Celular de la Madre",
+            "Correo de la Madre",
+            "Nombre del Padre",
+            "Celular del Padre",
+            "Correo del Padre",
+            "Razón social",
+            "NIT",
+            "Dirección Principal",
+            "Dirección Alterna",
+            "Descuento especial (monto)",
+            "Tipo ruta",
+            "Alumno 1",
+            "Grado Alumno 1",
+            "Alumno 2",
+            "Grado Alumno 2",
+            "Alumno 3",
+            "Grado Alumno 3",
+            "Alumno 4",
+            "Grado Alumno 4"
         ];
 
-        // 2. Definir los headers por rol
-        const sheets = [
-            {
-                name: "Gestor",
-                headers: [
-                    "Nombre Completo",
-                    "Correo electrónico",
-                    "Contraseña",
-                    "Colegio (ID)"
-                ],
-                example: [
-                    "GestorEjemplo",
-                    "gestor@email.com",
-                    "contraseña123",
-                    colegios[0]?.[0] || ""
-                ]
-            },
-            {
-                name: "Administrador",
-                headers: [
-                    "Nombre Completo",
-                    "Correo electrónico",
-                    "Contraseña"
-                ],
-                example: [
-                    "AdminEjemplo",
-                    "admin@email.com",
-                    "contraseña123"
-                ]
-            },
-            {
-                name: "Padre",
-                headers: [
-                    "Nombre Completo",
-                    "Correo electrónico",
-                    "Contraseña",
-                    "Colegio (ID)",
-                    "Nombre de la Madre",
-                    "Celular de la Madre",
-                    "Correo de la Madre",
-                    "Nombre del Padre",
-                    "Celular del Padre",
-                    "Correo del Padre",
-                    "Razón social",
-                    "NIT",
-                    "Dirección Principal",
-                    "Dirección Alterna",
-                    "Descuento especial (monto)",
-                    "Tipo ruta",
-                    "Alumno 1",
-                    "Grado Alumno 1",
-                    "Alumno 2",
-                    "Grado Alumno 2",
-                    "Alumno 3",
-                    "Grado Alumno 3",
-                    "Alumno 4",
-                    "Grado Alumno 4",
-                ],
-                example: [
-                    "PadreEjemplo",
-                    "padre@email.com",
-                    "contraseña123",
-                    colegios[0]?.[0] || "",
-                    "María López",
-                    "55512345",
-                    "maria@email.com",
-                    "Carlos Pérez",
-                    "55567890",
-                    "carlos@email.com",
-                    "Razón Social Ejemplo",
-                    "1234567-8",
-                    "Calle Principal 123",
-                    "Avenida Secundaria 456",
-                    "0",
-                    tiposRuta[0][0],
-                    "Alumno Ejemplo 1",
-                    "Primero Básico",
-                    "Alumno Ejemplo 2",
-                    "Segundo",
-                    "Alumno Ejemplo 3",
-                    "Tercero",
-                    "Alumno Ejemplo 4",
-                    "Cuarto",
-                ]
-            },
-            {
-                name: "Monitora",
-                headers: [
-                    "Nombre Completo",
-                    "Correo electrónico",
-                    "Contraseña",
-                    "Colegio (ID)"
-                ],
-                example: [
-                    "MonitoraEjemplo",
-                    "moni@email.com",
-                    "contraseña123",
-                    colegios[0]?.[0] || ""
-                ]
-            },
-            {
-                name: "Piloto",
-                headers: [
-                    "Nombre Completo",
-                    "Correo electrónico",
-                    "Contraseña",
-                    "Colegio (ID)"
-                ],
-                example: [
-                    "PilotoEjemplo",
-                    "piloto@email.com",
-                    "contraseña123",
-                    colegios[0]?.[0] || ""
-                ]
-            },
-            {
-                name: "Supervisor",
-                headers: [
-                    "Nombre Completo",
-                    "Correo electrónico",
-                    "Contraseña",
-                    "Colegio (ID)",
-                    "Pilotos a Cargo (IDs separados por ;)"
-                ],
-                example: [
-                    "SupervisorEjemplo",
-                    "supervisor@email.com",
-                    "contraseña123",
-                    colegios[0]?.[0] || "",
-                    ""
-                ]
-            },
-            {
-                name: "Auxiliar",
-                headers: [
-                    "Nombre Completo",
-                    "Correo electrónico",
-                    "Contraseña",
-                    "Colegio (ID)",
-                    "Monitoras a Cargo (IDs separados por ;)"
-                ],
-                example: [
-                    "AuxiliarEjemplo",
-                    "auxiliar@email.com",
-                    "contraseña123",
-                    colegios[0]?.[0] || "",
-                    ""
-                ]
-            }
+        const example = [
+            "López Ruiz",
+            "PadreEjemplo",
+            "padre@email.com",
+            "contraseña123",
+            "María López",
+            "55512345",
+            "maria@email.com",
+            "Carlos Pérez",
+            "55567890",
+            "carlos@email.com",
+            "Razón Social Ejemplo",
+            "1234567-8",
+            "Calle Principal 123",
+            "Avenida Secundaria 456",
+            "0",
+            "Completa",
+            "Alumno Ejemplo 1",
+            "Primero Básico",
+            "Alumno Ejemplo 2",
+            "Segundo",
+            "Alumno Ejemplo 3",
+            "Tercero",
+            "Alumno Ejemplo 4",
+            "Cuarto"
         ];
 
-        // 3. Hoja de listas de referencia con columnas separadas
-        const maxRows = Math.max(colegios.length, tiposRuta.length);
+        // Hoja de listas: únicamente lista de grados del colegio gestionado (una columna)
+        // Normalizar grades del colegio gestionado como en availableGrades
+        const getManagedSchoolGrades = () => {
+            let sch = currentSchool;
+            if (!sch && schoolId && Array.isArray(schools)) sch = schools.find(s => String(s.id) === String(schoolId));
+            if (!sch && Array.isArray(schools) && schools.length > 0) sch = schools[0];
+            const gradesRaw = sch?.grades;
+            if (!gradesRaw) return [];
+            let parsed = [];
+            if (typeof gradesRaw === 'string') {
+                try { parsed = JSON.parse(gradesRaw); } catch (e) { parsed = gradesRaw.split(',').map(x => x.trim()).filter(Boolean).map(name => ({ name })); }
+            } else if (Array.isArray(gradesRaw)) parsed = gradesRaw; else return [];
+            return parsed.map(g => {
+                if (!g) return '';
+                if (typeof g === 'string') return g;
+                if (typeof g === 'object') return g.name ?? g.label ?? JSON.stringify(g);
+                return String(g);
+            }).filter(Boolean);
+        };
 
-        const wsListasData = [
-            [
-                "Colegios (ID)", "Colegios (Nombre)", "", 
-                "Tipo de Ruta"
-            ]
-        ];
-
-        for (let i = 0; i < maxRows; i++) {
-            wsListasData.push([
-                colegios[i]?.[0] ?? "", colegios[i]?.[1] ?? "", "",
-                tiposRuta[i]?.[0] ?? ""
-            ]);
+        const managedGrades = getManagedSchoolGrades();
+        const wsListasData = [["Grados"]];
+        if (managedGrades.length === 0) {
+            // fallback: include a few common grades to avoid empty list
+            wsListasData.push(["Primero Básico"]);
+            wsListasData.push(["Segundo"]);
+            wsListasData.push(["Tercero"]);
+        } else {
+            managedGrades.forEach(g => wsListasData.push([g]));
         }
 
+        const wsPadres = XLSX.utils.aoa_to_sheet([headers, example]);
+        wsPadres['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
         const wsListas = XLSX.utils.aoa_to_sheet(wsListasData);
+        wsListas['!cols'] = [{ wch: 30 }];
 
-        wsListas['!cols'] = [
-            { wch: 15 },
-            { wch: 20 },
-            { wch: 2 },
-            { wch: 15 }
-        ];
-
-        // 4. Generar el archivo
         const wb = XLSX.utils.book_new();
-        sheets.forEach(sheet => {
-            const ws = XLSX.utils.aoa_to_sheet([sheet.headers, sheet.example]);
-            ws['!cols'] = sheet.headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
-            XLSX.utils.book_append_sheet(wb, ws, sheet.name);
-        });
-        XLSX.utils.book_append_sheet(wb, wsListas, "Listas");
+        XLSX.utils.book_append_sheet(wb, wsPadres, 'Padres');
+        XLSX.utils.book_append_sheet(wb, wsListas, 'Listas');
 
-        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([wbout], { type: "application/octet-stream" });
-        const fileName = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        const fileName = `plantilla_padres_${getFormattedDateTime()}.xlsx`;
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
+        const a = document.createElement('a');
         a.href = url;
         a.download = fileName;
         document.body.appendChild(a);
@@ -1414,8 +1260,11 @@ const SchoolUsersPage = () => {
         try {
             const formData = new FormData();
             formData.append('file', bulkFile);
+            // Adjuntar el colegio gestionado para que el backend pueda enlazar los padres automáticamente
+            const schoolToAttach = currentSchool?.id || schoolId || '';
+            if (schoolToAttach) formData.append('schoolId', String(schoolToAttach));
             
-            await api.post('/users/bulk-upload', formData, {
+            await api.post('/parents/bulk-upload', formData, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                     'Content-Type': 'multipart/form-data'
@@ -1913,7 +1762,7 @@ const SchoolUsersPage = () => {
                             variant="outlined"
                             sx={{ mr: 2 }}
                             color="success"
-                            onClick={handleDownloadUserTemplate}
+                            onClick={handleDownloadParentsTemplate}
                         >
                             Descargar Plantilla
                         </Button>
