@@ -104,6 +104,7 @@ const SchoolUsersPage = () => {
     // Nuevos estados para funcionalidades
     
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
+    const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
@@ -994,7 +995,30 @@ const SchoolUsersPage = () => {
             const found = filteredUsers.find(u => u.id === userOrId) || users.find(u => u.id === userOrId);
             setSelectedUser(found ? found : { id: userOrId });
         }
-    // delete confirmation dialog removed; selection is stored in state
+        // Open confirmation dialog after selection
+        setOpenDeleteConfirm(true);
+    };
+
+    const handleCancelDelete = () => {
+        setSelectedUser(null);
+        setOpenDeleteConfirm(false);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!selectedUser || !selectedUser.id) return;
+        try {
+            setBulkLoading(true);
+            await api.delete(`/users/${selectedUser.id}`);
+            setSnackbar({ open: true, message: 'Usuario eliminado correctamente', severity: 'success' });
+            setOpenDeleteConfirm(false);
+            setSelectedUser(null);
+            fetchUsers();
+        } catch (err) {
+            console.error('Error deleting user:', err);
+            setSnackbar({ open: true, message: 'Error eliminando el usuario', severity: 'error' });
+        } finally {
+            setBulkLoading(false);
+        }
     };
 
     const handleAssignBuses = (user) => {
@@ -1799,6 +1823,22 @@ const SchoolUsersPage = () => {
                         onClick={handleBulkUpload}
                     >
                         Subir
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Diálogo de confirmación para eliminación de usuario */}
+            <Dialog open={openDeleteConfirm} onClose={handleCancelDelete} maxWidth="xs" fullWidth>
+                <DialogTitle>Eliminar Usuario</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        ¿Estás seguro que deseas eliminar al usuario <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>? Esta acción no es reversible.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancelDelete}>Cancelar</Button>
+                    <Button variant="contained" color="error" onClick={handleConfirmDelete} disabled={bulkLoading}>
+                        {bulkLoading ? 'Eliminando...' : 'Eliminar'}
                     </Button>
                 </DialogActions>
             </Dialog>
