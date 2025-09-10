@@ -559,28 +559,17 @@ const SchoolUsersPage = () => {
     const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
-            // Usar el mismo endpoint que RolesManagementPage
-            const response = await api.get('/users', {
+            // Fetch only parents from the backend endpoint
+            const response = await api.get('/users/parents', {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
-                }
+                },
+                params: { schoolId }
             });
-            
-            const usersData = response.data.users || [];
-            
-            // Excluir roles que no se manejan en esta vista:
-            // - Administrador=1, Gestor=2 (ya no se gestionan aquí)
-            // - Monitora=4, Piloto=5, Supervisor=6, Auxiliar=7
-            const excludedRoleIds = [1,2,4,5,6,7];
-            let visibleUsers = usersData.filter(u => !excludedRoleIds.includes(Number(u.roleId)));
 
-            // Filtrar usuarios por colegio si se especifica
-            const filteredUsers = schoolId ? 
-                visibleUsers.filter(user => Number(user.school) === Number(schoolId)) : 
-                visibleUsers;
-            
-            setUsers(filteredUsers);
-            setFilteredUsers(filteredUsers);
+            const usersData = response.data.users || [];
+            setUsers(usersData);
+            setFilteredUsers(usersData);
         } catch (err) {
             console.error('Error fetching users:', err);
             setSnackbar({ 

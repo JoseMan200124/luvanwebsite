@@ -398,7 +398,8 @@ const RolesManagementPage = () => {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/users');
+            // fetch all non-parent users from backend
+            const response = await api.get('/users/non-parents');
             setUsers(response.data.users || []);
         } catch (err) {
             console.error('[fetchUsers] Error:', err);
@@ -992,7 +993,7 @@ const RolesManagementPage = () => {
             let fetched = 0;
 
             // Primera petición para saber el total
-            const firstResp = await api.get('/users', { params: { page, limit } });
+            const firstResp = await api.get('/users/non-parents', { params: { page, limit } });
             allUsers = firstResp.data.users || [];
             total = firstResp.data.total || allUsers.length;
             fetched = allUsers.length;
@@ -1000,7 +1001,7 @@ const RolesManagementPage = () => {
             // Si hay más, sigue pidiendo en lotes
             while (fetched < total) {
                 page += 1;
-                const resp = await api.get('/users', { params: { page, limit } });
+                const resp = await api.get('/users/non-parents', { params: { page, limit } });
                 const usersBatch = resp.data.users || [];
                 allUsers = allUsers.concat(usersBatch);
                 fetched += usersBatch.length;
