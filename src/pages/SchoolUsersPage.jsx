@@ -158,6 +158,152 @@ const SchoolUsersPage = () => {
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
 
+    // Generar y descargar archivo Excel con los padres NUEVOS del colegio gestionado
+    const handleDownloadNewParents = async (schoolIdParam) => {
+        const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
+        if (!schoolIdToUse) {
+            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            return;
+        }
+
+        try {
+            setRouteReportLoading(true);
+
+            // Obtener padres
+            let parents = [];
+            if (Array.isArray(users) && users.length > 0 && String(users[0].school) === String(schoolIdToUse)) {
+                parents = users.slice();
+            } else {
+                const resp = await api.get('/users/parents', { params: { schoolId: schoolIdToUse } });
+                parents = resp.data.users || [];
+            }
+
+            // Filtrar sólo los nuevos según isUserNew
+            const newParents = parents.filter(u => isUserNew(u));
+
+            // Si no hay nuevos, avisar
+            if (!newParents || newParents.length === 0) {
+                setSnackbar({ open: true, message: 'No hay usuarios nuevos para descargar.', severity: 'info' });
+                return;
+            }
+
+            // Determinar máximo de hijos entre las familias nuevas
+            let maxStudents = 0;
+            newParents.forEach(u => {
+                const fd = u.FamilyDetail || {};
+                const cnt = Array.isArray(fd.Students) ? fd.Students.length : 0;
+                if (cnt > maxStudents) maxStudents = cnt;
+            });
+
+            // Construir workbook con ExcelJS
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Padres Nuevos');
+
+            // Encabezados básicos (Apellido Familia primero)
+            const baseHeaders = [
+                { header: 'Apellido Familia', key: 'apellidoFamilia' },
+                { header: 'Nombre', key: 'nombre' },
+                { header: 'Email', key: 'email' },
+                { header: 'Nombre Madre', key: 'madreNombre' },
+                { header: 'Celular Madre', key: 'madreCelular' },
+                { header: 'Email Madre', key: 'madreEmail' },
+                { header: 'Nombre Padre', key: 'padreNombre' },
+                { header: 'Celular Padre', key: 'padreCelular' },
+                { header: 'Email Padre', key: 'padreEmail' },
+                { header: 'Dirección Principal', key: 'direccionPrincipal' },
+                { header: 'Dirección Alterna', key: 'direccionAlterna' },
+                { header: 'Tipo Ruta', key: 'tipoRuta' }
+            ];
+
+            const studentCols = [];
+            for (let i = 1; i <= maxStudents; i++) {
+                studentCols.push({ header: `Estudiante ${i} - Nombre`, key: `est_${i}_nombre` });
+                studentCols.push({ header: `Estudiante ${i} - Grado`, key: `est_${i}_grado` });
+            }
+
+            const finalColumns = baseHeaders.concat(studentCols);
+            sheet.columns = finalColumns.map(col => ({ header: col.header, key: col.key, width: Math.min(Math.max(col.header.length + 6, 12), 40) }));
+
+            // Rellenar filas
+            newParents.forEach((u) => {
+                const fd = u.FamilyDetail || {};
+                const row = {
+                    apellidoFamilia: fd.familyLastName ?? '',
+                    nombre: u.name ?? '',
+                    email: u.email ?? '',
+                    madreNombre: fd.motherName ?? '',
+                    madreCelular: fd.motherCellphone ?? '',
+                    madreEmail: fd.motherEmail ?? '',
+                    padreNombre: fd.fatherName ?? '',
+                    padreCelular: fd.fatherCellphone ?? '',
+                    padreEmail: fd.fatherEmail ?? '',
+                    direccionPrincipal: fd.mainAddress ?? '',
+                    direccionAlterna: fd.alternativeAddress ?? '',
+                    tipoRuta: fd.routeType ?? ''
+                };
+
+                const students = Array.isArray(fd.Students) ? fd.Students : [];
+                for (let i = 1; i <= maxStudents; i++) {
+                    const s = students[i - 1];
+                    row[`est_${i}_nombre`] = s ? (s.fullName || '') : '';
+                    row[`est_${i}_grado`] = s ? (s.grade || '') : '';
+                }
+
+                sheet.addRow(row);
+            });
+
+            // Formato
+            sheet.getRow(1).eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            });
+
+            sheet.eachRow((row, rowIndex) => {
+                if (rowIndex === 1) return;
+                const isEven = rowIndex % 2 === 0;
+                row.eachCell((cell) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                    cell.alignment = { vertical: 'middle' };
+                });
+            });
+
+            sheet.columns.forEach((col) => {
+                const key = col.key;
+                if (key === 'madreCelular' || key === 'padreCelular') {
+                    col.alignment = { horizontal: 'center', vertical: 'middle' };
+                }
+                if (key && key.startsWith('est_') && key.endsWith('_grado')) {
+                    col.alignment = { horizontal: 'center', vertical: 'middle' };
+                }
+            });
+
+            sheet.autoFilter = { from: 'A1', to: `${sheet.getColumn(sheet.getRow(1).cellCount).letter}1` };
+            sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const selectedSchool = schools.find(s => s.id === parseInt(schoolIdToUse));
+            const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
+            const fileName = `padres_nuevos_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: `Archivo con padres nuevos de ${schoolName} descargado.`, severity: 'success' });
+        } catch (error) {
+            console.error('[handleDownloadNewParents] Error:', error);
+            setSnackbar({ open: true, message: 'Error al generar el archivo de padres nuevos', severity: 'error' });
+        } finally {
+            setRouteReportLoading(false);
+        }
+    };
+
     const handleDownloadRouteReport = async (schoolIdParam) => {
         const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
         if (!schoolIdToUse) {
@@ -416,6 +562,154 @@ const SchoolUsersPage = () => {
         } catch (error) {
             console.error('[handleDownloadRouteReport] Error:', error);
             setSnackbar({ open: true, message: 'Error al descargar el reporte de rutas', severity: 'error' });
+        } finally {
+            setRouteReportLoading(false);
+        }
+    };
+
+    // Generar y descargar archivo Excel con TODOS los padres del colegio gestionado (ExcelJS, columnas por hijo)
+    const handleDownloadAllParents = async (schoolIdParam) => {
+        const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
+        if (!schoolIdToUse) {
+            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            return;
+        }
+
+        try {
+            setRouteReportLoading(true);
+
+            // Obtener padres (usar state si aplica)
+            let parents = [];
+            if (Array.isArray(users) && users.length > 0 && String(users[0].school) === String(schoolIdToUse)) {
+                parents = users.slice();
+            } else {
+                const resp = await api.get('/users/parents', { params: { schoolId: schoolIdToUse } });
+                parents = resp.data.users || [];
+            }
+
+            // Determinar máximo de hijos entre las familias
+            let maxStudents = 0;
+            parents.forEach(u => {
+                const fd = u.FamilyDetail || {};
+                const cnt = Array.isArray(fd.Students) ? fd.Students.length : 0;
+                if (cnt > maxStudents) maxStudents = cnt;
+            });
+
+            // Construir workbook con ExcelJS
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Padres');
+
+            // Encabezados básicos
+            const baseHeaders = [
+                { header: 'Apellido Familia', key: 'apellidoFamilia' },
+                { header: 'Nombre', key: 'nombre' },
+                { header: 'Email', key: 'email' },
+                { header: 'Nombre Madre', key: 'madreNombre' },
+                { header: 'Celular Madre', key: 'madreCelular' },
+                { header: 'Email Madre', key: 'madreEmail' },
+                { header: 'Nombre Padre', key: 'padreNombre' },
+                { header: 'Celular Padre', key: 'padreCelular' },
+                { header: 'Email Padre', key: 'padreEmail' },
+                { header: 'Dirección Principal', key: 'direccionPrincipal' },
+                { header: 'Dirección Alterna', key: 'direccionAlterna' },
+                { header: 'Tipo Ruta', key: 'tipoRuta' }
+            ];
+
+            // Añadir columnas por cada hijo: Estudiante N - Nombre, Estudiante N - Grado
+            const studentCols = [];
+            for (let i = 1; i <= maxStudents; i++) {
+                studentCols.push({ header: `Estudiante ${i} - Nombre`, key: `est_${i}_nombre` });
+                studentCols.push({ header: `Estudiante ${i} - Grado`, key: `est_${i}_grado` });
+            }
+
+            const finalColumns = baseHeaders.concat(studentCols);
+            sheet.columns = finalColumns.map(col => ({ header: col.header, key: col.key, width: Math.min(Math.max(col.header.length + 6, 12), 40) }));
+
+            // Rellenar filas
+            parents.forEach((u) => {
+                const fd = u.FamilyDetail || {};
+                const row = {
+                    nombre: u.name ?? '',
+                    email: u.email ?? '',
+                    apellidoFamilia: fd.familyLastName ?? '',
+                    madreNombre: fd.motherName ?? '',
+                    madreCelular: fd.motherCellphone ?? '',
+                    madreEmail: fd.motherEmail ?? '',
+                    padreNombre: fd.fatherName ?? '',
+                    padreCelular: fd.fatherCellphone ?? '',
+                    padreEmail: fd.fatherEmail ?? '',
+                    direccionPrincipal: fd.mainAddress ?? '',
+                    direccionAlterna: fd.alternativeAddress ?? '',
+                    tipoRuta: fd.routeType ?? ''
+                };
+
+                const students = Array.isArray(fd.Students) ? fd.Students : [];
+                for (let i = 1; i <= maxStudents; i++) {
+                    const s = students[i - 1];
+                    row[`est_${i}_nombre`] = s ? (s.fullName || '') : '';
+                    row[`est_${i}_grado`] = s ? (s.grade || '') : '';
+                }
+
+                sheet.addRow(row);
+            });
+
+            // Formato: cabecera en negrita y relleno
+            sheet.getRow(1).eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            });
+
+            // Alternar color de filas
+            sheet.eachRow((row, rowIndex) => {
+                if (rowIndex === 1) return; // header
+                const isEven = rowIndex % 2 === 0;
+                row.eachCell((cell) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                    cell.alignment = { vertical: 'middle' };
+                });
+            });
+
+            // Centrar columnas de celular y todas las columnas de grado
+            sheet.columns.forEach((col) => {
+                const key = col.key;
+                if (key === 'madreCelular' || key === 'padreCelular') {
+                    col.alignment = { horizontal: 'center', vertical: 'middle' };
+                }
+                if (key && key.startsWith('est_') && key.endsWith('_grado')) {
+                    col.alignment = { horizontal: 'center', vertical: 'middle' };
+                }
+            });
+
+            // Auto filter
+            const lastColLetter = sheet.getRow(1).cellCount;
+            sheet.autoFilter = {
+                from: 'A1',
+                to: `${sheet.getColumn(lastColLetter).letter}1`
+            };
+
+            // Freeze first row and first column
+            sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+
+            // Generar buffer y descargar
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const selectedSchool = schools.find(s => s.id === parseInt(schoolIdToUse));
+            const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
+            const fileName = `padres_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: `Archivo con padres de ${schoolName} descargado.`, severity: 'success' });
+        } catch (error) {
+            console.error('[handleDownloadAllParents] Error:', error);
+            setSnackbar({ open: true, message: 'Error al generar el archivo de padres', severity: 'error' });
         } finally {
             setRouteReportLoading(false);
         }
@@ -1687,12 +1981,13 @@ const SchoolUsersPage = () => {
                                 // Generar reporte de rutas para el colegio actual
                                 await handleDownloadRouteReport(currentSchool?.id || schoolId);
                             } else if (downloadMode === 'new') {
-                                // Descargar usuarios nuevos del colegio actual (no implementado aquí)
-                                console.log('Descargar nuevos para colegio:', schoolId);
+                                        // Descargar usuarios nuevos del colegio actual
+                                        await handleDownloadNewParents(currentSchool?.id || schoolId);
+                                        setOpenSchoolSelectDialog(false);
+                            } else if (downloadMode === 'all') {
+                                await handleDownloadAllParents(currentSchool?.id || schoolId);
                                 setOpenSchoolSelectDialog(false);
                             } else {
-                                // Descargar todos los usuarios del colegio actual (no implementado aquí)
-                                console.log('Descargar todos para colegio:', schoolId);
                                 setOpenSchoolSelectDialog(false);
                             }
                         }}
