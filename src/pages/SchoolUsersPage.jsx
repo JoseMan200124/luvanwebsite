@@ -1,6 +1,7 @@
 // src/pages/SchoolUsersPage.jsx
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
     Typography,
     Box,
@@ -114,6 +115,7 @@ const SchoolUsersPage = () => {
     const [bulkLoading, setBulkLoading] = useState(false);
     const [downloadMode, setDownloadMode] = useState('');
     const [scheduleModalStudents, setScheduleModalStudents] = useState([]);
+    const [routeReportLoading, setRouteReportLoading] = useState(false);
     // Actions menu state removed: actions shown inline per row
 
     // Menu is closed inline where used
@@ -154,6 +156,269 @@ const SchoolUsersPage = () => {
         const minutes = String(currentDate.getMinutes()).padStart(2, '0');
         const seconds = String(currentDate.getSeconds()).padStart(2, '0');
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+    };
+
+    const handleDownloadRouteReport = async (schoolIdParam) => {
+        const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
+        if (!schoolIdToUse) {
+            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            return;
+        }
+
+        setRouteReportLoading(true);
+        try {
+            // Fetch all users in pages like the original implementation
+            let allUsers = [];
+            let p = 0;
+            const limit = 500;
+            let total = 0;
+            let fetched = 0;
+
+            const firstResp = await api.get('/users', { params: { page: p, limit } });
+            allUsers = firstResp.data.users || [];
+            total = firstResp.data.total || allUsers.length;
+            fetched = allUsers.length;
+
+            while (fetched < total) {
+                p += 1;
+                const resp = await api.get('/users', { params: { page: p, limit } });
+                const usersBatch = resp.data.users || [];
+                allUsers = allUsers.concat(usersBatch);
+                fetched += usersBatch.length;
+                if (usersBatch.length === 0) break;
+            }
+
+            const parentsWithRoutes = allUsers.filter(u =>
+                u.Role && (u.Role.name === 'Padre' || (u.Role.name || '').toString().toLowerCase() === 'padre') &&
+                u.FamilyDetail &&
+                u.school && parseInt(u.school) === parseInt(schoolIdToUse) &&
+                (
+                    (Array.isArray(u.FamilyDetail.ScheduleSlots) && u.FamilyDetail.ScheduleSlots.length > 0) ||
+                    (Array.isArray(u.FamilyDetail.Students) && u.FamilyDetail.Students.some(s => Array.isArray(s.ScheduleSlots) && s.ScheduleSlots.length > 0))
+                )
+            );
+
+            // Build route summary like original
+            const routeSummary = {};
+            parentsWithRoutes.forEach(user => {
+                const fd = user.FamilyDetail || {};
+                if (!fd.Students || fd.Students.length === 0) return;
+                fd.Students.forEach(student => {
+                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                    const familySlots = Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots.filter(s => !s.studentId || Number(s.studentId) === Number(student.id)) : [];
+                    const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
+                    const studentRoutePeriodSet = new Set();
+                    slotsToUse.forEach(slot => {
+                        let routeNumber = '';
+                        if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') {
+                            routeNumber = String(slot.routeNumber);
+                        }
+                        if (!routeNumber) routeNumber = 'Sin Ruta';
+                        const period = (function(slot){
+                            const ss = (slot.schoolSchedule ?? '').toString();
+                            const mSS = ss.match(/\b(AM|MD|PM|EX)\b/i);
+                            if (mSS && mSS[1]) return mSS[1].toUpperCase();
+                            const t = (slot.time ?? slot.timeSlot ?? '').toString();
+                            const mT = t.match(/\b(AM|MD|PM|EX)\b/i);
+                            if (mT && mT[1]) return mT[1].toUpperCase();
+                            return null;
+                        })(slot);
+                        if (!period) return;
+                        studentRoutePeriodSet.add(`${routeNumber}::${period}`);
+                    });
+                    studentRoutePeriodSet.forEach(k => {
+                        const [routeNumber, period] = k.split('::');
+                        if (!routeSummary[routeNumber]) routeSummary[routeNumber] = { cantAM: 0, cantPM: 0, cantMD: 0, cantEX: 0 };
+                        if (period === 'AM') routeSummary[routeNumber].cantAM++;
+                        else if (period === 'MD') routeSummary[routeNumber].cantMD++;
+                        else if (period === 'PM') routeSummary[routeNumber].cantPM++;
+                        else if (period === 'EX') routeSummary[routeNumber].cantEX++;
+                    });
+                });
+            });
+
+            // Determine max students
+            let maxStudents = 0;
+            parentsWithRoutes.forEach(user => {
+                const fd = user.FamilyDetail || {};
+                if (!fd.Students || fd.Students.length === 0) return;
+                const hasStudentWithRoute = fd.Students.some(student => {
+                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                    if (studentSlots.length > 0) return studentSlots.some(slot => /(.+):(.+)/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()));
+                    if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) return fd.ScheduleSlots.some(slot => /(.+):(.+)/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()));
+                    return false;
+                });
+                if (hasStudentWithRoute && fd.Students.length > maxStudents) maxStudents = fd.Students.length;
+            });
+
+            // familiesWithRoutes: filter parents that have at least one student with schedule slots
+            const familiesWithRoutes = parentsWithRoutes.filter(user => {
+                const fd = user.FamilyDetail || {};
+                if (!fd.Students || fd.Students.length === 0) return false;
+                if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
+                    if (fd.ScheduleSlots.some(slot => /(.+):(.+)/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()))) return true;
+                }
+                return fd.Students.some(student => {
+                    const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                    return studentSlots.some(slot => /(.+):(.+)/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()));
+                });
+            });
+
+            const workbook = new ExcelJS.Workbook();
+            // Weekday map and contact columns used by per-day sheets
+            const weekdaysMap = [ { key: 'monday', label: 'Lunes' }, { key: 'tuesday', label: 'Martes' }, { key: 'wednesday', label: 'Miércoles' }, { key: 'thursday', label: 'Jueves' }, { key: 'friday', label: 'Viernes' } ];
+            const contactCols = ['Nombre Padre', 'Email Padre', 'Nombre Mamá', 'Teléfono Mamá', 'Nombre Papá', 'Teléfono Papá'];
+
+            // Create a worksheet per weekday with per-student schedule columns for that day
+            weekdaysMap.forEach((day) => {
+                const sheet = workbook.addWorksheet(day.label);
+                const headers = ["Apellido Familia", "Tipo Ruta", "Dirección Principal", "Dirección Alterna"];
+                for (let i = 1; i <= maxStudents; i++) {
+                    headers.push(`Estudiante ${i} - Nombre`);
+                    headers.push(`Estudiante ${i} - Grado`);
+                    headers.push(`Estudiante ${i} - Hora AM`);
+                    headers.push(`Estudiante ${i} - Ruta AM`);
+                    headers.push(`Estudiante ${i} - Parada AM`);
+                    headers.push(`Estudiante ${i} - Hora MD`);
+                    headers.push(`Estudiante ${i} - Ruta MD`);
+                    headers.push(`Estudiante ${i} - Parada MD`);
+                    headers.push(`Estudiante ${i} - Hora PM`);
+                    headers.push(`Estudiante ${i} - Ruta PM`);
+                    headers.push(`Estudiante ${i} - Parada PM`);
+                    headers.push(`Estudiante ${i} - Hora EX`);
+                    headers.push(`Estudiante ${i} - Ruta EX`);
+                    headers.push(`Estudiante ${i} - Parada EX`);
+                }
+                headers.push(...contactCols);
+
+                const headerRow = sheet.addRow(headers);
+                headerRow.eachCell(cell => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF70AD47' } }; cell.font = { color: { argb: 'FFFFFFFF' }, bold: true }; cell.alignment = { horizontal: 'center', vertical: 'middle' }; cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }; });
+
+                familiesWithRoutes.forEach((user, familyIndex) => {
+                    const fd = user.FamilyDetail || {};
+                    const row = [];
+                    row.push(fd.familyLastName || '');
+                    row.push(fd.routeType || '');
+                    row.push(fd.mainAddress || '');
+                    row.push(fd.alternativeAddress || '');
+                    for (let i = 0; i < maxStudents; i++) {
+                        const student = (fd.Students && fd.Students[i]) ? fd.Students[i] : null;
+                        row.push(student ? (student.fullName || '') : '');
+                        row.push(student ? (student.grade || '') : '');
+
+                        // prepare day-specific defaults
+                        const defaultPer = { horaAM: '', rutaAM: '', paradaAM: '', horaMD: '', rutaMD: '', paradaMD: '', horaPM: '', rutaPM: '', paradaPM: '', horaEX: '', rutaEX: '', paradaEX: '' };
+                        let dataForDay = { ...defaultPer };
+
+                        if (student) {
+                            const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
+                            const familySlots = Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots.filter(s => !s.studentId || Number(s.studentId) === Number(student.id)) : [];
+                            const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
+                            slotsToUse.forEach(slot => {
+                                let slotDays = [];
+                                if (Array.isArray(slot.days)) slotDays = slot.days;
+                                else if (typeof slot.days === 'string') {
+                                    try { const parsed = JSON.parse(slot.days); if (Array.isArray(parsed)) slotDays = parsed; else slotDays = [slot.days]; } catch (e) { slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days]; }
+                                } else if (slot.days) slotDays = [slot.days];
+                                const normalizedDays = slotDays.map(d => d ? d.toString().toLowerCase() : '').filter(Boolean);
+                                if (!normalizedDays.includes(day.key)) return;
+                                const displayTime = (slot.time || slot.schoolSchedule || slot.timeSlot || '').toString();
+                                const note = slot.note || '';
+                                let routeLabel = '';
+                                if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') routeLabel = String(slot.routeNumber);
+                                const ss = (slot.schoolSchedule ?? '').toString();
+                                const mSS = ss.match(/\b(AM|MD|PM|EX)\b/i);
+                                const period = mSS && mSS[1] ? mSS[1].toUpperCase() : ( (slot.time||slot.timeSlot||'').toString().match(/\b(AM|MD|PM|EX)\b/i)?.[1] ?? null );
+                                if (!period) return;
+                                if (period === 'AM') { if (!dataForDay.horaAM) dataForDay.horaAM = displayTime; if (!dataForDay.rutaAM) dataForDay.rutaAM = routeLabel; if (!dataForDay.paradaAM) dataForDay.paradaAM = note; }
+                                else if (period === 'MD') { if (!dataForDay.horaMD) dataForDay.horaMD = displayTime; if (!dataForDay.rutaMD) dataForDay.rutaMD = routeLabel; if (!dataForDay.paradaMD) dataForDay.paradaMD = note; }
+                                else if (period === 'PM') { if (!dataForDay.horaPM) dataForDay.horaPM = displayTime; if (!dataForDay.rutaPM) dataForDay.rutaPM = routeLabel; if (!dataForDay.paradaPM) dataForDay.paradaPM = note; }
+                                else if (period === 'EX') { if (!dataForDay.horaEX) dataForDay.horaEX = displayTime; if (!dataForDay.rutaEX) dataForDay.rutaEX = routeLabel; if (!dataForDay.paradaEX) dataForDay.paradaEX = note; }
+                            });
+                        }
+
+                        // push per-period fields for this day
+                        row.push(dataForDay.horaAM); row.push(dataForDay.rutaAM || ''); row.push(dataForDay.paradaAM);
+                        row.push(dataForDay.horaMD); row.push(dataForDay.rutaMD || ''); row.push(dataForDay.paradaMD);
+                        row.push(dataForDay.horaPM); row.push(dataForDay.rutaPM || ''); row.push(dataForDay.paradaPM);
+                        row.push(dataForDay.horaEX); row.push(dataForDay.rutaEX || ''); row.push(dataForDay.paradaEX);
+                    }
+
+                    const motherName = (fd.motherName && fd.motherName.trim()) || '';
+                    const motherPhone = (fd.motherCellphone && fd.motherCellphone.trim()) || '';
+                    const fatherName = (fd.fatherName && fd.fatherName.trim()) || '';
+                    const fatherPhone = (fd.fatherCellphone && fd.fatherCellphone.trim()) || '';
+                    row.push(user.name || '');
+                    row.push(user.email || '');
+                    row.push(motherName);
+                    row.push(motherPhone);
+                    row.push(fatherName);
+                    row.push(fatherPhone);
+
+                    const rowObj = sheet.addRow(row);
+                    const isEven = (familyIndex + 1) % 2 === 0;
+                    rowObj.eachCell((cell) => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } }; cell.alignment = { horizontal: 'center', vertical: 'middle' }; cell.border = { top: { style: 'thin', color: { argb: 'FFD0D0D0' } }, left: { style: 'thin', color: { argb: 'FFD0D0D0' } }, bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } }, right: { style: 'thin', color: { argb: 'FFD0D0D0' } } }; });
+                });
+
+                // Auto-size per-day sheet columns
+                sheet.columns.forEach((column, index) => {
+                    const header = headers[index];
+                    let maxWidth = header ? header.length : 10;
+                    sheet.eachRow((row, rowNumber) => {
+                        if (rowNumber > 1) {
+                            const cell = row.getCell(index + 1);
+                            const cellLength = String(cell.value || "").length;
+                            if (cellLength > maxWidth) maxWidth = cellLength;
+                        }
+                    });
+                    column.width = Math.min(Math.max(maxWidth, 10), 50);
+                });
+
+                if (sheet.rowCount > 1 && headers.length > 0) {
+                    const getColumnLetter = (columnNumber) => {
+                        let letter = '';
+                        while (columnNumber > 0) {
+                            const remainder = (columnNumber - 1) % 26;
+                            letter = String.fromCharCode(65 + remainder) + letter;
+                            columnNumber = Math.floor((columnNumber - 1) / 26);
+                        }
+                        return letter;
+                    };
+                    const maxColumns = Math.min(headers.length, 1024);
+                    const lastColumnLetter = getColumnLetter(maxColumns);
+                    const filterRange = `A1:${lastColumnLetter}${sheet.rowCount}`;
+                    sheet.autoFilter = filterRange;
+                    for (let i = 0; i < maxColumns; i++) {
+                        const columnLetter = getColumnLetter(i + 1);
+                        try { const column = sheet.getColumn(columnLetter); if (column) column.filterButton = true; } catch (error) { break; }
+                    }
+                }
+
+                sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+            });
+
+            const selectedSchool = schools.find(s => s.id === parseInt(schoolIdToUse));
+            const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
+            const fileName = `reporte_rutas_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: `Reporte de rutas para ${schoolName} descargado exitosamente`, severity: 'success' });
+            setOpenSchoolSelectDialog(false);
+        } catch (error) {
+            console.error('[handleDownloadRouteReport] Error:', error);
+            setSnackbar({ open: true, message: 'Error al descargar el reporte de rutas', severity: 'error' });
+        } finally {
+            setRouteReportLoading(false);
+        }
     };
 
     const fetchAllPilots = async () => {
@@ -1424,24 +1689,26 @@ const SchoolUsersPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenSchoolSelectDialog(false)}>Cancelar</Button>
-                    <Button 
-                        variant="contained" 
+                    <Button
+                        variant="contained"
                         color="primary"
-                        onClick={() => {
+                        disabled={routeReportLoading}
+                        onClick={async () => {
                             if (downloadMode === 'report') {
                                 // Generar reporte de rutas para el colegio actual
-                                console.log('Generar reporte para colegio:', schoolId);
+                                await handleDownloadRouteReport(currentSchool?.id || schoolId);
                             } else if (downloadMode === 'new') {
-                                // Descargar usuarios nuevos del colegio actual
+                                // Descargar usuarios nuevos del colegio actual (no implementado aquí)
                                 console.log('Descargar nuevos para colegio:', schoolId);
+                                setOpenSchoolSelectDialog(false);
                             } else {
-                                // Descargar todos los usuarios del colegio actual
+                                // Descargar todos los usuarios del colegio actual (no implementado aquí)
                                 console.log('Descargar todos para colegio:', schoolId);
+                                setOpenSchoolSelectDialog(false);
                             }
-                            setOpenSchoolSelectDialog(false);
                         }}
                     >
-                        {downloadMode === 'report' ? 'Generar Reporte' : 'Descargar'}
+                        {routeReportLoading ? 'Generando...' : (downloadMode === 'report' ? 'Generar Reporte' : 'Descargar')}
                     </Button>
                 </DialogActions>
             </Dialog>
