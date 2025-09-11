@@ -243,7 +243,7 @@ const SchoolUsersPage = () => {
 
             sheet.columns.forEach((col) => {
                 const key = col.key;
-                if (key === 'madreCelular' || key === 'padreCelular') {
+                if (key === 'madreCelular' || key === 'padreCelular' || key === 'tipoRuta') {
                     col.alignment = { horizontal: 'center', vertical: 'middle' };
                 }
                 if (key && key.startsWith('est_') && key.endsWith('_grado')) {
@@ -253,6 +253,44 @@ const SchoolUsersPage = () => {
 
             sheet.autoFilter = { from: 'A1', to: `${sheet.getColumn(sheet.getRow(1).cellCount).letter}1` };
             sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+
+            // Populate rows for each new parent
+            newParents.forEach((u, idx) => {
+                const fd = u.FamilyDetail || {};
+                const row = [];
+                row.push(fd.familyLastName || '');
+                row.push(u.name || '');
+                row.push(u.email || '');
+                row.push(fd.motherName || '');
+                row.push(fd.motherCellphone || '');
+                row.push(fd.motherEmail || '');
+                row.push(fd.fatherName || '');
+                row.push(fd.fatherCellphone || '');
+                row.push(fd.fatherEmail || '');
+                row.push(fd.mainAddress || '');
+                row.push(fd.alternativeAddress || '');
+                row.push(fd.routeType || '');
+
+                for (let i = 0; i < maxStudents; i++) {
+                    const student = Array.isArray(fd.Students) && fd.Students[i] ? fd.Students[i] : null;
+                    row.push(student ? (student.fullName || '') : '');
+                    row.push(student ? (student.grade || '') : '');
+                }
+
+                const added = sheet.addRow(row);
+                // Apply simple styling per row (alternating background)
+                const isEven = (idx + 1) % 2 === 0;
+                added.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                    // Default vertical middle
+                    cell.alignment = { vertical: 'middle' };
+                    // Column header text
+                    const headerText = (sheet.getRow(1).getCell(colNumber).value || '').toString().toLowerCase();
+                    if (headerText.includes('celular') || headerText.includes('tipo ruta') || headerText.includes('grado')) {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    }
+                });
+            });
 
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -457,10 +495,30 @@ const SchoolUsersPage = () => {
                         }
 
                         // push per-period fields for this day
-                        row.push(dataForDay.horaAM); row.push(dataForDay.rutaAM || ''); row.push(dataForDay.paradaAM);
-                        row.push(dataForDay.horaMD); row.push(dataForDay.rutaMD || ''); row.push(dataForDay.paradaMD);
-                        row.push(dataForDay.horaPM); row.push(dataForDay.rutaPM || ''); row.push(dataForDay.paradaPM);
-                        row.push(dataForDay.horaEX); row.push(dataForDay.rutaEX || ''); row.push(dataForDay.paradaEX);
+                        const parseRouteNumber = (r) => {
+                            if (r == null) return null;
+                            const s = String(r).trim();
+                            if (s === '') return null;
+                            // Try integer first, then float
+                            const n = Number(s);
+                            return Number.isFinite(n) ? n : null;
+                        };
+
+                        row.push(dataForDay.horaAM);
+                        row.push(parseRouteNumber(dataForDay.rutaAM));
+                        row.push(dataForDay.paradaAM);
+
+                        row.push(dataForDay.horaMD);
+                        row.push(parseRouteNumber(dataForDay.rutaMD));
+                        row.push(dataForDay.paradaMD);
+
+                        row.push(dataForDay.horaPM);
+                        row.push(parseRouteNumber(dataForDay.rutaPM));
+                        row.push(dataForDay.paradaPM);
+
+                        row.push(dataForDay.horaEX);
+                        row.push(parseRouteNumber(dataForDay.rutaEX));
+                        row.push(dataForDay.paradaEX);
                     }
 
                     const motherName = (fd.motherName && fd.motherName.trim()) || '';
@@ -635,6 +693,41 @@ const SchoolUsersPage = () => {
 
             // Freeze first row and first column
             sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+
+            // Fill rows with parent data
+            parents.forEach((u, idx) => {
+                const fd = u.FamilyDetail || {};
+                const row = [];
+                row.push(fd.familyLastName || '');
+                row.push(u.name || '');
+                row.push(u.email || '');
+                row.push(fd.motherName || '');
+                row.push(fd.motherCellphone || '');
+                row.push(fd.motherEmail || '');
+                row.push(fd.fatherName || '');
+                row.push(fd.fatherCellphone || '');
+                row.push(fd.fatherEmail || '');
+                row.push(fd.mainAddress || '');
+                row.push(fd.alternativeAddress || '');
+                row.push(fd.routeType || '');
+
+                for (let i = 0; i < maxStudents; i++) {
+                    const student = Array.isArray(fd.Students) && fd.Students[i] ? fd.Students[i] : null;
+                    row.push(student ? (student.fullName || '') : '');
+                    row.push(student ? (student.grade || '') : '');
+                }
+
+                const added = sheet.addRow(row);
+                const isEven = (idx + 1) % 2 === 0;
+                added.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                    cell.alignment = { vertical: 'middle' };
+                    const headerText = (sheet.getRow(1).getCell(colNumber).value || '').toString().toLowerCase();
+                    if (headerText.includes('celular') || headerText.includes('tipo ruta') || headerText.includes('grado')) {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    }
+                });
+            });
 
             // Generar buffer y descargar
             const buffer = await workbook.xlsx.writeBuffer();
