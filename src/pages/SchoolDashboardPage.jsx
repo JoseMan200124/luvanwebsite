@@ -36,7 +36,9 @@ import {
     Group,
     ArrowBack,
     TrendingUp,
-    People
+    People,
+    Description as ContractIcon,
+    Policy as ProtocolIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
@@ -206,6 +208,24 @@ const SchoolDashboardPage = () => {
 
     const handleViewBuses = () => {
         navigate(`/admin/escuelas/${schoolYear}/${schoolId}/buses-gestion`, {
+            state: {
+                schoolYear: schoolYear || stateSchoolYear,
+                school: schoolData || stateSchool
+            }
+        });
+    };
+
+    const handleViewContracts = () => {
+        navigate(`/admin/escuelas/${schoolYear}/${schoolId}/contratos`, {
+            state: {
+                schoolYear: schoolYear || stateSchoolYear,
+                school: schoolData || stateSchool
+            }
+        });
+    };
+
+    const handleViewProtocols = () => {
+        navigate(`/admin/escuelas/${schoolYear}/${schoolId}/protocolos`, {
             state: {
                 schoolYear: schoolYear || stateSchoolYear,
                 school: schoolData || stateSchool
@@ -680,6 +700,58 @@ const SchoolDashboardPage = () => {
                                         sx={{ borderRadius: 2 }}
                                     >
                                         Ver Buses
+                                    </Button>
+                                </CardContent>
+                            </SummaryCard>
+                        </Grid>
+                        
+                        {/* Sub-sección 4: Botón de contratos */}
+                        <Grid item xs={12}>
+                            <SummaryCard>
+                                <CardContent sx={{ textAlign: 'center' }}>
+                                    <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                    <Typography variant="h6" gutterBottom>
+                                        Gestión de Contratos
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                        Ver y gestionar los contratos específicos de este colegio
+                                    </Typography>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        size="large"
+                                        startIcon={<ContractIcon />}
+                                        onClick={handleViewContracts}
+                                        fullWidth
+                                        sx={{ borderRadius: 2 }}
+                                    >
+                                        Ver Contratos
+                                    </Button>
+                                </CardContent>
+                            </SummaryCard>
+                        </Grid>
+
+                        {/* Sub-sección 5: Botón de protocolos */}
+                        <Grid item xs={12}>
+                            <SummaryCard>
+                                <CardContent sx={{ textAlign: 'center' }}>
+                                    <ProtocolIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                    <Typography variant="h6" gutterBottom>
+                                        Protocolos y Reglamentos
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                        Ver y gestionar protocolos y reglamentos de este colegio
+                                    </Typography>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        size="large"
+                                        startIcon={<ProtocolIcon />}
+                                        onClick={handleViewProtocols}
+                                        fullWidth
+                                        sx={{ borderRadius: 2 }}
+                                    >
+                                        Ver Protocolos
                                     </Button>
                                 </CardContent>
                             </SummaryCard>
