@@ -105,7 +105,9 @@ const SchoolUsersPage = () => {
     
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
+    const [openActivateConfirm, setOpenActivateConfirm] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
+    const [activateLoading, setActivateLoading] = useState(false);
     const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
     const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
@@ -843,6 +845,8 @@ const SchoolUsersPage = () => {
     };
 
     const getUserStatus = useCallback((user) => {
+        // If user has explicit state flag (DB uses 0/1), consider 0 as Inactivo
+        if (user && (user.state === 0 || user.state === '0' || user.state === false)) return 'Inactivo';
         if (isUserNew(user)) return 'Nuevo';
         if (isFamilyLastNameDuplicated(user, users)) return 'Duplicado';
         if (user.FamilyDetail && user.FamilyDetail.hasUpdatedData) return 'Actualizado';
@@ -857,6 +861,8 @@ const SchoolUsersPage = () => {
                 return 'warning';
             case 'Actualizado':
                 return 'info';
+            case 'Inactivo':
+                return 'error';
             default:
                 return 'default';
         }
@@ -975,10 +981,16 @@ const SchoolUsersPage = () => {
 
         // Filtrar por estado
         if (statusFilter) {
-            filtered = filtered.filter(user => {
-                const status = getUserStatus(user);
-                return status === statusFilter;
-            });
+            if (statusFilter === 'Activo') {
+                filtered = filtered.filter(user => !(user && (user.state === 0 || user.state === '0' || user.state === false)));
+            } else if (statusFilter === 'Inactivo') {
+                filtered = filtered.filter(user => (user && (user.state === 0 || user.state === '0' || user.state === false)));
+            } else {
+                filtered = filtered.filter(user => {
+                    const status = getUserStatus(user);
+                    return status === statusFilter;
+                });
+            }
         }
 
         setFilteredUsers(filtered);
@@ -1077,6 +1089,35 @@ const SchoolUsersPage = () => {
         }
 
         setOpenEditDialog(true);
+    };
+
+    // Activation handlers (moved out so they are accessible from the table)
+    const handleActivateClick = (user) => {
+        if (!user) return;
+        setSelectedUser(user);
+        setOpenActivateConfirm(true);
+    };
+
+    const handleCancelActivate = () => {
+        setSelectedUser(null);
+        setOpenActivateConfirm(false);
+    };
+
+    const handleConfirmActivate = async () => {
+        if (!selectedUser || !selectedUser.id) return;
+        try {
+            setActivateLoading(true);
+            await api.patch(`/users/${selectedUser.id}/state`, { state: 1 });
+            setSnackbar({ open: true, message: 'Usuario activado correctamente', severity: 'success' });
+            setOpenActivateConfirm(false);
+            setSelectedUser(null);
+            fetchUsers();
+        } catch (err) {
+            console.error('Error activating user:', err);
+            setSnackbar({ open: true, message: 'Error activando el usuario', severity: 'error' });
+        } finally {
+            setActivateLoading(false);
+        }
     };
 
     const handleDeleteClick = (userOrId) => {
@@ -1603,6 +1644,8 @@ const SchoolUsersPage = () => {
                                     <MenuItem value="Nuevo">Nuevo</MenuItem>
                                     <MenuItem value="Duplicado">Duplicado</MenuItem>
                                     <MenuItem value="Actualizado">Actualizado</MenuItem>
+                                    <MenuItem value="Activo">Activo</MenuItem>
+                                    <MenuItem value="Inactivo">Inactivo</MenuItem>
                                 </Select>
                             </FormControl>
                         </Grid>
@@ -1806,6 +1849,14 @@ const SchoolUsersPage = () => {
                                                 <TableCell>
                                                     {getUserStatus(user) === 'Activo' ? (
                                                         <Typography variant="body2" color="textSecondary">-</Typography>
+                                                    ) : getUserStatus(user) === 'Inactivo' ? (
+                                                        <Chip
+                                                            label={getUserStatus(user)}
+                                                            color={getStatusColor(getUserStatus(user))}
+                                                            size="small"
+                                                            clickable
+                                                            onClick={() => handleActivateClick(user)}
+                                                        />
                                                     ) : (
                                                         <Chip
                                                             label={getUserStatus(user)}
@@ -1932,6 +1983,22 @@ const SchoolUsersPage = () => {
                     <Button onClick={handleCancelDelete}>Cancelar</Button>
                     <Button variant="contained" color="error" onClick={handleConfirmDelete} disabled={bulkLoading}>
                         {bulkLoading ? 'Eliminando...' : 'Eliminar'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Diálogo de confirmación para activar usuario */}
+            <Dialog open={openActivateConfirm} onClose={handleCancelActivate} maxWidth="xs" fullWidth>
+                <DialogTitle>Activar Usuario</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        ¿Deseas activar al usuario <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancelActivate}>Cancelar</Button>
+                    <Button variant="contained" color="success" onClick={handleConfirmActivate} disabled={activateLoading}>
+                        {activateLoading ? 'Activando...' : 'Activar'}
                     </Button>
                 </DialogActions>
             </Dialog>
