@@ -33,6 +33,7 @@ import {
     Tooltip,
     IconButton
 } from '@mui/material';
+import { ListItemText } from '@mui/material';
 import { Snackbar, Alert } from '@mui/material';
 import {
     Edit,
@@ -315,7 +316,7 @@ const RolesManagementPage = () => {
     const [loading, setLoading] = useState(false);
 
     const [allPilots, setAllPilots] = useState([]);
-    const [selectedSupervisorPilots, setSelectedSupervisorPilots] = useState([]);
+    const [selectedSupervisorSchools, setSelectedSupervisorSchools] = useState([]);
 
     const [allMonitoras, setAllMonitoras] = useState([]);
     const [selectedAuxiliarMonitoras, setSelectedAuxiliarMonitoras] = useState([]);
@@ -443,16 +444,6 @@ const RolesManagementPage = () => {
         }
     };
 
-    const handleToggleSupervisorPilot = useCallback((pilotId) => {
-        setSelectedSupervisorPilots(prev => {
-            if (prev.includes(pilotId)) {
-                return prev.filter(x => x !== pilotId);
-            } else {
-                return [...prev, pilotId];
-            }
-        });
-    }, []);
-
     const handleToggleAuxiliarMonitora = useCallback((monitoraId) => {
         setSelectedAuxiliarMonitoras(prev => {
             if (prev.includes(monitoraId)) {
@@ -530,12 +521,18 @@ const RolesManagementPage = () => {
             });
             setOriginalStudents([]);
         }
-        // Nota: El select de contrato NO se muestra en el diálogo de edición
-        setSelectedSupervisorPilots([]);
-        if (parsedRoleId === 6 || (user.Role && user.Role.name === 'Supervisor')) {
-            const newArray = user.supervisorPilots ? user.supervisorPilots.map(sp => Number(sp.pilotId)) : [];
-            setSelectedSupervisorPilots(newArray);
-        }
+            // Nota: El select de contrato NO se muestra en el diálogo de edición
+            if (parsedRoleId === 6 || (user.Role && user.Role.name === 'Supervisor')) {
+                // If backend provides attachedSupervisorSchools (optional), use it. Otherwise try to infer from user's school
+                const attachedSchools = user.attachedSupervisorSchools || [];
+                if (attachedSchools.length > 0) {
+                    setSelectedSupervisorSchools(attachedSchools.map(s => Number(s)));
+                } else if (user.school) {
+                    setSelectedSupervisorSchools([Number(user.school)]);
+                } else {
+                    setSelectedSupervisorSchools([]);
+                }
+            }
         // Para el caso de Auxiliar
         if (user.Role?.name === 'Auxiliar') {
             const auxMonitoras = [];
@@ -599,7 +596,7 @@ const RolesManagementPage = () => {
             specialFee: 0
         });
         setOriginalStudents([]);
-        setSelectedSupervisorPilots([]);
+        setSelectedSupervisorSchools([]);
         setSchoolGrades([]);
         setOpenDialog(true);
     };
@@ -607,7 +604,7 @@ const RolesManagementPage = () => {
     const handleDialogClose = () => {
         setOpenDialog(false);
         setSelectedUser(null);
-        setSelectedSupervisorPilots([]);
+        setSelectedSupervisorSchools([]);
     };
 
     const handleDeleteClick = async (userId) => {
@@ -725,9 +722,9 @@ const RolesManagementPage = () => {
                 payload.familyDetail = familyDetailPayload;
             }
 
-            // Supervisor: pilotos a cargo
+            // Supervisor: colegios a cargo (preferred)
             if (roleIdNum === 6) {
-                payload.supervisorPilots = selectedSupervisorPilots;
+                payload.supervisorSchools = (selectedSupervisorSchools || []).map(s => Number(s));
             }
 
             // Auxiliar: monitoras asignadas (comparar con roleId numérico del payload)
@@ -2115,35 +2112,44 @@ const RolesManagementPage = () => {
                         {Number(selectedUser?.roleId) === 6 && (
                             <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
                                 <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Pilotos a cargo
+                                    Colegios a cargo
                                 </Typography>
                                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona uno o más pilotos que estarán a cargo de este Supervisor.
+                                    Selecciona uno o más colegios; todos los pilotos asignados a esos colegios serán enlazados automáticamente.
                                 </Typography>
-                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto' }}>
-                                    {allPilots.length === 0 ? (
-                                        <Typography variant="body2" color="text.secondary">
-                                            No hay pilotos disponibles.
-                                        </Typography>
-                                    ) : (
-                                        allPilots.map((pilot) => {
-                                            const checked = selectedSupervisorPilots.includes(pilot.id);
-                                            return (
-                                                <FormControlLabel
-                                                    key={pilot.id}
-                                                    control={
-                                                        <Checkbox
-                                                            checked={checked}
-                                                            onChange={() => handleToggleSupervisorPilot(pilot.id)}
-                                                            color="primary"
-                                                        />
-                                                    }
-                                                    label={`${pilot.name} - ${pilot.email} (ID: ${pilot.id})`}
-                                                    sx={{ display: 'block', mb: 1 }}
-                                                />
-                                            );
-                                        })
-                                    )}
+                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                    <InputLabel>Seleccionar Colegios</InputLabel>
+                                    <Select
+                                        multiple
+                                        value={selectedSupervisorSchools}
+                                        onChange={(e) => setSelectedSupervisorSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                        label="Seleccionar Colegios"
+                                        renderValue={(selected) => selected.map(id => (schools.find(s => s.id === id)?.name || id)).join(', ')}
+                                    >
+                                        {schools.map(s => (
+                                            <MenuItem key={s.id} value={s.id}>
+                                                <Checkbox checked={selectedSupervisorSchools.includes(s.id)} />
+                                                <ListItemText primary={s.name} />
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+
+                                <Typography variant="subtitle2" sx={{ mt: 1 }}>Pilotos enlazados automáticamente:</Typography>
+                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
+                                    {(() => {
+                                        // Compute pilots that belong to selectedSupervisorSchools
+                                        if (selectedSupervisorSchools.length === 0) return (
+                                            <Typography variant="body2" color="text.secondary">No se seleccionaron colegios.</Typography>
+                                        );
+                                        const autoPilots = allPilots.filter(p => selectedSupervisorSchools.includes(Number(p.school)));
+                                        if (autoPilots.length === 0) return (
+                                            <Typography variant="body2" color="text.secondary">No se encontraron pilotos en los colegios seleccionados.</Typography>
+                                        );
+                                        return autoPilots.map(p => (
+                                            <Typography key={p.id} variant="body2">{p.name} — {p.email} (ID: {p.id})</Typography>
+                                        ));
+                                    })()}
                                 </Paper>
                             </Box>
                         )}
