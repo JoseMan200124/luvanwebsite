@@ -166,7 +166,12 @@ const SchoolDashboardPage = () => {
                 completa: summary.completa || 0,
                 mediaAM: summary.mediaAM || 0,
                 mediaPM: summary.mediaPM || 0,
-                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0)
+                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0),
+                // support varios nombres que la API podría retornar para inactivos
+                inactive: summary.inactive ?? summary.inactivos ?? 0,
+                inactivos: summary.inactive ?? summary.inactivos ?? 0,
+                inactiveMediaAM: summary.inactiveMediaAM ?? 0,
+                inactiveMediaPM: summary.inactiveMediaPM ?? 0
             });
         } catch (err) {
             console.error('Error fetching user summary:', err);
@@ -587,13 +592,13 @@ const SchoolDashboardPage = () => {
                 {/* Sección B: Resumen de usuarios y acciones */}
                 <Grid item xs={12} lg={4}>
                     <Grid container spacing={3}>
-                        {/* Sub-sección 1: Resumen de usuarios activos */}
+                        {/* Sub-sección 1: Resumen de familias registradas */}
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <TrendingUp color="primary" />
-                                        Usuarios Activos
+                                        Familias Registradas
                                     </Typography>
                                     <Divider sx={{ mb: 2 }} />
                                     
@@ -602,7 +607,7 @@ const SchoolDashboardPage = () => {
                                             {userSummary.total}
                                         </Typography>
                                         <Typography variant="body2" color="textSecondary">
-                                            Total de usuarios
+                                            Total de familias
                                         </Typography>
                                     </Box>
 
@@ -618,7 +623,7 @@ const SchoolDashboardPage = () => {
                                             </ListItemIcon>
                                             <ListItemText 
                                                 primary="Completa" 
-                                                secondary={`${userSummary.completa} usuarios`}
+                                                secondary={`${userSummary.completa} familias`}
                                             />
                                         </ListItem>
                                         <ListItem>
@@ -632,7 +637,7 @@ const SchoolDashboardPage = () => {
                                             </ListItemIcon>
                                             <ListItemText 
                                                 primary="Media AM" 
-                                                secondary={`${userSummary.mediaAM} usuarios`}
+                                                secondary={`${userSummary.mediaAM} familias`}
                                             />
                                         </ListItem>
                                         <ListItem>
@@ -646,7 +651,21 @@ const SchoolDashboardPage = () => {
                                             </ListItemIcon>
                                             <ListItemText 
                                                 primary="Media PM" 
-                                                secondary={`${userSummary.mediaPM} usuarios`}
+                                                secondary={`${userSummary.mediaPM} familias`}
+                                            />
+                                        </ListItem>
+                                        <ListItem>
+                                            <ListItemIcon>
+                                                <Box sx={{ 
+                                                    width: 12, 
+                                                    height: 12, 
+                                                    borderRadius: '50%', 
+                                                    backgroundColor: 'grey.500' 
+                                                }} />
+                                            </ListItemIcon>
+                                            <ListItemText 
+                                                primary="Inactivos" 
+                                                secondary={`${userSummary.inactive || 0} familias`}
                                             />
                                         </ListItem>
                                     </List>
@@ -660,10 +679,10 @@ const SchoolDashboardPage = () => {
                                 <CardContent sx={{ textAlign: 'center' }}>
                                     <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
                                     <Typography variant="h6" gutterBottom>
-                                        Gestión de Usuarios
+                                        Gestión de Familias
                                     </Typography>
                                     <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar todos los usuarios registrados en este colegio
+                                        Ver y gestionar todas las familias registradas en este colegio
                                     </Typography>
                                     <Button
                                         variant="contained"
@@ -674,7 +693,7 @@ const SchoolDashboardPage = () => {
                                         fullWidth
                                         sx={{ borderRadius: 2 }}
                                     >
-                                        Ver Usuarios
+                                        Ver Familias
                                     </Button>
                                 </CardContent>
                             </SummaryCard>

@@ -1594,7 +1594,7 @@ const SchoolUsersPage = () => {
                         <SchoolIcon sx={{ fontSize: 40 }} />
                         <Box>
                             <Typography variant="h4" component="h1" gutterBottom>
-                                Usuarios - {currentSchool?.name || 'Cargando...'}
+                                Familias - {currentSchool?.name || 'Cargando...'}
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Chip 
@@ -1602,9 +1602,25 @@ const SchoolUsersPage = () => {
                                     label={`Ciclo Escolar ${currentSchoolYear}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
-                                <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {filteredUsers.length} usuarios encontrados
-                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
+                                        {filteredUsers.length} familias encontradas
+                                    </Typography>
+                                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
+                                        {(() => {
+                                            // calcular total de alumnos sumando FamilyDetail.Students.length cuando exista
+                                            try {
+                                                const total = (filteredUsers || []).reduce((acc, u) => {
+                                                    const cnt = Array.isArray(u.FamilyDetail?.Students) ? u.FamilyDetail.Students.length : (u.studentsCount || 0);
+                                                    return acc + (Number.isFinite(Number(cnt)) ? Number(cnt) : 0);
+                                                }, 0);
+                                                return `${total} alumnos`;
+                                            } catch (e) {
+                                                return `0 alumnos`;
+                                            }
+                                        })()}
+                                    </Typography>
+                                </Box>
                             </Box>
                         </Box>
                     </Box>
