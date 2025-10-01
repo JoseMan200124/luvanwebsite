@@ -1,10 +1,8 @@
-// src/context/AuthProvider.js
+// src/context/AuthProvider.jsx
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-// Ojo: Asegúrate de usar la librería "jwt-decode" real.
-// (Aquí la variable se llama "jwtDecode" pero asegúrate de tener "npm install jwt-decode")
 import { jwtDecode } from 'jwt-decode';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
@@ -14,218 +12,130 @@ import { initSocket, closeSocket } from '../services/socketService';
 
 export const AuthContext = createContext();
 
-const IDLE_TIMEOUT_MS = 20 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutos
 const CHECK_INTERVAL_MS = 30 * 1000;
+const SILENT_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos
 
 const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
     const location = useLocation();
 
     const [initialLoad, setInitialLoad] = useState(true);
-
-    const [auth, setAuth] = useState({
-        user: null,
-        token: null,
-        // Podrías guardar passwordExpired aquí, si quieres chequearlo en otras partes:
-        // passwordExpired: false,
-    });
-
-    const [lastActivity, setLastActivity] = useState(Date.now());
+    const [auth, setAuth] = useState({ user: null, token: null });
     const [showIdleSnackbar, setShowIdleSnackbar] = useState(false);
 
-    const resetTimer = useCallback(() => {
-        setLastActivity(Date.now());
+    // lastActivity se sincroniza entre pestañas vía localStorage
+    const [lastActivity, setLastActivity] = useState(() => {
+        try { const stored = localStorage.getItem('lastActivity'); return stored ? Number(stored) : Date.now(); }
+        catch (e) { return Date.now(); }
+    });
+
+    const setSharedLastActivity = useCallback((ts) => {
+        try { localStorage.setItem('lastActivity', String(ts)); } catch (e) {}
+        setLastActivity(ts);
     }, []);
 
-    useEffect(() => {
-        const checkIdle = () => {
-            const now = Date.now();
-            if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) {
-                logoutByIdle();
+    const resetTimer = useCallback(() => setSharedLastActivity(Date.now()), [setSharedLastActivity]);
+
+    const logout = useCallback(() => {
+        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); } catch (e) {}
+        closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
+    }, [navigate]);
+
+    const logoutByIdle = useCallback(() => {
+        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); } catch (e) {}
+        closeSocket(); setAuth({ user: null, token: null }); setShowIdleSnackbar(true); navigate('/login');
+    }, [navigate]);
+
+    const silentRefreshIfNeeded = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('token'); if (!token) return;
+            const decoded = jwtDecode(token); const msLeft = decoded.exp * 1000 - Date.now();
+            if (msLeft < SILENT_REFRESH_THRESHOLD_MS) {
+                const refreshToken = localStorage.getItem('refreshToken'); if (!refreshToken) return;
+                const res = await axios.post('/auth/refresh', { refreshToken });
+                const { token: newToken, refreshToken: newRefresh } = res.data;
+                if (newToken) { localStorage.setItem('token', newToken); if (newRefresh) localStorage.setItem('refreshToken', newRefresh); setAuth(prev => ({ ...prev, token: newToken })); }
             }
-        };
-        const interval = setInterval(checkIdle, CHECK_INTERVAL_MS);
-        return () => clearInterval(interval);
-    }, [auth.token, lastActivity]);
+        } catch (err) {
+            try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); } catch (e) {}
+            logout();
+        }
+    }, [logout]);
+
+    useEffect(() => {
+        const checkIdle = () => { const now = Date.now(); if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) logoutByIdle(); };
+        const interval = setInterval(checkIdle, CHECK_INTERVAL_MS); return () => clearInterval(interval);
+    }, [auth.token, lastActivity, logoutByIdle]);
 
     useEffect(() => {
         const events = ['mousemove','mousedown','touchstart','keydown','scroll'];
-        events.forEach((evt) => {
-            window.addEventListener(evt, resetTimer, true);
-        });
-        return () => {
-            events.forEach((evt) => {
-                window.removeEventListener(evt, resetTimer, true);
-            });
+        events.forEach(evt => { window.addEventListener(evt, resetTimer, true); window.addEventListener(evt, silentRefreshIfNeeded, true); });
+
+        const onStorage = (e) => {
+            if (e.key === 'lastActivity' && e.newValue) { setLastActivity(Number(e.newValue)); }
+            if (e.key === 'token' && e.newValue == null) { logout(); }
+            if (e.key === 'refreshToken' && e.newValue == null) { logout(); }
         };
-    }, [resetTimer]);
+        window.addEventListener('storage', onStorage);
 
-    // Al montar, revisamos si hay token en localStorage
+        return () => { events.forEach(evt => { window.removeEventListener(evt, resetTimer, true); window.removeEventListener(evt, silentRefreshIfNeeded, true); }); window.removeEventListener('storage', onStorage); };
+    }, [resetTimer, silentRefreshIfNeeded, logout]);
+
+    // On mount, restore token if valid
     useEffect(() => {
-        const storedToken = localStorage.getItem('token');
-        if (storedToken) {
-            try {
+        try {
+            const storedToken = localStorage.getItem('token');
+            if (storedToken) {
                 const decoded = jwtDecode(storedToken);
-                if (decoded.exp * 1000 < Date.now()) {
-                    localStorage.removeItem('token');
-                } else {
-                    setAuth({
-                        user: { ...decoded, roleId: decoded.roleId },
-                        token: storedToken,
-                    });
-                }
-            } catch (error) {
-                console.error('Token inválido:', error);
-                localStorage.removeItem('token');
+                if (decoded.exp * 1000 >= Date.now()) setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: storedToken });
+                else localStorage.removeItem('token');
             }
-        }
-
-        // Revisar si hay ?token= en la URL (caso OAuth) ...
-        const params = new URLSearchParams(location.search);
-        const tokenFromOAuth = params.get('token');
-        if (tokenFromOAuth) {
-            try {
-                const decoded = jwtDecode(tokenFromOAuth);
-                localStorage.setItem('token', tokenFromOAuth);
-                setAuth({
-                    user: { ...decoded, roleId: decoded.roleId },
-                    token: tokenFromOAuth,
-                });
-            } catch (error) {
-                console.error('Token OAuth inválido:', error);
-            }
-        }
-
+            const params = new URLSearchParams(location.search); const tokenFromOAuth = params.get('token');
+            if (tokenFromOAuth) { const decoded = jwtDecode(tokenFromOAuth); localStorage.setItem('token', tokenFromOAuth); setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: tokenFromOAuth }); }
+        } catch (e) { localStorage.removeItem('token'); }
         setInitialLoad(false);
     }, [location]);
 
-    // Inicializar el socket si hay user
-    useEffect(() => {
-        if (auth.user?.id) {
-            initSocket(auth.user.id);
-        }
-    }, [auth.user]);
+    useEffect(() => { if (auth.user?.id) initSocket(auth.user.id); }, [auth.user]);
 
-    // Nueva función login con passwordExpired
+    // login functions
     const loginUpdateParentsInfo = async (email, password) => {
         try {
-            // Llamamos a loginUser => /api/auth/login
             const response = await loginUser({ email, password });
-            const { token, passwordExpired } = response.data; // <--- AQUÍ leemos passwordExpired
-
-            const decoded = jwtDecode(token);
-
-            // Si su rol no es Padres:
-            const restrictedRoles = [3]; // Por ejemplo
-            if (!restrictedRoles.includes(decoded.roleId)) {
-                const userName = decoded.name || 'Usuario';
-                throw new Error(`Para tu usuario ${userName}, solo acceso desde la página principal.`);
-            }
-
-            // Guardar en localStorage
-            localStorage.setItem('token', token);
-
-            // Actualizar estado
-            setAuth({
-                user: { ...decoded, roleId: decoded.roleId },
-                token
-            });
-
-            // Retornar passwordExpired para que la LoginPage decida redirigir
-            return { passwordExpired };
-        } catch (error) {
-            // Manejo de error: devolvemos error
-            throw error;
-        }
+            const { token, passwordExpired, refreshToken } = response.data; const decoded = jwtDecode(token);
+            const restrictedRoles = [3]; if (!restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la página principal.`);
+            localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token }); return { passwordExpired };
+        } catch (error) { throw error; }
     };
 
-    // Nueva función login con passwordExpired
     const login = async (email, password) => {
         try {
-            // Llamamos a loginUser => /api/auth/login
             const response = await loginUser({ email, password });
-            const { token, passwordExpired } = response.data; // <--- AQUÍ leemos passwordExpired
-
-            const decoded = jwtDecode(token);
-
-            // Si su rol es Piloto o Monitora, etc. (el check que tenías):
-            const restrictedRoles = [4,5];
-            if (restrictedRoles.includes(decoded.roleId)) {
-                const userName = decoded.name || 'Usuario';
-                throw new Error(`Para tu usuario ${userName}, solo acceso desde la app móvil.`);
-            }
-
-            // Guardar en localStorage
-            localStorage.setItem('token', token);
-
-            // Actualizar estado
-            setAuth({ user:{ ...decoded, roleId:decoded.roleId }, token });
-
-
-            // Retornar passwordExpired para que la LoginPage decida redirigir
-            return { passwordExpired, roleId: decoded.roleId };
-        } catch (error) {
-            // Manejo de error: devolvemos error
-            throw error;
-        }
-    };
-
-    const logout = () => {
-        localStorage.removeItem('token');
-        closeSocket();
-        setAuth({ user: null, token: null });
-        navigate('/login');
-    };
-
-    const logoutByIdle = () => {
-        localStorage.removeItem('token');
-        closeSocket();
-        setAuth({ user: null, token: null });
-        setShowIdleSnackbar(true); // Mostrar notificación
-        navigate('/login');
+            const { token, passwordExpired, refreshToken } = response.data; const decoded = jwtDecode(token);
+            const restrictedRoles = [4,5]; if (restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la app móvil.`);
+            localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token }); return { passwordExpired, roleId: decoded.roleId };
+        } catch (error) { throw error; }
     };
 
     const verifyToken = async () => {
-        try {
-            const response = await axios.get('/auth/verify', {
-                headers: { Authorization: `Bearer ${auth.token}` },
-            });
-            setAuth({
-                user: {
-                    ...response.data.user,
-                    roleId: response.data.user.roleId,
-                },
-                token: auth.token,
-            });
-        } catch (error) {
-            console.error('Token inválido o expirado:', error);
-            logout();
-        }
+        try { const response = await axios.get('/auth/verify', { headers: { Authorization: `Bearer ${auth.token}` } }); setAuth({ user: { ...response.data.user, roleId: response.data.user.roleId }, token: auth.token }); }
+        catch (error) { logout(); }
     };
 
-    const value = {
-        auth,
-        initialLoad,
-        loginUpdateParentsInfo,
-        login,
-        logout,
-        verifyToken,
-    };
+    const value = { auth, initialLoad, loginUpdateParentsInfo, login, logout, verifyToken };
 
     return (
         <AuthContext.Provider value={value}>
             {children}
-            <Snackbar
-                open={showIdleSnackbar}
-                onClose={() => setShowIdleSnackbar(false)}
-                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-            >
-                <Alert severity="warning" sx={{ width: '100%' }}>
-                    El tiempo de inactividad venció. Vuelva a iniciar sesión.
-                </Alert>
+            <Snackbar open={showIdleSnackbar} onClose={() => setShowIdleSnackbar(false)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+                <Alert severity="warning" sx={{ width: '100%' }}>El tiempo de inactividad venció. Vuelva a iniciar sesión.</Alert>
             </Snackbar>
         </AuthContext.Provider>
     );
 };
 
 export default AuthProvider;
+        

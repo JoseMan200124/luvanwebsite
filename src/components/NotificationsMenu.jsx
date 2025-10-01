@@ -1,6 +1,7 @@
 // src/components/NotificationsMenu.jsx
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     IconButton,
     Badge,
@@ -8,6 +9,11 @@ import {
     MenuItem,
     Typography,
     Divider,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
 } from '@mui/material';
 import { Notifications, ClearAll } from '@mui/icons-material';
 import styled from 'styled-components';
@@ -26,11 +32,12 @@ const NotificationsMenu = ({ authToken }) => {
     const [anchorEl, setAnchorEl] = useState(null);
     const menuOpen = Boolean(anchorEl);
     const menuRef = useRef();
+    const navigate = useNavigate();
 
     // ==============================
     // 1) Cargar todas las notificaciones
     // ==============================
-    const fetchAllNotifications = async () => {
+    const fetchAllNotifications = useCallback(async () => {
         try {
             // Ajusta esta URL/query param si tu backend es diferente
             const response = await api.get('/notifications?allStatuses=true', {
@@ -44,7 +51,7 @@ const NotificationsMenu = ({ authToken }) => {
             console.error('Error fetching notifications:', err);
             setNotifications([]);
         }
-    };
+    }, [authToken]);
 
     // ==============================
     // 2) Marcar una notificación como leída
@@ -66,6 +73,54 @@ const NotificationsMenu = ({ authToken }) => {
             console.error('Error marking notification as read:', err);
         }
     };
+
+    const handleNotificationClick = async (notification) => {
+        try {
+            await markNotificationAsRead(notification.id);
+        } catch (e) {
+            // ignore
+        }
+        // For 'Nueva Boleta de Pago', show the receipt preview inside the menu (no navigation).
+        if (notification && notification.type === 'boleta-pago') {
+            setAnchorEl(null);
+            // open preview: try to fetch receipts for the user (using payment.User.id or payment.userId)
+            try {
+                const userId = notification.payment?.User?.id || notification.payment?.userId || null;
+                if (!userId) {
+                    // no userId available in payload: show a minimal preview with message
+                    setPreviewNotification({ notification, receipt: null });
+                    setPreviewOpen(true);
+                    return;
+                }
+                const res = await api.get(`/parents/${userId}/receipts`, { headers: { Authorization: `Bearer ${authToken}` } });
+                const recs = res.data.receipts || [];
+                // prefer matching receipt by id when available
+                const matched = notification.paymentReceiptId ? recs.find(r => String(r.id) === String(notification.paymentReceiptId)) : recs[0];
+                setPreviewNotification({ notification, receipt: matched || null });
+                setPreviewOpen(true);
+            } catch (e) {
+                console.error('Error loading receipt for preview', e);
+                setPreviewNotification({ notification, receipt: null });
+                setPreviewOpen(true);
+            }
+            return;
+        }
+
+        // Otherwise, if notification has a link, navigate to it
+        if (notification && notification.link) {
+            try {
+                setAnchorEl(null);
+                const stateObj = notification.payment ? { payment: notification.payment } : undefined;
+                navigate(notification.link, { state: stateObj });
+            } catch (e) {
+                console.error('Error navigating to notification link', e);
+            }
+        }
+    };
+
+    // Preview modal state
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewNotification, setPreviewNotification] = useState(null); // { notification, receipt }
 
     // ==============================
     // 3) Marcar TODAS como leídas
@@ -130,7 +185,7 @@ const NotificationsMenu = ({ authToken }) => {
         return () => {
             if (socket) socket.off('new_notification');
         };
-    }, [authToken]);
+    }, [authToken, fetchAllNotifications]);
 
 
     // ==============================
@@ -238,9 +293,7 @@ const NotificationsMenu = ({ authToken }) => {
                     notifications.map((notification, index) => (
                         <div key={notification.id || index}>
                             <MenuItem
-                                // Eliminamos la acción de 'onClick' individual,
-                                // ya que al abrir el menú se marcan todas
-                                // onClick={() => handleNotificationClick(notification.id)}
+                                onClick={() => handleNotificationClick(notification)}
                                 style={{
                                     position: 'relative',
                                     minHeight: '80px',
@@ -299,6 +352,55 @@ const NotificationsMenu = ({ authToken }) => {
                     ))
                 )}
             </Menu>
+
+            {/* Receipt preview dialog (local) */}
+            <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} fullWidth maxWidth="md">
+                <DialogTitle>Vista previa de Boleta</DialogTitle>
+                <DialogContent>
+                    {previewNotification && previewNotification.receipt ? (
+                        (previewNotification.receipt.fileUrl && (previewNotification.receipt.fileUrl.match(/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)(\?|$)/i))) ? (
+                            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                <img src={previewNotification.receipt.fileUrl} alt="boleta" style={{ maxWidth: '100%', maxHeight: '60vh' }} />
+                            </div>
+                        ) : (
+                            <div>
+                                {previewNotification.receipt && previewNotification.receipt.fileUrl ? (
+                                    <Button variant="outlined" href={previewNotification.receipt.fileUrl} target="_blank" rel="noreferrer">Abrir archivo</Button>
+                                ) : (
+                                    <Typography variant="body2">No se encontró la boleta para vista previa.</Typography>
+                                )}
+                            </div>
+                        )
+                    ) : (
+                        <Typography variant="body2">No hay una boleta disponible para vista previa.</Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPreviewOpen(false)}>Cerrar</Button>
+                    <Button variant="contained" onClick={async () => {
+                        // when user chooses to register a payment, navigate to page with openRegister=true
+                        try {
+                            const notif = previewNotification && previewNotification.notification;
+                            const rec = previewNotification && previewNotification.receipt;
+                            // Build URL from notification.link if available, else construct
+                            let link = notif && notif.link ? notif.link : (rec ? `/admin/escuelas/${new Date().getFullYear()}/pagos?openRegister=true&receiptId=${rec.id}&userId=${rec.userId}` : null);
+                            // ensure openRegister explicit
+                            if (link) {
+                                const base = window.location.origin;
+                                const u = new URL(link, base);
+                                u.searchParams.set('openRegister', 'true');
+                                if (rec && rec.id) u.searchParams.set('receiptId', rec.id);
+                                if (rec && rec.userId) u.searchParams.set('userId', rec.userId);
+                                const state = notif && notif.payment ? { payment: notif.payment } : (rec ? { receiptId: rec.id } : undefined);
+                                setPreviewOpen(false);
+                                navigate(u.pathname + u.search, { state });
+                            }
+                        } catch (e) {
+                            console.error('Error navigating to register from preview', e);
+                        }
+                    }}>Registrar Pago</Button>
+                </DialogActions>
+            </Dialog>
         </>
     );
 };

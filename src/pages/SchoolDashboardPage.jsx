@@ -38,6 +38,7 @@ import {
     TrendingUp,
     People,
     Description as ContractIcon,
+    Payment as PaymentIcon,
     Policy as ProtocolIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -213,6 +214,15 @@ const SchoolDashboardPage = () => {
 
     const handleViewBuses = () => {
         navigate(`/admin/escuelas/${schoolYear}/${schoolId}/buses-gestion`, {
+            state: {
+                schoolYear: schoolYear || stateSchoolYear,
+                school: schoolData || stateSchool
+            }
+        });
+    };
+
+    const handleViewPayments = () => {
+        navigate(`/admin/escuelas/${schoolYear}/${schoolId}/pagos`, {
             state: {
                 schoolYear: schoolYear || stateSchoolYear,
                 school: schoolData || stateSchool
@@ -698,7 +708,34 @@ const SchoolDashboardPage = () => {
                                 </CardContent>
                             </SummaryCard>
                         </Grid>
-                        {/* Sub-sección 3: Botón de buses */}
+
+                        {/* Sub-sección 3: Botón de pagos */}
+                        <Grid item xs={12}>
+                            <SummaryCard>
+                                <CardContent sx={{ textAlign: 'center' }}>
+                                    <PaymentIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                    <Typography variant="h6" gutterBottom>
+                                        Gestión de Pagos
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                        Accede al panel de pagos y cobros específico de este colegio
+                                    </Typography>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        size="large"
+                                        startIcon={<PaymentIcon />}
+                                        onClick={handleViewPayments}
+                                        fullWidth
+                                        sx={{ borderRadius: 2 }}
+                                    >
+                                        Ver Pagos
+                                    </Button>
+                                </CardContent>
+                            </SummaryCard>
+                        </Grid>
+
+                        {/* Sub-sección 4: Botón de buses */}
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent sx={{ textAlign: 'center' }}>
@@ -724,7 +761,7 @@ const SchoolDashboardPage = () => {
                             </SummaryCard>
                         </Grid>
                         
-                        {/* Sub-sección 4: Botón de contratos */}
+                        {/* Sub-sección 5: Botón de contratos */}
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent sx={{ textAlign: 'center' }}>
@@ -750,7 +787,7 @@ const SchoolDashboardPage = () => {
                             </SummaryCard>
                         </Grid>
 
-                        {/* Sub-sección 5: Botón de protocolos */}
+                        {/* Sub-sección 6: Botón de protocolos */}
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent sx={{ textAlign: 'center' }}>

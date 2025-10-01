@@ -120,12 +120,13 @@ const SchoolContractsPage = () => {
     const signatureRefs = useRef({});
     const [formValues, setFormValues] = useState({});
 
-    // Contratos llenados (con paginación y búsqueda)
+    // Contratos firmados (con paginación y búsqueda)
     const [filledContracts, setFilledContracts] = useState([]);
     const [filledContractsLoading, setFilledContractsLoading] = useState(false);
     const [filledContractsPage, setFilledContractsPage] = useState(1);
     const [filledContractsLimit] = useState(10);
     const [filledContractsTotalPages, setFilledContractsTotalPages] = useState(1);
+    const [filledContractsTotalCount, setFilledContractsTotalCount] = useState(0);
     const [filledContractsSearch, setFilledContractsSearch] = useState('');
 
     // Diálogo de confirmación para eliminar contrato llenado
@@ -184,7 +185,7 @@ const SchoolContractsPage = () => {
     }, [schoolId, stateSchool]);
 
     // ---------------------------
-    // useEffect para cargar contratos llenados (paginados)
+    // useEffect para cargar contratos firmados (paginados)
     // ---------------------------
     useEffect(() => {
         const fetchFilledContracts = async () => {
@@ -199,11 +200,14 @@ const SchoolContractsPage = () => {
                 });
                 setFilledContracts(response.data.data);
                 setFilledContractsTotalPages(response.data.meta.totalPages);
+                // Diferentes backends pueden usar diferentes nombres en meta para el total
+                const totalCount = response.data.meta?.totalItems ?? response.data.meta?.total ?? response.data.meta?.totalCount ?? response.data.meta?.count ?? 0;
+                setFilledContractsTotalCount(totalCount);
             } catch (error) {
-                console.error('Error al obtener los contratos llenados:', error);
+                console.error('Error al obtener los contratos firmados:', error);
                 setSnackbar({
                     open: true,
-                    message: 'Error al obtener los contratos llenados.',
+                    message: 'Error al obtener los contratos firmados.',
                     severity: 'error'
                 });
             } finally {
@@ -605,18 +609,105 @@ const SchoolContractsPage = () => {
         });
     };
 
+    // Componente local para renderizar un filled contract (evita duplicación móvil/desktop)
+    const RenderFilledContract = ({ filledContract, isMobileView }) => {
+        const familyLastName = (
+            filledContract?.parent?.FamilyDetail?.familyLastName ||
+            filledContract?.parent?.familyLastName ||
+            filledContract?.filledData?.familyLastName ||
+            ''
+        );
+
+        if (isMobileView) {
+            return (
+                <MobileFilledContractCard key={filledContract.id}>
+                    <Typography variant="h6">{filledContract.title}</Typography>
+                    <Typography variant="body2" color="textSecondary">
+                        Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                        Contrato Original: {filledContract.contract?.title}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                        Familia: {familyLastName}
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                        <Button
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => navigate(`/admin/contratos-llenados/${filledContract.uuid}`)}
+                            startIcon={<VisibilityIcon />}
+                        >
+                            Ver Detalles
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            color="secondary"
+                            onClick={() => window.open(filledContract.pdfUrl, '_blank')}
+                            startIcon={<VisibilityIcon />}
+                        >
+                            Descargar PDF
+                        </Button>
+                        <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
+                            <DeleteIcon />
+                        </IconButton>
+                    </Box>
+                </MobileFilledContractCard>
+            );
+        }
+
+        return (
+            <ListItem key={filledContract.id} divider>
+                <ListItemText
+                    primary={filledContract.title}
+                    secondary={
+                        <>
+                            <Typography variant="body2" color="textSecondary">
+                                Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                Contrato Original: {filledContract.contract?.title}
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                Familia: {familyLastName}
+                            </Typography>
+                        </>
+                    }
+                />
+                <Button
+                    variant="outlined"
+                    color="primary"
+                    onClick={() => navigate(`/admin/contratos-llenados/${filledContract.uuid}`)}
+                    startIcon={<VisibilityIcon />}
+                    style={{ marginRight: '10px' }}
+                >
+                    Ver Detalles
+                </Button>
+                <Button
+                    variant="outlined"
+                    color="secondary"
+                    onClick={() => window.open(filledContract.pdfUrl, '_blank')}
+                    startIcon={<VisibilityIcon />}
+                    style={{ marginRight: '10px' }}
+                >
+                    Descargar PDF
+                </Button>
+                <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
+                    <DeleteIcon />
+                </IconButton>
+            </ListItem>
+        );
+    };
+
     return (
         <PageContainer>
             <HeaderCard>
                 <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                         <Button
                             startIcon={<ArrowBackIcon />}
                             onClick={handleBackToDashboard}
-                            sx={{ 
-                                color: 'white',
-                                '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' }
-                            }}
+                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
                         >
                             Volver al Dashboard
                         </Button>
@@ -634,7 +725,7 @@ const SchoolContractsPage = () => {
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
                                 <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {contracts.length} contratos encontrados
+                                    {filledContractsTotalCount} contratos firmados
                                 </Typography>
                             </Box>
                         </Box>
@@ -732,12 +823,12 @@ const SchoolContractsPage = () => {
 
                 <Divider style={{ margin: '40px 0' }} />
                 <Typography variant="h5" gutterBottom>
-                    Contratos Llenos
+                    Contratos Firmados
                 </Typography>
 
                 <Box display="flex" justifyContent="flex-end" mb={2}>
                     <TextField
-                        label="Buscar Contratos Llenados"
+                        label="Buscar por familia"
                         variant="outlined"
                         size="small"
                         value={filledContractsSearch}
@@ -753,50 +844,27 @@ const SchoolContractsPage = () => {
                 ) : isMobile ? (
                     <Box>
                         {filledContracts.length === 0 ? (
-                            <Typography variant="body1">No se encontraron contratos llenados.</Typography>
+                            <Typography variant="body1">No se encontraron contratos firmados.</Typography>
                         ) : (
-                            filledContracts
-                                .filter((fc) => {
-                                    const s = filledContractsSearch.toLowerCase();
-                                    return (
-                                        fc.title.toLowerCase().includes(s) ||
-                                        fc.contract.title.toLowerCase().includes(s)
-                                    );
-                                })
-                                .map((filledContract) => (
-                                    <MobileFilledContractCard key={filledContract.id}>
-                                        <Typography variant="h6">{filledContract.title}</Typography>
-                                        <Typography variant="body2" color="textSecondary">
-                                            Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
-                                        </Typography>
-                                        <Typography variant="body2" color="textSecondary">
-                                            Contrato Original: {filledContract.contract.title}
-                                        </Typography>
-                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                                            <Button
-                                                variant="outlined"
-                                                color="primary"
-                                                onClick={() =>
-                                                    navigate(`/admin/contratos-llenados/${filledContract.uuid}`)
-                                                }
-                                                startIcon={<VisibilityIcon />}
-                                            >
-                                                Ver Detalles
-                                            </Button>
-                                            <Button
-                                                variant="outlined"
-                                                color="secondary"
-                                                onClick={() => window.open(filledContract.pdfUrl, '_blank')}
-                                                startIcon={<VisibilityIcon />}
-                                            >
-                                                Descargar PDF
-                                            </Button>
-                                            <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
-                                                <DeleteIcon />
-                                            </IconButton>
-                                        </Box>
-                                    </MobileFilledContractCard>
-                                ))
+                            <>
+                                {filledContracts
+                                    .filter((fc) => {
+                                        const s = filledContractsSearch.toLowerCase();
+                                        const familyLastName = (
+                                            fc?.parent?.FamilyDetail?.familyLastName ||
+                                            fc?.parent?.familyLastName ||
+                                            fc?.filledData?.familyLastName ||
+                                            ''
+                                        ).toLowerCase();
+                                        const contractTitle = (fc.title || (fc.contract && fc.contract.title) || '').toLowerCase();
+                                        return (
+                                            contractTitle.includes(s) || familyLastName.includes(s)
+                                        );
+                                    })
+                                    .map((filledContract) => (
+                                        <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={true} />
+                                    ))}
+                            </>
                         )}
                         {filledContractsTotalPages > 1 && (
                             <Box display="flex" justifyContent="center" mt={2}>
@@ -812,56 +880,27 @@ const SchoolContractsPage = () => {
                 ) : (
                     <List>
                         {filledContracts.length === 0 ? (
-                            <Typography variant="body1">No se encontraron contratos llenados.</Typography>
+                            <Typography variant="body1">No se encontraron contratos firmados.</Typography>
                         ) : (
-                            filledContracts
-                                .filter((fc) => {
-                                    const s = filledContractsSearch.toLowerCase();
-                                    return (
-                                        fc.title.toLowerCase().includes(s) ||
-                                        fc.contract.title.toLowerCase().includes(s)
-                                    );
-                                })
-                                .map((filledContract) => (
-                                    <ListItem key={filledContract.id} divider>
-                                        <ListItemText
-                                            primary={filledContract.title}
-                                            secondary={
-                                                <>
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
-                                                    </Typography>
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        Contrato Original: {filledContract.contract.title}
-                                                    </Typography>
-                                                </>
-                                            }
-                                        />
-                                        <Button
-                                            variant="outlined"
-                                            color="primary"
-                                            onClick={() =>
-                                                navigate(`/admin/contratos-llenados/${filledContract.uuid}`)
-                                            }
-                                            startIcon={<VisibilityIcon />}
-                                            style={{ marginRight: '10px' }}
-                                        >
-                                            Ver Detalles
-                                        </Button>
-                                        <Button
-                                            variant="outlined"
-                                            color="secondary"
-                                            onClick={() => window.open(filledContract.pdfUrl, '_blank')}
-                                            startIcon={<VisibilityIcon />}
-                                            style={{ marginRight: '10px' }}
-                                        >
-                                            Descargar PDF
-                                        </Button>
-                                        <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
-                                            <DeleteIcon />
-                                        </IconButton>
-                                    </ListItem>
-                                ))
+                            <>
+                                {filledContracts
+                                    .filter((fc) => {
+                                        const s = filledContractsSearch.toLowerCase();
+                                        const familyLastName = (
+                                            fc?.parent?.FamilyDetail?.familyLastName ||
+                                            fc?.parent?.familyLastName ||
+                                            fc?.filledData?.familyLastName ||
+                                            ''
+                                        ).toLowerCase();
+                                        const contractTitle = (fc.title || (fc.contract && fc.contract.title) || '').toLowerCase();
+                                        return (
+                                            contractTitle.includes(s) || familyLastName.includes(s)
+                                        );
+                                    })
+                                    .map((filledContract) => (
+                                        <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={false} />
+                                    ))}
+                            </>
                         )}
                         {filledContractsTotalPages > 1 && (
                             <Box display="flex" justifyContent="center" mt={2}>

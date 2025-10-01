@@ -3,10 +3,8 @@ import {
     Group,
     School,
     BarChart,
-    Payments,
     People,
     Security,
-    Description
 } from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
@@ -17,10 +15,7 @@ import SupervisorsManagementPage from './pages/SupervisorsManagementPage';
 import AuxiliaresManagementPage from './pages/AuxiliaresManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
-import ContractsManagementPage from './pages/ContractsManagementPage';
-import ProtocolsManagementPage from './pages/ProtocolsManagementPage';
 import BusesManagementPage from './pages/BusesManagementPage';
-import PaymentsManagementPage from './pages/PaymentsManagementPage';
 import ActivityLogPage from './pages/ActivityLogPage';
 import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
@@ -90,20 +85,6 @@ export const modules = [
         ],
     },
     {
-        key: 'pagos',
-        name: 'Pagos y Cobros',
-        icon: Payments,
-        submodules: [
-            {
-                key: 'pagosIndex',
-                name: 'Gestión de Pagos',
-                path: 'pagos',
-                roles: ['Administrador', 'Gestor'],
-                component: PaymentsManagementPage,
-            },
-        ],
-    },
-    {
         key: 'gestion-personal',
         name: 'Gestión de Personal',
         icon: People,
@@ -149,27 +130,6 @@ export const modules = [
                 path: 'registro-actividades',
                 component: ActivityLogPage,
                 roles: ['Gestor', 'Administrador', 'Supervisor'],
-            },
-        ],
-    },
-    {
-        key: 'contratos',
-        name: 'Contratos',
-        icon: Description,
-        submodules: [
-            {
-                key: 'gestion-contratos',
-                name: 'Gestión de Contratos',
-                path: 'contratos',
-                component: ContractsManagementPage,
-                roles: ['Administrador', 'Gestor'],
-            },
-            {
-                key: 'gestion-protocolos',
-                name: 'Protocolos y Reglamentos',
-                path: 'protocolos',
-                component: ProtocolsManagementPage,
-                roles: ['Administrador', 'Gestor'],
             },
         ],
     },

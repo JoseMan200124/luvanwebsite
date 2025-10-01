@@ -28,10 +28,10 @@ import Autocomplete from '@mui/material/Autocomplete';
 import api from '../utils/axiosConfig';
 import moment from 'moment';
 
-const ExtraordinaryPaymentSection = ({ onPaymentCreated }) => {
+const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', hideSchoolSelect = false, noWrapper = false }) => {
     // Estado del formulario de registro
     const [formData, setFormData] = useState({
-        schoolId: '',
+    schoolId: initialSchoolId || '',
         familyLastName: '',
         eventType: '',
         customPaymentType: '',
@@ -78,12 +78,16 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated }) => {
             try {
                 const res = await api.get('/schools');
                 setSchools(res.data.schools || []);
+                // If initialSchoolId provided, ensure it's set in formData
+                if (initialSchoolId) {
+                    setFormData(prev => ({ ...prev, schoolId: initialSchoolId }));
+                }
             } catch (error) {
                 console.error('Error al obtener colegios:', error);
             }
         };
         fetchSchools();
-    }, []);
+    }, [initialSchoolId]);
 
     // Cuando se cambia el colegio, se consulta el endpoint de familias para ese colegio
     useEffect(() => {
@@ -219,29 +223,31 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated }) => {
         setPage(0);
     };
 
-    return (
-        <Paper elevation={3} style={{ padding: '16px', marginBottom: '32px' }}>
-            <Typography variant="h5" gutterBottom>
-                Registro de Pago Extraordinario
-            </Typography>
+    const content = (
+        <>
             <Grid container spacing={2}>
                 {/* Formulario de registro */}
                 <Grid item xs={12}>
-                    <FormControl variant="outlined" fullWidth>
-                        <InputLabel>Colegio</InputLabel>
-                        <Select
-                            name="schoolId"
-                            label="Colegio"
-                            value={formData.schoolId}
-                            onChange={handleChange}
-                        >
-                            {schools.map((school) => (
-                                <MenuItem key={school.id} value={school.id}>
-                                    {school.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
+                    {!hideSchoolSelect ? (
+                        <FormControl variant="outlined" fullWidth>
+                            <InputLabel>Colegio</InputLabel>
+                            <Select
+                                name="schoolId"
+                                label="Colegio"
+                                value={formData.schoolId}
+                                onChange={handleChange}
+                            >
+                                {schools.map((school) => (
+                                    <MenuItem key={school.id} value={school.id}>
+                                        {school.name}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    ) : (
+                        // Hidden input to keep backend compatibility
+                        <input type="hidden" name="schoolId" value={formData.schoolId} />
+                    )}
                 </Grid>
                 <Grid item xs={12}>
                     <Autocomplete
@@ -586,6 +592,12 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated }) => {
                     </Button>
                 </DialogActions>
             </Dialog>
+        </>
+    );
+
+    return noWrapper ? content : (
+        <Paper elevation={3} style={{ padding: '16px', marginBottom: '32px' }}>
+            {content}
         </Paper>
     );
 };

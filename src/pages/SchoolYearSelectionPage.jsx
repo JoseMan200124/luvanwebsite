@@ -164,6 +164,9 @@ const SchoolYearSelectionPage = () => {
     const [schoolRouteNumbers, setSchoolRouteNumbers] = useState([]);
     const [schoolRouteSchedules, setSchoolRouteSchedules] = useState([]);
     const [schoolExtraFields, setSchoolExtraFields] = useState([]);
+    // School year bounds for the UI edit dialog
+    const [schoolYearStart, setSchoolYearStart] = useState('');
+    const [schoolYearEnd, setSchoolYearEnd] = useState('');
     
     // Estado para controlar qué acordeones están expandidos
     const [expandedPanels, setExpandedPanels] = useState({
@@ -250,7 +253,10 @@ const SchoolYearSelectionPage = () => {
                 return {
                     ...school,
                     grades: Array.isArray(parsedGrades) ? parsedGrades : [],
-                    studentsCount: Number(school.studentsCount) || 0
+                    studentsCount: Number(school.studentsCount) || 0,
+                    // Penalty fields defaults
+                    dailyPenalty: Number(school.dailyPenalty) || 0,
+                    penaltyPaused: !!school.penaltyPaused
                 };
             });
             setSchools(processedSchools);
@@ -313,6 +319,8 @@ const SchoolYearSelectionPage = () => {
         const duePaymentDayValue = school.duePaymentDay ?? '';
         const bankNameValue = school.bankName ?? '';
         const bankAccountValue = school.bankAccount ?? '';
+        const dailyPenaltyValue = school.dailyPenalty ?? 0;
+        const penaltyPausedValue = school.penaltyPaused ?? false;
 
         setSelectedSchool({
             ...school,
@@ -321,7 +329,9 @@ const SchoolYearSelectionPage = () => {
             transportFeeHalf: transportFeeHalfValue,
             duePaymentDay: duePaymentDayValue,
             bankName: bankNameValue,
-            bankAccount: bankAccountValue
+            bankAccount: bankAccountValue,
+            dailyPenalty: dailyPenaltyValue,
+            penaltyPaused: penaltyPausedValue
         });
 
         let parsedSchedules = [];
@@ -416,7 +426,9 @@ const SchoolYearSelectionPage = () => {
             }
         }
         setSchoolExtraFields(parsedExtraFields);
-
+        // Initialize school year bounds in dialog state (if present)
+        setSchoolYearStart(school.schoolYearStart || '');
+        setSchoolYearEnd(school.schoolYearEnd || '');
         setOpenEditDialog(true);
     };
 
@@ -534,7 +546,9 @@ const SchoolYearSelectionPage = () => {
             transportFeeHalf: '',
             duePaymentDay: '',
             bankName: '',
-            bankAccount: ''
+            bankAccount: '',
+            dailyPenalty: 0,
+            penaltyPaused: false
         });
         setSchoolSchedules([
             { code: 'AM', name: 'HORARIO AM', times: ['N/A'] },
@@ -546,6 +560,8 @@ const SchoolYearSelectionPage = () => {
         setSchoolExtraFields([]);
         setSchoolRouteNumbers([]);
         setSchoolRouteSchedules([]);
+        setSchoolYearStart('');
+        setSchoolYearEnd('');
         setOpenEditDialog(true);
     };
 
@@ -721,6 +737,11 @@ const SchoolYearSelectionPage = () => {
             });
             return;
         }
+        // Validate daily penalty
+        if (Number(selectedSchool.dailyPenalty) < 0) {
+            setSnackbar({ open: true, message: 'La mora diaria no puede ser negativa.', severity: 'error' });
+            return;
+        }
 
         try {
             // Normalize schedules to required shape: 4 entries AM/MD/PM/EX with name 'HORARIO XX' and single time or 'N/A'
@@ -763,7 +784,13 @@ const SchoolYearSelectionPage = () => {
                 routeNumbers: schoolRouteNumbers,
                 routeSchedules: routeSchedulesPayload,
                 bankName: selectedSchool.bankName || '',
-                bankAccount: selectedSchool.bankAccount || ''
+                bankAccount: selectedSchool.bankAccount || '',
+                // Penalty settings
+                dailyPenalty: Number(selectedSchool.dailyPenalty) || 0,
+                penaltyPaused: !!selectedSchool.penaltyPaused,
+                // school year bounds
+                schoolYearStart: schoolYearStart || null,
+                schoolYearEnd: schoolYearEnd || null
             };
 
             await api.put(`/schools/${selectedSchool.id}`, payload, {
@@ -1251,6 +1278,47 @@ const SchoolYearSelectionPage = () => {
                                     value={selectedSchool ? selectedSchool.bankAccount : ''}
                                     onChange={handleInputChange}
                                 />
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                    <TextField
+                                        name="dailyPenalty"
+                                        label="Mora diaria (Q)"
+                                        type="number"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={selectedSchool ? selectedSchool.dailyPenalty : 0}
+                                        onChange={handleInputChange}
+                                        inputProps={{ min: '0', step: '0.01' }}
+                                    />
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                checked={selectedSchool ? !!selectedSchool.penaltyPaused : false}
+                                                onChange={(e) => setSelectedSchool(prev => ({ ...prev, penaltyPaused: e.target.checked }))}
+                                            />
+                                        }
+                                        label="Mora pausada"
+                                    />
+                                </Box>
+                                <Box sx={{ display: 'flex', gap: 2 }}>
+                                    <TextField
+                                        label="Inicio Ciclo Escolar"
+                                        type="date"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={schoolYearStart || ''}
+                                        onChange={(e) => setSchoolYearStart(e.target.value)}
+                                        InputLabelProps={{ shrink: true }}
+                                    />
+                                    <TextField
+                                        label="Fin Ciclo Escolar"
+                                        type="date"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={schoolYearEnd || ''}
+                                        onChange={(e) => setSchoolYearEnd(e.target.value)}
+                                        InputLabelProps={{ shrink: true }}
+                                    />
+                                </Box>
                             </Box>
                         </AccordionDetails>
                     </StyledAccordion>

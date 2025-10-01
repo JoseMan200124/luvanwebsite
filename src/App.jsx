@@ -31,6 +31,7 @@ import SchoolUsersPage from './pages/SchoolUsersPage';
 import SchoolBusesPage from './pages/SchoolBusesPage';
 import SchoolContractsPage from './pages/SchoolContractsPage';
 import SchoolProtocolsPage from './pages/SchoolProtocolsPage';
+import SchoolPaymentsPage from './pages/SchoolPaymentsPage';
 import { modules } from './modules';
 import AdminAuditHidden from './pages/AdminAuditHidden';
 
@@ -188,6 +189,14 @@ function App() {
                             element={
                                 <ProtectedRoute roles={['Gestor','Administrador']}>
                                     <SchoolProtocolsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="escuelas/:schoolYear/:schoolId/pagos"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <SchoolPaymentsPage />
                                 </ProtectedRoute>
                             }
                         />
