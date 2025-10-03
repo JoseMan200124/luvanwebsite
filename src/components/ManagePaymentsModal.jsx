@@ -21,7 +21,7 @@ import {
     Checkbox
 } from '@mui/material';
 import TablePagination from '@mui/material/TablePagination';
-import { ReceiptLong as ReceiptIcon, Pause as PauseIcon, MonetizationOn as MoneyIcon, Block as BlockIcon, PlayArrow as PlayArrowIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
+import { ReceiptLong as ReceiptIcon, Pause as PauseIcon, MonetizationOn as MoneyIcon, Block as BlockIcon, PlayArrow as PlayArrowIcon, CheckCircle as CheckCircleIcon, Delete as DeleteIcon, Restore } from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
 import ReceiptsPane from './ReceiptsPane';
@@ -109,6 +109,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     const [openExonerateDialog, setOpenExonerateDialog] = useState(false);
     const [exonerateAmount, setExonerateAmount] = useState('');
+
+    // Delete confirmation dialog
+    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
 
     // Receipts dialog state
     const [openReceiptsDialog, setOpenReceiptsDialog] = useState(false);
@@ -349,6 +352,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     <Button variant="outlined" startIcon={<MoneyIcon />} onClick={() => setOpenExonerateDialog(true)}>Exonerar Mora</Button>
                     {/* Suspend/Activate: toggle based on user state */}
                     <Button variant="outlined" startIcon={localPayment?.User?.state === 1 ? <BlockIcon /> : <CheckCircleIcon />} onClick={() => handleAction(localPayment?.User?.state === 1 ? 'suspend' : 'activate')}>{localPayment?.User?.state === 1 ? 'Suspender' : 'Activar'}</Button>
+                    {/* Delete/Revert payment */}
+                    <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => setOpenDeleteDialog(true)}>Revertir pago</Button>
                 </Box>
 
                 {/* Exonerate Dialog */}
@@ -367,6 +372,22 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             setOpenExonerateDialog(false);
                             setExonerateAmount('');
                         }}>Exonerar</Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Delete Payment Confirmation Dialog */}
+                <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle>Confirmar revertir último pago</DialogTitle>
+                    <DialogContent>
+                        <Typography variant="body2">¿Está seguro que desea revertir el último pago? Esta acción no se puede deshacer.</Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setOpenDeleteDialog(false)}>Cancelar</Button>
+                        <Button variant="contained" color="error" onClick={() => {
+                            // call parent action to delete the payment
+                            handleAction('deletePayment');
+                            setOpenDeleteDialog(false);
+                        }}>Revertir pago</Button>
                     </DialogActions>
                 </Dialog>
 

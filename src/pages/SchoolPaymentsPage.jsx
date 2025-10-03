@@ -1034,6 +1034,22 @@ const SchoolPaymentsPage = () => {
                 const val = payload?.value;
                 await api.put(`/payments/${payment.id}/set-invoice-need`, { requiresInvoice: !!val });
                 setSnackbar({ open: true, message: `Requiere factura: ${val ? 'Sí' : 'No'}`, severity: 'success' });
+            } else if (actionName === 'deletePayment') {
+                // Delete / revert a payment record entirely. Backend must expose DELETE /payments/:id
+                try {
+                    await api.delete(`/payments/${payment.id}`);
+                    setSnackbar({ open: true, message: 'Pago revertido', severity: 'success' });
+                    // invalidate caches for this user and refresh payments/analysis
+                    invalidatePaymentHistCacheForUser(payment?.User?.id || payment?.userId || manageTarget?.User?.id || manageTarget?.userId);
+                    // close manage modal if open
+                    setOpenManageModal(false);
+                    // refresh dataset and analysis
+                    await fetchAllPayments(statusFilter, search);
+                    await fetchPaymentsAnalysis(schoolId);
+                } catch (e) {
+                    console.error('Error revirtiendo pago', e);
+                    setSnackbar({ open: true, message: 'Error revirtiendo pago', severity: 'error' });
+                }
             } else {
                 setSnackbar({ open: true, message: `Acción no manejada: ${actionName}`, severity: 'info' });
             }
