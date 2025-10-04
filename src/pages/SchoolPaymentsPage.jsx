@@ -26,6 +26,8 @@ import {
     MenuItem
 } from '@mui/material';
 import ExcelJS from 'exceljs';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { IconButton, Collapse } from '@mui/material';
 // Recharts (used by PaymentsManagement analysis)
 import {
@@ -758,15 +760,15 @@ const SchoolPaymentsPage = () => {
         setOpenManageModal(true);
     }, [ensureRecalc]);
 
-    // Download payment history as styled Excel (ExcelJS) for a given family/user
+    // Download payment history as a presentable PDF (jsPDF + autotable)
     const handleDownloadHistory = useCallback(async (payment) => {
         try {
             const userId = payment?.User?.id || payment?.userId || null;
             if (!userId) {
-                setSnackbar({ open: true, message: 'Usuario no encontrado para descargar historial', severity: 'error' });
+                setSnackbar({ open: true, message: 'Usuario no encontrado para generar reporte', severity: 'error' });
                 return;
             }
-            // Fetch full history (no pagination) from existing endpoint
+
             const attemptFetch = async (params) => {
                 try {
                     const r = await api.get('/payments/paymenthistory', { params });
@@ -777,10 +779,10 @@ const SchoolPaymentsPage = () => {
                 }
             };
 
-            let res = await attemptFetch({ userId, page: 0, limit: 100 });
+            let res = await attemptFetch({ userId, page: 0, limit: 200 });
             let histories = res.data.histories || res.data || [];
             const totalReported = res.data.totalRecords ?? res.data.totalCount ?? res.data.count ?? null;
-            // If server reports records but returned array is empty, try fetching all pages iteratively
+
             if ((Array.isArray(histories) && histories.length === 0) && totalReported && Number(totalReported) > 0) {
                 try {
                     const per = 200;
@@ -797,20 +799,14 @@ const SchoolPaymentsPage = () => {
                 }
             }
 
-            // show quick diagnostic snackbar
-            setSnackbar({ open: true, message: `Historial: ${Array.isArray(histories) ? histories.length : 0} registros (reported: ${totalReported ?? 'n/a'})`, severity: 'info' });
-
             if (!histories || histories.length === 0) {
-                // Try fallback: some data may be accessible by paymentId instead of userId
                 const paymentId = payment?.id || null;
                 if (paymentId) {
-                        // No histories by userId; try fallback to paymentId
                     try {
                         const res2 = await attemptFetch({ paymentId, page: 0, limit: 1000 });
                         const fallbackHist = res2.data.histories || res2.data || [];
                         if (Array.isArray(fallbackHist) && fallbackHist.length > 0) {
                             histories = fallbackHist;
-                            setSnackbar({ open: true, message: `Historial fallback: ${fallbackHist.length} registros`, severity: 'info' });
                         } else {
                             setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
                             return;
@@ -826,135 +822,205 @@ const SchoolPaymentsPage = () => {
                 }
             }
 
-            // Build Excel workbook using ExcelJS to match route-report style
-            const workbook = new ExcelJS.Workbook();
-            const sheet = workbook.addWorksheet('Historial de Pagos');
-
-            // columnas solicitadas por el cliente (en este orden)
-            const headers = [
-                'Apellido Familia',
-                'Tipo de Ruta',
-                'Colegio',
-                'Fecha del Pago',
-                'Monto Pagado',
-                'Mora Pagada',
-                'Descuento Extraordinario',
-                'Numero Boleta',
-                'Numero de Cuenta',
-                'Factura Envíada'
-            ];
-            sheet.addRow(headers);
-
-            // Valores que podemos derivar: familia/ruta/colegio vienen del objeto `payment` pasado
-            const familyLastName = payment?.User?.FamilyDetail?.familyLastName || '';
-            const routeType = payment?.User?.FamilyDetail?.routeType || '';
-
-            histories.forEach((h) => {
-                const row = [];
-                // Colegio: preferimos el valor provisto por el histórico, si existe
-                const schoolName = h.schoolName || h.School?.name || payment?.School?.name || '';
-                // Fecha del pago: paymentDate / createdAt / snapshot fallback
-                const dateVal = h.paymentDate || h.date || h.createdAt || '';
-                const fecha = dateVal ? moment.parseZone(dateVal).format('YYYY-MM-DD HH:mm:ss') : '';
-                // Monto pagado: amountPaid || amount || value
-                const monto = Number(h.amountPaid || h.amount || h.value || 0);
-                // Mora pagada: diferencia entre penaltyBefore y penaltyAfter (si disponibles)
-                const penaltyBefore = Number(h.penaltyBefore || 0);
-                const penaltyAfter = Number(h.penaltyAfter || 0);
-                const moraPagada = Math.max(0, penaltyBefore - penaltyAfter);
-                // Descuento extraordinario
-                const descuentoExtra = Number(h.extraordinaryDiscount || 0);
-                // Numero boleta y numero de cuenta
-                const numeroBoleta = h.numeroBoleta || h.receiptNumber || h.receipt || '';
-                const numeroCuenta = h.bankAccountNumber || h.bankAccount || '';
-                // Factura enviada: mapear a Sí/No
-                const facturaEnviada = (h.invoiceSended || h.requiresInvoice || h.requiresInvoice === false ? !!(h.invoiceSended || h.requiresInvoice) : !!h.invoiceSended) ? 'Sí' : 'No';
-
-                // Append student count to family last name for clarity
-                const studentCountFromHist = h.studentCount || 0;
-                const familyWithCount = studentCountFromHist > 0 ? `${familyLastName} (${studentCountFromHist} estudiantes)` : familyLastName;
-                row.push(familyWithCount);
-                row.push(routeType);
-                row.push(schoolName);
-                row.push(fecha);
-                row.push(monto);
-                row.push(moraPagada);
-                row.push(descuentoExtra);
-                row.push(numeroBoleta);
-                row.push(numeroCuenta);
-                row.push(facturaEnviada);
-
-                sheet.addRow(row);
-            });
-
-            // Styling header
-            sheet.getRow(1).eachCell((cell) => {
-                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-            });
-
-            // Alternating row colors and alignment (center data cells; keep numeric right-aligned)
-            sheet.eachRow((row, rowIndex) => {
-                if (rowIndex === 1) return;
-                const isEven = rowIndex % 2 === 0;
-                row.eachCell((cell, colNumber) => {
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
-                    // center by default
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    // Monto (column 5 in historial) should be right-aligned and numeric
-                    if (colNumber === 5) {
-                        cell.numFmt = '0.00';
-                        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-                    }
-                });
-            });
-
-            // Autofilter and freeze
-            const lastCol = sheet.getRow(1).cellCount;
-            const getColumnLetter = (colNumber) => {
-                let letter = '';
-                while (colNumber > 0) {
-                    const remainder = (colNumber - 1) % 26;
-                    letter = String.fromCharCode(65 + remainder) + letter;
-                    colNumber = Math.floor((colNumber - 1) / 26);
+            // Helper: fetch image and convert to dataURL
+            const fetchImageDataUrl = async (url) => {
+                try {
+                    const resp = await fetch(url);
+                    const blob = await resp.blob();
+                    return await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    return null;
                 }
-                return letter;
             };
-            const lastColLetter = getColumnLetter(lastCol);
-            sheet.autoFilter = `A1:${lastColLetter}1`;
-            sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
 
-            // Autosize columns
-            sheet.columns.forEach((column, index) => {
-                const header = headers[index] || '';
-                let maxLength = header.length;
-                sheet.eachRow((row, rowNumber) => {
-                    const cell = row.getCell(index + 1);
-                    const value = cell.value ? cell.value.toString() : '';
-                    if (value.length > maxLength) maxLength = value.length;
-                });
-                column.width = Math.min(Math.max(maxLength + 2, 10), 50);
+            // Build PDF
+            const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+            
+            let cursorY = 40;
+
+            // Try to load logo from public folder
+            const logoUrl = '/logo.png';
+            const logoData = await fetchImageDataUrl(logoUrl);
+            const logoWidth = 80;
+            const logoHeight = 80;
+            if (logoData) {
+                doc.addImage(logoData, 'PNG', 40, cursorY, logoWidth, logoHeight);
+            }
+
+            // Header text
+            doc.setFontSize(18);
+            doc.setFont(undefined, 'bold');
+            const title = 'Estado de Cuenta - Historial de Pagos';
+            const titleX = logoData ? 40 + logoWidth + 20 : 40;
+            doc.text(title, titleX, cursorY + 24);
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Generado: ${moment().format('YYYY-MM-DD HH:mm')}`, titleX, cursorY + 42);
+
+            cursorY += Math.max(logoHeight, 60) + 10;
+
+            // Family / summary block
+            const familyLastName = payment?.User?.FamilyDetail?.familyLastName || payment?.User?.familyLastName || '';
+            const studentsArr = Array.isArray(payment?.User?.FamilyDetail?.Students) ? payment.User.FamilyDetail.Students : [];
+            const studentCount = studentsArr.length || payment?.studentCount || 0;
+            const routeType = payment?.User?.FamilyDetail?.routeType || '';
+            const tarifa = Number(payment?.tarif || payment?.tariff || payment?.fee || 0);
+            const descuento = Number(payment?.User?.FamilyDetail?.specialFee ?? payment?.specialFee ?? 0);
+
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'bold');
+            doc.text('Apellidos Familia:', 40, cursorY);
+            doc.setFont(undefined, 'normal');
+            doc.text(String(familyLastName || '-'), 160, cursorY);
+
+            // Swap: show Cant. Hijos first, then the small table of Hijos below
+            doc.setFont(undefined, 'bold');
+            doc.text('Cant. Hijos:', 40, cursorY + 16);
+            doc.setFont(undefined, 'normal');
+            doc.text(String(studentCount), 160, cursorY + 16);
+
+            // Keep a reference to top of this summary block for right-side alignment
+            const summaryTopY = cursorY;
+
+            // Small table for children: first row is a centered title 'Hijos', then header Nombre | Grado
+            const childTableBody = (studentsArr || []).map(s => {
+                const name = (s.fullName || s.firstName || s.name || '').toString().trim();
+                const last = (s.lastName || '').toString().trim();
+                const full = name && last ? `${name} ${last}` : (name || last || '-');
+                const grade = (s.grade || s.gradeName || s.level || '').toString().trim() || '-';
+                return [full, grade];
             });
 
-            // Generate file
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const selectedName = (payment?.User?.FamilyDetail?.familyLastName || 'historial') + '_' + userId;
-            const fileName = `historial_pagos_${selectedName}.xlsx`;
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            if (childTableBody.length > 0) {
+                autoTable(doc, {
+                    startY: cursorY + 36,
+                    margin: { left: 40 },
+                    head: [
+                        [ { content: 'Hijos', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold', fontSize: 11, textColor: 255, fillColor: [68,114,196] } } ],
+                        ['Nombre', 'Grado']
+                    ],
+                    body: childTableBody,
+                    styles: { fontSize: 9, cellPadding: 4, lineColor: [200,200,200], lineWidth: 0.5 },
+                    headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center' },
+                    columnStyles: { 0: { cellWidth: 160 }, 1: { cellWidth: 60, halign: 'center' } },
+                    tableWidth: 'auto',
+                    theme: 'grid',
+                });
+                // move cursorY to after the child table (use lastAutoTable.finalY when available)
+                cursorY = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY !== 'undefined') ? doc.lastAutoTable.finalY + 10 : cursorY + 80;
+            } else {
+                // still render a small table with title + empty row
+                autoTable(doc, {
+                    startY: cursorY + 36,
+                    margin: { left: 40 },
+                    head: [ [ { content: 'Hijos', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold', fontSize: 11, textColor: 255, fillColor: [68,114,196] } } ], ['Nombre', 'Grado'] ],
+                    body: [['-', '-']],
+                    styles: { fontSize: 9, cellPadding: 4, lineColor: [200,200,200], lineWidth: 0.5 },
+                    headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center' },
+                    columnStyles: { 0: { cellWidth: 160 }, 1: { cellWidth: 60, halign: 'center' } },
+                    tableWidth: 'auto',
+                    theme: 'grid',
+                });
+                cursorY = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY !== 'undefined') ? doc.lastAutoTable.finalY + 10 : cursorY + 80;
+            }
+
+            // Right-side summary (Tipo de Ruta / Tarifa / Descuento) aligned to top of summary block
+            const rightLabelX = 400;
+            const rightValueX = 480;
+
+            doc.setFont(undefined, 'bold');
+            doc.text('Tipo de Ruta:', rightLabelX, summaryTopY + 16);
+            doc.setFont(undefined, 'normal');
+            doc.text(String(routeType || '-'), rightValueX, summaryTopY + 16);
+
+            doc.setFont(undefined, 'bold');
+            doc.text('Tarifa:', rightLabelX, summaryTopY + 32);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Q ${tarifa.toFixed(2)}`, rightValueX, summaryTopY + 32);
+
+            doc.setFont(undefined, 'bold');
+            doc.text('Descuento:', rightLabelX, summaryTopY + 48);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Q ${descuento.toFixed(2)}`, rightValueX, summaryTopY + 48);
+
+            // Table: Fecha | Tarifa | Mora | Total a Pagar | Pago Registrado | Saldo/Credito
+            // center all columns for a compact, centered layout
+            const tableColumnStyles = {
+                0: { halign: 'center' },
+                1: { halign: 'center' },
+                2: { halign: 'center' },
+                3: { halign: 'center' },
+                4: { halign: 'center' },
+                5: { halign: 'center' }
+            };
+
+            const tableBody = (histories || []).map(h => {
+                const dateVal = h.paymentDate || h.date || h.createdAt || h.createdAtSnapshot || '';
+                const fecha = dateVal ? moment.parseZone(dateVal).format('YYYY-MM-DD') : '';
+                const tarifaHist = Number(h.tarif || h.fee || h.amountDue || tarifa || 0);
+                const penaltyBefore = Number(h.penaltyBefore || h.penalty || 0);
+                const penaltyAfter = Number(h.penaltyAfter || 0);
+                const mora = Math.max(0, penaltyBefore - penaltyAfter) || Number(h.mora || 0);
+                const totalAPagar = Number(h.totalToPay || h.total || tarifaHist + mora - Number(h.extraordinaryDiscount || 0));
+                const pagoRegistrado = Number(h.amountPaid || h.amount || h.value || 0);
+                // Compute saldo/credito using multiple possible field names returned by backend
+                let saldo = '';
+                const hasBalanceBefore = typeof h.balanceBefore !== 'undefined' || typeof h.balance_before !== 'undefined';
+                const hasBalanceAfter = typeof h.balanceAfter !== 'undefined' || typeof h.balance_after !== 'undefined';
+                const balanceBeforeVal = Number(h.balanceBefore ?? h.balance_before ?? 0);
+                const balanceAfterVal = Number(h.balanceAfter ?? h.balance_after ?? 0);
+                if (hasBalanceBefore && hasBalanceAfter) {
+                    const diff = balanceAfterVal - balanceBeforeVal;
+                    saldo = diff === 0 ? `Q 0.00` : (diff < 0 ? `Q ${Math.abs(diff).toFixed(2)} deuda` : `Q ${diff.toFixed(2)} crédito`);
+                } else if (typeof h.remainingBalance !== 'undefined') {
+                    const rem = Number(h.remainingBalance ?? 0);
+                    saldo = `Q ${rem.toFixed(2)}`;
+                } else if (typeof h.creditBalanceAfter !== 'undefined') {
+                    // Prefer creditBalanceAfter when available (primary source for last-column Crédito)
+                    const cbAfter = Number(h.creditBalanceAfter ?? 0);
+                    saldo = `Q ${cbAfter.toFixed(2)}`;
+                } else if (typeof h.creditBalance !== 'undefined' || typeof h.credit !== 'undefined' || typeof h.creditAmount !== 'undefined') {
+                    const cb = Number(h.creditBalance ?? h.credit ?? h.creditAmount);
+                    saldo = `Q ${cb.toFixed(2)}`;
+                } else if (typeof h.balance !== 'undefined' || typeof h.saldo !== 'undefined') {
+                    const b = Number(h.balance ?? h.saldo ?? 0);
+                    saldo = `Q ${b.toFixed(2)}`;
+                } else {
+                    saldo = '';
+                }
+
+                return [fecha, tarifaHist.toFixed(2), mora.toFixed(2), totalAPagar ? Number(totalAPagar).toFixed(2) : `${(tarifaHist + mora).toFixed(2)}`, pagoRegistrado.toFixed(2), saldo];
+            });
+
+            // Add table with autoTable
+            autoTable(doc, {
+                startY: cursorY,
+                head: [[ 'Fecha', 'Tarifa', 'Mora', 'Total a Pagar', 'Pago Registrado', 'Crédito' ]],
+                body: tableBody,
+                styles: { fontSize: 9, cellPadding: 6, lineColor: [200,200,200], lineWidth: 0.5 },
+                headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center' },
+                alternateRowStyles: { fillColor: [245,245,245] },
+                columnStyles: tableColumnStyles,
+                theme: 'grid',
+                didDrawPage: (data) => {
+                    // footer if needed
+                }
+            });
+
+            // finalize and save
+            // Build the requested filename: "Reporte Historial de Pagos ApellidosFamilia.pdf"
+            const familyForName = (familyLastName && String(familyLastName).trim()) ? String(familyLastName).replace(/\s+/g, '_') : 'Familia';
+            const fileName = `Reporte Historial de Pagos Familia ${familyForName}.pdf`;
+            doc.save(fileName);
             setSnackbar({ open: true, message: 'Descarga iniciada', severity: 'success' });
         } catch (err) {
             console.error('handleDownloadHistory', err);
-            setSnackbar({ open: true, message: 'Error descargando historial', severity: 'error' });
+            setSnackbar({ open: true, message: 'Error descargando reporte PDF', severity: 'error' });
         }
     }, []);
 
@@ -1011,9 +1077,6 @@ const SchoolPaymentsPage = () => {
                 const current = !!payment.penaltyPaused;
                 await api.put(`/payments/${payment.id}`, { penaltyPaused: !current });
                 setSnackbar({ open: true, message: `${!current ? 'Mora congelada' : 'Mora reanudada'}`, severity: 'success' });
-            } else if (actionName === 'receipts') {
-                // open receipts flow (not implemented): show info for now
-                setSnackbar({ open: true, message: 'Ver/descargar boletas (pendiente)', severity: 'info' });
             } else if (actionName === 'suspend' || actionName === 'activate') {
                 const userId = payment.User?.id;
                 if (!userId) {

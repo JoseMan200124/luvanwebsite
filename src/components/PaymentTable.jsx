@@ -41,7 +41,7 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
                 <Box sx={{ display: 'inline-flex', gap: 0.5 }}>
                     <IconButton title="Registrar Pago" onClick={() => onRegisterClick && onRegisterClick(p)}><PaymentIcon /></IconButton>
                     <IconButton title="Notas" onClick={() => (onNotesClick ? onNotesClick(p) : (onReceiptClick && onReceiptClick(p)))}><NoteAltIcon /></IconButton>
-                    <IconButton title="Descargar Historial" onClick={() => (onDownloadHistory ? onDownloadHistory(p) : (onEmailClick && onEmailClick(p)))}><DownloadIcon /></IconButton>
+                    <IconButton title="Descargar Reporte PDF" onClick={() => (onDownloadHistory ? onDownloadHistory(p) : (onEmailClick && onEmailClick(p)))}><DownloadIcon /></IconButton>
                     <IconButton title="Gestionar Pagos" onClick={() => onManageClick && onManageClick(p)}><ManageAccountsIcon /></IconButton>
                 </Box>
             </TableCell>
