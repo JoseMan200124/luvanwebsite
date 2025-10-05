@@ -47,24 +47,6 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
             </TableCell>
         </TableRow>
     );
-}, (prev, next) => {
-    // only re-render if key display fields changed
-    const a = prev.p; const b = next.p;
-    const fa = a.User?.FamilyDetail || {};
-    const fb = b.User?.FamilyDetail || {};
-    const keysEqual = (
-        a.id === b.id &&
-        (fa.familyLastName || '') === (fb.familyLastName || '') &&
-        // consider auto-debit toggles as part of equality to trigger re-render when changed
-        (!!(a.automaticDebit || fa.automaticDebit || fa.autoDebit)) === (!!(b.automaticDebit || fb.automaticDebit || fb.autoDebit)) &&
-        ((fa.Students || []).length) === ((fb.Students || []).length) &&
-        (fa.routeType || '') === (fb.routeType || '') &&
-        (a.lastPaymentDate || a.lastPaidDate || a.lastPayment) === (b.lastPaymentDate || b.lastPaidDate || b.lastPayment) &&
-        Number(fa.specialFee || fa.discount || 0) === Number(fb.specialFee || fb.discount || 0) &&
-        !!(fa.requiresInvoice || a.requiresInvoice) === !!(fb.requiresInvoice || b.requiresInvoice) &&
-        ( (a.finalStatus||'') === (b.finalStatus||'') )
-    );
-    return keysEqual;
 });
 
 const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, order, orderBy, onRequestSort }) => {

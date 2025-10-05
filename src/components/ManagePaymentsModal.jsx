@@ -125,8 +125,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     setHistLoading(false);
                     return;
                 }
-
-                // Use the userId to fetch only this family's histories
                 const params = { userId, limit: histLimit, page: histPage };
                 const res = await api.get('/payments/paymenthistory', { params });
                 const arr = res.data.histories || []; // controller returns { histories }
@@ -189,7 +187,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Historial');
 
-            const headers = ['Fecha Pago', 'Crédito/Saldo', 'Tarifa', 'Descuento Extraordinario', 'Mora', 'Total a Pagar', 'Monto Pagado', 'Total pendiente de pago', 'Crédito/Saldo Disponible'];
+            const headers = ['Fecha Pago', 'Crédito/Saldo', 'Tarifa', 'Descuento Familia', 'Descuento Extraordinario', 'Mora', 'Total a Pagar', 'Monto Pagado', 'Total pendiente de pago', 'Crédito/Saldo Disponible'];
             sheet.addRow(headers);
 
             historiesArr.forEach(h => {
@@ -197,14 +195,16 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 const fecha = (typeof h.paymentDate !== 'undefined' && h.paymentDate !== null && h.paymentDate !== '') ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '0';
                 const creditoSaldo = Number(h.creditBalanceBefore ?? 0);
                 const tarifa = Number(h.tarif ?? 0);
+                const descuentoFam = Number(h.familyDiscount ?? 0);
                 const descExtra = Number(h.extraordinaryDiscount ?? 0);
                 const mora = Number(h.penaltyBefore ?? 0);
-                const totalAPagar = Number(h.totalDueBefore ?? 0);
-                const monto = Number(h.amounntPaid ?? 0);
+                const totalDueBefore = Number(h.totalDueBefore ?? 0);
+                const totalAPagar = Number(totalDueBefore - creditoSaldo - descExtra - descuentoFam);
+                const monto = Number(h.amountPaid ?? 0);
                 const totalPendiente = Number(h.totalDueAfter ?? 0);
                 const creditoDisponible = Number(h.creditBalanceAfter ?? 0);
 
-                sheet.addRow([fecha, creditoSaldo, tarifa, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible]);
+                sheet.addRow([fecha, creditoSaldo, tarifa, descuentoFam, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible]);
             });
 
             // Header style
@@ -584,11 +584,11 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             </TableRow>
                         )}
                         {!histLoading && histories.map((h) => {
-                            // PaymentHistory fields: snapshotDate, lastPaymentDate, amountPaid, tarif, accumulatedPenalty, totalDue, requiresInvoice, familyLastName
-                            const dateVal = h.lastPaymentDate || h.snapshotDate || null;
+                            // PaymentHistory fields: lastPaymentDate, amountPaid, tarif, penaltyBefore, totalDue, requiresInvoice, familyLastName
+                            const dateVal = h.lastPaymentDate || null;
                             // Prefer amountPaid (ledger actual paid amount). Fallback to tarif or totalDue for older records.
                             const amountVal = (typeof h.amountPaid !== 'undefined' && h.amountPaid !== null) ? h.amountPaid : (h.tarif ?? h.totalDue ?? 0);
-                            const penaltyVal = h.accumulatedPenalty ?? 0;
+                            const penaltyVal = h.penaltyBefore ?? 0;
                             const receiptVal = h.receiptNumber || '';
                             const invoiceReq = !!h.requiresInvoice;
                             const key = h.id || `${dateVal || ''}-${amountVal}`;

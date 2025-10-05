@@ -163,6 +163,7 @@ function PaymentHistorySection({ refresh = 0 }) {
                 "Multa Acum. (Q)",
                 "Total a Pagar (Q)",
                 "Abono (Q)",
+                "Descuento Familia (Q)",
                 "Número de Cuenta",
                 "Factura",
                 "Exoneración (Q)"
@@ -183,6 +184,7 @@ function PaymentHistorySection({ refresh = 0 }) {
                     parseFloat(h.accumulatedPenalty).toFixed(2),
                     parseFloat(h.totalDue).toFixed(2),
                     parseFloat(h.creditBalance).toFixed(2),
+                    parseFloat(h.familyDiscount || 0).toFixed(2),
                     h.bankAccountNumber || '',
                     h.requiresInvoice ? 'Sí' : 'No',
                     parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)
@@ -280,6 +282,7 @@ function PaymentHistorySection({ refresh = 0 }) {
                                     <TableCell>Multa Acum. (Q)</TableCell>
                                     <TableCell>Total a Pagar (Q)</TableCell>
                                     <TableCell>Abono (Q)</TableCell>
+                                    <TableCell>Descuento Familia (Q)</TableCell>
                                     <TableCell>Número de Cuenta</TableCell>
                                     <TableCell>Factura</TableCell>
                                     <TableCell>Exoneración (Q)</TableCell>
@@ -315,6 +318,9 @@ function PaymentHistorySection({ refresh = 0 }) {
                                         </TableCell>
                                         <TableCell>
                                             {parseFloat(h.creditBalance).toFixed(2)}
+                                        </TableCell>
+                                        <TableCell>
+                                            {parseFloat(h.familyDiscount || 0).toFixed(2)}
                                         </TableCell>
                                         <TableCell>
                                             {h.bankAccountNumber || ''}

@@ -862,7 +862,8 @@ const SchoolPaymentsPage = () => {
             doc.setFont(undefined, 'normal');
             doc.text(`Generado: ${moment().format('YYYY-MM-DD HH:mm')}`, titleX, cursorY + 42);
 
-            cursorY += Math.max(logoHeight, 60) + 10;
+            // increase vertical spacing between logo and the family summary block
+            cursorY += Math.max(logoHeight, 60) + 18;
 
             // Family / summary block
             const familyLastName = payment?.User?.FamilyDetail?.familyLastName || payment?.User?.familyLastName || '';
@@ -878,13 +879,13 @@ const SchoolPaymentsPage = () => {
             doc.setFont(undefined, 'normal');
             doc.text(String(familyLastName || '-'), 160, cursorY);
 
-            // Swap: show Cant. Hijos first, then the small table of Hijos below
             doc.setFont(undefined, 'bold');
             doc.text('Cant. Hijos:', 40, cursorY + 16);
             doc.setFont(undefined, 'normal');
             doc.text(String(studentCount), 160, cursorY + 16);
 
             // Keep a reference to top of this summary block for right-side alignment
+            // Align right-side summary to the same Y as 'Apellidos Familia'
             const summaryTopY = cursorY;
 
             // Small table for children: first row is a centered title 'Hijos', then header Nombre | Grado
@@ -934,19 +935,21 @@ const SchoolPaymentsPage = () => {
             const rightValueX = 480;
 
             doc.setFont(undefined, 'bold');
-            doc.text('Tipo de Ruta:', rightLabelX, summaryTopY + 16);
+            // Right column labels aligned with Apellidos Familia (same baseline)
+            const rightStartY = summaryTopY;
+            doc.text('Tipo de Ruta:', rightLabelX, rightStartY + 0);
             doc.setFont(undefined, 'normal');
-            doc.text(String(routeType || '-'), rightValueX, summaryTopY + 16);
+            doc.text(String(routeType || '-'), rightValueX, rightStartY + 0);
 
             doc.setFont(undefined, 'bold');
-            doc.text('Tarifa:', rightLabelX, summaryTopY + 32);
+            doc.text('Tarifa:', rightLabelX, rightStartY + 16);
             doc.setFont(undefined, 'normal');
-            doc.text(`Q ${tarifa.toFixed(2)}`, rightValueX, summaryTopY + 32);
+            doc.text(`Q ${tarifa.toFixed(2)}`, rightValueX, rightStartY + 16);
 
             doc.setFont(undefined, 'bold');
-            doc.text('Descuento:', rightLabelX, summaryTopY + 48);
+            doc.text('Descuento:', rightLabelX, rightStartY + 32);
             doc.setFont(undefined, 'normal');
-            doc.text(`Q ${descuento.toFixed(2)}`, rightValueX, summaryTopY + 48);
+            doc.text(`Q ${descuento.toFixed(2)}`, rightValueX, rightStartY + 32);
 
             // Table: Fecha | Tarifa | Mora | Total a Pagar | Pago Registrado | Saldo/Credito
             // center all columns for a compact, centered layout
@@ -959,48 +962,41 @@ const SchoolPaymentsPage = () => {
                 5: { halign: 'center' }
             };
 
+            // Strict mapping per user request:
+            // Fecha (paymentDate)
+            // Tarifa (tarif)
+            // Mora (penaltyBefore)
+            // Total a pagar (totalToPay)
+            // Pago registrado (amountPaid)
+            // Crédito (creditBalanceAfter)
+            // No fallbacks, no calculations. If field missing -> show 0 (or '0' for Fecha as requested).
             const tableBody = (histories || []).map(h => {
-                const dateVal = h.paymentDate || h.date || h.createdAt || h.createdAtSnapshot || '';
-                const fecha = dateVal ? moment.parseZone(dateVal).format('YYYY-MM-DD') : '';
-                const tarifaHist = Number(h.tarif || h.fee || h.amountDue || tarifa || 0);
-                const penaltyBefore = Number(h.penaltyBefore || h.penalty || 0);
-                const penaltyAfter = Number(h.penaltyAfter || 0);
-                const mora = Math.max(0, penaltyBefore - penaltyAfter) || Number(h.mora || 0);
-                const totalAPagar = Number(h.totalToPay || h.total || tarifaHist + mora - Number(h.extraordinaryDiscount || 0));
-                const pagoRegistrado = Number(h.amountPaid || h.amount || h.value || 0);
-                // Compute saldo/credito using multiple possible field names returned by backend
-                let saldo = '';
-                const hasBalanceBefore = typeof h.balanceBefore !== 'undefined' || typeof h.balance_before !== 'undefined';
-                const hasBalanceAfter = typeof h.balanceAfter !== 'undefined' || typeof h.balance_after !== 'undefined';
-                const balanceBeforeVal = Number(h.balanceBefore ?? h.balance_before ?? 0);
-                const balanceAfterVal = Number(h.balanceAfter ?? h.balance_after ?? 0);
-                if (hasBalanceBefore && hasBalanceAfter) {
-                    const diff = balanceAfterVal - balanceBeforeVal;
-                    saldo = diff === 0 ? `Q 0.00` : (diff < 0 ? `Q ${Math.abs(diff).toFixed(2)} deuda` : `Q ${diff.toFixed(2)} crédito`);
-                } else if (typeof h.remainingBalance !== 'undefined') {
-                    const rem = Number(h.remainingBalance ?? 0);
-                    saldo = `Q ${rem.toFixed(2)}`;
-                } else if (typeof h.creditBalanceAfter !== 'undefined') {
-                    // Prefer creditBalanceAfter when available (primary source for last-column Crédito)
-                    const cbAfter = Number(h.creditBalanceAfter ?? 0);
-                    saldo = `Q ${cbAfter.toFixed(2)}`;
-                } else if (typeof h.creditBalance !== 'undefined' || typeof h.credit !== 'undefined' || typeof h.creditAmount !== 'undefined') {
-                    const cb = Number(h.creditBalance ?? h.credit ?? h.creditAmount);
-                    saldo = `Q ${cb.toFixed(2)}`;
-                } else if (typeof h.balance !== 'undefined' || typeof h.saldo !== 'undefined') {
-                    const b = Number(h.balance ?? h.saldo ?? 0);
-                    saldo = `Q ${b.toFixed(2)}`;
-                } else {
-                    saldo = '';
-                }
+                const fecha = h.paymentDate ? moment.parseZone(h.paymentDate).format('YYYY-MM-DD') : '0';
+                const tarifaHist = Number(typeof h.tarif !== 'undefined' ? h.tarif : 0);
+                const descuentoFamilia = Number(typeof h.familyDiscount !== 'undefined' ? h.familyDiscount : 0);
+                const descuentoExtra = Number(typeof h.extraordinaryDiscount !== 'undefined' ? h.extraordinaryDiscount : 0);
+                const penaltyBefore = Number(typeof h.penaltyBefore !== 'undefined' ? h.penaltyBefore : 0);
+                const totalDueBefore = Number(typeof h.totalDueBefore !== 'undefined' ? h.totalDueBefore : 0);
+                const totalToPay = totalDueBefore - descuentoExtra - descuentoFamilia;
+                const pagoRegistrado = Number(typeof h.amountPaid !== 'undefined' ? h.amountPaid : 0);
+                const credito = Number(typeof h.creditBalanceAfter !== 'undefined' ? h.creditBalanceAfter : 0);
 
-                return [fecha, tarifaHist.toFixed(2), mora.toFixed(2), totalAPagar ? Number(totalAPagar).toFixed(2) : `${(tarifaHist + mora).toFixed(2)}`, pagoRegistrado.toFixed(2), saldo];
+                return [
+                    fecha,
+                    `Q ${tarifaHist.toFixed(2)}`,
+                    `Q ${descuentoFamilia.toFixed(2)}`,
+                    `Q ${descuentoExtra.toFixed(2)}`,
+                    `Q ${penaltyBefore.toFixed(2)}`,
+                    `Q ${totalToPay.toFixed(2)}`,
+                    `Q ${pagoRegistrado.toFixed(2)}`,
+                    `Q ${credito.toFixed(2)}`
+                ];
             });
 
             // Add table with autoTable
             autoTable(doc, {
                 startY: cursorY,
-                head: [[ 'Fecha', 'Tarifa', 'Mora', 'Total a Pagar', 'Pago Registrado', 'Crédito' ]],
+                head: [[ 'Fecha', 'Tarifa', 'Descuento Familia', 'Descuento Extra', 'Mora', 'Total a Pagar', 'Pago Registrado', 'Crédito' ]],
                 body: tableBody,
                 styles: { fontSize: 9, cellPadding: 6, lineColor: [200,200,200], lineWidth: 0.5 },
                 headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center' },
