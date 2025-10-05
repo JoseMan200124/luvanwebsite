@@ -21,7 +21,8 @@ import {
     Checkbox
 } from '@mui/material';
 import TablePagination from '@mui/material/TablePagination';
-import { ReceiptLong as ReceiptIcon, Pause as PauseIcon, MonetizationOn as MoneyIcon, Block as BlockIcon, PlayArrow as PlayArrowIcon, CheckCircle as CheckCircleIcon, Delete as DeleteIcon, Restore } from '@mui/icons-material';
+import { ReceiptLong as ReceiptIcon, Pause as PauseIcon, MonetizationOn as MoneyIcon, Block as BlockIcon, PlayArrow as PlayArrowIcon, CheckCircle as CheckCircleIcon, Restore, GetApp as DownloadIcon } from '@mui/icons-material';
+import ExcelJS from 'exceljs';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
 import ReceiptsPane from './ReceiptsPane';
@@ -54,50 +55,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     if (!global.__paymentHistCache) global.__paymentHistCache = new Map();
     const histCacheRef = React.useRef(global.__paymentHistCache);
 
-    // Load payment histories from paymenthistory (ledger) via API
-    useEffect(() => {
-        const loadHistories = async () => {
-            if (!open || !payment?.User?.id) {
-                setHistories([]);
-                return;
-            }
-            setHistLoading(true);
-            try {
-                const userId = payment.User.id;
-                const cacheKey = `${userId}:${histPage}:${histLimit}`;
-                const now = Date.now();
-
-                // Try cache
-                const cached = histCacheRef.current.get(cacheKey);
-                if (cached && (now - cached.ts) < PAYMENT_HIST_CACHE_TTL) {
-                    setHistories(cached.data || []);
-                    setHistTotal(cached.total || 0);
-                    setHistLoading(false);
-                    return;
-                }
-
-                // Use the userId to fetch only this family's histories
-                const params = { userId, limit: histLimit, page: histPage };
-                const res = await api.get('/payments/paymenthistory', { params });
-                const arr = res.data.histories || []; // controller returns { histories }
-                const total = res.data.totalRecords || res.data.total || 0;
-                setHistories(arr);
-                setHistTotal(total);
-
-                // Save to cache
-                histCacheRef.current.set(cacheKey, { ts: now, data: arr, total });
-            } catch (err) {
-                console.error('Error cargando historial de pagos:', err);
-                setHistories([]);
-            } finally {
-                setHistLoading(false);
-            }
-        };
-        loadHistories();
-    }, [open, payment, histPage, histLimit]);
-
     // compute tariff: prefer school's transport fees based on routeType, fallback to payment tariff/rate
-    const school = payment?.User.School || {};
+    const school = payment?.User?.School || {};
     // routeType is one of: 'Completa', 'Media AM', 'Media PM' — use exact mapping to school's fees
     const routeType = (family.routeType || payment?.routeType || '');
 
@@ -144,6 +103,175 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             return moment.parseZone(d).format('YYYY-MM') === boletaMonth;
         });
     }, [uploadedReceipts, boletaMonth]);
+
+    // Load payment histories from paymenthistory (ledger) via API
+    useEffect(() => {
+        const loadHistories = async () => {
+            if (!open || !payment?.User?.id) {
+                setHistories([]);
+                return;
+            }
+            setHistLoading(true);
+            try {
+                const userId = payment.User.id;
+                const cacheKey = `${userId}:${histPage}:${histLimit}`;
+                const now = Date.now();
+
+                // Try cache
+                const cached = histCacheRef.current.get(cacheKey);
+                if (cached && (now - cached.ts) < PAYMENT_HIST_CACHE_TTL) {
+                    setHistories(cached.data || []);
+                    setHistTotal(cached.total || 0);
+                    setHistLoading(false);
+                    return;
+                }
+
+                // Use the userId to fetch only this family's histories
+                const params = { userId, limit: histLimit, page: histPage };
+                const res = await api.get('/payments/paymenthistory', { params });
+                const arr = res.data.histories || []; // controller returns { histories }
+                const total = res.data.totalRecords || res.data.total || 0;
+                setHistories(arr);
+                setHistTotal(total);
+
+                // Save to cache
+                histCacheRef.current.set(cacheKey, { ts: now, data: arr, total });
+            } catch (err) {
+                console.error('Error cargando historial de pagos:', err);
+                setHistories([]);
+            } finally {
+                setHistLoading(false);
+            }
+        };
+        loadHistories();
+    }, [open, payment, histPage, histLimit]);
+
+    // Download Excel strictly mapping the fields provided by the user.
+    const handleDownloadExcel = async () => {
+        try {
+            const userId = (localPayment || payment)?.User?.id || (localPayment || payment)?.userId;
+            if (!userId) {
+                console.warn('No user id for excel export');
+                return;
+            }
+
+            const attemptFetch = async (params) => await api.get('/payments/paymenthistory', { params });
+
+            let res = await attemptFetch({ userId, page: 0, limit: 200 });
+            let historiesArr = res.data.histories || res.data || [];
+            const totalReported = res.data.totalRecords ?? res.data.totalCount ?? res.data.count ?? null;
+
+            if (Array.isArray(historiesArr) && historiesArr.length === 0 && totalReported && Number(totalReported) > 0) {
+                const per = 200;
+                const pages = Math.ceil(Number(totalReported) / per);
+                const all = [];
+                for (let p = 0; p < pages; p++) {
+                    const r2 = await attemptFetch({ userId, page: p, limit: per });
+                    const part = r2.data.histories || r2.data || [];
+                    if (Array.isArray(part) && part.length > 0) all.push(...part);
+                }
+                if (all.length > 0) historiesArr = all;
+            }
+
+            if (!Array.isArray(historiesArr) || historiesArr.length === 0) {
+                const paymentId = (localPayment || payment)?.id;
+                if (paymentId) {
+                    const r3 = await attemptFetch({ paymentId, page: 0, limit: 1000 });
+                    historiesArr = r3.data.histories || r3.data || [];
+                }
+            }
+
+            if (!Array.isArray(historiesArr) || historiesArr.length === 0) {
+                console.warn('No histories found for excel export');
+                return;
+            }
+
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Historial');
+
+            const headers = ['Fecha Pago', 'Crédito/Saldo', 'Tarifa', 'Descuento Extraordinario', 'Mora', 'Total a Pagar', 'Monto Pagado', 'Total pendiente de pago', 'Crédito/Saldo Disponible'];
+            sheet.addRow(headers);
+
+            historiesArr.forEach(h => {
+                // Strict field mapping; if missing, use 0 (or '0' for fecha)
+                const fecha = (typeof h.paymentDate !== 'undefined' && h.paymentDate !== null && h.paymentDate !== '') ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '0';
+                const creditoSaldo = Number(h.creditBalanceBefore ?? 0);
+                const tarifa = Number(h.tarif ?? 0);
+                const descExtra = Number(h.extraordinaryDiscount ?? 0);
+                const mora = Number(h.penaltyBefore ?? 0);
+                const totalAPagar = Number(h.totalDueBefore ?? 0);
+                const monto = Number(h.amounntPaid ?? 0);
+                const totalPendiente = Number(h.totalDueAfter ?? 0);
+                const creditoDisponible = Number(h.creditBalanceAfter ?? 0);
+
+                sheet.addRow([fecha, creditoSaldo, tarifa, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible]);
+            });
+
+            // Header style
+            sheet.getRow(1).eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+            });
+
+            // Enable autofilter and freeze header row
+            const lastCol = sheet.getRow(1).cellCount;
+            const getColumnLetter = (colNumber) => {
+                let letter = '';
+                while (colNumber > 0) {
+                    const remainder = (colNumber - 1) % 26;
+                    letter = String.fromCharCode(65 + remainder) + letter;
+                    colNumber = Math.floor((colNumber - 1) / 26);
+                }
+                return letter;
+            };
+            const lastColLetter = getColumnLetter(lastCol);
+            sheet.autoFilter = `A1:${lastColLetter}1`;
+            sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+
+            // Set Fecha Pago column as date format (dd/mm/yy)
+            try {
+                sheet.getColumn(1).numFmt = 'dd/mm/yy';
+            } catch (e) { /* ignore if not supported */ }
+
+            // autosize
+            sheet.columns.forEach((column, index) => {
+                const header = headers[index] || '';
+                let maxLength = header.length;
+                sheet.eachRow((row) => {
+                    const cell = row.getCell(index + 1);
+                    const value = cell && cell.value ? String(cell.value) : '';
+                    if (value.length > maxLength) maxLength = value.length;
+                });
+                column.width = Math.min(Math.max(maxLength + 2, 10), 60);
+            });
+
+            // Center-align all data rows (from row 2 to last)
+            const lastRowNumber = sheet.rowCount;
+            for (let r = 2; r <= lastRowNumber; r++) {
+                const row = sheet.getRow(r);
+                row.eachCell((cell) => {
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                });
+            }
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const familyName = (family.familyLastName || (payment?.User?.familyLastName) || 'Familia').toString().replace(/\s+/g, '_');
+            const fileName = `historial_pagos_${familyName}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Error generating Excel', err);
+        }
+    };
 
     const fetchReceiptsForUser = async (userId) => {
         if (!userId) return [];
@@ -341,6 +469,25 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'flex-end' }}>
                             <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); onAction('toggleAutoDebit', { payment, value: e.target.checked }); }} />} label="Débito Automático" />
                             <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); onAction('toggleRequiresInvoice', { payment, value: e.target.checked }); }} />} label="Factura" />
+                        </Box>
+                        {/* Download button placed below the toggles as requested */}
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: 1 }}>
+                            <Button
+                                variant="outlined"
+                                color="success"
+                                startIcon={<DownloadIcon />}
+                                onClick={handleDownloadExcel}
+                                sx={{
+                                    borderWidth: 1,
+                                    borderColor: 'success.main',
+                                    color: 'success.main',
+                                    '&:hover': {
+                                        backgroundColor: 'rgba(76, 175, 80, 0.08)'
+                                    }
+                                }}
+                            >
+                                Descargar Historial (Excel)
+                            </Button>
                         </Box>
                     </Grid>
                 </Grid>
