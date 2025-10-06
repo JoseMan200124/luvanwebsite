@@ -608,14 +608,15 @@ const RolesManagementPage = () => {
     };
 
     const handleDeleteClick = async (userId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
+        if (window.confirm('¿Estás seguro de que deseas eliminar este usuario de forma PERMANENTE? Esta acción no se puede deshacer.')) {
             try {
-                await api.delete(`/users/${userId}`);
-                setSnackbar({ open: true, message: 'Usuario eliminado exitosamente', severity: 'success' });
+                // Use the hard-delete endpoint implemented on the backend which unlinks payments instead of deleting them
+                await api.delete(`/users/${userId}/hard`);
+                setSnackbar({ open: true, message: 'Usuario eliminado permanentemente', severity: 'success' });
                 fetchUsers();
             } catch (err) {
                 console.error('[handleDeleteClick] Error:', err);
-                setSnackbar({ open: true, message: 'Error al eliminar usuario', severity: 'error' });
+                setSnackbar({ open: true, message: 'Error al eliminar usuario permanentemente', severity: 'error' });
             }
         }
     };

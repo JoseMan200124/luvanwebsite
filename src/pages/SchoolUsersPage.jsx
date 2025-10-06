@@ -1142,14 +1142,16 @@ const SchoolUsersPage = () => {
         if (!selectedUser || !selectedUser.id) return;
         try {
             setBulkLoading(true);
-            await api.delete(`/users/${selectedUser.id}`);
-            setSnackbar({ open: true, message: 'Usuario eliminado correctamente', severity: 'success' });
+            // This view requires a permanent (hard) deletion for users.
+            await api.delete(`/users/${selectedUser.id}/hard`);
+            setSnackbar({ open: true, message: 'Usuario eliminado permanentemente', severity: 'success' });
             setOpenDeleteConfirm(false);
             setSelectedUser(null);
             fetchUsers();
         } catch (err) {
             console.error('Error deleting user:', err);
-            setSnackbar({ open: true, message: 'Error eliminando el usuario', severity: 'error' });
+            const message = err?.response?.data?.message || 'Error eliminando el usuario';
+            setSnackbar({ open: true, message, severity: 'error' });
         } finally {
             setBulkLoading(false);
         }
