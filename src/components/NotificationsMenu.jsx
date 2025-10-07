@@ -15,7 +15,7 @@ import {
     DialogActions,
     Button,
 } from '@mui/material';
-import { Notifications, ClearAll } from '@mui/icons-material';
+import { Notifications, ClearAll, Close } from '@mui/icons-material';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import PropTypes from 'prop-types';
@@ -46,7 +46,10 @@ const NotificationsMenu = ({ authToken }) => {
             const fetched = Array.isArray(response.data.notifications)
                 ? response.data.notifications
                 : [];
-            setNotifications(fetched);
+            // Only keep notifications that are not marked as 'read' so that
+            // notifications removed/marked-as-read don't reappear after a page reload.
+            const visible = fetched.filter((n) => !n.status || n.status !== 'read');
+            setNotifications(visible);
         } catch (err) {
             console.error('Error fetching notifications:', err);
             setNotifications([]);
@@ -74,12 +77,15 @@ const NotificationsMenu = ({ authToken }) => {
         }
     };
 
+    // Helper para ocultar localmente (remover) una notificación
+    const hideNotificationLocal = (notificationId) => {
+        setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+    };
+
     const handleNotificationClick = async (notification) => {
-        try {
-            await markNotificationAsRead(notification.id);
-        } catch (e) {
-            // ignore
-        }
+        // Do NOT auto-mark notification as read when user clicks the card.
+        // Only the X (delete) will mark as read. This preserves the user's
+        // explicit action intent.
         // For 'Nueva Boleta de Pago', show the receipt preview inside the menu (no navigation).
         if (notification && notification.type === 'boleta-pago') {
             setAnchorEl(null);
@@ -145,8 +151,8 @@ const NotificationsMenu = ({ authToken }) => {
         setAnchorEl(event.currentTarget);
         // Volvemos a pedir la lista más reciente
         await fetchAllNotifications();
-        // Marcar todas como leídas
-        await markAllNotificationsAsRead();
+        // Do NOT auto-mark all as read on open. The user can explicitly remove (X) or
+        // use the ClearAll button if they want to mark all as read.
     };
 
     // ==============================
@@ -162,6 +168,7 @@ const NotificationsMenu = ({ authToken }) => {
     //  pero lo dejamos si quieres un botón extra)
     // ==============================
     const handleClearNotifications = async () => {
+        // Keep behavior: explicit 'clear' button will mark all as read
         await markAllNotificationsAsRead();
         handleMenuClose();
     };
@@ -293,22 +300,41 @@ const NotificationsMenu = ({ authToken }) => {
                     notifications.map((notification, index) => (
                         <div key={notification.id || index}>
                             <MenuItem
-                                onClick={() => handleNotificationClick(notification)}
                                 style={{
                                     position: 'relative',
                                     minHeight: '80px',
                                     alignItems: 'flex-start',
+                                    paddingRight: 8,
                                     ...getNotificationStyle(notification)
                                 }}
                             >
+                                {/* Close (X) button */}
+                                <IconButton
+                                    size="small"
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                            await markNotificationAsRead(notification.id);
+                                        } catch (err) {
+                                            // ignore
+                                        }
+                                        hideNotificationLocal(notification.id);
+                                    }}
+                                    style={{ position: 'absolute', right: 4, top: 4, zIndex: 5 }}
+                                >
+                                    <Close fontSize="small" />
+                                </IconButton>
+
                                 <div
+                                    onClick={() => handleNotificationClick(notification)}
                                     style={{
                                         display: 'flex',
                                         flexDirection: 'column',
                                         position: 'relative',
                                         width: '100%',
-                                        paddingRight: '60px',
+                                        paddingRight: '28px',
                                         paddingBottom: '28px',
+                                        cursor: 'pointer'
                                     }}
                                 >
                                     <Typography
