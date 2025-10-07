@@ -1146,31 +1146,37 @@ const SchoolPaymentsPage = () => {
     const [openExportStatusDialog, setOpenExportStatusDialog] = useState(false);
     // Export dialog additional filters: separate month and year selectors
     const [exportMonth, setExportMonth] = useState(''); // '' or '01'..'12'
+    // Final status selector for export (MORA, PENDIENTE, PAGADO)
+    const [exportFinalStatus, setExportFinalStatus] = useState('MORA');
     // Lock year to 2025 as requested
     const exportYear = '2025';
 
     // Export payments filtered by status and build Excel
     const handleDownloadPaymentsByStatus = useCallback(async (month = '', year = '') => {
         try {
+            // Use new backend endpoint to fetch all PaymentHistory rows for payments
+            // matching the selected final status. Backend will JOIN PaymentHistory -> Payment.
+            // If 'GENERAL' is selected, omit the finalstatus param so backend returns all statuses.
             const params = { schoolId, page: 1, limit: 10000 };
+            if (exportFinalStatus && String(exportFinalStatus).toUpperCase() !== 'GENERAL') params.finalstatus = exportFinalStatus;
             setOpenExportStatusDialog(false);
             setSnackbar({ open: true, message: 'Preparando descarga...', severity: 'info' });
 
-            // Fetch payments (one row per family/payment)
-            const res = await api.get('/payments', { params });
-            const arr = res.data.payments || res.data.rows || [];
+            const res = await api.get('/payments/histories-by-finalstatus', { params });
+            const historiesAll = res.data.histories || res.data || [];
 
-            if (!Array.isArray(arr) || arr.length === 0) {
-                setSnackbar({ open: true, message: 'No se encontraron pagos para el filtro seleccionado', severity: 'info' });
+            if (!Array.isArray(historiesAll) || historiesAll.length === 0) {
+                setSnackbar({ open: true, message: 'No se encontraron historiales para el filtro seleccionado', severity: 'info' });
                 return;
             }
 
-            // Build workbook with payment histories for all families
+            // Build workbook
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Historiales');
 
             const headers = [
                 'Apellidos Familia',
+                'Estado',
                 'Fecha Pago',
                 'Crédito/Saldo',
                 'Tarifa',
@@ -1184,66 +1190,39 @@ const SchoolPaymentsPage = () => {
             ];
             sheet.addRow(headers);
 
-            // Helper to fetch full history for a user (with pagination fallback)
-            const fetchHistoryForUser = async (userId) => {
-                if (!userId) return [];
-                const fetchPage = async (page, limit) => await api.get('/payments/paymenthistory', { params: { userId, page, limit } });
-                let r = await fetchPage(0, 200);
-                let hist = r.data.histories || r.data || [];
-                const totalReported = r.data.totalRecords ?? r.data.totalCount ?? r.data.count ?? null;
-                if (Array.isArray(hist) && hist.length === 0 && totalReported && Number(totalReported) > 0) {
-                    const per = 200;
-                    const pages = Math.ceil(Number(totalReported) / per);
-                    const all = [];
-                    for (let p = 0; p < pages; p++) {
-                        const r2 = await fetchPage(p, per);
-                        const part = r2.data.histories || r2.data || [];
-                        if (Array.isArray(part) && part.length > 0) all.push(...part);
-                    }
-                    if (all.length > 0) hist = all;
+            // historiesAll contains PaymentHistory rows for all matching payments.
+            // Apply month/year filter and write rows directly (assume each history row includes familyLastName)
+            const yearToUse = year ? Number(year) : moment().year();
+            const monthStrPad = month ? String(month).padStart(2, '0') : null;
+
+            historiesAll.forEach(h => {
+                const familyLast = h.familyLastName || h.familyLast || h.familyLastname || h.User?.FamilyDetail?.familyLastName || h.User?.familyLastName || '';
+                // Use only finalStatus (as required). Fallback to Payment.finalStatus if the snapshot doesn't include it.
+                const estado = h.finalStatus || (h.Payment && h.Payment.finalStatus) || '';
+                const pd = h.paymentDate || h.lastPaymentDate || h.snapshotDate || null;
+                if (!pd) return;
+                const mm = moment.parseZone(pd);
+                if (monthStrPad) {
+                    if (mm.format('YYYY-MM') !== `${yearToUse}-${monthStrPad}`) return;
+                } else {
+                    if (mm.year() !== yearToUse) return;
                 }
-                return Array.isArray(hist) ? hist : [];
-            };
 
-            // Iterate payments and append their histories matching month/year filters
-            for (const p of arr) {
-                const familyLast = p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '';
-                const userId = p.User?.id || p.userId;
-                if (!userId) continue;
-                const histories = await fetchHistoryForUser(userId);
-                if (!Array.isArray(histories) || histories.length === 0) continue;
+                const fecha = (typeof h.paymentDate !== 'undefined' && h.paymentDate !== null && h.paymentDate !== '') ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '0';
+                const creditoSaldo = Number(h.creditBalanceBefore ?? 0);
+                const tarifa = Number(h.tarif ?? 0);
+                const descuentoFam = Number(h.familyDiscount ?? 0);
+                const descExtra = Number(h.extraordinaryDiscount ?? 0);
+                const mora = Number(h.penaltyBefore ?? 0);
+                const totalDueBefore = Number(h.totalDueBefore ?? 0);
+                const totalAPagar = Number(totalDueBefore - creditoSaldo - descExtra - descuentoFam);
+                const monto = Number(h.amountPaid ?? 0);
+                const totalPendiente = Number(h.totalDueAfter ?? 0);
+                const creditoDisponible = Number(h.creditBalanceAfter ?? 0);
 
-                // apply month/year filter: if month provided, filter YYYY-MM; if month empty, filter whole year
-                const yearToUse = year ? Number(year) : moment().year();
-                const filteredHist = histories.filter(h => {
-                    if (!h) return false;
-                    const pd = h.paymentDate || h.lastPaymentDate || h.snapshotDate || null;
-                    if (!pd) return false;
-                    const mm = moment.parseZone(pd);
-                    if (month) {
-                        const monthStr = String(month).padStart(2, '0');
-                        return mm.format('YYYY-MM') === `${yearToUse}-${monthStr}`;
-                    }
-                    // month empty -> whole year
-                    return mm.year() === yearToUse;
-                });
-
-                filteredHist.forEach(h => {
-                    const fecha = (typeof h.paymentDate !== 'undefined' && h.paymentDate !== null && h.paymentDate !== '') ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '0';
-                    const creditoSaldo = Number(h.creditBalanceBefore ?? 0);
-                    const tarifa = Number(h.tarif ?? 0);
-                    const descuentoFam = Number(h.familyDiscount ?? 0);
-                    const descExtra = Number(h.extraordinaryDiscount ?? 0);
-                    const mora = Number(h.penaltyBefore ?? 0);
-                    const totalDueBefore = Number(h.totalDueBefore ?? 0);
-                    const totalAPagar = Number(totalDueBefore - creditoSaldo - descExtra - descuentoFam);
-                    const monto = Number(h.amountPaid ?? 0);
-                    const totalPendiente = Number(h.totalDueAfter ?? 0);
-                    const creditoDisponible = Number(h.creditBalanceAfter ?? 0);
-
-                    sheet.addRow([familyLast, fecha, creditoSaldo, tarifa, descuentoFam, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible]);
-                });
-            }
+                // Insert Estado as the second column
+                sheet.addRow([familyLast, estado, fecha, creditoSaldo, tarifa, descuentoFam, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible]);
+            });
 
             // Styling header (match historial style)
             sheet.getRow(1).eachCell((cell) => {
@@ -1259,10 +1238,10 @@ const SchoolPaymentsPage = () => {
                 const isEven = rowIndex % 2 === 0;
                 row.eachCell((cell, colNumber) => {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
-                    // center by default
+                    // center by default for text/date columns
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    // Tarifa column formatting (col 6) should be right-aligned and numeric
-                    if (colNumber === 6) {
+                    // Numeric columns start at column 4 now (Crédito/Saldo). Right-align and format numbers for columns >= 4
+                    if (colNumber >= 4) {
                         cell.numFmt = '0.00';
                         cell.alignment = { horizontal: 'right', vertical: 'middle' };
                     }
@@ -1303,9 +1282,21 @@ const SchoolPaymentsPage = () => {
                 '01': 'Enero','02': 'Febrero','03': 'Marzo','04': 'Abril','05': 'Mayo','06': 'Junio',
                 '07': 'Julio','08': 'Agosto','09': 'Septiembre','10': 'Octubre','11': 'Noviembre','12': 'Diciembre'
             };
-            const period = month ? `${year}-${(monthNames[String(month).padStart(2, '0')] || String(month).padStart(2, '0'))}` : String(year || exportYear || moment().year());
-            const schoolSafe = school?.name ? String(school.name).replace(/\s+/g, '_') : schoolId;
-            const fileName = `pagos_${schoolSafe}_${period}.xlsx`;
+            // Build filename in requested format:
+            // "Historial Pagos estadoFinal nombreColegio Mes Año"
+            const periodYear = year || exportYear || moment().year();
+            const monthPadded = month ? String(month).padStart(2, '0') : '';
+            const monthName = monthPadded ? (monthNames[monthPadded] || monthPadded) : '';
+            // sanitize school name for filenames (remove newlines/slashes, collapse spaces)
+            const rawSchoolName = school?.name ? String(school.name) : String(schoolId || '');
+            const schoolClean = rawSchoolName.replace(/[\n\r/\\]+/g, ' ').replace(/\s+/g, ' ').trim();
+            const statusPart = exportFinalStatus ? String(exportFinalStatus).toUpperCase() : '';
+            let fileName;
+            if (monthName) {
+                fileName = `Historial Pagos ${statusPart} ${schoolClean} ${monthName} ${periodYear}.xlsx`;
+            } else {
+                fileName = `Historial Pagos ${statusPart} ${schoolClean} ${periodYear}.xlsx`;
+            }
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -1319,7 +1310,7 @@ const SchoolPaymentsPage = () => {
             console.error('handleDownloadPaymentsByStatus', err);
             setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
         }
-    }, [schoolId, school, exportYear]);
+    }, [schoolId, school, exportYear, exportFinalStatus]);
 
     const handleSaveDiscount = async (payment, newDiscount) => {
         try {
@@ -1589,6 +1580,20 @@ const SchoolPaymentsPage = () => {
                             <DialogTitle>Exportar historial de pagos - seleccionar periodo</DialogTitle>
                             <DialogContent>
                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                                    <FormControl fullWidth>
+                                        <InputLabel id="export-finalstatus-label">Estado Final</InputLabel>
+                                        <Select
+                                            labelId="export-finalstatus-label"
+                                            label="Estado Final"
+                                            value={exportFinalStatus}
+                                            onChange={(e) => setExportFinalStatus(e.target.value)}
+                                        >
+                                            <MenuItem value="GENERAL">GENERAL</MenuItem>
+                                            <MenuItem value="PAGADO">PAGADO</MenuItem>
+                                            <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
+                                            <MenuItem value="MORA">MORA</MenuItem>
+                                        </Select>
+                                    </FormControl>
                                     <FormControl fullWidth>
                                         <InputLabel id="export-month-label">Mes</InputLabel>
                                         <Select
