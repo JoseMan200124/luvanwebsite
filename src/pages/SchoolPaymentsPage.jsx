@@ -412,6 +412,10 @@ const SchoolPaymentsPage = () => {
         bankAccountNumber: ''
     });
     // (extraordinary quick-register removed; use ExtraordinaryPaymentSection)
+    
+    // Payment summary calculation for real-time penalty exoneration display
+    const [paymentSummary, setPaymentSummary] = useState(null);
+    const [loadingPaymentSummary, setLoadingPaymentSummary] = useState(false);
 
     // Payment histories loading flag (for receipts pane inside Registrar Pago dialog)
     const [regHistLoading, setRegHistLoading] = useState(false);
@@ -576,6 +580,31 @@ const SchoolPaymentsPage = () => {
             }
         })();
     }, [allSchools, fetchAllSchools, regHistPage, regHistLimit, school]);
+
+    // Fetch payment summary for real-time penalty exoneration calculation
+    const fetchPaymentSummary = useCallback(async (paymentId, paymentDate) => {
+        if (!paymentId || !paymentDate) return;
+        
+        setLoadingPaymentSummary(true);
+        try {
+            const response = await api.get(`/payments/${paymentId}/calculate-summary`, {
+                params: { paymentDate }
+            });
+            setPaymentSummary(response.data.calculation);
+        } catch (error) {
+            console.error('Error calculating payment summary:', error);
+            setPaymentSummary(null);
+        } finally {
+            setLoadingPaymentSummary(false);
+        }
+    }, []);
+
+    // Recalculate summary when payment date changes
+    useEffect(() => {
+        if (openRegisterDialog && registerPaymentTarget?.id && registerPaymentExtra.paymentDate) {
+            fetchPaymentSummary(registerPaymentTarget.id, registerPaymentExtra.paymentDate);
+        }
+    }, [openRegisterDialog, registerPaymentTarget?.id, registerPaymentExtra.paymentDate, fetchPaymentSummary]);
  
     // Handle query params after handleOpenRegister is defined
     useEffect(() => {
@@ -1335,8 +1364,10 @@ const SchoolPaymentsPage = () => {
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
     // Tarifa: prefer explicit fee fields
     const dialogTarifa = Number(registerPaymentTarget?.tarif || registerPaymentTarget?.tariff || registerPaymentTarget?.fee || registerPaymentTarget?.monthlyFee || 0);
-    // Mora (accumulated penalty)
-    const dialogMora = Number(registerPaymentTarget?.accumulatedPenalty || registerPaymentTarget?.totalPenalty || registerPaymentTarget?.penalty || 0);
+    // Mora (accumulated penalty) - Use calculated summary if available, otherwise fallback to payment data
+    const dialogMora = paymentSummary?.adjustedPenalty !== undefined 
+        ? Number(paymentSummary.adjustedPenalty)
+        : Number(registerPaymentTarget?.accumulatedPenalty || registerPaymentTarget?.totalPenalty || registerPaymentTarget?.penalty || 0);
     // Crédito a favor: always use the payment table's creditBalance field only
     const dialogCredito = Number(registerPaymentTarget?.creditBalance ?? 0);
     // Descuento de familia (special fee) comes from User.FamilyDetail.specialFee
