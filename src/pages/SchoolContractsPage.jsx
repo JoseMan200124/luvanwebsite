@@ -128,6 +128,7 @@ const SchoolContractsPage = () => {
     const [filledContractsTotalPages, setFilledContractsTotalPages] = useState(1);
     const [filledContractsTotalCount, setFilledContractsTotalCount] = useState(0);
     const [filledContractsSearch, setFilledContractsSearch] = useState('');
+    const [filledContractsSearchInput, setFilledContractsSearchInput] = useState(''); // Para el input del usuario
 
     // Diálogo de confirmación para eliminar contrato llenado
     const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
@@ -191,16 +192,20 @@ const SchoolContractsPage = () => {
         const fetchFilledContracts = async () => {
             setFilledContractsLoading(true);
             try {
-                const response = await api.get('/contracts/filled', {
-                    params: {
-                        page: filledContractsPage,
-                        limit: filledContractsLimit,
-                        schoolId: schoolId // Filtrar por colegio
-                    }
-                });
+                const params = {
+                    page: filledContractsPage,
+                    limit: filledContractsLimit,
+                    schoolId: schoolId
+                };
+                
+                // Agregar search solo si hay búsqueda activa
+                if (filledContractsSearch) {
+                    params.search = filledContractsSearch;
+                }
+                
+                const response = await api.get('/contracts/filled', { params });
                 setFilledContracts(response.data.data);
                 setFilledContractsTotalPages(response.data.meta.totalPages);
-                // Diferentes backends pueden usar diferentes nombres en meta para el total
                 const totalCount = response.data.meta?.totalItems ?? response.data.meta?.total ?? response.data.meta?.totalCount ?? response.data.meta?.count ?? 0;
                 setFilledContractsTotalCount(totalCount);
             } catch (error) {
@@ -215,7 +220,7 @@ const SchoolContractsPage = () => {
             }
         };
         fetchFilledContracts();
-    }, [filledContractsPage, filledContractsLimit, schoolId]);
+    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch]);
 
     // ---------------------------
     // Función para subir archivo Word y convertirlo a HTML (igual que ContractsManagementPage)
@@ -609,6 +614,22 @@ const SchoolContractsPage = () => {
         });
     };
 
+    // ---------------------------
+    // Función para manejar la búsqueda
+    // ---------------------------
+    const handleSearch = () => {
+        // Resetear a la página 1 y actualizar la búsqueda activa
+        setFilledContractsPage(1);
+        setFilledContractsSearch(filledContractsSearchInput);
+    };
+
+    // Función para limpiar la búsqueda
+    const handleClearSearch = () => {
+        setFilledContractsSearchInput('');
+        setFilledContractsSearch('');
+        setFilledContractsPage(1);
+    };
+
     // Componente local para renderizar un filled contract (evita duplicación móvil/desktop)
     const RenderFilledContract = ({ filledContract, isMobileView }) => {
         const familyLastName = (
@@ -826,15 +847,38 @@ const SchoolContractsPage = () => {
                     Contratos Firmados
                 </Typography>
 
-                <Box display="flex" justifyContent="flex-end" mb={2}>
+                <Box display="flex" gap={2} justifyContent="flex-end" mb={2} flexWrap="wrap">
                     <TextField
-                        label="Buscar por familia"
+                        label="Buscar por apellido de familia"
                         variant="outlined"
                         size="small"
-                        value={filledContractsSearch}
-                        onChange={(e) => setFilledContractsSearch(e.target.value)}
+                        value={filledContractsSearchInput}
+                        onChange={(e) => setFilledContractsSearchInput(e.target.value)}
+                        onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                                handleSearch();
+                            }
+                        }}
                         style={{ width: isMobile ? '100%' : '300px' }}
                     />
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleSearch}
+                        disabled={filledContractsLoading}
+                    >
+                        Buscar
+                    </Button>
+                    {filledContractsSearch && (
+                        <Button
+                            variant="outlined"
+                            color="secondary"
+                            onClick={handleClearSearch}
+                            disabled={filledContractsLoading}
+                        >
+                            Limpiar
+                        </Button>
+                    )}
                 </Box>
 
                 {filledContractsLoading ? (
@@ -844,26 +888,17 @@ const SchoolContractsPage = () => {
                 ) : isMobile ? (
                     <Box>
                         {filledContracts.length === 0 ? (
-                            <Typography variant="body1">No se encontraron contratos firmados.</Typography>
+                            <Typography variant="body1">
+                                {filledContractsSearch 
+                                    ? 'No se encontraron contratos firmados con ese criterio de búsqueda.'
+                                    : 'No se encontraron contratos firmados.'
+                                }
+                            </Typography>
                         ) : (
                             <>
-                                {filledContracts
-                                    .filter((fc) => {
-                                        const s = filledContractsSearch.toLowerCase();
-                                        const familyLastName = (
-                                            fc?.parent?.FamilyDetail?.familyLastName ||
-                                            fc?.parent?.familyLastName ||
-                                            fc?.filledData?.familyLastName ||
-                                            ''
-                                        ).toLowerCase();
-                                        const contractTitle = (fc.title || (fc.contract && fc.contract.title) || '').toLowerCase();
-                                        return (
-                                            contractTitle.includes(s) || familyLastName.includes(s)
-                                        );
-                                    })
-                                    .map((filledContract) => (
-                                        <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={true} />
-                                    ))}
+                                {filledContracts.map((filledContract) => (
+                                    <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={true} />
+                                ))}
                             </>
                         )}
                         {filledContractsTotalPages > 1 && (
@@ -880,26 +915,17 @@ const SchoolContractsPage = () => {
                 ) : (
                     <List>
                         {filledContracts.length === 0 ? (
-                            <Typography variant="body1">No se encontraron contratos firmados.</Typography>
+                            <Typography variant="body1">
+                                {filledContractsSearch 
+                                    ? 'No se encontraron contratos firmados con ese criterio de búsqueda.'
+                                    : 'No se encontraron contratos firmados.'
+                                }
+                            </Typography>
                         ) : (
                             <>
-                                {filledContracts
-                                    .filter((fc) => {
-                                        const s = filledContractsSearch.toLowerCase();
-                                        const familyLastName = (
-                                            fc?.parent?.FamilyDetail?.familyLastName ||
-                                            fc?.parent?.familyLastName ||
-                                            fc?.filledData?.familyLastName ||
-                                            ''
-                                        ).toLowerCase();
-                                        const contractTitle = (fc.title || (fc.contract && fc.contract.title) || '').toLowerCase();
-                                        return (
-                                            contractTitle.includes(s) || familyLastName.includes(s)
-                                        );
-                                    })
-                                    .map((filledContract) => (
-                                        <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={false} />
-                                    ))}
+                                {filledContracts.map((filledContract) => (
+                                    <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={false} />
+                                ))}
                             </>
                         )}
                         {filledContractsTotalPages > 1 && (
