@@ -1374,7 +1374,7 @@ const SchoolPaymentsPage = () => {
     // Note: family specialFee is already applied to the stored tarifa/leftover, so do not subtract it again.
     const dialogFamilySpecialFee = Number(registerPaymentTarget?.User?.FamilyDetail?.specialFee ?? 0);
     // Leftover / total due (fallbacks)
-    const dialogLeftover = Number(registerPaymentTarget?.leftover || registerPaymentTarget?.leftOver || registerPaymentTarget?.totalDue || registerPaymentTarget?.amountDue || 0);
+    const dialogLeftover = Number(registerPaymentTarget?.leftover - registerPaymentTarget?.accumulatedPenalty || registerPaymentTarget?.totalDue - registerPaymentTarget?.accumulatedPenalty || 0);
     const dialogExtraDiscount = Number(registerPaymentExtra?.extraordinaryDiscount || 0);
     // Total to pay: start from leftover + mora, then subtract credito and extraordinary discount only.
     const dialogTotalToPay = Math.max(0, dialogLeftover + dialogMora - dialogCredito - dialogExtraDiscount - dialogFamilySpecialFee);
@@ -1718,6 +1718,12 @@ const SchoolPaymentsPage = () => {
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
                                                 <Typography variant="body2" color="text.secondary">Tarifa</Typography>
                                                 <Typography variant="body2">{formatCurrency(dialogTarifa)}</Typography>
+                                            </Box>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                <Typography variant="body2" color="text.secondary">Saldo pendiente</Typography>
+                                                <Typography variant="body2" sx={{ color: dialogLeftover > 0 ? '#d32f2f' : 'inherit', fontWeight: dialogLeftover > 0 ? 600 : 400 }}>
+                                                    {formatCurrency(dialogLeftover)}
+                                                </Typography>
                                             </Box>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
                                                 <Typography variant="body2" color="text.secondary">Mora</Typography>
