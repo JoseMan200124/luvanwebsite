@@ -1495,18 +1495,18 @@ const SchoolPaymentsPage = () => {
     // Derived values for the Register Payment dialog summary
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
     // Tarifa: prefer explicit fee fields
-    const dialogTarifa = Number(registerPaymentTarget?.tarif || registerPaymentTarget?.tariff || registerPaymentTarget?.fee || registerPaymentTarget?.monthlyFee || 0);
+    const dialogTarifa = Number(registerPaymentTarget?.tarif || 0);
     // Mora (accumulated penalty) - Use calculated summary if available, otherwise fallback to payment data
     const dialogMora = paymentSummary?.adjustedPenalty !== undefined 
         ? Number(paymentSummary.adjustedPenalty)
-        : Number(registerPaymentTarget?.accumulatedPenalty || registerPaymentTarget?.totalPenalty || registerPaymentTarget?.penalty || 0);
+        : Number(registerPaymentTarget?.accumulatedPenalty || 0);
     // Crédito a favor: always use the payment table's creditBalance field only
     const dialogCredito = Number(registerPaymentTarget?.creditBalance ?? 0);
     // Descuento de familia (special fee) comes from User.FamilyDetail.specialFee
     // Note: family specialFee is already applied to the stored tarifa/leftover, so do not subtract it again.
     const dialogFamilySpecialFee = Number(registerPaymentTarget?.User?.FamilyDetail?.specialFee ?? 0);
     // Leftover / total due (fallbacks)
-    const dialogLeftover = Number(registerPaymentTarget?.leftover - registerPaymentTarget?.accumulatedPenalty || registerPaymentTarget?.totalDue - registerPaymentTarget?.accumulatedPenalty || 0);
+    const dialogLeftover = Number(registerPaymentTarget?.leftover || 0);
     const dialogExtraDiscount = Number(registerPaymentExtra?.extraordinaryDiscount || 0);
     // Total to pay: start from leftover + mora, then subtract credito and extraordinary discount only.
     const dialogTotalToPay = Math.max(0, dialogLeftover + dialogMora - dialogCredito - dialogExtraDiscount - dialogFamilySpecialFee);
