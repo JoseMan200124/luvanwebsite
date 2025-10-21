@@ -1180,6 +1180,11 @@ const SchoolPaymentsPage = () => {
     // Lock year to 2025 as requested
     const exportYear = '2025';
 
+    // --- Export by estado (new) ---
+    const [openExportByStateDialog, setOpenExportByStateDialog] = useState(false);
+    const [exportByStateValue, setExportByStateValue] = useState(''); // '' means all
+
+
     // Export payments filtered by status and build Excel
     const handleDownloadPaymentsByStatus = useCallback(async (month = '', year = '') => {
         try {
@@ -1254,10 +1259,11 @@ const SchoolPaymentsPage = () => {
             });
 
             // Styling header (match historial style)
-            sheet.getRow(1).eachCell((cell) => {
+            sheet.getRow(1).eachCell((cell, colNumber) => {
                 cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                // Column 2 (Apellidos Familia) left-aligned header, others centered
+                cell.alignment = colNumber === 2 ? { horizontal: 'left', vertical: 'middle' } : { horizontal: 'center', vertical: 'middle' };
                 cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
             });
 
@@ -1340,6 +1346,132 @@ const SchoolPaymentsPage = () => {
             setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
         }
     }, [schoolId, school, exportYear, exportFinalStatus]);
+
+    // Export payments filtered by estado using client-side dataset (paymentsAll)
+    const handleDownloadByState = useCallback(async (estado) => {
+        try {
+            setOpenExportByStateDialog(false);
+            setSnackbar({ open: true, message: 'Preparando descarga...', severity: 'info' });
+
+            const estadoNorm = estado ? String(estado).toUpperCase().trim() : '';
+            const arr = Array.isArray(paymentsAll) ? paymentsAll : [];
+            const filteredRows = arr.filter(p => {
+                if (!estadoNorm) return true;
+                const s = (p.finalStatus || p.status || '').toString().toUpperCase();
+                return s === estadoNorm;
+            });
+
+            if (!filteredRows || filteredRows.length === 0) {
+                setSnackbar({ open: true, message: 'No se encontraron registros para el estado seleccionado', severity: 'info' });
+                return;
+            }
+
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Datos');
+
+            const headers = ['Estado','Apellidos Familia','Débito Automático','Cant. Estudiantes','Tipo Ruta','Fecha Último Pago','Descuento','Envío Factura'];
+            sheet.addRow(headers);
+
+            filteredRows.forEach(p => {
+                const estadoVal = (p.finalStatus || p.status || '') ? String((p.finalStatus || p.status)).toUpperCase() : '';
+                const familyLast = p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '';
+                const autoDebit = !!(p.automaticDebit || p.User?.FamilyDetail?.automaticDebit || p.User?.FamilyDetail?.autoDebit);
+                const autoStr = autoDebit ? 'Sí' : 'No';
+                const studentsCount = Array.isArray(p.User?.FamilyDetail?.Students) ? p.User.FamilyDetail.Students.length : (p.studentCount || 0);
+                const studentsInt = Number.isFinite(Number(studentsCount)) ? Math.trunc(Number(studentsCount)) : 0;
+                const routeType = p.User?.FamilyDetail?.routeType || '';
+                const lastPaymentRaw = p.lastPaymentDate || p.lastPaidDate || p.lastPayment || p.lastPaymentAt || p.last_paid_at || null;
+                const lastPaymentDate = lastPaymentRaw ? moment.parseZone(lastPaymentRaw).toDate() : null;
+                const discount = Number(p.User?.FamilyDetail?.specialFee ?? p.specialFee ?? 0) || 0;
+                const invoiceSent = !!(p.User?.FamilyDetail?.requiresInvoice || p.requiresInvoice);
+                const invoiceStr = invoiceSent ? 'Sí' : 'No';
+
+                // Add row: for Fecha Último Pago we add a Date object (or empty string if missing) so Excel recognizes it as date
+                sheet.addRow([estadoVal, familyLast, autoStr, studentsInt, routeType, lastPaymentDate || '', discount, invoiceStr]);
+            });
+
+            // Styling header (match historial style)
+            sheet.getRow(1).eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+            });
+
+            // Alternating row colors and alignment (center text/date columns; numeric right-aligned)
+            sheet.eachRow((row, rowIndex) => {
+                if (rowIndex === 1) return;
+                const isEven = rowIndex % 2 === 0;
+                row.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                    // Apellidos Familia (col 2) left-aligned; numeric fields right-aligned; dates centered; others centered
+                    if (colNumber === 2) {
+                        cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                    } else {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    }
+                    // Numeric columns: Cant. Estudiantes (col 4) integer, Descuento (col 7) two decimals
+                    if (colNumber === 4) {
+                        cell.numFmt = '0';
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    }
+                    if (colNumber === 7) {
+                        cell.numFmt = '0.00';
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    }
+                    // Fecha Último Pago (col 6) should be date dd/mm/yyyy
+                    if (colNumber === 6) {
+                        cell.numFmt = 'dd/mm/yyyy';
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    }
+                });
+            });
+
+            // Autofilter and freeze first row
+            const lastCol = sheet.getRow(1).cellCount;
+            const getColumnLetter = (colNumber) => {
+                let letter = '';
+                while (colNumber > 0) {
+                    const remainder = (colNumber - 1) % 26;
+                    letter = String.fromCharCode(65 + remainder) + letter;
+                    colNumber = Math.floor((colNumber - 1) / 26);
+                }
+                return letter;
+            };
+            const lastColLetter = getColumnLetter(lastCol);
+            sheet.autoFilter = `A1:${lastColLetter}1`;
+            sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+
+            // Autosize columns
+            sheet.columns.forEach((column, index) => {
+                const header = headers[index] || '';
+                let maxLength = header.length;
+                sheet.eachRow((row) => {
+                    const cell = row.getCell(index + 1);
+                    const value = cell && cell.value ? String(cell.value) : '';
+                    if (value.length > maxLength) maxLength = value.length;
+                });
+                column.width = Math.min(Math.max(maxLength + 2, 10), 60);
+            });
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const fileName = `Pagos_por_estado_${(estado || 'TODOS')}_${school?.name ? school.name.replace(/[^a-z0-9]/gi,'_') : schoolId}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: 'Descarga iniciada', severity: 'success' });
+        } catch (err) {
+            console.error('handleDownloadByState', err);
+            setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
+        }
+    }, [paymentsAll, school, schoolId]);
 
     const handleSaveDiscount = async (payment, newDiscount) => {
         try {
@@ -1575,7 +1707,10 @@ const SchoolPaymentsPage = () => {
                             <PaymentFilters search={search} onSearchChange={setSearch} status={statusFilter} onStatusChange={setStatusFilter} autoDebit={autoDebitFilter} onAutoDebitChange={setAutoDebitFilter} />
                             <Box sx={{ flex: 1 }} />
                             <Button startIcon={<DownloadIcon />} size="small" onClick={() => setOpenExportStatusDialog(true)} sx={{ textTransform: 'none', mr: 1 }}>
-                                Descargar Datos
+                                Descargar Historial
+                            </Button>
+                            <Button startIcon={<DownloadIcon />} size="small" onClick={() => setOpenExportByStateDialog(true)} sx={{ textTransform: 'none' }}>
+                                Descargar por Estado
                             </Button>
                             {/* Enviar Recordatorio button hidden temporarily per request. Restore when needed:
                                 <Button startIcon={<SendIcon />} onClick={() => setSnackbar({ open: true, message: 'Enviar recordatorios (pendiente)', severity: 'info' })}>
@@ -1665,6 +1800,33 @@ const SchoolPaymentsPage = () => {
                             <DialogActions>
                                 <Button onClick={() => setOpenExportStatusDialog(false)}>Cancelar</Button>
                                 <Button variant="contained" onClick={() => handleDownloadPaymentsByStatus(exportMonth, exportYear)}>Descargar</Button>
+                            </DialogActions>
+                        </Dialog>
+
+                        {/* Dialog: Exportar por Estado (nuevo) */}
+                        <Dialog open={openExportByStateDialog} onClose={() => setOpenExportByStateDialog(false)} fullWidth maxWidth="xs">
+                            <DialogTitle>Exportar pagos - seleccionar Estado</DialogTitle>
+                            <DialogContent>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                                    <FormControl fullWidth>
+                                        <InputLabel id="export-by-state-label">Estado</InputLabel>
+                                        <Select
+                                            labelId="export-by-state-label"
+                                            label="Estado"
+                                            value={exportByStateValue}
+                                            onChange={(e) => setExportByStateValue(e.target.value)}
+                                        >
+                                            <MenuItem value="">(Todos)</MenuItem>
+                                            <MenuItem value="PAGADO">PAGADO</MenuItem>
+                                            <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
+                                            <MenuItem value="MORA">MORA</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                </Box>
+                            </DialogContent>
+                            <DialogActions>
+                                <Button onClick={() => setOpenExportByStateDialog(false)}>Cancelar</Button>
+                                <Button variant="contained" onClick={() => handleDownloadByState(exportByStateValue)}>Descargar</Button>
                             </DialogActions>
                         </Dialog>
 
