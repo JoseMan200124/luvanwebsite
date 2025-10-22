@@ -899,8 +899,9 @@ const SchoolPaymentsPage = () => {
             const studentsArr = Array.isArray(payment?.User?.FamilyDetail?.Students) ? payment.User.FamilyDetail.Students : [];
             const studentCount = studentsArr.length || payment?.studentCount || 0;
             const routeType = payment?.User?.FamilyDetail?.routeType || '';
-            const tarifa = Number(payment?.tarif || payment?.tariff || payment?.fee || 0);
+            const tarifa = Number(payment?.tarif || 0);
             const descuento = Number(payment?.User?.FamilyDetail?.specialFee ?? payment?.specialFee ?? 0);
+            const leftover = Number(payment?.leftover || 0);
 
             doc.setFontSize(11);
             doc.setFont(undefined, 'bold');
@@ -979,6 +980,11 @@ const SchoolPaymentsPage = () => {
             doc.text('Descuento:', rightLabelX, rightStartY + 32);
             doc.setFont(undefined, 'normal');
             doc.text(`Q ${descuento.toFixed(2)}`, rightValueX, rightStartY + 32);
+
+            doc.setFont(undefined, 'bold');
+            doc.text('Saldo pendiente:', rightLabelX, rightStartY + 48);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Q ${leftover.toFixed(2)}`, rightValueX + 15, rightStartY + 48);
 
             // Table: Fecha | Tarifa | Mora | Total a Pagar | Pago Registrado | Saldo/Credito
             // center all columns for a compact, centered layout
