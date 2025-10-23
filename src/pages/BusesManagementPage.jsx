@@ -41,6 +41,8 @@ import {
     Image as ImageIcon,
     FileUpload
 } from '@mui/icons-material';
+import { History } from '@mui/icons-material';
+import RouteHistoryModal from '../components/modals/RouteHistoryModal';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
@@ -191,6 +193,10 @@ const BusesManagementPage = () => {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteTargetIndex, setDeleteTargetIndex] = useState(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
+    // Route history modal state
+    const [routeHistoryOpen, setRouteHistoryOpen] = useState(false);
+    const [routeHistoryRouteNumber, setRouteHistoryRouteNumber] = useState('');
+    const [routeHistorySchoolId, setRouteHistorySchoolId] = useState(null);
 
     // =================== Efectos y funciones ===================
     const handleRequestSort = (property) => {
@@ -272,6 +278,28 @@ const BusesManagementPage = () => {
                 });
             }
         }
+    };
+
+    const handleOpenRouteHistory = (bus) => {
+        // If called without a bus, open the general modal (no pre-filled route/school)
+        if (!bus) {
+            setRouteHistoryRouteNumber('');
+            setRouteHistorySchoolId(null);
+            setRouteHistoryOpen(true);
+            return;
+        }
+        // try to infer route number and school id from bus object when available
+        const routeNumber = bus?.routeNumber || bus?.route || '';
+        const schoolIdFromBus = bus?.schoolId || (bus?.school && (bus.school.id || bus.school._id)) || null;
+        setRouteHistoryRouteNumber(routeNumber);
+        setRouteHistorySchoolId(schoolIdFromBus);
+        setRouteHistoryOpen(true);
+    };
+
+    const handleCloseRouteHistory = () => {
+        setRouteHistoryOpen(false);
+        setRouteHistoryRouteNumber('');
+        setRouteHistorySchoolId(null);
     };
 
     const handleDialogClose = () => {
@@ -586,6 +614,15 @@ const BusesManagementPage = () => {
                     style={{ width: '300px' }}
                 />
                 <div>
+                    <Button
+                        variant="outlined"
+                        color="primary"
+                        startIcon={<History />}
+                        sx={{ mr: 2 }}
+                        onClick={() => handleOpenRouteHistory()}
+                    >
+                        Ver Historial de Rutas
+                    </Button>
                     <Button
                         variant="contained"
                         color="info"
@@ -1090,6 +1127,8 @@ const BusesManagementPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+            {/* Route history modal */}
+            <RouteHistoryModal open={routeHistoryOpen} onClose={handleCloseRouteHistory} routeNumber={routeHistoryRouteNumber} schoolId={routeHistorySchoolId} />
         </BusesContainer>
     );
 };
