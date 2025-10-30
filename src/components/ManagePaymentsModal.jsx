@@ -440,7 +440,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             const dateVal = h.lastPaymentDate || null;
                             // Prefer amountPaid (ledger actual paid amount). Fallback to tarif or totalDue for older records.
                             const amountVal = (typeof h.amountPaid !== 'undefined' && h.amountPaid !== null) ? h.amountPaid : (h.tarif ?? h.totalDue ?? 0);
-                            const penaltyVal = h.penaltyBefore ?? 0;
+                            const penaltyVal = h.penaltyAfter ?? 0;
                             const receiptVal = h.receiptNumber || '';
                             const invoiceReq = !!h.requiresInvoice;
                             const key = h.id || `${dateVal || ''}-${amountVal}`;

@@ -582,13 +582,19 @@ const SchoolPaymentsPage = () => {
     }, [allSchools, fetchAllSchools, regHistPage, regHistLimit, school]);
 
     // Fetch payment summary for real-time penalty exoneration calculation
-    const fetchPaymentSummary = useCallback(async (paymentId, paymentDate) => {
+    // paymentId: id of payment; paymentDate: date string YYYY-MM-DD the payment will be applied
+    // baseDate (optional): if provided, backend should calculate penalty starting from this date
+    // Frontend will pass baseDate = nextPaymentDate when leftover != 0 so mora is calculated from nextPaymentDate
+    const fetchPaymentSummary = useCallback(async (paymentId, paymentDate, baseDate = null) => {
         if (!paymentId || !paymentDate) return;
         
         setLoadingPaymentSummary(true);
         try {
+            const params = { paymentDate };
+            if (baseDate) params.baseDate = baseDate; // optional; backend may use this to change penalty base
+
             const response = await api.get(`/payments/${paymentId}/calculate-summary`, {
-                params: { paymentDate }
+                params
             });
             setPaymentSummary(response.data.calculation);
         } catch (error) {
@@ -602,9 +608,13 @@ const SchoolPaymentsPage = () => {
     // Recalculate summary when payment date changes
     useEffect(() => {
         if (openRegisterDialog && registerPaymentTarget?.id && registerPaymentExtra.paymentDate) {
-            fetchPaymentSummary(registerPaymentTarget.id, registerPaymentExtra.paymentDate);
+            // If leftover != 0, calculate penalty starting from nextPaymentDate instead of lastPaymentDate
+            const baseDate = (registerPaymentTarget?.leftover && Number(registerPaymentTarget.leftover) !== 0)
+                ? registerPaymentTarget.nextPaymentDate
+                : null;
+            fetchPaymentSummary(registerPaymentTarget.id, registerPaymentExtra.paymentDate, baseDate);
         }
-    }, [openRegisterDialog, registerPaymentTarget?.id, registerPaymentExtra.paymentDate, fetchPaymentSummary]);
+    }, [openRegisterDialog, registerPaymentTarget?.id, registerPaymentExtra.paymentDate, registerPaymentTarget?.leftover, registerPaymentTarget?.nextPaymentDate, fetchPaymentSummary]);
  
     // Handle query params after handleOpenRegister is defined
     useEffect(() => {
@@ -1011,6 +1021,7 @@ const SchoolPaymentsPage = () => {
                 const descuentoFamilia = Number(typeof h.familyDiscount !== 'undefined' ? h.familyDiscount : 0);
                 const descuentoExtra = Number(typeof h.extraordinaryDiscount !== 'undefined' ? h.extraordinaryDiscount : 0);
                 const penaltyBefore = Number(typeof h.penaltyBefore !== 'undefined' ? h.penaltyBefore : 0);
+                const penaltyAfter = Number(typeof h.penaltyAfter !== 'undefined' ? h.penaltyAfter : 0);
                 const totalDueBefore = Number(typeof h.totalDueBefore !== 'undefined' ? h.totalDueBefore : 0);
                 const totalToPay = totalDueBefore - descuentoExtra - descuentoFamilia;
                 const pagoRegistrado = Number(typeof h.amountPaid !== 'undefined' ? h.amountPaid : 0);
@@ -1502,20 +1513,37 @@ const SchoolPaymentsPage = () => {
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
     // Tarifa: prefer explicit fee fields
     const dialogTarifa = Number(registerPaymentTarget?.tarif || 0);
-    // Mora (accumulated penalty) - Use calculated summary if available, otherwise fallback to payment data
-    const dialogMora = paymentSummary?.adjustedPenalty !== undefined 
-        ? Number(paymentSummary.adjustedPenalty)
-        : Number(registerPaymentTarget?.accumulatedPenalty || 0);
+    // Mora (accumulated penalty)
+    // If the payment has penaltyPaused === true, show the paused accumulatedPenalty
+    // (do NOT recalculate from paymentSummary). Otherwise prefer the calculated
+    // summary (paymentSummary.adjustedPenalty) and fallback to the stored value.
+    const dialogMora = registerPaymentTarget?.penaltyPaused
+        ? Number(registerPaymentTarget?.accumulatedPenalty || 0)
+        : (paymentSummary?.adjustedPenalty !== undefined
+            ? Number(paymentSummary.adjustedPenalty)
+            : Number(registerPaymentTarget?.accumulatedPenalty || 0));
     // Crédito a favor: always use the payment table's creditBalance field only
     const dialogCredito = Number(registerPaymentTarget?.creditBalance ?? 0);
     // Descuento de familia (special fee) comes from User.FamilyDetail.specialFee
-    // Note: family specialFee is already applied to the stored tarifa/leftover, so do not subtract it again.
+    // IMPORTANTE: El descuento familiar solo se aplica en el PRIMER pago del período.
+    // Backend lo detecta con: leftover === tarif (significa que el descuento aún no se aplicó)
+    // Solo mostramos el descuento si se va a aplicar en este pago
     const dialogFamilySpecialFee = Number(registerPaymentTarget?.User?.FamilyDetail?.specialFee ?? 0);
-    // Leftover / total due (fallbacks)
     const dialogLeftover = Number(registerPaymentTarget?.leftover || 0);
+    
+    // Determinar si el descuento familiar se aplicará en este pago
+    // Usamos una tolerancia pequeña (0.01) para comparar decimales
+    const toMoney = (num) => Math.round(parseFloat(num || 0) * 100) / 100;
+    const willApplyFamilyDiscount = dialogFamilySpecialFee > 0 && 
+                                     Math.abs(toMoney(dialogLeftover) - toMoney(dialogTarifa)) < 0.01;
+    
     const dialogExtraDiscount = Number(registerPaymentExtra?.extraordinaryDiscount || 0);
-    // Total to pay: start from leftover + mora, then subtract credito and extraordinary discount only.
-    const dialogTotalToPay = Math.max(0, dialogLeftover + dialogMora - dialogCredito - dialogExtraDiscount - dialogFamilySpecialFee);
+    // Total to pay: start from leftover + mora, then subtract credito, extraordinary discount, 
+    // and family discount (only if it will be applied)
+    const dialogTotalToPay = Math.max(0, 
+        dialogLeftover + dialogMora - dialogCredito - dialogExtraDiscount - 
+        (willApplyFamilyDiscount ? dialogFamilySpecialFee : 0)
+    );
 
 
     return (
@@ -1894,17 +1922,25 @@ const SchoolPaymentsPage = () => {
                                                 </Typography>
                                             </Box>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                <Typography variant="body2" color="text.secondary">Mora</Typography>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <Typography variant="body2" color="text.secondary">Mora</Typography>
+                                                    {registerPaymentTarget?.penaltyPaused && (
+                                                        <Chip label="Mora congelada" size="small" color="default" sx={{ height: 22, fontSize: '0.7rem' }} />
+                                                    )}
+                                                </Box>
                                                 <Typography variant="body2">{formatCurrency(dialogMora)}</Typography>
                                             </Box>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
                                                 <Typography variant="body2" color="text.secondary">Crédito a favor</Typography>
                                                 <Typography variant="body2">{formatCurrency(dialogCredito)}</Typography>
                                             </Box>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                <Typography variant="body2" color="text.secondary">Descuento familia</Typography>
-                                                <Typography variant="body2">{formatCurrency(dialogFamilySpecialFee)}</Typography>
-                                            </Box>
+                                            {/* Solo mostrar descuento familia si se va a aplicar (primer pago del mes) */}
+                                            {willApplyFamilyDiscount && (
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">Descuento familia</Typography>
+                                                    <Typography variant="body2">{formatCurrency(dialogFamilySpecialFee)}</Typography>
+                                                </Box>
+                                            )}
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
                                                 <Typography variant="body2" color="text.secondary">Descuento extraordinario</Typography>
                                                 <Typography variant="body2">{formatCurrency(dialogExtraDiscount)}</Typography>
