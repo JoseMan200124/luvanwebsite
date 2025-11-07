@@ -1247,6 +1247,10 @@ const SchoolPaymentsPage = () => {
             const monthStrPad = month ? String(month).padStart(2, '0') : null;
 
             historiesAll.forEach(h => {
+                // Filtrar familias con estado inactivo (state = 0)
+                const userState = h.User?.state ?? h.Payment?.User?.state ?? 1;
+                if (Number(userState) === 0) return; // Ignorar usuarios inactivos
+                
                 const familyLast = h.familyLastName || h.familyLast || h.familyLastname || h.User?.FamilyDetail?.familyLastName || h.User?.familyLastName || '';
                 // Use only finalStatus (as required). Fallback to Payment.finalStatus if the snapshot doesn't include it.
                 const estado = h.finalStatus || (h.Payment && h.Payment.finalStatus) || '';
@@ -1373,6 +1377,10 @@ const SchoolPaymentsPage = () => {
             const estadoNorm = estado ? String(estado).toUpperCase().trim() : '';
             const arr = Array.isArray(paymentsAll) ? paymentsAll : [];
             const filteredRows = arr.filter(p => {
+                // Filtrar familias con estado inactivo (state = 0)
+                const userState = p.User?.state ?? 1;
+                if (Number(userState) === 0) return false; // Ignorar usuarios inactivos
+                
                 if (!estadoNorm) return true;
                 const s = (p.finalStatus || p.status || '').toString().toUpperCase();
                 return s === estadoNorm;
