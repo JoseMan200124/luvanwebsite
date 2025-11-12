@@ -216,9 +216,10 @@ const BusesManagementPage = () => {
             setLoading(false);
         } catch (err) {
             console.error('Error fetching buses:', err);
+            const errorMessage = err.response?.data?.message || 'Error al obtener los buses';
             setSnackbar({
                 open: true,
-                message: 'Error al obtener los buses',
+                message: errorMessage,
                 severity: 'error'
             });
             setLoading(false);
@@ -271,9 +272,10 @@ const BusesManagementPage = () => {
                 fetchBuses();
             } catch (err) {
                 console.error('Error deleting bus:', err);
+                const errorMessage = err.response?.data?.message || 'Error al eliminar el bus';
                 setSnackbar({
                     open: true,
-                    message: 'Error al eliminar el bus',
+                    message: errorMessage,
                     severity: 'error'
                 });
             }
@@ -460,9 +462,10 @@ const BusesManagementPage = () => {
             handleDialogClose();
         } catch (err) {
             console.error('Error saving bus:', err);
+            const errorMessage = err.response?.data?.message || 'Ocurrió un error al guardar el bus';
             setSnackbar({
                 open: true,
-                message: 'Ocurrió un error al guardar el bus',
+                message: errorMessage,
                 severity: 'error'
             });
         }
@@ -542,9 +545,10 @@ const BusesManagementPage = () => {
             fetchBuses();
         } catch (error) {
             console.error('Error al subir buses masivamente:', error);
+            const errorMessage = error.response?.data?.message || 'Ocurrió un error al procesar la carga masiva';
             setSnackbar({
                 open: true,
-                message: 'Ocurrió un error al procesar la carga masiva',
+                message: errorMessage,
                 severity: 'error'
             });
         }
