@@ -790,18 +790,35 @@ const SchoolYearSelectionPage = () => {
                 penaltyPaused: !!selectedSchool.penaltyPaused,
                 // school year bounds
                 schoolYearStart: schoolYearStart || null,
-                schoolYearEnd: schoolYearEnd || null
+                schoolYearEnd: schoolYearEnd || null,
+                // Add school year for new schools
+                schoolYear: selectedSchoolYear
             };
 
-            await api.put(`/schools/${selectedSchool.id}`, payload, {
-                headers: { Authorization: `Bearer ${auth.token}` },
-            });
-            
-            setSnackbar({
-                open: true,
-                message: 'Colegio actualizado exitosamente',
-                severity: 'success'
-            });
+            // Distinguish between create and update
+            if (selectedSchool.id) {
+                // Update existing school
+                await api.put(`/schools/${selectedSchool.id}`, payload, {
+                    headers: { Authorization: `Bearer ${auth.token}` },
+                });
+                
+                setSnackbar({
+                    open: true,
+                    message: 'Colegio actualizado exitosamente',
+                    severity: 'success'
+                });
+            } else {
+                // Create new school
+                await api.post('/schools', payload, {
+                    headers: { Authorization: `Bearer ${auth.token}` },
+                });
+                
+                setSnackbar({
+                    open: true,
+                    message: 'Colegio creado exitosamente',
+                    severity: 'success'
+                });
+            }
 
             fetchSchoolsByYear(); // Recargar la lista
             handleCloseEditDialog();
@@ -1134,7 +1151,9 @@ const SchoolYearSelectionPage = () => {
                 maxWidth="md" 
                 fullWidth
             >
-                <DialogTitle>Editar Colegio</DialogTitle>
+                <DialogTitle>
+                    {selectedSchool?.id ? 'Editar Colegio' : 'Añadir Nuevo Colegio'}
+                </DialogTitle>
                 <DialogContent sx={{ px: 3, py: 2 }}>
                     {/* Sección: Información Básica */}
                     <StyledAccordion 
@@ -1559,7 +1578,7 @@ const SchoolYearSelectionPage = () => {
                 <DialogActions>
                     <Button onClick={handleCloseEditDialog}>Cancelar</Button>
                     <Button onClick={handleSave} variant="contained" color="primary">
-                        Guardar Cambios
+                        {selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio'}
                     </Button>
                 </DialogActions>
             </Dialog>
