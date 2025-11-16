@@ -5,6 +5,7 @@ import {
     BarChart,
     People,
     Security,
+    DirectionsBus,
 } from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
@@ -19,6 +20,10 @@ import BusesManagementPage from './pages/BusesManagementPage';
 import ActivityLogPage from './pages/ActivityLogPage';
 import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
+import AttendanceManagementPage from './pages/AttendanceManagementPage';
+import StudentIncidentsPage from './pages/StudentIncidentsPage';
+import RouteTimeLogsPage from './pages/RouteTimeLogsPage';
+import FuelRecordsPage from './pages/FuelRecordsPage';
 
 export const modules = [
     {
@@ -116,6 +121,41 @@ export const modules = [
                 path: 'auxiliares',
                 component: AuxiliaresManagementPage,
                 roles: ['Administrador', 'Gestor'],
+            },
+        ],
+    },
+    {
+        key: 'operaciones-moviles',
+        name: 'Operaciones Móviles',
+        icon: DirectionsBus,
+        submodules: [
+            {
+                key: 'asistencias',
+                name: 'Asistencias',
+                path: 'asistencias',
+                component: AttendanceManagementPage,
+                roles: ['Administrador', 'Gestor', 'Supervisor'],
+            },
+            {
+                key: 'incidentes-conducta',
+                name: 'Reportes de Conducta',
+                path: 'incidentes-conducta',
+                component: StudentIncidentsPage,
+                roles: ['Administrador', 'Gestor', 'Supervisor'],
+            },
+            {
+                key: 'horarios-rutas',
+                name: 'Horarios de Rutas',
+                path: 'horarios-rutas',
+                component: RouteTimeLogsPage,
+                roles: ['Administrador', 'Gestor', 'Supervisor'],
+            },
+            {
+                key: 'registros-combustible',
+                name: 'Registros de Combustible',
+                path: 'registros-combustible',
+                component: FuelRecordsPage,
+                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
         ],
     },
