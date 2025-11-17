@@ -65,8 +65,8 @@ const FuelRecordsPage = () => {
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedFuelingReason, setSelectedFuelingReason] = useState('');
-    const [startDate, setStartDate] = useState(moment().subtract(30, 'days'));
-    const [endDate, setEndDate] = useState(moment());
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
 
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -136,12 +136,20 @@ const FuelRecordsPage = () => {
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
 
-            const data = await getFuelRecords(filters);
+            const response = await getFuelRecords(filters);
             
-            setFuelRecords(data.records || data.data || []);
-            setTotalCount(data.total || 0);
+            // El backend retorna: { success: true, data: [...], pagination: { total, page, limit, totalPages } }
+            if (response.success && response.data) {
+                setFuelRecords(response.data);
+                setTotalCount(response.pagination?.total || 0);
+            } else {
+                setFuelRecords([]);
+                setTotalCount(0);
+            }
         } catch (error) {
             console.error('Error al cargar registros de combustible:', error);
+            setFuelRecords([]);
+            setTotalCount(0);
         } finally {
             setLoading(false);
         }
@@ -157,17 +165,49 @@ const FuelRecordsPage = () => {
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
 
-            const data = await getFuelStatistics(filters);
+            const response = await getFuelStatistics(filters);
             
-            setStatistics({
-                totalRecords: data.totalRecords || 0,
-                totalGallons: data.totalGallons || 0,
-                totalAmount: data.totalAmount || 0,
-                averagePrice: data.averagePrice || 0,
-                byReason: data.byReason || {},
-            });
+            // El backend retorna: { success: true, data: { byFuelType: [...], byBus: [...], totals: {...} } }
+            if (response.success && response.data) {
+                const totals = response.data.totals || {};
+                const byFuelType = response.data.byFuelType || [];
+                
+                // Organizar por razón de abastecimiento
+                const byReason = {};
+                byFuelType.forEach(stat => {
+                    byReason[stat.fuelingReason] = {
+                        count: parseInt(stat.count) || 0,
+                        totalGallonage: parseFloat(stat.totalGallonage) || 0,
+                        totalAmount: parseFloat(stat.totalAmount) || 0,
+                        avgPricePerGallon: parseFloat(stat.avgPricePerGallon) || 0
+                    };
+                });
+
+                setStatistics({
+                    totalRecords: parseInt(totals.totalRecords) || 0,
+                    totalGallons: parseFloat(totals.totalGallonage) || 0,
+                    totalAmount: parseFloat(totals.totalAmount) || 0,
+                    averagePrice: parseFloat(totals.avgPricePerGallon) || 0,
+                    byReason: byReason,
+                });
+            } else {
+                setStatistics({
+                    totalRecords: 0,
+                    totalGallons: 0,
+                    totalAmount: 0,
+                    averagePrice: 0,
+                    byReason: {},
+                });
+            }
         } catch (error) {
             console.error('Error al cargar estadísticas:', error);
+            setStatistics({
+                totalRecords: 0,
+                totalGallons: 0,
+                totalAmount: 0,
+                averagePrice: 0,
+                byReason: {},
+            });
         }
     };
 
@@ -187,9 +227,12 @@ const FuelRecordsPage = () => {
 
     const handleViewDetails = async (recordId) => {
         try {
-            const data = await getFuelRecordById(recordId);
-            setSelectedRecord(data);
-            setDetailsOpen(true);
+            const response = await getFuelRecordById(recordId);
+            // El backend retorna: { success: true, data: {...} }
+            if (response.success && response.data) {
+                setSelectedRecord(response.data);
+                setDetailsOpen(true);
+            }
         } catch (error) {
             console.error('Error al cargar detalles del registro:', error);
         }
