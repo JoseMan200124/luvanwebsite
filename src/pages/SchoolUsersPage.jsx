@@ -136,7 +136,11 @@ const SchoolUsersPage = () => {
         nit: '',
         mainAddress: '',
         alternativeAddress: '',
+        zoneOrSector: '',
         routeType: '',
+        emergencyContact: '',
+        emergencyRelationship: '',
+        emergencyPhone: '',
         students: [],
         scheduleSlots: [],
         specialFee: 0
@@ -1040,7 +1044,11 @@ const SchoolUsersPage = () => {
                 nit: user.FamilyDetail.nit || '',
                 mainAddress: user.FamilyDetail.mainAddress || '',
                 alternativeAddress: user.FamilyDetail.alternativeAddress || '',
+                zoneOrSector: user.FamilyDetail.zoneOrSector || '',
                 routeType: user.FamilyDetail.routeType || '',
+                emergencyContact: user.FamilyDetail.emergencyContact || '',
+                emergencyRelationship: user.FamilyDetail.emergencyRelationship || '',
+                emergencyPhone: user.FamilyDetail.emergencyPhone || '',
                 students: user.FamilyDetail.Students || [],
                 scheduleSlots: user.FamilyDetail.ScheduleSlots || [],
                 specialFee: user.FamilyDetail.specialFee ?? 0
@@ -1059,7 +1067,11 @@ const SchoolUsersPage = () => {
                 nit: '',
                 mainAddress: '',
                 alternativeAddress: '',
+                zoneOrSector: '',
                 routeType: '',
+                emergencyContact: '',
+                emergencyRelationship: '',
+                emergencyPhone: '',
                 students: [],
                 scheduleSlots: [],
                 specialFee: 0
@@ -1290,7 +1302,11 @@ const SchoolUsersPage = () => {
             nit: '',
             mainAddress: '',
             alternativeAddress: '',
+            zoneOrSector: '',
             routeType: '',
+            emergencyContact: '',
+            emergencyRelationship: '',
+            emergencyPhone: '',
             students: [],
             scheduleSlots: [],
             specialFee: 0
@@ -2323,6 +2339,16 @@ const SchoolUsersPage = () => {
                                         />
                                     </Grid>
                                     <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="zoneOrSector"
+                                            label="Zona/Sector"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.zoneOrSector}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
                                         <FormControl variant="outlined" fullWidth>
                                             <InputLabel>Tipo de Ruta</InputLabel>
                                             <Select
@@ -2348,6 +2374,43 @@ const SchoolUsersPage = () => {
                                             fullWidth
                                             variant="outlined"
                                             value={familyDetail.specialFee}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                </Grid>
+
+                                {/* Sección de contacto de emergencia */}
+                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
+                                    Contacto de Emergencia
+                                </Typography>
+                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="emergencyContact"
+                                            label="Nombre del Contacto"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.emergencyContact}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="emergencyRelationship"
+                                            label="Parentesco"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.emergencyRelationship}
+                                            onChange={handleFamilyDetailChange}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <TextField
+                                            name="emergencyPhone"
+                                            label="Teléfono de Emergencia"
+                                            fullWidth
+                                            variant="outlined"
+                                            value={familyDetail.emergencyPhone}
                                             onChange={handleFamilyDetailChange}
                                         />
                                     </Grid>
