@@ -219,7 +219,11 @@ const SchoolUsersPage = () => {
                 { header: 'Email Padre', key: 'padreEmail' },
                 { header: 'Dirección Principal', key: 'direccionPrincipal' },
                 { header: 'Dirección Alterna', key: 'direccionAlterna' },
-                { header: 'Tipo Ruta', key: 'tipoRuta' }
+                { header: 'Zona/Sector', key: 'zonaSector' },
+                { header: 'Tipo Ruta', key: 'tipoRuta' },
+                { header: 'Contacto Emergencia', key: 'emergenciaContacto' },
+                { header: 'Parentesco Emergencia', key: 'emergenciaParentesco' },
+                { header: 'Teléfono Emergencia', key: 'emergenciaTelefono' }
             ];
 
             const studentCols = [];
@@ -275,7 +279,11 @@ const SchoolUsersPage = () => {
                 row.push(fd.fatherEmail || '');
                 row.push(fd.mainAddress || '');
                 row.push(fd.alternativeAddress || '');
+                row.push(fd.zoneOrSector || '');
                 row.push(fd.routeType || '');
+                row.push(fd.emergencyContact || '');
+                row.push(fd.emergencyRelationship || '');
+                row.push(fd.emergencyPhone || '');
 
                 for (let i = 0; i < maxStudents; i++) {
                     const student = Array.isArray(fd.Students) && fd.Students[i] ? fd.Students[i] : null;
@@ -649,7 +657,11 @@ const SchoolUsersPage = () => {
                 { header: 'Email Padre', key: 'padreEmail' },
                 { header: 'Dirección Principal', key: 'direccionPrincipal' },
                 { header: 'Dirección Alterna', key: 'direccionAlterna' },
-                { header: 'Tipo Ruta', key: 'tipoRuta' }
+                { header: 'Zona/Sector', key: 'zonaSector' },
+                { header: 'Tipo Ruta', key: 'tipoRuta' },
+                { header: 'Contacto Emergencia', key: 'emergenciaContacto' },
+                { header: 'Parentesco Emergencia', key: 'emergenciaParentesco' },
+                { header: 'Teléfono Emergencia', key: 'emergenciaTelefono' }
             ];
 
             // Añadir columnas por cada hijo: Estudiante N - Nombre, Estudiante N - Grado
@@ -715,7 +727,11 @@ const SchoolUsersPage = () => {
                 row.push(fd.fatherEmail || '');
                 row.push(fd.mainAddress || '');
                 row.push(fd.alternativeAddress || '');
+                row.push(fd.zoneOrSector || '');
                 row.push(fd.routeType || '');
+                row.push(fd.emergencyContact || '');
+                row.push(fd.emergencyRelationship || '');
+                row.push(fd.emergencyPhone || '');
 
                 for (let i = 0; i < maxStudents; i++) {
                     const student = Array.isArray(fd.Students) && fd.Students[i] ? fd.Students[i] : null;
@@ -1335,6 +1351,10 @@ const SchoolUsersPage = () => {
             "NIT",
             "Dirección Principal",
             "Dirección Alterna",
+            "Zona/Sector",
+            "Contacto de Emergencia",
+            "Parentesco de Emergencia",
+            "Teléfono de Emergencia",
             "Descuento especial (monto)",
             "Tipo ruta",
             "Alumno 1",
@@ -1362,6 +1382,10 @@ const SchoolUsersPage = () => {
             "1234567-8",
             "Calle Principal 123",
             "Avenida Secundaria 456",
+            "Zona 10",
+            "Ana García",
+            "Hermana",
+            "55598765",
             "0",
             "Completa",
             "Alumno Ejemplo 1",
