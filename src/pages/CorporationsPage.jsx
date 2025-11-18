@@ -1,0 +1,985 @@
+// src/pages/CorporationsPage.jsx
+
+import React, { useState, useEffect, useContext, useCallback } from 'react';
+import {
+    Typography,
+    Box,
+    Card,
+    CardContent,
+    Button,
+    CircularProgress,
+    Snackbar,
+    Alert,
+    Grid,
+    IconButton,
+    Tooltip,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    DialogContentText,
+    TextField,
+    Chip,
+    Accordion,
+    AccordionSummary,
+    AccordionDetails,
+    FormControlLabel,
+    Checkbox,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem
+} from '@mui/material';
+import { 
+    Business as CorporationIcon, 
+    ContentCopy, 
+    Edit, 
+    Delete,
+    Add,
+    ExpandMore,
+    CalendarToday
+} from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../context/AuthProvider';
+import api from '../utils/axiosConfig';
+import styled from 'styled-components';
+import tw from 'twin.macro';
+
+const PageContainer = styled.div`
+    ${tw`bg-gray-50 min-h-screen w-full`}
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+
+    @media (max-width: 640px) {
+        padding: 1rem;
+    }
+`;
+
+const HeaderCard = styled(Card)`
+    ${tw`mb-6 shadow-lg`}
+    background: linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);
+    color: white;
+`;
+
+const CorporationCard = styled(Card)`
+    ${tw`cursor-pointer transition-all duration-300`}
+    &:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+`;
+
+const StyledAccordion = styled(Accordion)`
+    &.MuiAccordion-root {
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        box-shadow: none;
+        margin-bottom: 8px;
+        border-radius: 8px !important;
+        overflow: hidden;
+        
+        &:before {
+            display: none;
+        }
+        
+        &.Mui-expanded {
+            margin-bottom: 8px;
+        }
+    }
+    
+    & .MuiAccordionSummary-root {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+        min-height: 56px;
+        transition: background-color 0.3s ease;
+        
+        &:hover {
+            background-color: #e9ecef;
+        }
+        
+        &.Mui-expanded {
+            min-height: 56px;
+            background-color: #e3f2fd;
+        }
+    }
+    
+    & .MuiAccordionDetails-root {
+        padding: 24px;
+        background-color: #ffffff;
+    }
+    
+    & .MuiAccordionSummary-expandIconWrapper {
+        transition: transform 0.3s ease;
+        
+        &.Mui-expanded {
+            transform: rotate(180deg);
+        }
+    }
+`;
+
+const StyledAccordionSummary = styled(AccordionSummary)`
+    & .MuiAccordionSummary-content {
+        margin: 12px 0;
+        
+        &.Mui-expanded {
+            margin: 12px 0;
+        }
+    }
+`;
+
+const CorporationsPage = () => {
+    const { auth } = useContext(AuthContext);
+    const navigate = useNavigate();
+
+    const [corporations, setCorporations] = useState([]);
+    const [selectedFiscalYear, setSelectedFiscalYear] = useState(new Date().getFullYear().toString());
+    const [loading, setLoading] = useState(false);
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    
+    // Estados para diálogos
+    const [openCreateDialog, setOpenCreateDialog] = useState(false);
+    const [openEditDialog, setOpenEditDialog] = useState(false);
+    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+    const [selectedCorporation, setSelectedCorporation] = useState(null);
+    
+    // Estados para formulario
+    const [formData, setFormData] = useState({
+        name: '',
+        contactPhone: '',
+        contactEmail: '',
+        address: '',
+        city: '',
+        contactPerson: '',
+        routeNumbers: [],
+        routeSchedules: [],
+        extraEnrollmentFields: [],
+        whatsappLink: '',
+        state: 1
+    });
+    
+    const [newRouteNumber, setNewRouteNumber] = useState('');
+    
+    // Estado para controlar acordeones expandidos
+    const [expandedPanels, setExpandedPanels] = useState({
+        basicInfo: true,
+        routes: false,
+        extraFields: false
+    });
+
+    // Años fiscales disponibles
+    const currentYear = new Date().getFullYear();
+    const fiscalYears = [
+        { id: (currentYear - 1).toString(), name: `Año Fiscal ${currentYear - 1}` },
+        { id: currentYear.toString(), name: `Año Fiscal ${currentYear}` },
+        { id: (currentYear + 1).toString(), name: `Año Fiscal ${currentYear + 1}` }
+    ];
+
+    const fetchCorporations = useCallback(async () => {
+        setLoading(true);
+        try {
+            const response = await api.get('/corporations', {
+                headers: {
+                    Authorization: `Bearer ${auth.token}`,
+                },
+                params: {
+                    fiscalYear: selectedFiscalYear
+                }
+            });
+            const rawCorporations = Array.isArray(response.data.corporations) 
+                ? response.data.corporations 
+                : [];
+            
+            const processedCorporations = rawCorporations.map((corp) => {
+                let parsedDepartments = [];
+                if (typeof corp.departments === 'string' && corp.departments.trim()) {
+                    try {
+                        parsedDepartments = JSON.parse(corp.departments);
+                    } catch {
+                        parsedDepartments = [];
+                    }
+                } else if (Array.isArray(corp.departments)) {
+                    parsedDepartments = corp.departments;
+                }
+                
+                let parsedRoutes = [];
+                if (typeof corp.routeNumbers === 'string' && corp.routeNumbers.trim()) {
+                    try {
+                        parsedRoutes = JSON.parse(corp.routeNumbers);
+                    } catch {
+                        parsedRoutes = [];
+                    }
+                } else if (Array.isArray(corp.routeNumbers)) {
+                    parsedRoutes = corp.routeNumbers;
+                }
+                
+                let parsedBusinessHours = { start: '08:00', end: '17:00' };
+                if (typeof corp.businessHours === 'string' && corp.businessHours.trim()) {
+                    try {
+                        parsedBusinessHours = JSON.parse(corp.businessHours);
+                    } catch {
+                        // keep default
+                    }
+                } else if (typeof corp.businessHours === 'object' && corp.businessHours !== null) {
+                    parsedBusinessHours = corp.businessHours;
+                }
+                
+                return {
+                    ...corp,
+                    departments: Array.isArray(parsedDepartments) ? parsedDepartments : [],
+                    routeNumbers: Array.isArray(parsedRoutes) ? parsedRoutes : [],
+                    businessHours: parsedBusinessHours,
+                    employeesCount: Number(corp.employeesCount) || 0,
+                    transportFee: Number(corp.transportFee) || 0
+                };
+            });
+            
+            setCorporations(processedCorporations);
+        } catch (err) {
+            console.error('Error fetching corporations:', err);
+            setSnackbar({ 
+                open: true, 
+                message: 'Error al obtener las corporaciones', 
+                severity: 'error' 
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [auth.token, selectedFiscalYear]);
+
+    useEffect(() => {
+        if (auth.token && selectedFiscalYear) {
+            fetchCorporations();
+        }
+    }, [auth.token, selectedFiscalYear, fetchCorporations]);
+
+    const handleCorporationSelect = (corporation) => {
+        navigate(`/admin/corporaciones/${selectedFiscalYear}/${corporation.id}`, {
+            state: {
+                fiscalYear: selectedFiscalYear,
+                corporation: corporation
+            }
+        });
+    };
+
+    const handleCopyEnrollLink = (corporationId) => {
+        const baseUrl = window.location.origin;
+        const link = `${baseUrl}/corporations/enroll/${corporationId}`;
+        navigator.clipboard.writeText(link)
+            .then(() => {
+                setSnackbar({
+                    open: true,
+                    message: 'Enlace de inscripción copiado al portapapeles',
+                    severity: 'success'
+                });
+            })
+            .catch(() => {
+                setSnackbar({
+                    open: true,
+                    message: 'Error al copiar enlace',
+                    severity: 'error'
+                });
+            });
+    };
+
+    const handleOpenCreateDialog = () => {
+        setFormData({
+            name: '',
+            contactPhone: '',
+            contactEmail: '',
+            address: '',
+            city: '',
+            contactPerson: '',
+            routeNumbers: [],
+            routeSchedules: [],
+            extraEnrollmentFields: [],
+            whatsappLink: '',
+            state: 1
+        });
+        setExpandedPanels({
+            basicInfo: true,
+            routes: false,
+            extraFields: false
+        });
+        setOpenCreateDialog(true);
+    };
+
+    const handleOpenEditDialog = (corporation) => {
+        setSelectedCorporation(corporation);
+        setFormData({
+            name: corporation.name || '',
+            contactPhone: corporation.contactPhone || '',
+            contactEmail: corporation.contactEmail || '',
+            address: corporation.address || '',
+            city: corporation.city || '',
+            contactPerson: corporation.contactPerson || '',
+            routeNumbers: corporation.routeNumbers || [],
+            routeSchedules: corporation.routeSchedules || [],
+            extraEnrollmentFields: corporation.extraEnrollmentFields || [],
+            whatsappLink: corporation.whatsappLink || '',
+            state: corporation.state !== undefined ? corporation.state : 1
+        });
+        setExpandedPanels({
+            basicInfo: true,
+            routes: false,
+            extraFields: false
+        });
+        setOpenEditDialog(true);
+    };
+
+    const handleOpenDeleteDialog = (corporation) => {
+        setSelectedCorporation(corporation);
+        setOpenDeleteDialog(true);
+    };
+
+    const handleCloseDialogs = () => {
+        setOpenCreateDialog(false);
+        setOpenEditDialog(false);
+        setOpenDeleteDialog(false);
+        setSelectedCorporation(null);
+    };
+
+    const handleInputChange = (field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleAddExtraField = () => {
+        setFormData(prev => ({
+            ...prev,
+            extraEnrollmentFields: [
+                ...prev.extraEnrollmentFields,
+                { fieldName: '', type: 'text', required: false }
+            ]
+        }));
+    };
+
+    const handleRemoveExtraField = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            extraEnrollmentFields: prev.extraEnrollmentFields.filter((_, i) => i !== index)
+        }));
+    };
+
+    const handleChangeExtraField = (index, field, value) => {
+        setFormData(prev => {
+            const clone = [...prev.extraEnrollmentFields];
+            clone[index][field] = value;
+            return { ...prev, extraEnrollmentFields: clone };
+        });
+    };
+
+    const handleAddRouteNumber = () => {
+        if (newRouteNumber.trim()) {
+            setFormData(prev => ({
+                ...prev,
+                routeNumbers: [...prev.routeNumbers, newRouteNumber.trim()]
+            }));
+            setNewRouteNumber('');
+        }
+    };
+
+    const handleRemoveRouteNumber = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            routeNumbers: prev.routeNumbers.filter((_, i) => i !== index)
+        }));
+    };
+
+    const handleAccordionChange = (panel) => (event, isExpanded) => {
+        setExpandedPanels(prev => ({ ...prev, [panel]: isExpanded }));
+    };
+
+    const handleCreateCorporation = async () => {
+        try {
+            const payload = {
+                name: formData.name,
+                address: formData.address,
+                city: formData.city,
+                contactPerson: formData.contactPerson,
+                contactEmail: formData.contactEmail,
+                contactPhone: formData.contactPhone,
+                whatsappLink: formData.whatsappLink || null,
+                extraEnrollmentFields: Array.isArray(formData.extraEnrollmentFields) ? formData.extraEnrollmentFields : [],
+                routeNumbers: Array.isArray(formData.routeNumbers) ? formData.routeNumbers : [],
+                routeSchedules: Array.isArray(formData.routeSchedules) ? formData.routeSchedules : [],
+                state: formData.state || 1
+            };
+            
+            await api.post('/corporations', payload, {
+                headers: {
+                    Authorization: `Bearer ${auth.token}`,
+                }
+            });
+            
+            setSnackbar({
+                open: true,
+                message: 'Corporación creada exitosamente',
+                severity: 'success'
+            });
+            
+            handleCloseDialogs();
+            fetchCorporations();
+        } catch (err) {
+            console.error('Error creating corporation:', err);
+            setSnackbar({
+                open: true,
+                message: err.response?.data?.error || 'Error al crear corporación',
+                severity: 'error'
+            });
+        }
+    };
+
+    const handleUpdateCorporation = async () => {
+        if (!selectedCorporation) return;
+        
+        try {
+            const payload = {
+                name: formData.name,
+                address: formData.address,
+                city: formData.city,
+                contactPerson: formData.contactPerson,
+                contactEmail: formData.contactEmail,
+                contactPhone: formData.contactPhone,
+                whatsappLink: formData.whatsappLink || null,
+                extraEnrollmentFields: Array.isArray(formData.extraEnrollmentFields) ? formData.extraEnrollmentFields : [],
+                routeNumbers: Array.isArray(formData.routeNumbers) ? formData.routeNumbers : [],
+                routeSchedules: Array.isArray(formData.routeSchedules) ? formData.routeSchedules : [],
+                state: formData.state || 1
+            };
+            
+            await api.put(`/corporations/${selectedCorporation.id}`, payload, {
+                headers: {
+                    Authorization: `Bearer ${auth.token}`,
+                }
+            });
+            
+            setSnackbar({
+                open: true,
+                message: 'Corporación actualizada exitosamente',
+                severity: 'success'
+            });
+            
+            handleCloseDialogs();
+            fetchCorporations();
+        } catch (err) {
+            console.error('Error updating corporation:', err);
+            setSnackbar({
+                open: true,
+                message: err.response?.data?.error || 'Error al actualizar corporación',
+                severity: 'error'
+            });
+        }
+    };
+
+    const handleDeleteCorporation = async () => {
+        if (!selectedCorporation) return;
+        
+        try {
+            await api.delete(`/corporations/${selectedCorporation.id}`, {
+                headers: {
+                    Authorization: `Bearer ${auth.token}`,
+                }
+            });
+            
+            setSnackbar({
+                open: true,
+                message: 'Corporación eliminada exitosamente',
+                severity: 'success'
+            });
+            
+            handleCloseDialogs();
+            fetchCorporations();
+        } catch (err) {
+            console.error('Error deleting corporation:', err);
+            setSnackbar({
+                open: true,
+                message: err.response?.data?.error || 'Error al eliminar corporación',
+                severity: 'error'
+            });
+        }
+    };
+
+    const renderCorporationDialog = (isEdit = false) => (
+        <Dialog 
+            open={isEdit ? openEditDialog : openCreateDialog} 
+            onClose={handleCloseDialogs}
+            maxWidth="md"
+            fullWidth
+        >
+            <DialogTitle>
+                {isEdit ? 'Editar Corporación' : 'Añadir Nueva Corporación'}
+            </DialogTitle>
+            <DialogContent sx={{ px: 3, py: 2 }}>
+                {/* Sección: Información Básica */}
+                <StyledAccordion 
+                    expanded={expandedPanels.basicInfo}
+                    onChange={handleAccordionChange('basicInfo')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            📋 Información Básica
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <TextField
+                                fullWidth
+                                label="Nombre de la Corporación"
+                                value={formData.name}
+                                onChange={(e) => handleInputChange('name', e.target.value)}
+                                required
+                            />
+                            <TextField
+                                fullWidth
+                                label="Ciudad"
+                                value={formData.city}
+                                onChange={(e) => handleInputChange('city', e.target.value)}
+                            />
+                            <TextField
+                                fullWidth
+                                label="Dirección"
+                                value={formData.address}
+                                onChange={(e) => handleInputChange('address', e.target.value)}
+                                multiline
+                                rows={2}
+                            />
+                            <TextField
+                                fullWidth
+                                label="Persona de Contacto"
+                                value={formData.contactPerson}
+                                onChange={(e) => handleInputChange('contactPerson', e.target.value)}
+                            />
+                            <TextField
+                                fullWidth
+                                label="Teléfono de Contacto"
+                                value={formData.contactPhone}
+                                onChange={(e) => handleInputChange('contactPhone', e.target.value)}
+                            />
+                            <TextField
+                                fullWidth
+                                label="Email de Contacto"
+                                type="email"
+                                value={formData.contactEmail}
+                                onChange={(e) => handleInputChange('contactEmail', e.target.value)}
+                            />
+                            <TextField
+                                fullWidth
+                                label="Enlace de WhatsApp"
+                                value={formData.whatsappLink}
+                                onChange={(e) => handleInputChange('whatsappLink', e.target.value)}
+                                placeholder="https://wa.me/50212345678"
+                                helperText="Enlace directo para contacto por WhatsApp"
+                            />
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        checked={formData.state === 1}
+                                        onChange={(e) => handleInputChange('state', e.target.checked ? 1 : 0)}
+                                    />
+                                }
+                                label="Corporación Activa"
+                            />
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
+
+                {/* Sección: Rutas */}
+                <StyledAccordion 
+                    expanded={expandedPanels.routes}
+                    onChange={handleAccordionChange('routes')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            🚌 Números de Ruta
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box>
+                            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                                <TextField
+                                    fullWidth
+                                    label="Nuevo Número de Ruta"
+                                    value={newRouteNumber}
+                                    onChange={(e) => setNewRouteNumber(e.target.value)}
+                                    onKeyPress={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleAddRouteNumber();
+                                        }
+                                    }}
+                                />
+                                <Button 
+                                    variant="contained" 
+                                    onClick={handleAddRouteNumber}
+                                    startIcon={<Add />}
+                                >
+                                    Agregar
+                                </Button>
+                            </Box>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                {formData.routeNumbers.map((route, index) => (
+                                    <Chip
+                                        key={index}
+                                        label={`Ruta ${route}`}
+                                        onDelete={() => handleRemoveRouteNumber(index)}
+                                        color="secondary"
+                                        variant="outlined"
+                                    />
+                                ))}
+                            </Box>
+                            {formData.routeNumbers.length === 0 && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                    No hay rutas agregadas
+                                </Typography>
+                            )}
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
+
+                {/* Sección: Campos de Inscripción Extra */}
+                <StyledAccordion 
+                    expanded={expandedPanels.extraFields}
+                    onChange={handleAccordionChange('extraFields')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            � Campos de Inscripción Extra
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box>
+                            <Button 
+                                variant="outlined" 
+                                onClick={handleAddExtraField}
+                                startIcon={<Add />}
+                                sx={{ mb: 2 }}
+                            >
+                                Agregar Campo
+                            </Button>
+                            {formData.extraEnrollmentFields.map((field, index) => (
+                                <Box 
+                                    key={index}
+                                    sx={{ 
+                                        display: 'flex', 
+                                        gap: 2, 
+                                        mb: 2, 
+                                        p: 2, 
+                                        border: '1px solid #e0e0e0',
+                                        borderRadius: 1,
+                                        alignItems: 'center'
+                                    }}
+                                >
+                                    <TextField
+                                        fullWidth
+                                        label="Nombre del Campo"
+                                        value={field.fieldName}
+                                        onChange={(e) => handleChangeExtraField(index, 'fieldName', e.target.value)}
+                                    />
+                                    <FormControl sx={{ minWidth: 150 }}>
+                                        <InputLabel>Tipo</InputLabel>
+                                        <Select
+                                            value={field.type}
+                                            onChange={(e) => handleChangeExtraField(index, 'type', e.target.value)}
+                                            label="Tipo"
+                                        >
+                                            <MenuItem value="text">Texto</MenuItem>
+                                            <MenuItem value="email">Email</MenuItem>
+                                            <MenuItem value="number">Número</MenuItem>
+                                            <MenuItem value="tel">Teléfono</MenuItem>
+                                            <MenuItem value="date">Fecha</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                checked={field.required}
+                                                onChange={(e) => handleChangeExtraField(index, 'required', e.target.checked)}
+                                            />
+                                        }
+                                        label="Requerido"
+                                    />
+                                    <IconButton 
+                                        color="error" 
+                                        onClick={() => handleRemoveExtraField(index)}
+                                    >
+                                        <Delete />
+                                    </IconButton>
+                                </Box>
+                            ))}
+                            {formData.extraEnrollmentFields.length === 0 && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                    No hay campos extra agregados. Estos campos aparecerán en el formulario de inscripción pública.
+                                </Typography>
+                            )}
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={handleCloseDialogs}>Cancelar</Button>
+                <Button 
+                    onClick={isEdit ? handleUpdateCorporation : handleCreateCorporation}
+                    variant="contained"
+                    disabled={!formData.name.trim()}
+                >
+                    {isEdit ? 'Guardar Cambios' : 'Crear Corporación'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+
+    return (
+        <PageContainer>
+            {/* Header */}
+            <HeaderCard>
+                <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <CalendarToday sx={{ fontSize: 40 }} />
+                        <Box>
+                            <Typography variant="h4" component="h1" gutterBottom>
+                                Gestión de Transportes Corporativos
+                            </Typography>
+                            <Typography variant="h6" sx={{ opacity: 0.9 }}>
+                                Selecciona el año fiscal y corporación para gestionar
+                            </Typography>
+                        </Box>
+                    </Box>
+                </CardContent>
+            </HeaderCard>
+
+            {/* Selector de Año Fiscal */}
+            <Card sx={{ mb: 4 }}>
+                <CardContent>
+                    <Box>
+                        <Typography variant="h6" gutterBottom sx={{ mb: 1 }}>
+                            Año Fiscal
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                            <FormControl fullWidth variant="outlined" sx={{ maxWidth: 300 }}>
+                                <InputLabel>Seleccionar Año Fiscal</InputLabel>
+                                <Select
+                                    value={selectedFiscalYear}
+                                    onChange={(e) => setSelectedFiscalYear(e.target.value)}
+                                    label="Seleccionar Año Fiscal"
+                                >
+                                    {fiscalYears.map((year) => (
+                                        <MenuItem key={year.id} value={year.id}>
+                                            {year.name}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={handleOpenCreateDialog}
+                                >
+                                    Añadir Corporación
+                                </Button>
+                            </Box>
+                        </Box>
+                    </Box>
+                </CardContent>
+            </Card>
+
+            {/* Lista de Corporaciones */}
+            <Card>
+                <CardContent>
+                    <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
+                        Corporaciones - {fiscalYears.find(y => y.id === selectedFiscalYear)?.name}
+                    </Typography>
+
+                    {loading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : corporations.length === 0 ? (
+                        <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <CorporationIcon sx={{ fontSize: 64, color: 'grey.400', mb: 2 }} />
+                            <Typography variant="h6" color="textSecondary">
+                                No hay corporaciones disponibles para este año fiscal
+                            </Typography>
+                        </Box>
+                    ) : (
+                        <Grid container spacing={3}>
+                            {corporations.map((corporation) => (
+                                <Grid item xs={12} sm={6} md={4} lg={3} key={corporation.id}>
+                                    <CorporationCard>
+                                        <CardContent sx={{ textAlign: 'center', py: 3 }}>
+                                            <CorporationIcon 
+                                                sx={{ 
+                                                    fontSize: 48, 
+                                                    color: 'primary.main', 
+                                                    mb: 2 
+                                                }} 
+                                            />
+                                            <Typography 
+                                                variant="h6" 
+                                                component="h3" 
+                                                gutterBottom
+                                                sx={{ 
+                                                    fontWeight: 'bold',
+                                                    minHeight: '2.5rem',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}
+                                            >
+                                                {corporation.name}
+                                            </Typography>
+                                            <Typography 
+                                                variant="body2" 
+                                                color="textSecondary" 
+                                                sx={{ mb: 2 }}
+                                            >
+                                                {corporation.industry || 'Sin industria'}
+                                            </Typography>
+
+                                            {/* Total de Empleados */}
+                                            <Typography 
+                                                variant="body2" 
+                                                color="text.secondary" 
+                                                sx={{ mb: 1, fontWeight: 600 }}
+                                            >
+                                                Total de Empleados: {corporation.employeesCount || 0}
+                                            </Typography>
+
+                                            {/* Departamentos como chips */}
+                                            {Array.isArray(corporation.departments) && corporation.departments.length > 0 ? (
+                                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 2, justifyContent: 'center' }}>
+                                                    {corporation.departments.slice(0, 3).map((dept, index) => (
+                                                        <Chip
+                                                            key={index}
+                                                            label={dept}
+                                                            size="small"
+                                                            color="primary"
+                                                            variant="outlined"
+                                                        />
+                                                    ))}
+                                                    {corporation.departments.length > 3 && (
+                                                        <Chip
+                                                            label={`+${corporation.departments.length - 3} más`}
+                                                            size="small"
+                                                            color="secondary"
+                                                            variant="outlined"
+                                                        />
+                                                    )}
+                                                </Box>
+                                            ) : (
+                                                <Typography 
+                                                    variant="body2" 
+                                                    color="textSecondary" 
+                                                    sx={{ mb: 2, fontSize: '0.75rem' }}
+                                                >
+                                                    Sin departamentos configurados
+                                                </Typography>
+                                            )}
+                                            
+                                            {/* Botón principal de gestionar */}
+                                            <Button 
+                                                variant="contained" 
+                                                color="primary"
+                                                size="small"
+                                                sx={{ borderRadius: 2, mb: 2 }}
+                                                onClick={() => handleCorporationSelect(corporation)}
+                                            >
+                                                Gestionar
+                                            </Button>
+
+                                            {/* Botones de acciones */}
+                                            <Box sx={{ 
+                                                display: 'flex', 
+                                                justifyContent: 'center', 
+                                                gap: 1,
+                                                borderTop: '1px solid #e0e0e0',
+                                                pt: 1.5
+                                            }}>
+                                                <Tooltip title="Copiar enlace de inscripción">
+                                                    <IconButton 
+                                                        size="small"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleCopyEnrollLink(corporation.id);
+                                                        }}
+                                                    >
+                                                        <ContentCopy fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Editar corporación">
+                                                    <IconButton 
+                                                        size="small"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenEditDialog(corporation);
+                                                        }}
+                                                    >
+                                                        <Edit fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Eliminar corporación">
+                                                    <IconButton 
+                                                        size="small"
+                                                        color="error"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenDeleteDialog(corporation);
+                                                        }}
+                                                    >
+                                                        <Delete fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </Box>
+                                        </CardContent>
+                                    </CorporationCard>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Diálogo de Crear/Editar */}
+            {renderCorporationDialog(false)}
+            {renderCorporationDialog(true)}
+
+            {/* Diálogo de Eliminar */}
+            <Dialog open={openDeleteDialog} onClose={handleCloseDialogs}>
+                <DialogTitle>Confirmar Eliminación</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        ¿Está seguro que desea eliminar la corporación "{selectedCorporation?.name}"?
+                        Esta acción no se puede deshacer.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseDialogs}>Cancelar</Button>
+                    <Button onClick={handleDeleteCorporation} color="error" variant="contained">
+                        Eliminar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Snackbar de notificaciones */}
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={6000}
+                onClose={() => setSnackbar({ ...snackbar, open: false })}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            >
+                <Alert 
+                    onClose={() => setSnackbar({ ...snackbar, open: false })} 
+                    severity={snackbar.severity}
+                    variant="filled"
+                >
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
+        </PageContainer>
+    );
+};
+
+export default CorporationsPage;

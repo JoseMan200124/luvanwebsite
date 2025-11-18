@@ -17,10 +17,12 @@ import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
 import FilledContractViewer from './pages/FilledContractViewer';
 import SchoolEnrollmentPage from './pages/SchoolEnrollmentPage';
+import CorporateEnrollmentPage from './pages/CorporateEnrollmentPage';
 import ThankYouPage from './pages/ThankYouPage';
 import DefaultAdminRoute from './components/DefaultAdminRoute';
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import UpdateParentInfoPage from './pages/UpdateParentInfoPage';
+import UpdateEmployeeInfoPage from './pages/UpdateEmployeeInfoPage';
 import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
@@ -32,6 +34,8 @@ import SchoolBusesPage from './pages/SchoolBusesPage';
 import SchoolContractsPage from './pages/SchoolContractsPage';
 import SchoolProtocolsPage from './pages/SchoolProtocolsPage';
 import SchoolPaymentsPage from './pages/SchoolPaymentsPage';
+import CorporateDashboardPage from './pages/CorporateDashboardPage';
+import EmployeesPage from './pages/EmployeesPage';
 import { modules } from './modules';
 import AdminAuditHidden from './pages/AdminAuditHidden';
 
@@ -71,6 +75,7 @@ function App() {
                     <Route path="/privacy-policy"     element={<PrivacyPolicyPage />} />
                     <Route path="/thank-you"          element={<ThankYouPage />} />
                     <Route path="/update-parent-info" element={<UpdateParentInfoPage />} />
+                    <Route path="/update-employee-info" element={<UpdateEmployeeInfoPage />} />
 
                     {/* Forzar cambio de contraseña */}
                     <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
@@ -99,6 +104,9 @@ function App() {
 
                     {/* Inscripción colegios (pública) */}
                     <Route path="/schools/enroll/:schoolId" element={<SchoolEnrollmentPage />} />
+
+                    {/* Inscripción corporaciones (pública) */}
+                    <Route path="/corporations/enroll/:corporationId" element={<CorporateEnrollmentPage />} />
 
                     {/* ---------------- Panel administrativo -------------- */}
                     <Route
@@ -194,6 +202,48 @@ function App() {
                         />
                         <Route
                             path="escuelas/:schoolYear/:schoolId/pagos"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <SchoolPaymentsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        {/* Rutas para gestión de corporaciones por año fiscal */}
+                        <Route
+                            path="corporaciones/:fiscalYear/:corporationId"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <CorporateDashboardPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="corporaciones/:fiscalYear/:corporationId/empleados"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <EmployeesPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="corporaciones/:fiscalYear/:corporationId/buses-gestion"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <SchoolBusesPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="corporaciones/:fiscalYear/:corporationId/contratos"
+                            element={
+                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                    <SchoolContractsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="corporaciones/:fiscalYear/:corporationId/pagos"
                             element={
                                 <ProtectedRoute roles={['Gestor','Administrador']}>
                                     <SchoolPaymentsPage />

@@ -9,7 +9,6 @@ import {
 } from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
-//import SchoolsManagementPage from './pages/SchoolsManagementPage';
 import MonitorsManagementPage from './pages/MonitorsManagementPage';
 import PilotsManagementPage from './pages/PilotsManagementPage';
 import SupervisorsManagementPage from './pages/SupervisorsManagementPage';
@@ -24,6 +23,7 @@ import AttendanceManagementPage from './pages/AttendanceManagementPage';
 import StudentIncidentsPage from './pages/StudentIncidentsPage';
 import RouteTimeLogsPage from './pages/RouteTimeLogsPage';
 import FuelRecordsPage from './pages/FuelRecordsPage';
+import CorporationsPage from './pages/CorporationsPage';
 
 export const modules = [
     {
@@ -50,6 +50,13 @@ export const modules = [
                 name: 'Colegios',
                 path: 'colegios',
                 component: SchoolYearSelectionPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'corporaciones',
+                name: 'Corporaciones',
+                path: 'corporaciones',
+                component: CorporationsPage,
                 roles: ['Administrador', 'Gestor'],
             },
             {
