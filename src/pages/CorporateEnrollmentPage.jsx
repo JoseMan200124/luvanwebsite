@@ -20,6 +20,16 @@ import api from '../utils/axiosConfig';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
 import CorporateEnrollmentModal from '../components/modals/CorporateEnrollmentModal';
 
+// Función para convertir tiempo de 24h a 12h con AM/PM
+const formatTime12Hour = (time24) => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+};
+
 const CorporateEnrollmentPage = () => {
     const { corporationId } = useParams();
         
@@ -27,13 +37,16 @@ const CorporateEnrollmentPage = () => {
     
     const [loading, setLoading] = useState(true);
     const [isEnrollmentModalOpen, setEnrollmentModalOpen] = useState(true);
+    const [corporationData, setCorporationData] = useState(null);
 
     // Campos del formulario de empleado
     const [lastName, setLastName] = useState('');
     const [firstName, setFirstName] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [serviceAddress, setServiceAddress] = useState('');
     const [zoneOrSector, setZoneOrSector] = useState('');
     const [routeType, setRouteType] = useState('Completa');
+    const [selectedSchedule, setSelectedSchedule] = useState(-1); // Índice del horario seleccionado
 
     // Contacto de emergencia
     const [emergencyContact, setEmergencyContact] = useState('');
@@ -58,9 +71,11 @@ const CorporateEnrollmentPage = () => {
             corporationId,
             lastName,
             firstName,
+            phoneNumber,
             serviceAddress,
             zoneOrSector,
             routeType,
+            selectedSchedule, // Horario seleccionado
             emergencyContact,
             emergencyRelationship,
             emergencyPhone,
@@ -92,9 +107,11 @@ const CorporateEnrollmentPage = () => {
             // Limpiar formulario
             setLastName('');
             setFirstName('');
+            setPhoneNumber('');
             setServiceAddress('');
             setZoneOrSector('');
             setRouteType('Completa');
+            setSelectedSchedule(-1);
             setEmergencyContact('');
             setEmergencyRelationship('');
             setEmergencyPhone('');
@@ -117,8 +134,21 @@ const CorporateEnrollmentPage = () => {
                 const response = await api.get(`/corporations/${corporationId}`);
                 
                 if (response.data && response.data.corporation) {
-                    // Corporación cargada correctamente
-                    console.log('Corporación obtenida:', response.data.corporation);
+                    const corp = response.data.corporation;
+                    
+                    // Parse schedules if it's a string
+                    if (corp.schedules && typeof corp.schedules === 'string') {
+                        try {
+                            corp.schedules = JSON.parse(corp.schedules);
+                        } catch (e) {
+                            corp.schedules = [];
+                        }
+                    } else if (!Array.isArray(corp.schedules)) {
+                        corp.schedules = [];
+                    }
+                    
+                    setCorporationData(corp);
+                    console.log('Corporación obtenida:', corp);
                 }
             } catch (error) {
                 console.error('Error al obtener info de la corporación:', error);
@@ -235,6 +265,16 @@ const CorporateEnrollmentPage = () => {
                         />
 
                         <TextField
+                            label="Teléfono del Empleado"
+                            fullWidth
+                            margin="normal"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.target.value)}
+                            required
+                            placeholder="Ej: 55555555"
+                        />
+
+                        <TextField
                             label="Dirección de Servicio"
                             fullWidth
                             margin="normal"
@@ -265,6 +305,31 @@ const CorporateEnrollmentPage = () => {
                                 <MenuItem value="Completa">Completa</MenuItem>
                                 <MenuItem value="Media PM">Media PM</MenuItem>
                                 <MenuItem value="Media AM">Media AM</MenuItem>
+                            </Select>
+                        </FormControl>
+
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel>Horario</InputLabel>
+                            <Select
+                                value={selectedSchedule}
+                                onChange={(e) => setSelectedSchedule(e.target.value)}
+                                label="Horario"
+                                required
+                            >
+                                <MenuItem value={-1}>
+                                    <em>Seleccionar horario</em>
+                                </MenuItem>
+                                {Array.isArray(corporationData?.schedules) && corporationData.schedules.length > 0 ? (
+                                    corporationData.schedules.map((schedule, idx) => (
+                                        <MenuItem key={idx} value={idx}>
+                                            {schedule.name} ({formatTime12Hour(schedule.entryTime)} - {formatTime12Hour(schedule.exitTime)})
+                                        </MenuItem>
+                                    ))
+                                ) : (
+                                    <MenuItem disabled value={-1}>
+                                        No hay horarios configurados
+                                    </MenuItem>
+                                )}
                             </Select>
                         </FormControl>
 

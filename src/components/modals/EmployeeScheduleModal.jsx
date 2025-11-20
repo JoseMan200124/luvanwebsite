@@ -20,17 +20,20 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
         dropoffTime: '',
         stopName: '',
         routeNumber: '', // Número de ruta
+        stopType: 'entrada', // 'entrada' o 'salida'
         note: '',
         days: []
     });
 
-    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const DAY_LABELS = {
         monday: 'Lunes',
         tuesday: 'Martes',
         wednesday: 'Miércoles',
         thursday: 'Jueves',
-        friday: 'Viernes'
+        friday: 'Viernes',
+        saturday: 'Sábado',
+        sunday: 'Domingo'
     };
 
     const loadScheduleSlots = async () => {
@@ -40,8 +43,24 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
             // Cargar los horarios del empleado usando el nuevo endpoint
             const response = await api.get(`/schedule-slots/employee/${employee.id}`);
             const slots = response.data || [];
+            console.log('[EmployeeScheduleModal] loaded slots RAW:', slots);
+            console.log('[EmployeeScheduleModal] loaded slots COUNT:', slots.length);
+            
+            // Verificar estructura de cada slot
+            slots.forEach((slot, idx) => {
+                console.log(`[EmployeeScheduleModal] Slot ${idx}:`, {
+                    id: slot.id,
+                    time: slot.time,
+                    note: slot.note,
+                    routeNumber: slot.routeNumber,
+                    stopType: slot.stopType,
+                    days: slot.days,
+                    daysType: typeof slot.days,
+                    daysIsArray: Array.isArray(slot.days)
+                });
+            });
+            
             setScheduleSlots(slots);
-            console.log('[EmployeeScheduleModal] loaded slots:', slots);
         } catch (err) {
             console.error('[EmployeeScheduleModal] Error loading slots:', err);
             setScheduleSlots([]);
@@ -67,6 +86,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                 dropoffTime: '', // No tenemos dropoffTime en el modelo actual
                 stopName: slot.note || '',
                 routeNumber: slot.routeNumber || '',
+                stopType: slot.stopType || 'entrada',
                 note: '',
                 days: [day]
             });
@@ -77,6 +97,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                 dropoffTime: '',
                 stopName: '',
                 routeNumber: '',
+                stopType: 'entrada',
                 note: '',
                 days: []
             });
@@ -86,10 +107,12 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
     };
 
     const saveAssignedSchedule = async () => {
-        const { pickupTime, stopName, routeNumber, days } = assignForm;
+        const { pickupTime, stopName, routeNumber, stopType, days } = assignForm;
         
-        if (!pickupTime || !stopName || !routeNumber || !days || days.length === 0) {
-            alert('Completa todos los campos obligatorios (hora, parada, ruta y días)');
+        console.log('[EmployeeScheduleModal] saveAssignedSchedule - assignForm:', assignForm);
+        
+        if (!pickupTime || !stopName || !routeNumber || !stopType || !days || days.length === 0) {
+            alert('Completa todos los campos obligatorios (hora, parada, ruta, tipo y días)');
             return;
         }
 
@@ -109,6 +132,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
             time: pickupTime,
             note: stopName,
             routeNumber: routeNumber,
+            stopType: stopType,
             days: days
         };
 
@@ -135,6 +159,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                             time: pickupTime,
                             note: stopName,
                             routeNumber: routeNumber,
+                            stopType: stopType,
                             days: days,
                             employeeId: employee.id,
                             corporationId: corporation.id
@@ -221,7 +246,8 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                 width: '95vw', 
                 maxWidth: 1400, 
                 maxHeight: '85vh', 
-                overflow: 'auto', 
+                display: 'flex',
+                flexDirection: 'column',
                 zIndex: 30001 
             }}>
                 <div style={{ 
@@ -242,7 +268,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                     </button>
                 </div>
 
-                <div>
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     {loading ? (
                         <div style={{ textAlign: 'center', padding: 40 }}>Cargando...</div>
                     ) : (
@@ -250,7 +276,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                             border: '1px solid #eef2f7', 
                             borderRadius: 8, 
                             padding: 12, 
-                            background: '#FBFDFF' 
+                            background: '#FBFDFF'
                         }}>
                             <div style={{ 
                                 display: 'flex', 
@@ -299,22 +325,201 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                 </div>
                             </div>
 
+                            {/* Primera fila: Lunes a Viernes */}
                             <div style={{ 
                                 display: 'grid', 
                                 gridTemplateColumns: 'repeat(5, 1fr)', 
-                                gap: 12 
+                                gap: 12,
+                                marginBottom: 12
                             }}>
-                                {DAYS.map(day => {
-                                    const daySlots = scheduleSlots.filter(s => 
-                                        Array.isArray(s.days) && s.days.includes(day)
-                                    );
+                                {DAYS.slice(0, 5).map(day => {
+                                    const daySlots = scheduleSlots.filter(s => {
+                                        const hasDays = Array.isArray(s.days);
+                                        const includesDay = hasDays && s.days.includes(day);
+                                        
+                                        if (!hasDays) {
+                                            console.log('[EmployeeScheduleModal] Slot sin days array:', s);
+                                        }
+                                        
+                                        return hasDays && includesDay;
+                                    });
 
-                                    // Separar por tipo (entrada/salida basado en hora)
+                                    console.log(`[EmployeeScheduleModal] ${day} - daySlots:`, daySlots);
+
+                                    // Separar por tipo (entrada/salida basado en stopType)
                                     const entradaSlots = daySlots.filter(s => 
-                                        s.time && s.time < '12:00'
+                                        s.stopType === 'entrada'
                                     );
                                     const salidaSlots = daySlots.filter(s => 
-                                        s.time && s.time >= '12:00'
+                                        s.stopType === 'salida'
+                                    );
+                                    
+                                    console.log(`[EmployeeScheduleModal] ${day} - entrada:`, entradaSlots.length, 'salida:', salidaSlots.length);
+
+                                    const renderCard = (slot) => (
+                                        <div 
+                                            key={slot.id} 
+                                            style={{ 
+                                                marginBottom: 8, 
+                                                padding: 10, 
+                                                borderRadius: 8, 
+                                                background: '#ffffff', 
+                                                boxShadow: '0 4px 10px rgba(2,6,23,0.04)', 
+                                                border: '1px solid #e6eef6' 
+                                            }}
+                                        >
+                                            <div style={{ 
+                                                display: 'flex', 
+                                                justifyContent: 'space-between', 
+                                                alignItems: 'center', 
+                                                marginBottom: 6 
+                                            }}>
+                                                <div style={{ fontSize: 15, fontWeight: 700 }}>
+                                                    {slot.time}
+                                                </div>
+                                                <div style={{ display: 'flex', gap: 8 }}>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => {
+                                                            setConfirmTarget({ slotId: slot.id, day });
+                                                            setConfirmDeleteOpen(true);
+                                                        }}
+                                                        style={{ 
+                                                            background: 'transparent', 
+                                                            border: 'none', 
+                                                            color: '#DC2626', 
+                                                            cursor: 'pointer',
+                                                            fontSize: 16
+                                                        }}
+                                                        title="Eliminar"
+                                                    >
+                                                        🗑
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => openAssignPopup(slot, day)}
+                                                        style={{ 
+                                                            background: 'transparent', 
+                                                            border: 'none', 
+                                                            color: '#2563EB', 
+                                                            cursor: 'pointer',
+                                                            fontSize: 16
+                                                        }}
+                                                        title="Editar"
+                                                    >
+                                                        ✏️
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>
+                                                Parada: {slot.note || '—'}
+                                            </div>
+                                            <div style={{ fontSize: 12, color: '#6B7280' }}>
+                                                Ruta: {slot.routeNumber || '—'}
+                                            </div>
+                                        </div>
+                                    );
+
+                                    return (
+                                        <div 
+                                            key={day} 
+                                            style={{ 
+                                                border: '1px solid #eef2f7', 
+                                                borderRadius: 8, 
+                                                padding: 12, 
+                                                background: '#FBFDFF' 
+                                            }}
+                                        >
+                                            <div style={{ 
+                                                fontSize: 13, 
+                                                fontWeight: 600, 
+                                                marginBottom: 8, 
+                                                textAlign: 'center', 
+                                                color: '#374151' 
+                                            }}>
+                                                {DAY_LABELS[day]}
+                                            </div>
+                                            <div style={{ 
+                                                display: 'grid', 
+                                                gridTemplateColumns: '1fr 1fr', 
+                                                gap: 8 
+                                            }}>
+                                                <div>
+                                                    <div style={{ 
+                                                        fontSize: 13, 
+                                                        fontWeight: 600, 
+                                                        marginBottom: 6 
+                                                    }}>
+                                                        Entrada
+                                                    </div>
+                                                    {entradaSlots.length === 0 ? (
+                                                        <div style={{ 
+                                                            padding: 10, 
+                                                            borderRadius: 6, 
+                                                            background: '#f3f7fa', 
+                                                            color: '#6B7280', 
+                                                            textAlign: 'center',
+                                                            fontSize: 12
+                                                        }}>
+                                                            Sin asignación
+                                                        </div>
+                                                    ) : (
+                                                        entradaSlots.map(s => renderCard(s))
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <div style={{ 
+                                                        fontSize: 13, 
+                                                        fontWeight: 600, 
+                                                        marginBottom: 6 
+                                                    }}>
+                                                        Salida
+                                                    </div>
+                                                    {salidaSlots.length === 0 ? (
+                                                        <div style={{ 
+                                                            padding: 10, 
+                                                            borderRadius: 6, 
+                                                            background: '#f3f7fa', 
+                                                            color: '#6B7280', 
+                                                            textAlign: 'center',
+                                                            fontSize: 12
+                                                        }}>
+                                                            Sin asignación
+                                                        </div>
+                                                    ) : (
+                                                        salidaSlots.map(s => renderCard(s))
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Segunda fila: Sábado y Domingo */}
+                            <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: 'repeat(2, 1fr)', 
+                                gap: 12
+                            }}>
+                                {DAYS.slice(5, 7).map(day => {
+                                    const daySlots = scheduleSlots.filter(s => {
+                                        const hasDays = Array.isArray(s.days);
+                                        const includesDay = hasDays && s.days.includes(day);
+                                        
+                                        if (!hasDays) {
+                                            console.log('[EmployeeScheduleModal] Slot sin days array:', s);
+                                        }
+                                        
+                                        return hasDays && includesDay;
+                                    });
+
+                                    // Separar por tipo (entrada/salida basado en stopType)
+                                    const entradaSlots = daySlots.filter(s => 
+                                        s.stopType === 'entrada'
+                                    );
+                                    const salidaSlots = daySlots.filter(s => 
+                                        s.stopType === 'salida'
                                     );
 
                                     const renderCard = (slot) => (
@@ -477,53 +682,28 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                             width: 'min(720px, 95vw)', 
                             boxShadow: '0 6px 24px rgba(0,0,0,0.2)' 
                         }}>
-                            <h3 style={{ marginTop: 0 }}>Asignar Horario</h3>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <h3 style={{ marginTop: 0 }}>Asignar Ruta</h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                                 <div>
-                                    <label style={{ fontSize: 13 }}>Hora de Recogida *</label>
-                                    <input 
-                                        type="time" 
+                                    <label style={{ fontSize: 13 }}>Tipo de Parada</label>
+                                    <select
                                         style={{ 
                                             width: '100%', 
                                             padding: 8, 
                                             borderRadius: 6, 
-                                            border: '1px solid #d1d5db' 
+                                            border: '1px solid #d1d5db',
+                                            background: '#fff'
                                         }}
-                                        value={assignForm.pickupTime}
-                                        onChange={e => setAssignForm(f => ({ ...f, pickupTime: e.target.value }))}
-                                    />
+                                        value={assignForm.stopType}
+                                        onChange={e => setAssignForm(f => ({ ...f, stopType: e.target.value }))}
+                                    >
+                                        <option value="">-- seleccionar --</option>
+                                        <option value="entrada">Entrada</option>
+                                        <option value="salida">Salida</option>
+                                    </select>
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: 13 }}>Hora de Entrega (opcional)</label>
-                                    <input 
-                                        type="time" 
-                                        style={{ 
-                                            width: '100%', 
-                                            padding: 8, 
-                                            borderRadius: 6, 
-                                            border: '1px solid #d1d5db' 
-                                        }}
-                                        value={assignForm.dropoffTime}
-                                        onChange={e => setAssignForm(f => ({ ...f, dropoffTime: e.target.value }))}
-                                    />
-                                </div>
-                                <div style={{ gridColumn: '1 / span 2' }}>
-                                    <label style={{ fontSize: 13 }}>Nombre de Parada *</label>
-                                    <input 
-                                        type="text" 
-                                        style={{ 
-                                            width: '100%', 
-                                            padding: 8, 
-                                            borderRadius: 6, 
-                                            border: '1px solid #d1d5db' 
-                                        }}
-                                        value={assignForm.stopName}
-                                        onChange={e => setAssignForm(f => ({ ...f, stopName: e.target.value }))}
-                                        placeholder="Ej: Oficina Central, Casa del empleado, etc."
-                                    />
-                                </div>
-                                <div style={{ gridColumn: '1 / span 2' }}>
-                                    <label style={{ fontSize: 13 }}>Ruta Asignada *</label>
+                                    <label style={{ fontSize: 13 }}>Número de Ruta</label>
                                     <select
                                         style={{ 
                                             width: '100%', 
@@ -536,12 +716,135 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                         onChange={e => setAssignForm(f => ({ ...f, routeNumber: e.target.value }))}
                                     >
                                         <option value="">Seleccionar ruta...</option>
-                                        {corporation?.routeNumbers && Array.isArray(corporation.routeNumbers) && corporation.routeNumbers.map(route => (
-                                            <option key={route} value={route}>
-                                                Ruta {route}
-                                            </option>
-                                        ))}
+                                        {(() => {
+                                            // Debug logging
+                                            console.log('[EmployeeScheduleModal] Debug info:', {
+                                                employee: employee,
+                                                employeeScheduleIndex: employee?.EmployeeDetail?.selectedSchedule,
+                                                corporationSchedules: corporation?.schedules,
+                                                routeNumbers: corporation?.routeNumbers,
+                                                routeSchedules: corporation?.routeSchedules
+                                            });
+                                            
+                                            // Obtener el índice del horario del empleado
+                                            const employeeScheduleIndex = Number(employee?.EmployeeDetail?.selectedSchedule);
+                                            
+                                            // Si el empleado no tiene horario asignado, mostrar todas las rutas
+                                            if (isNaN(employeeScheduleIndex) || employeeScheduleIndex < 0 || !Array.isArray(corporation?.schedules)) {
+                                                console.log('[EmployeeScheduleModal] Mostrando todas las rutas (sin horario asignado)');
+                                                return corporation?.routeNumbers && Array.isArray(corporation.routeNumbers) 
+                                                    ? corporation.routeNumbers.map(route => (
+                                                        <option key={route} value={route}>
+                                                            Ruta {route} (Sin horario del empleado)
+                                                        </option>
+                                                    ))
+                                                    : null;
+                                            }
+                                            
+                                            // Obtener el horario del empleado
+                                            const employeeSchedule = corporation.schedules[employeeScheduleIndex];
+                                            if (!employeeSchedule) {
+                                                console.log('[EmployeeScheduleModal] No se encontró el horario del empleado en índice:', employeeScheduleIndex);
+                                                return <option disabled>No se encontró el horario del empleado</option>;
+                                            }
+                                            
+                                            console.log('[EmployeeScheduleModal] Horario del empleado:', employeeSchedule);
+                                            
+                                            // Filtrar rutas que tengan el mismo horario asignado
+                                            const routeSchedules = corporation?.routeSchedules || [];
+                                            
+                                            // Si no hay routeSchedules configurados, mostrar todas las rutas
+                                            if (!Array.isArray(routeSchedules) || routeSchedules.length === 0) {
+                                                console.log('[EmployeeScheduleModal] No hay routeSchedules configurados, mostrando todas las rutas');
+                                                return corporation?.routeNumbers && Array.isArray(corporation.routeNumbers) 
+                                                    ? corporation.routeNumbers.map(route => (
+                                                        <option key={route} value={route}>
+                                                            Ruta {route} - {employeeSchedule.name}
+                                                        </option>
+                                                    ))
+                                                    : null;
+                                            }
+                                            
+                                            const filteredRoutes = corporation?.routeNumbers?.filter(routeNum => {
+                                                const routeSchedule = routeSchedules.find(rs => {
+                                                    // Comparar como string para evitar problemas de tipo
+                                                    return String(rs.routeNumber) === String(routeNum);
+                                                });
+                                                
+                                                console.log('[EmployeeScheduleModal] Ruta:', routeNum, 'routeSchedule:', routeSchedule);
+                                                
+                                                if (!routeSchedule || !Array.isArray(routeSchedule.schedules)) {
+                                                    console.log('[EmployeeScheduleModal] Ruta', routeNum, 'no tiene horarios asignados');
+                                                    return false; // No tiene horarios asignados
+                                                }
+                                                
+                                                // Log para ver estructura de schedules
+                                                if (routeSchedule.schedules.length > 0) {
+                                                    console.log('[EmployeeScheduleModal] Primer elemento de schedules:', routeSchedule.schedules[0], 'tipo:', typeof routeSchedule.schedules[0]);
+                                                }
+                                                
+                                                // Verificar si el horario del empleado está en los horarios de la ruta
+                                                // Si schedules contiene objetos, comparar por nombre
+                                                // Si schedules contiene strings, comparar directamente
+                                                let hasSchedule;
+                                                if (routeSchedule.schedules.length > 0 && typeof routeSchedule.schedules[0] === 'object') {
+                                                    // schedules es array de objetos { name, entryTime, exitTime }
+                                                    hasSchedule = routeSchedule.schedules.some(s => s.name === employeeSchedule.name);
+                                                } else {
+                                                    // schedules es array de strings
+                                                    hasSchedule = routeSchedule.schedules.includes(employeeSchedule.name);
+                                                }
+                                                
+                                                console.log('[EmployeeScheduleModal] Ruta', routeNum, 'schedules:', routeSchedule.schedules, 'incluye', employeeSchedule.name, '?', hasSchedule);
+                                                
+                                                return hasSchedule;
+                                            }) || [];
+                                            
+                                            console.log('[EmployeeScheduleModal] Rutas filtradas:', filteredRoutes);
+                                            
+                                            if (filteredRoutes.length === 0) {
+                                                return <option disabled>No hay rutas con el horario "{employeeSchedule.name}"</option>;
+                                            }
+                                            
+                                            return filteredRoutes.map(route => (
+                                                <option key={route} value={route}>
+                                                    Ruta {route}
+                                                </option>
+                                            ));
+                                        })()}
                                     </select>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: 13 }}>Hora Parada (HH:mm)</label>
+                                    <input 
+                                        type="time" 
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: 8, 
+                                            borderRadius: 6, 
+                                            border: '1px solid #d1d5db' 
+                                        }}
+                                        value={assignForm.pickupTime}
+                                        onChange={e => setAssignForm(f => ({ ...f, pickupTime: e.target.value }))}
+                                        placeholder="--:-- --"
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: 13 }}>Nota Parada</label>
+                                    <textarea
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: 8, 
+                                            borderRadius: 6, 
+                                            border: '1px solid #d1d5db',
+                                            resize: 'none',
+                                            fontFamily: 'inherit',
+                                            minHeight: '38px'
+                                        }}
+                                        value={assignForm.stopName}
+                                        onChange={e => setAssignForm(f => ({ ...f, stopName: e.target.value }))}
+                                        rows={1}
+                                    />
                                 </div>
                                 <div style={{ gridColumn: '1 / span 2' }}>
                                     <label style={{ fontSize: 13 }}>Días</label>

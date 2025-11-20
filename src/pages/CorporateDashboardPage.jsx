@@ -262,15 +262,6 @@ const CorporateDashboardPage = () => {
         });
     };
 
-    const handleViewPayments = () => {
-        navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/pagos`, {
-            state: {
-                fiscalYear: fiscalYear || stateFiscalYear,
-                corporation: corporationData || stateCorporation
-            }
-        });
-    };
-
     const handleViewContracts = () => {
         navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/contratos`, {
             state: {
@@ -554,32 +545,6 @@ const CorporateDashboardPage = () => {
                                         sx={{ borderRadius: 2 }}
                                     >
                                         Ver Empleados
-                                    </Button>
-                                </CardContent>
-                            </SummaryCard>
-                        </Grid>
-
-                        {/* Gestión de Pagos */}
-                        <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <PaymentIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Gestión de Pagos
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Accede al panel de pagos y cobros específico de esta corporación
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<PaymentIcon />}
-                                        onClick={handleViewPayments}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Pagos
                                     </Button>
                                 </CardContent>
                             </SummaryCard>

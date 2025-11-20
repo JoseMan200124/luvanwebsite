@@ -20,6 +20,7 @@ import {
     DialogContentText,
     TextField,
     Chip,
+    Paper,
     Accordion,
     AccordionSummary,
     AccordionDetails,
@@ -127,6 +128,16 @@ const StyledAccordionSummary = styled(AccordionSummary)`
     }
 `;
 
+// Función para convertir tiempo de 24h a 12h con AM/PM
+const formatTime12Hour = (time24) => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+};
+
 const CorporationsPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -152,16 +163,24 @@ const CorporationsPage = () => {
         contactPerson: '',
         routeNumbers: [],
         routeSchedules: [],
+        schedules: [],
         extraEnrollmentFields: [],
         whatsappLink: '',
         state: 1
     });
     
     const [newRouteNumber, setNewRouteNumber] = useState('');
+    const [corporationSchedules, setCorporationSchedules] = useState([]);
+    const [corporationRouteNumbers, setCorporationRouteNumbers] = useState([]);
+    const [corporationRouteSchedules, setCorporationRouteSchedules] = useState([]);
+    const [newScheduleName, setNewScheduleName] = useState('');
+    const [newScheduleEntry, setNewScheduleEntry] = useState('');
+    const [newScheduleExit, setNewScheduleExit] = useState('');
     
     // Estado para controlar acordeones expandidos
     const [expandedPanels, setExpandedPanels] = useState({
         basicInfo: true,
+        schedules: false,
         routes: false,
         extraFields: false
     });
@@ -223,11 +242,23 @@ const CorporationsPage = () => {
                     parsedBusinessHours = corp.businessHours;
                 }
                 
+                let parsedExtraFields = [];
+                if (typeof corp.extraEnrollmentFields === 'string' && corp.extraEnrollmentFields.trim()) {
+                    try {
+                        parsedExtraFields = JSON.parse(corp.extraEnrollmentFields);
+                    } catch {
+                        parsedExtraFields = [];
+                    }
+                } else if (Array.isArray(corp.extraEnrollmentFields)) {
+                    parsedExtraFields = corp.extraEnrollmentFields;
+                }
+                
                 return {
                     ...corp,
                     departments: Array.isArray(parsedDepartments) ? parsedDepartments : [],
                     routeNumbers: Array.isArray(parsedRoutes) ? parsedRoutes : [],
                     businessHours: parsedBusinessHours,
+                    extraEnrollmentFields: Array.isArray(parsedExtraFields) ? parsedExtraFields : [],
                     employeesCount: Number(corp.employeesCount) || 0,
                     transportFee: Number(corp.transportFee) || 0
                 };
@@ -291,19 +322,76 @@ const CorporationsPage = () => {
             contactPerson: '',
             routeNumbers: [],
             routeSchedules: [],
+            schedules: [],
             extraEnrollmentFields: [],
             whatsappLink: '',
             state: 1
         });
+        setCorporationSchedules([]);
+        setCorporationRouteNumbers([]);
+        setCorporationRouteSchedules([]);
         setExpandedPanels({
             basicInfo: true,
+            schedules: false,
             routes: false,
             extraFields: false
         });
         setOpenCreateDialog(true);
     };
 
-    const handleOpenEditDialog = (corporation) => {
+    const handleOpenEditDialog = async (corporation) => {
+        // Asegurar que extraEnrollmentFields sea siempre un array
+        let extraFields = [];
+        if (typeof corporation.extraEnrollmentFields === 'string' && corporation.extraEnrollmentFields.trim()) {
+            try {
+                extraFields = JSON.parse(corporation.extraEnrollmentFields);
+            } catch {
+                extraFields = [];
+            }
+        } else if (Array.isArray(corporation.extraEnrollmentFields)) {
+            extraFields = corporation.extraEnrollmentFields;
+        }
+        
+        // Parsear schedules
+        let parsedSchedules = [];
+        if (Array.isArray(corporation.schedules)) {
+            parsedSchedules = corporation.schedules;
+        } else if (typeof corporation.schedules === 'string' && corporation.schedules.trim()) {
+            try {
+                parsedSchedules = JSON.parse(corporation.schedules);
+            } catch {
+                parsedSchedules = [];
+            }
+        }
+        setCorporationSchedules(Array.isArray(parsedSchedules) ? parsedSchedules : []);
+        
+        // Parsear routeNumbers
+        let parsedRoutes = [];
+        if (Array.isArray(corporation.routeNumbers)) {
+            parsedRoutes = corporation.routeNumbers;
+        } else if (typeof corporation.routeNumbers === 'string' && corporation.routeNumbers.trim()) {
+            try {
+                parsedRoutes = JSON.parse(corporation.routeNumbers);
+            } catch {
+                parsedRoutes = [];
+            }
+        }
+        setCorporationRouteNumbers(Array.isArray(parsedRoutes) ? parsedRoutes : []);
+        
+        // Cargar routeSchedules desde el backend
+        try {
+            const detail = await api.get(`/corporations/${corporation.id}`, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            const rs = (detail.data && detail.data.corporation && Array.isArray(detail.data.corporation.routeSchedules)) 
+                ? detail.data.corporation.routeSchedules 
+                : [];
+            setCorporationRouteSchedules(rs);
+        } catch (err) {
+            console.error('Error loading route schedules:', err);
+            setCorporationRouteSchedules([]);
+        }
+        
         setSelectedCorporation(corporation);
         setFormData({
             name: corporation.name || '',
@@ -312,14 +400,16 @@ const CorporationsPage = () => {
             address: corporation.address || '',
             city: corporation.city || '',
             contactPerson: corporation.contactPerson || '',
-            routeNumbers: corporation.routeNumbers || [],
+            routeNumbers: parsedRoutes,
             routeSchedules: corporation.routeSchedules || [],
-            extraEnrollmentFields: corporation.extraEnrollmentFields || [],
+            schedules: parsedSchedules,
+            extraEnrollmentFields: Array.isArray(extraFields) ? extraFields : [],
             whatsappLink: corporation.whatsappLink || '',
             state: corporation.state !== undefined ? corporation.state : 1
         });
         setExpandedPanels({
             basicInfo: true,
+            schedules: false,
             routes: false,
             extraFields: false
         });
@@ -369,19 +459,65 @@ const CorporationsPage = () => {
 
     const handleAddRouteNumber = () => {
         if (newRouteNumber.trim()) {
-            setFormData(prev => ({
-                ...prev,
-                routeNumbers: [...prev.routeNumbers, newRouteNumber.trim()]
-            }));
+            setCorporationRouteNumbers(prev => [...prev, newRouteNumber.trim()]);
             setNewRouteNumber('');
         }
     };
 
     const handleRemoveRouteNumber = (index) => {
-        setFormData(prev => ({
-            ...prev,
-            routeNumbers: prev.routeNumbers.filter((_, i) => i !== index)
-        }));
+        const routeToRemove = corporationRouteNumbers[index];
+        setCorporationRouteNumbers(prev => prev.filter((_, i) => i !== index));
+        // También remover de routeSchedules
+        setCorporationRouteSchedules(prev => prev.filter(rs => rs.routeNumber !== routeToRemove));
+    };
+
+    const handleChangeRouteNumber = (index, newValue) => {
+        const oldValue = corporationRouteNumbers[index];
+        setCorporationRouteNumbers(prev => {
+            const updated = [...prev];
+            updated[index] = newValue;
+            return updated;
+        });
+        // Actualizar también en routeSchedules
+        setCorporationRouteSchedules(prev => {
+            return prev.map(rs => rs.routeNumber === oldValue ? { ...rs, routeNumber: newValue } : rs);
+        });
+    };
+
+    const handleAddSchedule = () => {
+        if (newScheduleName.trim() && newScheduleEntry && newScheduleExit) {
+            setCorporationSchedules(prev => [
+                ...prev,
+                {
+                    name: newScheduleName.trim(),
+                    entryTime: newScheduleEntry,
+                    exitTime: newScheduleExit
+                }
+            ]);
+            setNewScheduleName('');
+            setNewScheduleEntry('');
+            setNewScheduleExit('');
+        }
+    };
+
+    const handleRemoveSchedule = (index) => {
+        const scheduleToRemove = corporationSchedules[index];
+        setCorporationSchedules(prev => prev.filter((_, i) => i !== index));
+        // También remover de routeSchedules
+        setCorporationRouteSchedules(prev => {
+            return prev.map(rs => ({
+                ...rs,
+                schedules: (rs.schedules || []).filter(s => s.name !== scheduleToRemove.name)
+            }));
+        });
+    };
+
+    const handleChangeSchedule = (index, field, value) => {
+        setCorporationSchedules(prev => {
+            const updated = [...prev];
+            updated[index][field] = value;
+            return updated;
+        });
     };
 
     const handleAccordionChange = (panel) => (event, isExpanded) => {
@@ -399,8 +535,9 @@ const CorporationsPage = () => {
                 contactPhone: formData.contactPhone,
                 whatsappLink: formData.whatsappLink || null,
                 extraEnrollmentFields: Array.isArray(formData.extraEnrollmentFields) ? formData.extraEnrollmentFields : [],
-                routeNumbers: Array.isArray(formData.routeNumbers) ? formData.routeNumbers : [],
-                routeSchedules: Array.isArray(formData.routeSchedules) ? formData.routeSchedules : [],
+                routeNumbers: Array.isArray(corporationRouteNumbers) ? corporationRouteNumbers : [],
+                routeSchedules: Array.isArray(corporationRouteSchedules) ? corporationRouteSchedules : [],
+                schedules: Array.isArray(corporationSchedules) ? corporationSchedules : [],
                 state: formData.state || 1
             };
             
@@ -441,8 +578,9 @@ const CorporationsPage = () => {
                 contactPhone: formData.contactPhone,
                 whatsappLink: formData.whatsappLink || null,
                 extraEnrollmentFields: Array.isArray(formData.extraEnrollmentFields) ? formData.extraEnrollmentFields : [],
-                routeNumbers: Array.isArray(formData.routeNumbers) ? formData.routeNumbers : [],
-                routeSchedules: Array.isArray(formData.routeSchedules) ? formData.routeSchedules : [],
+                routeNumbers: Array.isArray(corporationRouteNumbers) ? corporationRouteNumbers : [],
+                routeSchedules: Array.isArray(corporationRouteSchedules) ? corporationRouteSchedules : [],
+                schedules: Array.isArray(corporationSchedules) ? corporationSchedules : [],
                 state: formData.state || 1
             };
             
@@ -583,6 +721,97 @@ const CorporationsPage = () => {
                     </AccordionDetails>
                 </StyledAccordion>
 
+                {/* Sección: Horarios */}
+                <StyledAccordion 
+                    expanded={expandedPanels.schedules}
+                    onChange={handleAccordionChange('schedules')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            🕐 Horarios de la Corporación
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center' }}>
+                                <TextField
+                                    label="Nombre del Horario"
+                                    value={newScheduleName}
+                                    onChange={(e) => setNewScheduleName(e.target.value)}
+                                    placeholder="Ej: AM, PM, Nocturno"
+                                    sx={{ flex: 2 }}
+                                />
+                                <TextField
+                                    label="Hora de Entrada"
+                                    type="time"
+                                    value={newScheduleEntry}
+                                    onChange={(e) => setNewScheduleEntry(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    sx={{ flex: 1 }}
+                                />
+                                <TextField
+                                    label="Hora de Salida"
+                                    type="time"
+                                    value={newScheduleExit}
+                                    onChange={(e) => setNewScheduleExit(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    sx={{ flex: 1 }}
+                                />
+                                <Button 
+                                    variant="contained" 
+                                    onClick={handleAddSchedule}
+                                    startIcon={<Add />}
+                                    disabled={!newScheduleName.trim() || !newScheduleEntry || !newScheduleExit}
+                                >
+                                    Agregar
+                                </Button>
+                            </Box>
+                            
+                            {Array.isArray(corporationSchedules) && corporationSchedules.map((schedule, index) => (
+                                <Paper key={index} sx={{ p: 2, border: '1px solid #e0e0e0' }}>
+                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                        <TextField
+                                            label="Nombre"
+                                            value={schedule.name}
+                                            onChange={(e) => handleChangeSchedule(index, 'name', e.target.value)}
+                                            sx={{ flex: 2 }}
+                                        />
+                                        <TextField
+                                            label="Hora de Entrada"
+                                            type="time"
+                                            value={schedule.entryTime}
+                                            onChange={(e) => handleChangeSchedule(index, 'entryTime', e.target.value)}
+                                            InputLabelProps={{ shrink: true }}
+                                            sx={{ flex: 1 }}
+                                        />
+                                        <TextField
+                                            label="Hora de Salida"
+                                            type="time"
+                                            value={schedule.exitTime}
+                                            onChange={(e) => handleChangeSchedule(index, 'exitTime', e.target.value)}
+                                            InputLabelProps={{ shrink: true }}
+                                            sx={{ flex: 1 }}
+                                        />
+                                        <IconButton 
+                                            color="error" 
+                                            onClick={() => handleRemoveSchedule(index)}
+                                        >
+                                            <Delete />
+                                        </IconButton>
+                                    </Box>
+                                </Paper>
+                            ))}
+                            
+                            {corporationSchedules.length === 0 && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                    No hay horarios agregados. Los horarios permiten definir diferentes turnos para los empleados.
+                                </Typography>
+                            )}
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
+
                 {/* Sección: Rutas */}
                 <StyledAccordion 
                     expanded={expandedPanels.routes}
@@ -595,7 +824,7 @@ const CorporationsPage = () => {
                         </Typography>
                     </StyledAccordionSummary>
                     <AccordionDetails>
-                        <Box>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                                 <TextField
                                     fullWidth
@@ -617,18 +846,88 @@ const CorporationsPage = () => {
                                     Agregar
                                 </Button>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                {formData.routeNumbers.map((route, index) => (
-                                    <Chip
-                                        key={index}
-                                        label={`Ruta ${route}`}
-                                        onDelete={() => handleRemoveRouteNumber(index)}
-                                        color="secondary"
-                                        variant="outlined"
-                                    />
-                                ))}
-                            </Box>
-                            {formData.routeNumbers.length === 0 && (
+
+                            {corporationRouteNumbers.map((rn, idx) => {
+                                const entry = (corporationRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
+                                const selectedSchedules = new Set((entry.schedules || []).map(s => s && s.name).filter(Boolean));
+                                
+                                const toggleSchedule = (scheduleName, checked) => {
+                                    setCorporationRouteSchedules(prev => {
+                                        const arr = Array.isArray(prev) ? [...prev] : [];
+                                        let i = arr.findIndex(x => String(x.routeNumber) === String(rn));
+                                        if (i === -1) { 
+                                            arr.push({ routeNumber: String(rn), schedules: [] }); 
+                                            i = arr.length - 1; 
+                                        }
+                                        const curr = Array.isArray(arr[i].schedules) ? [...arr[i].schedules] : [];
+                                        const idxByName = curr.findIndex(s => s && s.name === scheduleName);
+                                        
+                                        if (checked) {
+                                            const scheduleObj = corporationSchedules.find(s => s.name === scheduleName);
+                                            if (scheduleObj) {
+                                                const cleaned = {
+                                                    name: scheduleObj.name,
+                                                    entryTime: scheduleObj.entryTime,
+                                                    exitTime: scheduleObj.exitTime
+                                                };
+                                                if (idxByName === -1) curr.push(cleaned); 
+                                                else curr[idxByName] = cleaned;
+                                            }
+                                        } else {
+                                            if (idxByName !== -1) curr.splice(idxByName, 1);
+                                        }
+                                        
+                                        arr[i] = { routeNumber: String(rn), schedules: curr };
+                                        return arr;
+                                    });
+                                };
+
+                                return (
+                                    <Paper key={idx} sx={{ p: 2, border: '1px solid #e0e0e0' }}>
+                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
+                                            <TextField
+                                                fullWidth
+                                                value={rn}
+                                                onChange={(e) => handleChangeRouteNumber(idx, e.target.value)}
+                                                label={`Número de Ruta #${idx + 1}`}
+                                            />
+                                            <IconButton size="small" color="error" onClick={() => handleRemoveRouteNumber(idx)}>
+                                                <Delete />
+                                            </IconButton>
+                                        </Box>
+                                        <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+                                            Horarios asignados a esta ruta:
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                            {corporationSchedules.length === 0 ? (
+                                                <Typography variant="body2" color="text.secondary">
+                                                    Agregue horarios en la sección de arriba para poder asignarlos a esta ruta
+                                                </Typography>
+                                            ) : (
+                                                Array.isArray(corporationSchedules) && corporationSchedules.map((sch, si) => {
+                                                    const label = `${sch.name} (${formatTime12Hour(sch.entryTime)} - ${formatTime12Hour(sch.exitTime)})`;
+                                                    const checked = selectedSchedules.has(sch.name);
+                                                    return (
+                                                        <FormControlLabel
+                                                            key={`rn-${idx}-sch-${si}`}
+                                                            control={
+                                                                <Checkbox 
+                                                                    size="small" 
+                                                                    checked={checked} 
+                                                                    onChange={(e) => toggleSchedule(sch.name, e.target.checked)} 
+                                                                />
+                                                            }
+                                                            label={label}
+                                                        />
+                                                    );
+                                                })
+                                            )}
+                                        </Box>
+                                    </Paper>
+                                );
+                            })}
+                            
+                            {corporationRouteNumbers.length === 0 && (
                                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                                     No hay rutas agregadas
                                 </Typography>
@@ -658,7 +957,7 @@ const CorporationsPage = () => {
                             >
                                 Agregar Campo
                             </Button>
-                            {formData.extraEnrollmentFields.map((field, index) => (
+                            {Array.isArray(formData.extraEnrollmentFields) && formData.extraEnrollmentFields.map((field, index) => (
                                 <Box 
                                     key={index}
                                     sx={{ 
@@ -708,7 +1007,7 @@ const CorporationsPage = () => {
                                     </IconButton>
                                 </Box>
                             ))}
-                            {formData.extraEnrollmentFields.length === 0 && (
+                            {(!Array.isArray(formData.extraEnrollmentFields) || formData.extraEnrollmentFields.length === 0) && (
                                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                                     No hay campos extra agregados. Estos campos aparecerán en el formulario de inscripción pública.
                                 </Typography>
@@ -831,13 +1130,6 @@ const CorporationsPage = () => {
                                             >
                                                 {corporation.name}
                                             </Typography>
-                                            <Typography 
-                                                variant="body2" 
-                                                color="textSecondary" 
-                                                sx={{ mb: 2 }}
-                                            >
-                                                {corporation.industry || 'Sin industria'}
-                                            </Typography>
 
                                             {/* Total de Empleados */}
                                             <Typography 
@@ -847,37 +1139,6 @@ const CorporationsPage = () => {
                                             >
                                                 Total de Empleados: {corporation.employeesCount || 0}
                                             </Typography>
-
-                                            {/* Departamentos como chips */}
-                                            {Array.isArray(corporation.departments) && corporation.departments.length > 0 ? (
-                                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 2, justifyContent: 'center' }}>
-                                                    {corporation.departments.slice(0, 3).map((dept, index) => (
-                                                        <Chip
-                                                            key={index}
-                                                            label={dept}
-                                                            size="small"
-                                                            color="primary"
-                                                            variant="outlined"
-                                                        />
-                                                    ))}
-                                                    {corporation.departments.length > 3 && (
-                                                        <Chip
-                                                            label={`+${corporation.departments.length - 3} más`}
-                                                            size="small"
-                                                            color="secondary"
-                                                            variant="outlined"
-                                                        />
-                                                    )}
-                                                </Box>
-                                            ) : (
-                                                <Typography 
-                                                    variant="body2" 
-                                                    color="textSecondary" 
-                                                    sx={{ mb: 2, fontSize: '0.75rem' }}
-                                                >
-                                                    Sin departamentos configurados
-                                                </Typography>
-                                            )}
                                             
                                             {/* Botón principal de gestionar */}
                                             <Button 
