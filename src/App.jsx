@@ -35,6 +35,7 @@ import SchoolContractsPage from './pages/SchoolContractsPage';
 import SchoolProtocolsPage from './pages/SchoolProtocolsPage';
 import SchoolPaymentsPage from './pages/SchoolPaymentsPage';
 import CorporateDashboardPage from './pages/CorporateDashboardPage';
+import CorporateBusesPage from './pages/CorporateBusesPage';
 import EmployeesPage from './pages/EmployeesPage';
 import { modules } from './modules';
 import AdminAuditHidden from './pages/AdminAuditHidden';
@@ -230,7 +231,7 @@ function App() {
                             path="corporaciones/:fiscalYear/:corporationId/buses-gestion"
                             element={
                                 <ProtectedRoute roles={['Gestor','Administrador']}>
-                                    <SchoolBusesPage />
+                                    <CorporateBusesPage />
                                 </ProtectedRoute>
                             }
                         />
