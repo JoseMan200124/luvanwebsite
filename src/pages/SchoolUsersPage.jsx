@@ -94,6 +94,7 @@ const SchoolUsersPage = () => {
     // Sorting state
     const [sortBy, setSortBy] = useState(null); // 'status' | 'updatedAt' | 'familyLastName' | 'name' | 'email' | 'role' | 'students'
     const [sortOrder, setSortOrder] = useState('asc');
+    const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [page, setPage] = useState(0);
@@ -1038,6 +1039,18 @@ const SchoolUsersPage = () => {
         setPage(0);
     };
 
+    const handleSearch = () => {
+        setSearchQuery(searchInput);
+        setPage(0);
+    };
+
+    const handleClearFilters = () => {
+        setSearchInput('');
+        setSearchQuery('');
+        setStatusFilter('');
+        setPage(0);
+    };
+
     // Restore action handlers for table actions
     const handleEditClick = async (user) => {
         const parsedRoleId = Number(user.roleId);
@@ -1673,13 +1686,18 @@ const SchoolUsersPage = () => {
             <Card sx={{ mb: 3 }}>
                 <CardContent>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={6}>
+                        <Grid item xs={12} md={5}>
                             <TextField
                                 fullWidth
                                 variant="outlined"
                                 placeholder="Buscar por nombre, apellido o email..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                        handleSearch();
+                                    }
+                                }}
                                 InputProps={{
                                     startAdornment: (
                                         <InputAdornment position="start">
@@ -1688,6 +1706,16 @@ const SchoolUsersPage = () => {
                                     ),
                                 }}
                             />
+                        </Grid>
+                        <Grid item xs={12} md={1}>
+                            <Button
+                                variant="contained"
+                                fullWidth
+                                onClick={handleSearch}
+                                sx={{ height: '56px' }}
+                            >
+                                Buscar
+                            </Button>
                         </Grid>
                         <Grid item xs={12} md={3}>
                             <FormControl fullWidth variant="outlined">
@@ -1712,10 +1740,7 @@ const SchoolUsersPage = () => {
                             <Button
                                 variant="outlined"
                                 fullWidth
-                                onClick={() => {
-                                    setSearchQuery('');
-                                    setStatusFilter('');
-                                }}
+                                onClick={handleClearFilters}
                             >
                                 Limpiar
                             </Button>
