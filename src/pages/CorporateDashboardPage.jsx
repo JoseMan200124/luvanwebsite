@@ -262,8 +262,8 @@ const CorporateDashboardPage = () => {
         });
     };
 
-    const handleViewContracts = () => {
-        navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/contratos`, {
+    const handleViewProtocols = () => {
+        navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/protocolos`, {
             state: {
                 fiscalYear: fiscalYear || stateFiscalYear,
                 corporation: corporationData || stateCorporation
@@ -576,27 +576,27 @@ const CorporateDashboardPage = () => {
                             </SummaryCard>
                         </Grid>
                         
-                        {/* Gestión de Contratos */}
+                        {/* Gestión de Protocolos y Reglamentos */}
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent sx={{ textAlign: 'center' }}>
                                     <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
                                     <Typography variant="h6" gutterBottom>
-                                        Gestión de Contratos
+                                        Protocolos y Reglamentos
                                     </Typography>
                                     <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar los contratos específicos de esta corporación
+                                        Ver y gestionar los protocolos y reglamentos de esta corporación
                                     </Typography>
                                     <Button
                                         variant="contained"
                                         color="primary"
                                         size="large"
                                         startIcon={<ContractIcon />}
-                                        onClick={handleViewContracts}
+                                        onClick={handleViewProtocols}
                                         fullWidth
                                         sx={{ borderRadius: 2 }}
                                     >
-                                        Ver Contratos
+                                        Ver Protocolos
                                     </Button>
                                 </CardContent>
                             </SummaryCard>
