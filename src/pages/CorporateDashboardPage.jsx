@@ -38,7 +38,6 @@ import {
     TrendingUp,
     People,
     Description as ContractIcon,
-    Payment as PaymentIcon,
     Work as DepartmentIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -46,6 +45,8 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
+import RouteEmployeesModal from '../components/modals/RouteEmployeesModal';
+import { generateCorporateRouteOccupancyPDF } from '../utils/pdfExport';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -90,6 +91,15 @@ const CorporateDashboardPage = () => {
     
     // Estado para el filtro de día (default Lunes)
     const [selectedDay, setSelectedDay] = useState('monday');
+    
+    // Estado para el modal de empleados por ruta
+    const [modalOpen, setModalOpen] = useState(false);
+    const [selectedRoute, setSelectedRoute] = useState({
+        routeNumber: null,
+        scheduleIndex: null,
+        scheduleName: '',
+        stopType: ''
+    });
 
     // Obtener datos del estado de navegación si están disponibles
     const stateCorporation = location.state?.corporation;
@@ -160,7 +170,6 @@ const CorporateDashboardPage = () => {
         if (!corporationId) return;
         
         try {
-            // Similar endpoint to schools but for corporations
             const response = await api.get(`/routes/occupancy-corporate/${corporationId}`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
@@ -173,12 +182,7 @@ const CorporateDashboardPage = () => {
             setRouteOccupancy(response.data.routes || []);
         } catch (err) {
             console.error('Error fetching route occupancy:', err);
-            // Datos de ejemplo si no existe el endpoint aún
-            setRouteOccupancy([
-                { routeNumber: '1', employees: 15 },
-                { routeNumber: '2', employees: 18 },
-                { routeNumber: '3', employees: 12 }
-            ]);
+            setRouteOccupancy([]);
         }
     }, [auth.token, corporationId, fiscalYear, selectedDay]);
 
@@ -271,6 +275,85 @@ const CorporateDashboardPage = () => {
         });
     };
 
+    // Manejador para abrir el modal de empleados por ruta
+    const handleOpenRouteModal = (routeNumber, scheduleIndex, scheduleName, stopType) => {
+        setSelectedRoute({
+            routeNumber,
+            scheduleIndex,
+            scheduleName,
+            stopType
+        });
+        setModalOpen(true);
+    };
+
+    const handleCloseRouteModal = () => {
+        setModalOpen(false);
+        setSelectedRoute({
+            routeNumber: null,
+            scheduleIndex: null,
+            scheduleName: '',
+            stopType: ''
+        });
+    };
+
+    // Exportar PDF de ocupación de rutas (se usa la versión que exporta TODOS los días)
+
+    // Exportar PDF para TODOS los días (flujo colegios)
+    const handleExportPDFAll = async () => {
+        if (!corporationId) {
+            setSnackbar({ open: true, message: 'Corporación no seleccionada', severity: 'error' });
+            return;
+        }
+
+        const dayKeys = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+        const schedules = currentCorporation?.schedules || [];
+
+        try {
+            // Hacer peticiones paralelas por día y recoger las rutas por día
+            const promises = dayKeys.map(d => api.get(`/routes/occupancy-corporate/${corporationId}`, {
+                headers: { Authorization: `Bearer ${auth.token}` },
+                params: { fiscalYear: currentFiscalYear || fiscalYear, day: d }
+            }).then(resp => ({ day: d, data: resp.data })).catch(err => {
+                console.warn(`Warning: error fetching occupancy for ${d}`, err);
+                return { day: d, data: null };
+            }));
+
+            const results = await Promise.all(promises);
+
+            const dayMap = {};
+            results.forEach(r => {
+                if (r.data && (r.data.routes || Array.isArray(r.data))) {
+                    // Algunos endpoints devuelven { routes: [...] }, otros devuelven directamente array
+                    dayMap[r.day] = r.data.routes || r.data;
+                } else {
+                    dayMap[r.day] = [];
+                }
+            });
+
+            // Generar PDF con el dayMap
+            generateCorporateRouteOccupancyPDF(dayMap, {
+                corporationName: currentCorporation?.name || '',
+                fiscalYear: currentFiscalYear || '',
+                generatedAt: new Date(),
+                schedules,
+                dayLabels: {
+                    monday: 'Lunes',
+                    tuesday: 'Martes',
+                    wednesday: 'Miércoles',
+                    thursday: 'Jueves',
+                    friday: 'Viernes',
+                    saturday: 'Sábado',
+                    sunday: 'Domingo'
+                }
+            });
+
+            setSnackbar({ open: true, message: 'PDF generado exitosamente', severity: 'success' });
+        } catch (err) {
+            console.error('Error exporting PDF (all days):', err);
+            setSnackbar({ open: true, message: 'Error al generar PDF', severity: 'error' });
+        }
+    };
+
     const getDayLabel = (day) => {
         const dayLabels = {
             'monday': 'Lunes',
@@ -344,10 +427,22 @@ const CorporateDashboardPage = () => {
                 <Grid item xs={12} lg={8}>
                     <SummaryCard>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <DirectionsBus color="primary" />
-                                Resumen de Ocupación por Ruta
-                            </Typography>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <DirectionsBus color="primary" />
+                                    Resumen de Ocupación por Ruta
+                                </Typography>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    size="medium"
+                                    onClick={async () => { await handleExportPDFAll(); }}
+                                    disabled={false}
+                                    sx={{ textTransform: 'uppercase' }}
+                                >
+                                    EXPORTAR PDF (TODOS LOS DÍAS)
+                                </Button>
+                            </Box>
                             <Divider sx={{ mb: 2 }} />
                             
                             {/* Filtro por día */}
@@ -364,6 +459,8 @@ const CorporateDashboardPage = () => {
                                         <MenuItem value="wednesday">Miércoles</MenuItem>
                                         <MenuItem value="thursday">Jueves</MenuItem>
                                         <MenuItem value="friday">Viernes</MenuItem>
+                                        <MenuItem value="saturday">Sábado</MenuItem>
+                                        <MenuItem value="sunday">Domingo</MenuItem>
                                     </Select>
                                 </FormControl>
                                 <Typography variant="body2" color="textSecondary">
@@ -396,45 +493,146 @@ const CorporateDashboardPage = () => {
                                     <Table stickyHeader>
                                         <TableHead>
                                             <TableRow>
-                                                <TableCell>
+                                                <TableCell rowSpan={2}>
                                                     <Typography variant="subtitle2" fontWeight="bold">
-                                                        Número de Ruta
+                                                        Ruta
                                                     </Typography>
                                                 </TableCell>
-                                                <TableCell align="center">
+                                                {(corporationData?.schedules || []).map((schedule, idx) => (
+                                                    <TableCell key={idx} align="center" colSpan={2}>
+                                                        <Typography variant="subtitle2" fontWeight="bold">
+                                                            {schedule.name}
+                                                        </Typography>
+                                                    </TableCell>
+                                                ))}
+                                                <TableCell rowSpan={2} align="center">
                                                     <Typography variant="subtitle2" fontWeight="bold">
-                                                        Empleados Asignados
+                                                        Total
                                                     </Typography>
                                                 </TableCell>
                                             </TableRow>
+                                            <TableRow>
+                                                {(corporationData?.schedules || []).map((schedule, idx) => (
+                                                    <React.Fragment key={idx}>
+                                                        <TableCell align="center">
+                                                            <Typography variant="caption" fontWeight="bold">
+                                                                Entrada
+                                                            </Typography>
+                                                        </TableCell>
+                                                        <TableCell align="center">
+                                                            <Typography variant="caption" fontWeight="bold">
+                                                                Salida
+                                                            </Typography>
+                                                        </TableCell>
+                                                    </React.Fragment>
+                                                ))}
+                                            </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {routeOccupancy.map((route) => (
-                                                <TableRow key={route.routeNumber} hover>
-                                                    <TableCell>
-                                                        <Chip 
-                                                            label={`Ruta ${route.routeNumber}`}
-                                                            color="primary"
-                                                            size="small"
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <Typography variant="body2">
-                                                            {route.employees || 0}
-                                                        </Typography>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {routeOccupancy.map((route) => {
+                                                // Calculate row total
+                                                let rowTotal = 0;
+                                                Object.values(route.schedules || {}).forEach(sched => {
+                                                    rowTotal += (sched.entrada || 0) + (sched.salida || 0);
+                                                });
+                                                
+                                                return (
+                                                    <TableRow key={route.routeNumber} hover>
+                                                        <TableCell>
+                                                            <Typography variant="subtitle1" fontWeight="bold">
+                                                                Ruta {route.routeNumber}
+                                                            </Typography>
+                                                        </TableCell>
+                                                        {(corporationData?.schedules || []).map((schedule, idx) => {
+                                                            const schedData = route.schedules?.[idx] || { entrada: 0, salida: 0 };
+                                                            return (
+                                                                <React.Fragment key={idx}>
+                                                                    <TableCell align="center">
+                                                                        <Chip
+                                                                            label={schedData.entrada || 0}
+                                                                            size="small"
+                                                                            color={schedData.entrada > 0 ? 'primary' : 'default'}
+                                                                            sx={{ minWidth: 40, cursor: schedData.entrada > 0 ? 'pointer' : 'default' }}
+                                                                            onClick={() => {
+                                                                                if (schedData.entrada > 0) {
+                                                                                    handleOpenRouteModal(
+                                                                                        route.routeNumber,
+                                                                                        idx,
+                                                                                        schedule.name,
+                                                                                        'entrada'
+                                                                                    );
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell align="center">
+                                                                        <Chip
+                                                                            label={schedData.salida || 0}
+                                                                            size="small"
+                                                                            color={schedData.salida > 0 ? 'secondary' : 'default'}
+                                                                            sx={{ minWidth: 40, cursor: schedData.salida > 0 ? 'pointer' : 'default' }}
+                                                                            onClick={() => {
+                                                                                if (schedData.salida > 0) {
+                                                                                    handleOpenRouteModal(
+                                                                                        route.routeNumber,
+                                                                                        idx,
+                                                                                        schedule.name,
+                                                                                        'salida'
+                                                                                    );
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    </TableCell>
+                                                                </React.Fragment>
+                                                            );
+                                                        })}
+                                                        <TableCell align="center">
+                                                            <Typography variant="subtitle1" fontWeight="bold">
+                                                                {rowTotal}
+                                                            </Typography>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
                                             {/* Total row */}
-                                            <TableRow>
+                                            <TableRow sx={{ backgroundColor: 'grey.100' }}>
                                                 <TableCell>
                                                     <Typography variant="subtitle1" fontWeight="bold">
                                                         Total
                                                     </Typography>
                                                 </TableCell>
+                                                {(corporationData?.schedules || []).map((schedule, idx) => {
+                                                    let totalEntrada = 0;
+                                                    let totalSalida = 0;
+                                                    routeOccupancy.forEach(route => {
+                                                        const schedData = route.schedules?.[idx] || { entrada: 0, salida: 0 };
+                                                        totalEntrada += schedData.entrada || 0;
+                                                        totalSalida += schedData.salida || 0;
+                                                    });
+                                                    return (
+                                                        <React.Fragment key={idx}>
+                                                            <TableCell align="center">
+                                                                <Typography variant="subtitle1" fontWeight="bold">
+                                                                    {totalEntrada}
+                                                                </Typography>
+                                                            </TableCell>
+                                                            <TableCell align="center">
+                                                                <Typography variant="subtitle1" fontWeight="bold">
+                                                                    {totalSalida}
+                                                                </Typography>
+                                                            </TableCell>
+                                                        </React.Fragment>
+                                                    );
+                                                })}
                                                 <TableCell align="center">
                                                     <Typography variant="subtitle1" fontWeight="bold">
-                                                        {routeOccupancy.reduce((sum, r) => sum + (Number(r.employees) || 0), 0)}
+                                                        {routeOccupancy.reduce((sum, route) => {
+                                                            let routeTotal = 0;
+                                                            Object.values(route.schedules || {}).forEach(sched => {
+                                                                routeTotal += (sched.entrada || 0) + (sched.salida || 0);
+                                                            });
+                                                            return sum + routeTotal;
+                                                        }, 0)}
                                                     </Typography>
                                                 </TableCell>
                                             </TableRow>
@@ -620,6 +818,19 @@ const CorporateDashboardPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
+            {/* Modal de empleados por ruta */}
+            <RouteEmployeesModal
+                open={modalOpen}
+                onClose={handleCloseRouteModal}
+                routeNumber={selectedRoute.routeNumber}
+                scheduleIndex={selectedRoute.scheduleIndex}
+                scheduleName={selectedRoute.scheduleName}
+                stopType={selectedRoute.stopType}
+                corporationId={corporationId}
+                fiscalYear={currentFiscalYear}
+                selectedDay={selectedDay}
+            />
         </PageContainer>
     );
 };
