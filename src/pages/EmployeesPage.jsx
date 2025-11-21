@@ -174,12 +174,16 @@ const EmployeesPage = () => {
         selectedSchedule: -1,
         scheduleSlots: []
     });
+
+    // Valores de campos extra definidos por la corporación (clave: fieldName)
+    const [extraFieldsValues, setExtraFieldsValues] = useState({});
     
     // Estados de acordeón
     const [expandedPanels, setExpandedPanels] = useState({
         basicInfo: true,
         contactInfo: false,
-        schedules: false
+        schedules: false,
+        extraFields: false
     });
 
     // Funciones auxiliares para determinar el estado de los empleados
@@ -389,13 +393,30 @@ const EmployeesPage = () => {
         setExpandedPanels({
             basicInfo: true,
             contactInfo: false,
-            schedules: false
+            schedules: false,
+            extraFields: true
         });
+        // Inicializar campos extra desde la configuración de la corporación
+        const parsedExtra = Array.isArray(corporationData?.extraEnrollmentFields) ? corporationData.extraEnrollmentFields : [];
+        const initialExtra = {};
+        parsedExtra.forEach((f, idx) => {
+            const fieldName = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
+            initialExtra[fieldName] = f.default !== undefined ? f.default : '';
+        });
+        setExtraFieldsValues(initialExtra);
         setOpenCreateDialog(true);
     };
 
     const handleOpenEditDialog = (employee) => {
         setSelectedEmployee(employee);
+        
+        console.log('[EmployeesPage] Opening edit dialog for employee:', {
+            employeeName: employee.name,
+            hasEmployeeDetail: !!employee.EmployeeDetail,
+            extraFields: employee.EmployeeDetail?.extraFields,
+            extraFieldsType: typeof employee.EmployeeDetail?.extraFields,
+            corporationExtraFields: corporationData?.extraEnrollmentFields
+        });
         
         // Convertir selectedSchedule de índice numérico (si ya lo es) o mantener -1
         let scheduleIndex = -1;
@@ -418,10 +439,64 @@ const EmployeesPage = () => {
             selectedSchedule: scheduleIndex,
             scheduleSlots: employee.ScheduleSlots || []
         });
+        // Inicializar campos extra con los valores existentes del empleado o defaults de la corporación
+        const corpFields = Array.isArray(corporationData?.extraEnrollmentFields) ? corporationData.extraEnrollmentFields : [];
+        const initialExtra = {};
+        
+        // Parsear extraFields del empleado si es string
+        let empExtras = employee.EmployeeDetail?.extraFields || {};
+        if (typeof empExtras === 'string') {
+            try {
+                empExtras = JSON.parse(empExtras);
+            } catch (e) {
+                empExtras = {};
+            }
+        }
+        
+        // Crear mapa de claves normalizadas (trim) para búsqueda flexible
+        const empExtrasNormalized = {};
+        Object.keys(empExtras).forEach(k => {
+            const trimmedKey = k.trim();
+            empExtrasNormalized[trimmedKey] = empExtras[k];
+        });
+        
+        corpFields.forEach((f, idx) => {
+            const fieldName = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
+            const trimmedFieldName = fieldName.trim();
+            
+            // Buscar valor guardado: primero con clave exacta, luego con clave trimmed
+            let saved = f.default !== undefined ? f.default : '';
+            if (empExtras[fieldName] !== undefined) {
+                saved = empExtras[fieldName];
+            } else if (empExtrasNormalized[trimmedFieldName] !== undefined) {
+                saved = empExtrasNormalized[trimmedFieldName];
+            }
+            
+            initialExtra[fieldName] = saved;
+        });
+        
+        // También incluir cualquier extraFields que existan en EmployeeDetail pero no estén en corpFields
+        Object.keys(empExtras).forEach(k => { 
+            const trimmedK = k.trim();
+            // Buscar si algún campo de corpFields coincide (exacto o trimmed)
+            const existsInCorp = corpFields.some(f => {
+                const fn = f.fieldName || f.label || f.name || f.key || '';
+                return fn === k || fn.trim() === trimmedK || fn === trimmedK;
+            });
+            if (!existsInCorp && initialExtra[k] === undefined) {
+                initialExtra[k] = empExtras[k];
+            }
+        });
+        
+        setExtraFieldsValues(initialExtra);
+        
+        console.log('[EmployeesPage] Initialized extraFieldsValues:', initialExtra);
+        
         setExpandedPanels({
             basicInfo: true,
             contactInfo: false,
-            schedules: false
+            schedules: false,
+            extraFields: true
         });
         setOpenEditDialog(true);
     };
@@ -470,6 +545,10 @@ const EmployeesPage = () => {
                 },
                 scheduleSlots: employeeForm.scheduleSlots
             };
+            // Incluir campos extra si existen
+            if (extraFieldsValues && Object.keys(extraFieldsValues).length > 0) {
+                payload.employeeDetail.extraFields = extraFieldsValues;
+            }
             
             await api.post(`/corporations/${corporationId}/employees`, payload, {
                 headers: {
@@ -513,6 +592,10 @@ const EmployeesPage = () => {
                     selectedSchedule: employeeForm.selectedSchedule
                 }
             };
+            // Incluir campos extra si existen
+            if (extraFieldsValues && Object.keys(extraFieldsValues).length > 0) {
+                payload.employeeDetail.extraFields = extraFieldsValues;
+            }
             
             // Si se proporciona contraseña, incluirla
             if (employeeForm.password) {
@@ -999,6 +1082,77 @@ const EmployeesPage = () => {
                             </Grid>
                         </AccordionDetails>
                     </StyledAccordion>
+
+                    {/* Campos adicionales (dinámicos definidos por la corporación) */}
+                    {Array.isArray(corporationData?.extraEnrollmentFields) && corporationData.extraEnrollmentFields.length > 0 && (
+                        <StyledAccordion 
+                            expanded={expandedPanels.extraFields}
+                            onChange={handleAccordionChange('extraFields')}
+                        >
+                            <AccordionSummary expandIcon={<ExpandMore />}>
+                                <Typography variant="subtitle1" fontWeight="bold">Campos Adicionales</Typography>
+                            </AccordionSummary>
+                            <AccordionDetails>
+                                <Grid container spacing={2}>
+                                    {corporationData.extraEnrollmentFields.map((field, idx) => {
+                                        const fieldName = field.fieldName || field.label || field.name || field.key || `extra_${idx}`;
+                                        const label = fieldName;
+                                        const type = (field.type || 'text').toLowerCase();
+
+                                        const handleChangeExtra = (value) => {
+                                            setExtraFieldsValues(prev => ({ ...prev, [fieldName]: value }));
+                                        };
+
+                                        return (
+                                            <Grid item xs={12} sm={6} key={fieldName}>
+                                                {type === 'select' ? (
+                                                    <FormControl fullWidth>
+                                                        <InputLabel>{label}</InputLabel>
+                                                        <Select
+                                                            value={extraFieldsValues[fieldName] ?? ''}
+                                                            label={label}
+                                                            onChange={(e) => handleChangeExtra(e.target.value)}
+                                                        >
+                                                            {(Array.isArray(field.options) ? field.options : []).map((opt, i) => (
+                                                                <MenuItem key={i} value={opt.value ?? opt}>{opt.label ?? opt}</MenuItem>
+                                                            ))}
+                                                        </Select>
+                                                    </FormControl>
+                                                ) : type === 'textarea' ? (
+                                                    <TextField
+                                                        fullWidth
+                                                        label={label}
+                                                        multiline
+                                                        rows={4}
+                                                        value={extraFieldsValues[fieldName] ?? ''}
+                                                        onChange={(e) => handleChangeExtra(e.target.value)}
+                                                    />
+                                                ) : type === 'checkbox' ? (
+                                                    <FormControl fullWidth>
+                                                        <InputLabel shrink>{label}</InputLabel>
+                                                        <Select
+                                                            value={extraFieldsValues[fieldName] ? 'true' : 'false'}
+                                                            onChange={(e) => handleChangeExtra(e.target.value === 'true')}
+                                                        >
+                                                            <MenuItem value={'true'}>Sí</MenuItem>
+                                                            <MenuItem value={'false'}>No</MenuItem>
+                                                        </Select>
+                                                    </FormControl>
+                                                ) : (
+                                                    <TextField
+                                                        fullWidth
+                                                        label={label}
+                                                        value={extraFieldsValues[fieldName] ?? ''}
+                                                        onChange={(e) => handleChangeExtra(e.target.value)}
+                                                    />
+                                                )}
+                                            </Grid>
+                                        );
+                                    })}
+                                </Grid>
+                            </AccordionDetails>
+                        </StyledAccordion>
+                    )}
 
                     {/* Información de Contacto */}
                     <StyledAccordion 

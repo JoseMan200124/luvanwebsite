@@ -64,6 +64,9 @@ const CorporateEnrollmentPage = () => {
         severity: 'success'
     });
 
+    // Campos dinámicos definidos por la corporación
+    const [extraFieldsValues, setExtraFieldsValues] = useState({});
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -83,6 +86,10 @@ const CorporateEnrollmentPage = () => {
             accountEmail,
             accountPassword
         };
+        // Incluir campos extra si existen
+        if (extraFieldsValues && Object.keys(extraFieldsValues).length > 0) {
+            payload.extraFields = extraFieldsValues;
+        }
 
         try {
             await api.post(`/public/corporations/enroll/${corporationId}`, payload);
@@ -146,7 +153,43 @@ const CorporateEnrollmentPage = () => {
                     } else if (!Array.isArray(corp.schedules)) {
                         corp.schedules = [];
                     }
-                    
+
+                    // Parse extraEnrollmentFields if it was saved as a JSON string
+                    if (corp.extraEnrollmentFields && typeof corp.extraEnrollmentFields === 'string') {
+                        try {
+                            corp.extraEnrollmentFields = JSON.parse(corp.extraEnrollmentFields);
+                        } catch (e) {
+                            corp.extraEnrollmentFields = [];
+                        }
+                    } else if (!Array.isArray(corp.extraEnrollmentFields)) {
+                        corp.extraEnrollmentFields = [];
+                    }
+
+                    // Normalizar cada campo extra al mismo formato que usa el flujo de colegios: { fieldName, type, required, options?, default? }
+                    corp.extraEnrollmentFields = (corp.extraEnrollmentFields || []).map((fld, idx) => {
+                        if (!fld) return null;
+                        if (typeof fld === 'string') {
+                            return { fieldName: fld, type: 'text', required: false, options: [], default: '' };
+                        }
+
+                        const fieldName = fld.fieldName || fld.label || fld.name || fld.key || `extra_${idx}`;
+                        const type = (fld.type || 'text').toLowerCase();
+                        const required = fld.required === true || fld.required === 'true' || fld.isRequired === true || false;
+                        const options = Array.isArray(fld.options) ? fld.options : (fld.choices || []);
+                        const def = fld.default !== undefined ? fld.default : (fld.value !== undefined ? fld.value : '');
+
+                        return { fieldName, type, required, options, default: def };
+                    }).filter(Boolean);
+
+                    // Inicializar valores por defecto para campos extra si existen (usar fieldName como clave)
+                    if (corp.extraEnrollmentFields.length > 0) {
+                        const initial = {};
+                        corp.extraEnrollmentFields.forEach(field => {
+                            initial[field.fieldName] = field.default !== undefined ? field.default : '';
+                        });
+                        setExtraFieldsValues(initial);
+                    }
+
                     setCorporationData(corp);
                     console.log('Corporación obtenida:', corp);
                 }
@@ -365,6 +408,85 @@ const CorporateEnrollmentPage = () => {
                             onChange={(e) => setEmergencyPhone(e.target.value)}
                             required
                         />
+
+                        {Array.isArray(corporationData?.extraEnrollmentFields) && corporationData.extraEnrollmentFields.length > 0 && (
+                            <>
+                                <Divider sx={{ my: 3 }} />
+                                <Typography variant="h6" sx={{ mb: 2 }}>
+                                    Campos adicionales
+                                </Typography>
+                                {corporationData.extraEnrollmentFields.map((field, idx) => {
+                                    const fieldName = field.fieldName || field.label || field.name || field.key || `extra_${idx}`;
+                                    const key = fieldName;
+                                    const label = fieldName;
+                                    const type = (field.type || 'text').toLowerCase();
+
+                                    const handleChange = (value) => {
+                                        setExtraFieldsValues(prev => ({ ...prev, [fieldName]: value }));
+                                    };
+
+                                    if (type === 'select') {
+                                        return (
+                                            <FormControl fullWidth margin="normal" key={key}>
+                                                <InputLabel>{label}</InputLabel>
+                                                <Select
+                                                    value={extraFieldsValues[fieldName] ?? ''}
+                                                    label={label}
+                                                    onChange={(e) => handleChange(e.target.value)}
+                                                >
+                                                    {(Array.isArray(field.options) ? field.options : []).map((opt, i) => (
+                                                        <MenuItem key={i} value={opt.value ?? opt}>{opt.label ?? opt}</MenuItem>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                        );
+                                    }
+
+                                    if (type === 'textarea') {
+                                        return (
+                                            <TextField
+                                                key={key}
+                                                label={label}
+                                                fullWidth
+                                                margin="normal"
+                                                multiline
+                                                rows={4}
+                                                value={extraFieldsValues[fieldName] ?? ''}
+                                                onChange={(e) => handleChange(e.target.value)}
+                                            />
+                                        );
+                                    }
+
+                                    // Default: text / number / checkbox
+                                    if (type === 'checkbox') {
+                                        return (
+                                            <FormControl key={key} margin="normal">
+                                                <InputLabel shrink>{label}</InputLabel>
+                                                <Select
+                                                    value={extraFieldsValues[fieldName] ? 'true' : 'false'}
+                                                    onChange={(e) => handleChange(e.target.value === 'true')}
+                                                >
+                                                    <MenuItem value={'true'}>Sí</MenuItem>
+                                                    <MenuItem value={'false'}>No</MenuItem>
+                                                </Select>
+                                            </FormControl>
+                                        );
+                                    }
+
+                                    return (
+                                        <TextField
+                                            key={key}
+                                            label={label}
+                                            fullWidth
+                                            margin="normal"
+                                            type={type === 'number' ? 'number' : 'text'}
+                                            value={extraFieldsValues[fieldName] ?? ''}
+                                            onChange={(e) => handleChange(e.target.value)}
+                                        />
+                                    );
+                                })}
+                            </>
+                        )}
 
                         <Divider sx={{ my: 3 }} />
 
