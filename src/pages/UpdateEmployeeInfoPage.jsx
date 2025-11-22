@@ -34,9 +34,26 @@ const UpdateEmployeeInfoPage = () => {
     // Campos del formulario de empleado
     const [lastName, setLastName] = useState('');
     const [firstName, setFirstName] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [serviceAddress, setServiceAddress] = useState('');
     const [zoneOrSector, setZoneOrSector] = useState('');
     const [routeType, setRouteType] = useState('Completa');
+    const [selectedSchedule, setSelectedSchedule] = useState(-1);
+
+    const [schedules, setSchedules] = useState([]);
+    const [extraFields, setExtraFields] = useState([]);
+    const [formExtraValues, setFormExtraValues] = useState({});
+    const [prefillExtraFields, setPrefillExtraFields] = useState(null);
+
+    const getExtraValue = (fieldName) => {
+        if (!formExtraValues) return '';
+        if (formExtraValues[fieldName] !== undefined) return formExtraValues[fieldName];
+        const target = String(fieldName || '').trim().toLowerCase();
+        for (const k of Object.keys(formExtraValues)) {
+            if (String(k || '').trim().toLowerCase() === target) return formExtraValues[k];
+        }
+        return '';
+    };
 
     // Contacto de emergencia
     const [emergencyContact, setEmergencyContact] = useState('');
@@ -45,6 +62,8 @@ const UpdateEmployeeInfoPage = () => {
     
     const [accountFullName, setAccountFullName] = useState('');
     const [accountEmail, setAccountEmail] = useState('');
+    const [accountUsername, setAccountUsername] = useState('');
+    const [accountPassword, setAccountPassword] = useState('');
 
     const [snackbar, setSnackbar] = useState({
         open: false,
@@ -56,26 +75,90 @@ const UpdateEmployeeInfoPage = () => {
         setCorporationId(userData.corporationId || '');
         setLastName(userData.lastName || '');
         setFirstName(userData.firstName || '');
+        setPhoneNumber(userData.phoneNumber || '');
         setServiceAddress(userData.serviceAddress || '');
         setZoneOrSector(userData.zoneOrSector || '');
+        // Save extraFields from prefill and map after corp data loads
+        setPrefillExtraFields(userData.extraFields || {});
         setRouteType(userData.routeType || 'Completa');
+        setSelectedSchedule(userData.selectedSchedule ?? -1);
+        // don't set formExtraValues directly; we will map prefill fields to canonical fieldName after corp data is loaded
+        setFormExtraValues({});
         setEmergencyContact(userData.emergencyContact || '');
         setEmergencyRelationship(userData.emergencyRelationship || '');
         setEmergencyPhone(userData.emergencyPhone || '');
         setAccountFullName(userData.accountFullName || '');
+        setAccountUsername(userData.accountFullName || '');
         setAccountEmail(userData.accountEmail || '');
 
         setIsLoginOpen(false);
-        fetchCorporationData(userData.corporationId);
+        // Pass prefill extraFields directly to avoid async state update race
+        fetchCorporationData(userData.corporationId, userData.extraFields || {});
     };
 
-    const fetchCorporationData = async (id) => {
+    const fetchCorporationData = async (id, prefill = null) => {
         try {
             const response = await api.get(`/corporations/${id}`);
             
             if (response.data && response.data.corporation) {
                 // Corporación cargada correctamente
                 console.log('Corporación obtenida:', response.data.corporation);
+                const corp = response.data.corporation;
+                // Load schedules and extra enrollment fields if present
+                if (Array.isArray(corp.schedules)) setSchedules(corp.schedules);
+                else if (corp.schedules && typeof corp.schedules === 'string') {
+                    try { setSchedules(JSON.parse(corp.schedules)); } catch { setSchedules([]); }
+                }
+
+                if (Array.isArray(corp.extraEnrollmentFields)) setExtraFields(corp.extraEnrollmentFields);
+                else if (corp.extraEnrollmentFields && typeof corp.extraEnrollmentFields === 'string') {
+                    try { setExtraFields(JSON.parse(corp.extraEnrollmentFields)); } catch { setExtraFields([]); }
+                }
+
+                // Map prefill (passed directly or from state) into formExtraValues using the canonical fieldName from corp.extraEnrollmentFields
+                const prefillObj = prefill && Object.keys(prefill || {}).length > 0 ? prefill : prefillExtraFields;
+                if (prefillObj) {
+                    const mapped = {};
+                    const defs = Array.isArray(corp.extraEnrollmentFields) ? corp.extraEnrollmentFields : (corp.extraEnrollmentFields && typeof corp.extraEnrollmentFields === 'string' ? (() => { try { return JSON.parse(corp.extraEnrollmentFields); } catch { return []; } })() : []);
+
+                    const findKey = (obj, target) => {
+                        if (!obj) return null;
+                        const t = String(target || '').trim().toLowerCase();
+                        for (const k of Object.keys(obj)) {
+                            if (String(k || '').trim().toLowerCase() === t) return k;
+                        }
+                        return null;
+                    };
+
+                    if (Array.isArray(defs) && defs.length > 0) {
+                        defs.forEach(def => {
+                            const fname = def.fieldName || def.label || def.name || '';
+                            const keyInPrefill = findKey(prefillObj, fname) || findKey(prefillObj, String(fname).toLowerCase());
+                            if (keyInPrefill) {
+                                mapped[fname] = prefillObj[keyInPrefill];
+                            } else {
+                                // fallback: try to match common synonyms
+                                const lname = String(fname).toLowerCase();
+                                if (lname.includes('depart') || lname.includes('zona') || lname.includes('sector')) {
+                                    const syn = findKey(prefillObj, 'department') || findKey(prefillObj, 'zoneOrSector') || findKey(prefillObj, 'zona') || findKey(prefillObj, 'zone');
+                                    if (syn) mapped[fname] = prefillObj[syn];
+                                }
+                            }
+                        });
+                    } else {
+                        // no defs: copy all
+                        Object.keys(prefillObj).forEach(k => mapped[k] = prefillObj[k]);
+                    }
+
+                    // final fallback: if mapped empty and prefill has department-like top-level, set a Departamento key
+                    if (Object.keys(mapped).length === 0) {
+                        const depKey = findKey(prefillObj, 'department') || findKey(prefillObj, 'zoneOrSector') || findKey(prefillObj, 'zona');
+                        if (depKey) mapped['Departamento'] = prefillObj[depKey];
+                    }
+
+                    setFormExtraValues(prev => ({ ...mapped, ...prev }));
+                    setPrefillExtraFields(null);
+                }
             }
         } catch (error) {
             console.error('Error al obtener info de la corporación:', error);
@@ -97,13 +180,17 @@ const UpdateEmployeeInfoPage = () => {
             lastName,
             firstName,
             serviceAddress,
-            zoneOrSector,
+            zoneOrSector: zoneOrSector,
             routeType,
+            phoneNumber,
+            selectedSchedule,
             emergencyContact,
             emergencyRelationship,
             emergencyPhone,
-            accountFullName,
-            accountEmail
+            accountFullName: accountUsername || accountFullName,
+            accountEmail,
+            accountPassword,
+            extraFields: formExtraValues
         };
 
         try {
@@ -117,13 +204,18 @@ const UpdateEmployeeInfoPage = () => {
 
             setLastName('');
             setFirstName('');
+            setPhoneNumber('');
             setServiceAddress('');
             setZoneOrSector('');
             setRouteType('Completa');
+            setSelectedSchedule(-1);
+            setFormExtraValues({});
             setEmergencyContact('');
             setEmergencyRelationship('');
             setEmergencyPhone('');
             setAccountFullName('');
+            setAccountUsername('');
+            setAccountPassword('');
             setAccountEmail('');
 
             // Redirigir a la página de agradecimiento
@@ -250,6 +342,16 @@ const UpdateEmployeeInfoPage = () => {
                             required
                         />
 
+                        
+                        <TextField
+                            label="Teléfono"
+                            fullWidth
+                            margin="normal"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.target.value)}
+                            placeholder="50241234567"
+                        />
+
                         <TextField
                             label="Dirección de Servicio"
                             fullWidth
@@ -284,6 +386,22 @@ const UpdateEmployeeInfoPage = () => {
                             </Select>
                         </FormControl>
 
+                        {schedules && schedules.length > 0 && (
+                            <FormControl fullWidth margin="normal">
+                                <InputLabel>Horario</InputLabel>
+                                <Select
+                                    value={selectedSchedule}
+                                    onChange={(e) => setSelectedSchedule(Number(e.target.value))}
+                                    label="Horario"
+                                >
+                                    <MenuItem value={-1}>-- Seleccione --</MenuItem>
+                                    {schedules.map((s, idx) => (
+                                        <MenuItem key={idx} value={idx}>{s.name || `Horario ${idx+1}`}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        )}
+
                         <Divider sx={{ my: 3 }} />
 
                         <Typography variant="h6" sx={{ mb: 2 }}>
@@ -315,6 +433,98 @@ const UpdateEmployeeInfoPage = () => {
                             value={emergencyPhone}
                             onChange={(e) => setEmergencyPhone(e.target.value)}
                             required
+                        />
+
+                        <Divider sx={{ my: 3 }} />
+
+                        {extraFields.length > 0 && (
+                            <>
+                                <Typography variant="h6" sx={{ mb: 2 }}>Campos Adicionales</Typography>
+                                {extraFields.map((field, idx) => (
+                                    <Box key={idx} sx={{ mb: 2 }}>
+                                        <Typography variant="subtitle2" sx={{ mb: 1 }}>{field.fieldName}{field.required && ' *'}</Typography>
+
+                                        {field.type === 'text' && (
+                                            <TextField
+                                                placeholder={field.fieldName}
+                                                fullWidth
+                                                required={field.required}
+                                                value={getExtraValue(field.fieldName) || ''}
+                                                onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })}
+                                            />
+                                        )}
+
+                                        {field.type === 'number' && (
+                                            <TextField
+                                                type="number"
+                                                placeholder={field.fieldName}
+                                                fullWidth
+                                                required={field.required}
+                                                value={getExtraValue(field.fieldName) || ''}
+                                                onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })}
+                                            />
+                                        )}
+
+                                        {field.type === 'date' && (
+                                            <TextField
+                                                type="date"
+                                                fullWidth
+                                                required={field.required}
+                                                InputLabelProps={{ shrink: true }}
+                                                placeholder={field.fieldName}
+                                                value={getExtraValue(field.fieldName) || ''}
+                                                onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })}
+                                            />
+                                        )}
+
+                                        {field.type === 'select' && (
+                                            <FormControl fullWidth required={field.required}>
+                                                <InputLabel>{field.fieldName}</InputLabel>
+                                                <Select
+                                                    value={getExtraValue(field.fieldName) || ''}
+                                                    onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })}
+                                                >
+                                                    <MenuItem value="">-- Seleccione --</MenuItem>
+                                                    {(field.options || []).map((opt, i) => (<MenuItem key={i} value={opt}>{opt}</MenuItem>))}
+                                                </Select>
+                                            </FormControl>
+                                        )}
+                                    </Box>
+                                ))}
+                            </>
+                        )}
+
+                        <Divider sx={{ my: 3 }} />
+
+                        <Typography variant="h6" sx={{ mb: 2 }}>Datos de la Cuenta</Typography>
+
+                        <TextField
+                            label="Nombre de usuario"
+                            fullWidth
+                            margin="normal"
+                            value={accountUsername}
+                            onChange={(e) => setAccountUsername(e.target.value)}
+                            required
+                        />
+
+                        <TextField
+                            label="Correo electrónico"
+                            type="email"
+                            fullWidth
+                            margin="normal"
+                            value={accountEmail}
+                            onChange={(e) => setAccountEmail(e.target.value)}
+                            required
+                        />
+
+                        <TextField
+                            label="Contraseña (dejar en blanco para no cambiar)"
+                            type="password"
+                            fullWidth
+                            margin="normal"
+                            value={accountPassword}
+                            onChange={(e) => setAccountPassword(e.target.value)}
+                            placeholder="Nueva contraseña opcional"
                         />
 
                         <Button

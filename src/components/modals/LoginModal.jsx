@@ -71,7 +71,7 @@ const LoginModal = ({ open, onClose, onLoginSuccess }) => {
             // Llamamos a login del AuthContext
             // Este login internamente hace la petición a /api/auth/login
             // y ya maneja el storage del token.
-            const { passwordExpired } = await loginUpdateParentsInfo(trimmedEmail, formData.password);
+            const { passwordExpired, roleId } = await loginUpdateParentsInfo(trimmedEmail, formData.password);
 
             // Si el backend nos dice que la contraseña ha expirado:
             if (passwordExpired) {
@@ -84,10 +84,21 @@ const LoginModal = ({ open, onClose, onLoginSuccess }) => {
                 message: '¡Inicio de sesión exitoso!',
                 severity: 'success',
             });
+            // Llamar al endpoint de prefill según el rol: Padres => update-parent-info, Empleados => update-employee-info
+            let response;
+            try {
+                if (Number(roleId) === 8) {
+                    response = await api.get('/update-employee-info', { params: { email: trimmedEmail } });
+                } else {
+                    response = await api.get('/update-parent-info', { params: { email: trimmedEmail } });
+                }
+            } catch (err) {
+                // If prefill endpoint returned 404, surface a friendly message but allow login success flow
+                console.warn('[LoginModal] Prefill endpoint returned error:', err?.response?.status || err.message);
+                throw err;
+            }
 
-            const response = await api.get('/update-parent-info', { params: { email: trimmedEmail } });
             const userData = response.data;
-
             onLoginSuccess(userData); // Pasar los datos del usuario al componente principal
             onClose();
 
