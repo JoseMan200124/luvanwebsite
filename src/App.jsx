@@ -38,6 +38,7 @@ import CorporateDashboardPage from './pages/CorporateDashboardPage';
 import CorporateBusesPage from './pages/CorporateBusesPage';
 import CorporateProtocolsPage from './pages/CorporateProtocolsPage';
 import EmployeesPage from './pages/EmployeesPage';
+import EmployeeDashboardPage from './pages/EmployeeDashboardPage';
 import { modules } from './modules';
 import AdminAuditHidden from './pages/AdminAuditHidden';
 
@@ -281,6 +282,16 @@ function App() {
                         element={
                             <ProtectedRoute roles={['Padre','PadreFamilia',3]}>
                                 <ParentPaymentPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* ---------------- Área EMPLEADO (sin sidebar) --------- */}
+                    <Route
+                        path="/employee/dashboard"
+                        element={
+                            <ProtectedRoute roles={['Empleado', 8]}>
+                                <EmployeeDashboardPage />
                             </ProtectedRoute>
                         }
                     />
