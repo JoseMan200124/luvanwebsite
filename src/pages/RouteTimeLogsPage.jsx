@@ -23,6 +23,7 @@ import {
     Chip,
     IconButton,
     Tooltip,
+    TableSortLabel,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -42,6 +43,10 @@ const RouteTimeLogsPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [totalCount, setTotalCount] = useState(0);
+
+    // Sorting (client-side)
+    const [orderBy, setOrderBy] = useState(''); // column key
+    const [order, setOrder] = useState('asc'); // 'asc' | 'desc'
 
     // Filtros
     const [schools, setSchools] = useState([]);
@@ -73,7 +78,7 @@ const RouteTimeLogsPage = () => {
     useEffect(() => {
         fetchTimeLogs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedSchedule, selectedDay, startDate, endDate]);
+    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedSchedule, selectedDay, startDate, endDate, orderBy, order]);
 
     const fetchSchools = async () => {
         try {
@@ -104,6 +109,10 @@ const RouteTimeLogsPage = () => {
                 page: page + 1,
                 limit: rowsPerPage,
             };
+
+            // Añadir ordenamiento solicitado al servidor
+            if (orderBy) filters.sortBy = orderBy;
+            if (order) filters.order = order;
 
             if (selectedSchool) filters.schoolId = selectedSchool;
             if (selectedPlate) filters.plate = selectedPlate;
@@ -154,6 +163,20 @@ const RouteTimeLogsPage = () => {
         fetchTimeLogs();
     };
 
+    const handleSort = (col) => {
+        if (orderBy === col) {
+            setOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setOrderBy(col);
+            setOrder('asc');
+        }
+        // reset page to first when changing sort
+        setPage(0);
+    };
+
+    // Server returns ordered results; use them directly
+    const displayedLogs = timeLogs;
+
     const getScheduleLabel = (schedule) => {
         const labels = {
             'AM': 'Mañana',
@@ -178,7 +201,11 @@ const RouteTimeLogsPage = () => {
     };
 
     const formatTime = (dateTime) => {
-        return dateTime ? moment(dateTime).format('HH:mm') : 'N/A';
+        return dateTime ? moment(dateTime).format('hh:mm A') : 'N/A';
+    };
+
+    const formatDateOnly = (dateTime) => {
+        return dateTime ? moment(dateTime).format('DD/MM/YYYY') : '';
     };
 
     const formatDuration = (minutes) => {
@@ -374,21 +401,109 @@ const RouteTimeLogsPage = () => {
                                 <Table>
                                     <TableHead>
                                         <TableRow>
-                                            <TableCell>Fecha</TableCell>
-                                            <TableCell>Día</TableCell>
-                                            <TableCell>Horario</TableCell>
-                                            <TableCell>Monitora</TableCell>
-                                            <TableCell>Placa</TableCell>
-                                            <TableCell>Ruta</TableCell>
-                                            <TableCell>Primera Parada</TableCell>
-                                            <TableCell>Última Parada</TableCell>
-                                            <TableCell>Salida Colegio</TableCell>
-                                            <TableCell>Llegada Colegio</TableCell>
-                                            <TableCell align="center">Duración Total</TableCell>
+                                            <TableCell sortDirection={orderBy === 'fecha' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'fecha'}
+                                                    direction={orderBy === 'fecha' ? order : 'asc'}
+                                                    onClick={() => handleSort('fecha')}
+                                                >
+                                                    Fecha
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'day' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'day'}
+                                                    direction={orderBy === 'day' ? order : 'asc'}
+                                                    onClick={() => handleSort('day')}
+                                                >
+                                                    Día
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'schedule' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'schedule'}
+                                                    direction={orderBy === 'schedule' ? order : 'asc'}
+                                                    onClick={() => handleSort('schedule')}
+                                                >
+                                                    Horario
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'monitora' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'monitora'}
+                                                    direction={orderBy === 'monitora' ? order : 'asc'}
+                                                    onClick={() => handleSort('monitora')}
+                                                >
+                                                    Monitora
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'plate' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'plate'}
+                                                    direction={orderBy === 'plate' ? order : 'asc'}
+                                                    onClick={() => handleSort('plate')}
+                                                >
+                                                    Placa
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'routeNumber' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'routeNumber'}
+                                                    direction={orderBy === 'routeNumber' ? order : 'asc'}
+                                                    onClick={() => handleSort('routeNumber')}
+                                                >
+                                                    Ruta
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'schoolDepartureTime' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'schoolDepartureTime'}
+                                                    direction={orderBy === 'schoolDepartureTime' ? order : 'asc'}
+                                                    onClick={() => handleSort('schoolDepartureTime')}
+                                                >
+                                                    Salida Colegio
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'firstStopTime' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'firstStopTime'}
+                                                    direction={orderBy === 'firstStopTime' ? order : 'asc'}
+                                                    onClick={() => handleSort('firstStopTime')}
+                                                >
+                                                    Primera Parada
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'lastStopTime' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'lastStopTime'}
+                                                    direction={orderBy === 'lastStopTime' ? order : 'asc'}
+                                                    onClick={() => handleSort('lastStopTime')}
+                                                >
+                                                    Última Parada
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'schoolArrivalTime' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'schoolArrivalTime'}
+                                                    direction={orderBy === 'schoolArrivalTime' ? order : 'asc'}
+                                                    onClick={() => handleSort('schoolArrivalTime')}
+                                                >
+                                                    Llegada Colegio
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell align="center" sortDirection={orderBy === 'tripDuration' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'tripDuration'}
+                                                    direction={orderBy === 'tripDuration' ? order : 'asc'}
+                                                    onClick={() => handleSort('tripDuration')}
+                                                >
+                                                    Duración Total
+                                                </TableSortLabel>
+                                            </TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {timeLogs.map((log) => (
+                                        {displayedLogs.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell>
                                                     {moment(log.fecha).format('DD/MM/YYYY')}
@@ -414,10 +529,38 @@ const RouteTimeLogsPage = () => {
                                                 <TableCell>
                                                     {log.routeNumber || 'N/A'}
                                                 </TableCell>
-                                                <TableCell>{formatTime(log.firstStopTime)}</TableCell>
-                                                <TableCell>{formatTime(log.lastStopTime)}</TableCell>
-                                                <TableCell>{formatTime(log.schoolDepartureTime)}</TableCell>
-                                                <TableCell>{formatTime(log.schoolArrivalTime)}</TableCell>
+                                                <TableCell>
+                                                    <div>
+                                                        <div>{formatTime(log.schoolDepartureTime)}</div>
+                                                        <Typography variant="caption" color="textSecondary">
+                                                            {formatDateOnly(log.schoolDepartureTime)}
+                                                        </Typography>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div>
+                                                        <div>{formatTime(log.firstStopTime)}</div>
+                                                        <Typography variant="caption" color="textSecondary">
+                                                            {formatDateOnly(log.firstStopTime)}
+                                                        </Typography>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div>
+                                                        <div>{formatTime(log.lastStopTime)}</div>
+                                                        <Typography variant="caption" color="textSecondary">
+                                                            {formatDateOnly(log.lastStopTime)}
+                                                        </Typography>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div>
+                                                        <div>{formatTime(log.schoolArrivalTime)}</div>
+                                                        <Typography variant="caption" color="textSecondary">
+                                                            {formatDateOnly(log.schoolArrivalTime)}
+                                                        </Typography>
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell align="center">
                                                     <Chip 
                                                         label={formatDuration(log.tripDuration)}
