@@ -37,6 +37,15 @@ export const getRouteTimeLogById = async (id) => {
 };
 
 /**
+ * Eliminar un registro de tiempos por ID
+ * @param {number} id
+ */
+export const deleteRouteTimeLog = async (id) => {
+    const response = await api.delete(`/monitora/route-times/${id}`);
+    return response.data;
+};
+
+/**
  * Obtener estadísticas de tiempos de rutas
  * @param {Object} filters - Filtros para las estadísticas
  */

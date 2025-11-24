@@ -24,13 +24,21 @@ import {
     IconButton,
     Tooltip,
     TableSortLabel,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogContentText,
+    DialogActions,
+    Button,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import tw from 'twin.macro';
 import { getRouteTimeLogs } from '../services/routeTimeLogService';
+import { deleteRouteTimeLog } from '../services/routeTimeLogService';
 import api from '../utils/axiosConfig';
 
 moment.tz.setDefault('America/Guatemala');
@@ -64,6 +72,9 @@ const RouteTimeLogsPage = () => {
         total: 0,
         averageDuration: 0,
     });
+    // Delete dialog state
+    const [deleteId, setDeleteId] = useState(null);
+    const [deleteOpen, setDeleteOpen] = useState(false);
 
     useEffect(() => {
         fetchSchools();
@@ -161,6 +172,31 @@ const RouteTimeLogsPage = () => {
 
     const handleRefresh = () => {
         fetchTimeLogs();
+    };
+
+    const handleOpenDelete = (id) => {
+        setDeleteId(id);
+        setDeleteOpen(true);
+    };
+
+    const handleCancelDelete = () => {
+        setDeleteId(null);
+        setDeleteOpen(false);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deleteId) return;
+        try {
+            await deleteRouteTimeLog(deleteId);
+            // refresh list
+            setDeleteOpen(false);
+            setDeleteId(null);
+            fetchTimeLogs();
+        } catch (error) {
+            console.error('Error al eliminar registro:', error);
+            setDeleteOpen(false);
+            setDeleteId(null);
+        }
     };
 
     const handleSort = (col) => {
@@ -500,6 +536,9 @@ const RouteTimeLogsPage = () => {
                                                     Duración Total
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell align="center">
+                                                Acciones
+                                            </TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -572,6 +611,13 @@ const RouteTimeLogsPage = () => {
                                                         }
                                                     />
                                                 </TableCell>
+                                                <TableCell align="center">
+                                                    <Tooltip title="Eliminar registro">
+                                                        <IconButton onClick={() => handleOpenDelete(log.id)} size="small" color="error">
+                                                            <DeleteIcon fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                         {timeLogs.length === 0 && (
@@ -596,6 +642,22 @@ const RouteTimeLogsPage = () => {
                                     `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
                                 }
                             />
+                            <Dialog
+                                open={deleteOpen}
+                                onClose={handleCancelDelete}
+                                aria-labelledby="delete-dialog-title"
+                            >
+                                <DialogTitle id="delete-dialog-title">Confirmar eliminación</DialogTitle>
+                                <DialogContent>
+                                    <DialogContentText>
+                                        ¿Estás seguro que deseas eliminar este registro? Esta acción no se puede deshacer.
+                                    </DialogContentText>
+                                </DialogContent>
+                                <DialogActions>
+                                    <Button onClick={handleCancelDelete}>Cancelar</Button>
+                                    <Button onClick={handleConfirmDelete} color="error">Eliminar</Button>
+                                </DialogActions>
+                            </Dialog>
                         </>
                     )}
                 </Paper>
