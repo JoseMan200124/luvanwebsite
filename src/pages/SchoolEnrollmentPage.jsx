@@ -159,9 +159,11 @@ const SchoolEnrollmentPage = () => {
             setFormExtraValues({});
         } catch (error) {
             console.error('Error al enviar formulario:', error);
+            
+            const messageToShow = 'Ocurrió un error al enviar tu registro. Intenta de nuevo.';
             setSnackbar({
                 open: true,
-                message: 'Ocurrió un error al enviar tu registro. Intenta de nuevo.',
+                message: error?.response?.data?.message || messageToShow,
                 severity: 'error'
             });
         }
