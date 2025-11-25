@@ -5,7 +5,7 @@ import {
     BarChart,
     People,
     Security,
-    DirectionsBus,
+    Smartphone
 } from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
@@ -42,7 +42,7 @@ export const modules = [
     },
     {
         key: 'gestion-colegios-rutas',
-        name: 'Gestión de Colegios y Rutas',
+        name: 'Gestión de Clientes y Rutas',
         icon: School,
         submodules: [
             {
@@ -134,7 +134,7 @@ export const modules = [
     {
         key: 'operaciones-moviles',
         name: 'Operaciones Móviles',
-        icon: DirectionsBus,
+        icon: Smartphone,
         submodules: [
             {
                 key: 'asistencias',
