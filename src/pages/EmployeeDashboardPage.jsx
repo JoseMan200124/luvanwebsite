@@ -23,6 +23,7 @@ import { styled } from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import ParentNavbar from '../components/ParentNavbar';
+import UpdateEmployeeInfoDialog from '../components/UpdateEmployeeInfoDialog';
 
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
 const LoaderBox   = styled(Box)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
@@ -62,6 +63,7 @@ const EmployeeDashboardPage = () => {
 
   const [employeeInfo, setEmployeeInfo] = useState(null);
   const [schedules, setSchedules] = useState([]);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
 
   const [selectedDay, setSelectedDay] = useState('all');
 
@@ -254,7 +256,7 @@ const EmployeeDashboardPage = () => {
                   </Grid>
 
                   <Grid item xs={12} sx={{ mt: 2, textAlign: 'center' }}>
-                    <Button variant="contained" color="primary" size="small" onClick={() => window.location.href = '/update-employee-info'}>Editar mis datos</Button>
+                    <Button variant="contained" color="primary" size="small" onClick={() => setOpenEditDialog(true)}>Editar mis datos</Button>
                   </Grid>
                 </Grid>
               </CardContent>
@@ -312,6 +314,12 @@ const EmployeeDashboardPage = () => {
       <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open:false })} anchorOrigin={{ vertical:'bottom', horizontal:'center' }}>
         <Alert severity={snackbar.sev} onClose={() => setSnackbar({ ...snackbar, open:false })} sx={{ width: '100%' }}>{snackbar.msg}</Alert>
       </Snackbar>
+      <UpdateEmployeeInfoDialog
+        open={openEditDialog}
+        onClose={() => setOpenEditDialog(false)}
+        initialData={employeeInfo || {}}
+        onSaved={() => { setOpenEditDialog(false); loadAll(); setSnackbar({ open:true, sev:'success', msg: 'Datos actualizados correctamente.' }); }}
+      />
     </>
   );
 };

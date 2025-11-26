@@ -18,7 +18,6 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
-import CorporateEnrollmentModal from '../components/modals/CorporateEnrollmentModal';
 
 // Función para convertir tiempo de 24h a 12h con AM/PM
 const formatTime12Hour = (time24) => {
@@ -36,7 +35,6 @@ const CorporateEnrollmentPage = () => {
     const navigate = useNavigate();
     
     const [loading, setLoading] = useState(true);
-    const [isEnrollmentModalOpen, setEnrollmentModalOpen] = useState(true);
     const [corporationData, setCorporationData] = useState(null);
 
     // Campos del formulario de empleado
@@ -100,7 +98,7 @@ const CorporateEnrollmentPage = () => {
                     state: {
                         title: '¡Gracias por inscribirse!',
                         body: 'En breve le llegará un correo electrónico con su usuario.',
-                        footer: 'Por favor asegúrese de ingresar desde la aplicación móvil.'
+                        footer: 'Transporte Luvan'
                     }
                 });
             }, 2000);
@@ -228,13 +226,6 @@ const CorporateEnrollmentPage = () => {
     }
 
     return (
-        <>
-            <CorporateEnrollmentModal
-                open={isEnrollmentModalOpen}
-                onClose={() => setEnrollmentModalOpen(false)}
-                disableEscapeKeyDown
-                disableBackdropClick
-            />
             <Box
                 sx={{
                     backgroundColor: '#f7f7f7',
@@ -592,7 +583,6 @@ const CorporateEnrollmentPage = () => {
                     </Snackbar>
                 </Box>
             </Box>
-        </>
     );
 };
 

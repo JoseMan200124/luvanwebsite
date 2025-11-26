@@ -161,6 +161,9 @@ const EmployeesPage = () => {
     
     // Formulario de empleado - SOLO campos del formulario de inscripción + phoneNumber
     const [employeeForm, setEmployeeForm] = useState({
+        username: '',
+        firstName: '',
+        lastName: '',
         name: '',
         email: '',
         password: '',
@@ -377,6 +380,9 @@ const EmployeesPage = () => {
 
     const handleOpenCreateDialog = () => {
         setEmployeeForm({
+            username: '',
+            firstName: '',
+            lastName: '',
             name: '',
             email: '',
             password: '',
@@ -426,6 +432,9 @@ const EmployeesPage = () => {
         }
         
         setEmployeeForm({
+            username: employee.name || '',
+            firstName: employee.EmployeeDetail?.firstName || '',
+            lastName: employee.EmployeeDetail?.lastName || '',
             name: employee.name || '',
             email: employee.email || '',
             password: '',
@@ -530,11 +539,13 @@ const EmployeesPage = () => {
     const handleCreateEmployee = async () => {
         try {
             const payload = {
-                name: employeeForm.name,
+                name: employeeForm.username || employeeForm.name,
                 email: employeeForm.email,
                 password: employeeForm.password,
                 phoneNumber: employeeForm.phoneNumber,
                 employeeDetail: {
+                    firstName: employeeForm.firstName || null,
+                    lastName: employeeForm.lastName || null,
                     serviceAddress: employeeForm.serviceAddress,
                     zoneOrSector: employeeForm.zoneOrSector,
                     routeType: employeeForm.routeType,
@@ -579,10 +590,12 @@ const EmployeesPage = () => {
         
         try {
             const payload = {
-                name: employeeForm.name,
+                name: employeeForm.username || employeeForm.name,
                 email: employeeForm.email,
                 phoneNumber: employeeForm.phoneNumber,
                 employeeDetail: {
+                    firstName: employeeForm.firstName,
+                    lastName: employeeForm.lastName,
                     serviceAddress: employeeForm.serviceAddress,
                     zoneOrSector: employeeForm.zoneOrSector,
                     routeType: employeeForm.routeType,
@@ -1017,12 +1030,30 @@ const EmployeesPage = () => {
                         </AccordionSummary>
                         <AccordionDetails>
                             <Grid container spacing={2}>
+                                <Grid item xs={12} sm={6}>
+                                    <TextField
+                                        fullWidth
+                                        label="Nombres"
+                                        value={employeeForm.firstName}
+                                        onChange={(e) => handleFormChange('firstName', e.target.value)}
+                                        required
+                                    />
+                                </Grid>
+                                <Grid item xs={12} sm={6}>
+                                    <TextField
+                                        fullWidth
+                                        label="Apellidos"
+                                        value={employeeForm.lastName}
+                                        onChange={(e) => handleFormChange('lastName', e.target.value)}
+                                        required
+                                    />
+                                </Grid>
                                 <Grid item xs={12}>
                                     <TextField
                                         fullWidth
-                                        label="Nombre Completo"
-                                        value={employeeForm.name}
-                                        onChange={(e) => handleFormChange('name', e.target.value)}
+                                        label="Nombre Usuario"
+                                        value={employeeForm.username}
+                                        onChange={(e) => handleFormChange('username', e.target.value)}
                                         required
                                     />
                                 </Grid>
@@ -1232,7 +1263,7 @@ const EmployeesPage = () => {
                 <Button 
                     onClick={isEdit ? handleUpdateEmployee : handleCreateEmployee}
                     variant="contained"
-                    disabled={!employeeForm.name || !employeeForm.email || (!isEdit && !employeeForm.password)}
+                    disabled={!employeeForm.username || !employeeForm.email || (!isEdit && !employeeForm.password)}
                 >
                     {isEdit ? 'Actualizar' : 'Crear'}
                 </Button>

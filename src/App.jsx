@@ -22,7 +22,6 @@ import ThankYouPage from './pages/ThankYouPage';
 import DefaultAdminRoute from './components/DefaultAdminRoute';
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import UpdateParentInfoPage from './pages/UpdateParentInfoPage';
-import UpdateEmployeeInfoPage from './pages/UpdateEmployeeInfoPage';
 import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
@@ -78,7 +77,6 @@ function App() {
                     <Route path="/privacy-policy"     element={<PrivacyPolicyPage />} />
                     <Route path="/thank-you"          element={<ThankYouPage />} />
                     <Route path="/update-parent-info" element={<UpdateParentInfoPage />} />
-                    <Route path="/update-employee-info" element={<UpdateEmployeeInfoPage />} />
 
                     {/* Forzar cambio de contraseña */}
                     <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
