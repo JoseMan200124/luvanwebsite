@@ -9,6 +9,8 @@ import {
     Select,
     FormControl,
     InputLabel,
+    Checkbox,
+    FormControlLabel,
     Alert,
     Snackbar,
     Box,
@@ -64,12 +66,26 @@ const UpdateEmployeeInfoPage = () => {
     const [accountEmail, setAccountEmail] = useState('');
     const [accountUsername, setAccountUsername] = useState('');
     const [accountPassword, setAccountPassword] = useState('');
+    const [changePassword, setChangePassword] = useState(false);
 
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
         severity: 'success'
     });
+
+    // Formato 24h -> 12h con AM/PM (ej: "14:30" -> "2:30 PM")
+    const formatTime12Hour = (time24) => {
+        if (!time24) return '';
+        const parts = String(time24).split(':');
+        if (parts.length < 2) return time24;
+        const hours = parseInt(parts[0], 10);
+        const minutes = parts[1];
+        if (Number.isNaN(hours)) return time24;
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const hour12 = hours % 12 || 12;
+        return `${hour12}:${minutes} ${ampm}`;
+    };
 
     const handleLoginSuccess = (userData) => {        
         setCorporationId(userData.corporationId || '');
@@ -398,7 +414,15 @@ const UpdateEmployeeInfoPage = () => {
                                 >
                                     <MenuItem value={-1}>-- Seleccione --</MenuItem>
                                     {schedules.map((s, idx) => (
-                                        <MenuItem key={idx} value={idx}>{s.name || `Horario ${idx+1}`}</MenuItem>
+                                           <MenuItem key={idx} value={idx}>{(() => {
+                                              const name = s.name || `Horario ${idx+1}`;
+                                              const entry = s.entryTime || s.entry || s.startTime || s.entry_time || '';
+                                              const exit = s.exitTime || s.exit || s.endTime || s.exit_time || '';
+                                              const entryFmt = entry ? formatTime12Hour(entry) : '';
+                                              const exitFmt = exit ? formatTime12Hour(exit) : '';
+                                              const times = entryFmt || exitFmt ? ` (${entryFmt}${entryFmt && exitFmt ? ' - ' : ''}${exitFmt})` : '';
+                                              return name + times;
+                                           })()}</MenuItem>
                                     ))}
                                 </Select>
                             </FormControl>
@@ -510,7 +534,7 @@ const UpdateEmployeeInfoPage = () => {
                         />
 
                         <TextField
-                            label="Correo electrónico"
+                            label="Correo electrónico (ingresa tu correo personal)"
                             type="email"
                             fullWidth
                             margin="normal"
@@ -519,15 +543,27 @@ const UpdateEmployeeInfoPage = () => {
                             required
                         />
 
-                        <TextField
-                            label="Contraseña (dejar en blanco para no cambiar)"
-                            type="password"
-                            fullWidth
-                            margin="normal"
-                            value={accountPassword}
-                            onChange={(e) => setAccountPassword(e.target.value)}
-                            placeholder="Nueva contraseña opcional"
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={changePassword}
+                                    onChange={(e) => setChangePassword(e.target.checked)}
+                                />
+                            }
+                            label="¿Cambiar contraseña?"
                         />
+
+                        {changePassword && (
+                            <TextField
+                                label="Nueva contraseña"
+                                type="password"
+                                fullWidth
+                                margin="normal"
+                                value={accountPassword}
+                                onChange={(e) => setAccountPassword(e.target.value)}
+                                placeholder="Nueva contraseña opcional"
+                            />
+                        )}
 
                         <Button
                             type="submit"
