@@ -154,6 +154,18 @@ function getFieldValue(bus, field) {
             return '';
     }
 }
+
+// Devuelve una cadena representando la asignación del bus (colegio/corporación y número de ruta)
+function getAssignmentText(bus) {
+    if (!bus) return 'Sin asignar';
+    const schoolName =
+        bus.school?.name || bus.corporation?.name || '';
+    const routeNumber = bus.routeNumber || bus.route || bus.route_num || '';
+    if (!schoolName && !routeNumber) return 'Sin asignar';
+    if (schoolName && routeNumber) return `${schoolName} — Ruta ${routeNumber}`;
+    if (schoolName) return schoolName;
+    return `Ruta ${routeNumber}`;
+}
 /* =================== Fin código para ordenamiento =================== */
 
 const BusesManagementPage = () => {
@@ -672,6 +684,10 @@ const BusesManagementPage = () => {
                                             <MobileValue>{bus.description}</MobileValue>
                                         </MobileField>
                                         <MobileField>
+                                            <MobileLabel>Asignación</MobileLabel>
+                                            <MobileValue>{getAssignmentText(bus)}</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
                                             <MobileLabel>Estado</MobileLabel>
                                             <MobileValue>
                                                 {bus.inWorkshop ? (
@@ -786,6 +802,7 @@ const BusesManagementPage = () => {
                                                     Descripción
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell>Asignación</TableCell>
                                             <TableCell>Estado</TableCell>
                                             <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
                                             <TableCell align="center">Acciones</TableCell>
@@ -804,6 +821,9 @@ const BusesManagementPage = () => {
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Descripción">
                                                         {bus.description}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Asignación">
+                                                        {getAssignmentText(bus)}
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Estado">
                                                         {bus.inWorkshop ? (
