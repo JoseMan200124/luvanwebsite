@@ -49,7 +49,9 @@ import {
     GetApp,
     Mail,
     FilterList,
-    DirectionsBus
+    DirectionsBus,
+    ToggleOn,
+    ToggleOff
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
@@ -143,6 +145,7 @@ const EmployeesPage = () => {
     const [openCreateDialog, setOpenCreateDialog] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+    const [openToggleStateDialog, setOpenToggleStateDialog] = useState(false);
     const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openCircularDialog, setOpenCircularDialog] = useState(false);
@@ -312,7 +315,7 @@ const EmployeesPage = () => {
             console.error('Error fetching employees:', err);
             setSnackbar({ 
                 open: true, 
-                message: 'Error al obtener empleados', 
+                message: 'Error al obtener colaboradores.', 
                 severity: 'error' 
             });
         } finally {
@@ -515,6 +518,11 @@ const EmployeesPage = () => {
         setOpenDeleteDialog(true);
     };
 
+    const handleOpenToggleStateDialog = (employee) => {
+        setSelectedEmployee(employee);
+        setOpenToggleStateDialog(true);
+    };
+
     const handleOpenScheduleDialog = (employee) => {
         setSelectedEmployee(employee);
         setOpenScheduleDialog(true);
@@ -524,6 +532,7 @@ const EmployeesPage = () => {
         setOpenCreateDialog(false);
         setOpenEditDialog(false);
         setOpenDeleteDialog(false);
+        setOpenToggleStateDialog(false);
         setOpenScheduleDialog(false);
         setSelectedEmployee(null);
     };
@@ -569,7 +578,7 @@ const EmployeesPage = () => {
             
             setSnackbar({
                 open: true,
-                message: 'Empleado creado exitosamente',
+                message: 'Colaborador creado exitosamente',
                 severity: 'success'
             });
             
@@ -579,7 +588,7 @@ const EmployeesPage = () => {
             console.error('Error creating employee:', err);
             setSnackbar({
                 open: true,
-                message: err.response?.data?.error || 'Error al crear empleado',
+                message: err.response?.data?.error || 'Error al crear colaborador',
                 severity: 'error'
             });
         }
@@ -623,7 +632,7 @@ const EmployeesPage = () => {
             
             setSnackbar({
                 open: true,
-                message: 'Empleado actualizado exitosamente',
+                message: 'Colaborador actualizado exitosamente',
                 severity: 'success'
             });
             
@@ -633,7 +642,7 @@ const EmployeesPage = () => {
             console.error('Error updating employee:', err);
             setSnackbar({
                 open: true,
-                message: err.response?.data?.error || 'Error al actualizar empleado',
+                message: err.response?.data?.error || 'Error al actualizar colaborador',
                 severity: 'error'
             });
         }
@@ -651,7 +660,7 @@ const EmployeesPage = () => {
             
             setSnackbar({
                 open: true,
-                message: 'Empleado eliminado exitosamente',
+                message: 'Colaborador eliminado exitosamente',
                 severity: 'success'
             });
             
@@ -661,34 +670,42 @@ const EmployeesPage = () => {
             console.error('Error deleting employee:', err);
             setSnackbar({
                 open: true,
-                message: err.response?.data?.error || 'Error al eliminar empleado',
+                message: err.response?.data?.message || 'Error al eliminar colaborador',
                 severity: 'error'
             });
         }
     };
 
-    const handleActivateEmployee = async (employee) => {
-        if (!employee) return;
+    const handleToggleState = async () => {
+        if (!selectedEmployee) return;
+        
+        // Determinar el nuevo estado (opuesto al actual)
+        const currentState = Number(selectedEmployee.state);
+        const newState = currentState === 1 ? 0 : 1;
         
         try {
-            await api.put(`/users/${employee.id}/activate`, {}, {
-                headers: {
-                    Authorization: `Bearer ${auth.token}`,
+            await api.put(`/users/${selectedEmployee.id}/toggle-state`, 
+                { state: newState },
+                {
+                    headers: {
+                        Authorization: `Bearer ${auth.token}`,
+                    }
                 }
-            });
+            );
             
             setSnackbar({
                 open: true,
-                message: 'Empleado activado exitosamente',
+                message: `Colaborador ${newState === 1 ? 'activado' : 'desactivado'} exitosamente`,
                 severity: 'success'
             });
             
+            handleCloseDialogs();
             fetchEmployees();
         } catch (err) {
-            console.error('Error activating employee:', err);
+            console.error('Error toggling employee state:', err);
             setSnackbar({
                 open: true,
-                message: err.response?.data?.error || 'Error al activar empleado',
+                message: err.response?.data?.message || 'Error al cambiar estado del colaborador',
                 severity: 'error'
             });
         }
@@ -702,14 +719,14 @@ const EmployeesPage = () => {
             if (newEmployees.length === 0) {
                 setSnackbar({
                     open: true,
-                    message: 'No hay empleados nuevos para descargar',
+                    message: 'No hay colaboradores nuevos para descargar',
                     severity: 'warning'
                 });
                 return;
             }
             
             const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Empleados Nuevos');
+            const worksheet = workbook.addWorksheet('Colaboradores Nuevos');
             
             worksheet.columns = [
                 { header: 'Nombre', key: 'name', width: 30 },
@@ -758,7 +775,7 @@ const EmployeesPage = () => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Empleados_Nuevos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
+            a.download = `Colaboradores_Nuevos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
             a.click();
             window.URL.revokeObjectURL(url);
             
@@ -771,7 +788,7 @@ const EmployeesPage = () => {
             console.error('Error downloading new employees:', err);
             setSnackbar({
                 open: true,
-                message: 'Error al descargar empleados',
+                message: 'Error al descargar colaboradores',
                 severity: 'error'
             });
         }
@@ -783,14 +800,14 @@ const EmployeesPage = () => {
             if (employees.length === 0) {
                 setSnackbar({
                     open: true,
-                    message: 'No hay empleados para descargar',
+                    message: 'No hay colaboradores para descargar',
                     severity: 'warning'
                 });
                 return;
             }
             
             const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Todos los Empleados');
+            const worksheet = workbook.addWorksheet('Todos los Colaboradores');
             
             worksheet.columns = [
                 { header: 'Nombre', key: 'name', width: 30 },
@@ -851,7 +868,7 @@ const EmployeesPage = () => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Empleados_Todos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
+            a.download = `Colaboradores_Todos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
             a.click();
             window.URL.revokeObjectURL(url);
             
@@ -864,7 +881,7 @@ const EmployeesPage = () => {
             console.error('Error downloading all employees:', err);
             setSnackbar({
                 open: true,
-                message: 'Error al descargar empleados',
+                message: 'Error al descargar colaboradores',
                 severity: 'error'
             });
         }
@@ -1014,7 +1031,7 @@ const EmployeesPage = () => {
             fullWidth
         >
             <DialogTitle>
-                {isEdit ? 'Editar Empleado' : 'Crear Nuevo Empleado'}
+                {isEdit ? 'Editar Colaborador' : 'Crear Nuevo Colaborador'}
             </DialogTitle>
             <DialogContent>
                 <Box sx={{ mt: 2 }}>
@@ -1289,7 +1306,7 @@ const EmployeesPage = () => {
                         <CorporationIcon sx={{ fontSize: 40 }} />
                         <Box>
                             <Typography variant="h4" component="h1" gutterBottom>
-                                Empleados - {corporationData?.name || 'Corporación'}
+                                Colaboradores - {corporationData?.name || 'Corporación'}
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Chip 
@@ -1298,7 +1315,7 @@ const EmployeesPage = () => {
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
                                 <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {filteredEmployees.length} empleados
+                                    {filteredEmployees.length} colaboradores
                                 </Typography>
                             </Box>
                         </Box>
@@ -1395,7 +1412,7 @@ const EmployeesPage = () => {
                                 fullWidth
                                 onClick={handleOpenCreateDialog}
                             >
-                                Añadir Empleado
+                                Añadir Colaborador
                             </Button>
                         </Grid>
                         <Grid item xs={12} md={2.4}>
@@ -1538,14 +1555,20 @@ const EmployeesPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     {getEmployeeStatus(employee) === 'Activo' ? (
-                                                        <Typography variant="body2" color="textSecondary">-</Typography>
+                                                        <Chip
+                                                            label="Activo"
+                                                            color="success"
+                                                            size="small"
+                                                            clickable
+                                                            onClick={() => handleOpenToggleStateDialog(employee)}
+                                                        />
                                                     ) : getEmployeeStatus(employee) === 'Inactivo' ? (
                                                         <Chip
                                                             label={getEmployeeStatus(employee)}
                                                             color={getStatusColor(getEmployeeStatus(employee))}
                                                             size="small"
                                                             clickable
-                                                            onClick={() => handleActivateEmployee(employee)}
+                                                            onClick={() => handleOpenToggleStateDialog(employee)}
                                                         />
                                                     ) : (
                                                         <Chip
@@ -1557,13 +1580,21 @@ const EmployeesPage = () => {
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                                                        <IconButton size="small" onClick={() => handleOpenEditDialog(employee)}>
+                                                        <IconButton 
+                                                            size="small" 
+                                                            onClick={() => handleOpenToggleStateDialog(employee)}
+                                                            title={Number(employee.state) === 1 ? 'Desactivar' : 'Activar'}
+                                                            color={Number(employee.state) === 1 ? 'warning' : 'success'}
+                                                        >
+                                                            {Number(employee.state) === 1 ? <ToggleOn fontSize="small" /> : <ToggleOff fontSize="small" />}
+                                                        </IconButton>
+                                                        <IconButton size="small" onClick={() => handleOpenEditDialog(employee)} title="Editar">
                                                             <Edit fontSize="small" />
                                                         </IconButton>
-                                                        <IconButton size="small" onClick={() => handleOpenDeleteDialog(employee)}>
+                                                        <IconButton size="small" onClick={() => handleOpenDeleteDialog(employee)} title="Eliminar" color="error">
                                                             <Delete fontSize="small" />
                                                         </IconButton>
-                                                        <IconButton size="small" onClick={() => handleOpenScheduleDialog(employee)}>
+                                                        <IconButton size="small" onClick={() => handleOpenScheduleDialog(employee)} title="Horarios">
                                                             <DirectionsBus fontSize="small" />
                                                         </IconButton>
                                                     </Box>
@@ -1575,7 +1606,7 @@ const EmployeesPage = () => {
                                             <TableRow>
                                                 <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                                                     <Typography variant="body1" color="textSecondary">
-                                                        No se encontraron empleados con los filtros aplicados
+                                                        No se encontraron colaboradores con los filtros aplicados
                                                     </Typography>
                                                 </TableCell>
                                             </TableRow>
@@ -1610,14 +1641,39 @@ const EmployeesPage = () => {
                 <DialogTitle>Confirmar Eliminación</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        ¿Está seguro que desea eliminar al empleado "{selectedEmployee?.name}"?
-                        Esta acción no se puede deshacer.
+                        ¿Está seguro que desea eliminar al colaborador "{selectedEmployee?.name}"?
+                        Esta acción no es reversible..
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialogs}>Cancelar</Button>
                     <Button onClick={handleDeleteEmployee} color="error" variant="contained">
                         Eliminar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Diálogo de toggle state (activar/desactivar) */}
+            <Dialog open={openToggleStateDialog} onClose={handleCloseDialogs}>
+                <DialogTitle>
+                    {selectedEmployee && Number(selectedEmployee.state) === 1 ? 'Desactivar' : 'Activar'} Colaborador
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        ¿Está seguro que desea {selectedEmployee && Number(selectedEmployee.state) === 1 ? 'desactivar' : 'activar'} al colaborador "{selectedEmployee?.name}"?
+                        {selectedEmployee && Number(selectedEmployee.state) === 1 
+                            ? ' El colaborador no podrá acceder al sistema mientras esté desactivado.' 
+                            : ' El colaborador podrá acceder al sistema nuevamente.'}
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseDialogs}>Cancelar</Button>
+                    <Button 
+                        onClick={handleToggleState} 
+                        color={selectedEmployee && Number(selectedEmployee.state) === 1 ? 'warning' : 'success'}
+                        variant="contained"
+                    >
+                        {selectedEmployee && Number(selectedEmployee.state) === 1 ? 'Desactivar' : 'Activar'}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -1640,11 +1696,11 @@ const EmployeesPage = () => {
 
             {/* Diálogo de Carga Masiva */}
             <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Empleados</DialogTitle>
+                <DialogTitle>Carga Masiva de Colaboradores</DialogTitle>
                 <DialogContent>
                     <Box sx={{ mt: 2 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Seleccione un archivo Excel (.xlsx) con los datos de los empleados.
+                            Seleccione un archivo Excel (.xlsx) con los datos de los colaboradores.
                             El archivo debe contener las siguientes columnas: Nombre, Email, Contraseña, Teléfono.
                         </Typography>
                         <input
@@ -1679,7 +1735,7 @@ const EmployeesPage = () => {
 
             {/* Diálogo de Enviar Circular */}
             <Dialog open={openCircularDialog} onClose={() => setOpenCircularDialog(false)} maxWidth="md" fullWidth>
-                <DialogTitle>Enviar Circular a Empleados</DialogTitle>
+                <DialogTitle>Enviar Circular a Colaboradores</DialogTitle>
                 <DialogContent>
                     <Box sx={{ mt: 2 }}>
                         <TextField
@@ -1696,10 +1752,10 @@ const EmployeesPage = () => {
                             onChange={(e) => setCircularMessage(e.target.value)}
                             multiline
                             rows={6}
-                            placeholder="Escriba el mensaje que desea enviar a todos los empleados del corporativo..."
+                            placeholder="Escriba el mensaje que desea enviar a todos los colaboradores del corporativo..."
                         />
                         <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                            Esta circular se enviará a todos los empleados activos del corporativo: {currentCorporation?.name}
+                            Esta circular se enviará a todos los colaboradores activos del corporativo: {currentCorporation?.name}
                         </Typography>
                     </Box>
                 </DialogContent>

@@ -277,6 +277,7 @@ const RolesManagementPage = () => {
 
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
+    const [corporations, setCorporations] = useState([]);
     // Buses no longer needed for route report generation (slots carry routeNumber)
     const [contracts, setContracts] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
@@ -317,6 +318,7 @@ const RolesManagementPage = () => {
 
     const [allPilots, setAllPilots] = useState([]);
     const [selectedSupervisorSchools, setSelectedSupervisorSchools] = useState([]);
+    const [selectedSupervisorCorporations, setSelectedSupervisorCorporations] = useState([]);
 
     const [allMonitoras, setAllMonitoras] = useState([]);
     const [selectedAuxiliarMonitoras, setSelectedAuxiliarMonitoras] = useState([]);
@@ -366,6 +368,7 @@ const RolesManagementPage = () => {
     useEffect(() => {
         fetchUsers();
         fetchSchools();
+        fetchCorporations();
     // fetchBuses removed: not needed for route report
         fetchContracts();
         fetchAllPilots();
@@ -416,6 +419,16 @@ const RolesManagementPage = () => {
         } catch (err) {
             console.error('[fetchSchools] Error:', err);
             setSnackbar({ open: true, message: 'Error al obtener colegios', severity: 'error' });
+        }
+    };
+
+    const fetchCorporations = async () => {
+        try {
+            const resp = await api.get('/corporations');
+            setCorporations(resp.data.corporations || []);
+        } catch (err) {
+            console.error('[fetchCorporations] Error:', err);
+            setSnackbar({ open: true, message: 'Error al obtener corporaciones', severity: 'error' });
         }
     };
 
@@ -476,7 +489,8 @@ const RolesManagementPage = () => {
         setSelectedUser({
             ...user,
             roleId: parsedRoleId,
-            password: ''
+            password: '',
+            corporationId: user.corporationId || ''
         });
         if (parsedRoleId === 3 && user.FamilyDetail) {
             setFamilyDetail({
@@ -532,6 +546,14 @@ const RolesManagementPage = () => {
                 } else {
                     setSelectedSupervisorSchools([]);
                 }
+                
+                // Load attached corporations for supervisor
+                const attachedCorporations = user.attachedSupervisorCorporations || [];
+                if (attachedCorporations.length > 0) {
+                    setSelectedSupervisorCorporations(attachedCorporations.map(c => Number(c)));
+                } else {
+                    setSelectedSupervisorCorporations([]);
+                }
             }
         // Para el caso de Auxiliar
         if (user.Role?.name === 'Auxiliar') {
@@ -576,7 +598,8 @@ const RolesManagementPage = () => {
             email: '',
             password: '',
             roleId: '',
-            school: ''
+            school: '',
+            corporationId: ''
         });
         setFamilyDetail({
             familyLastName:  '',
@@ -597,6 +620,7 @@ const RolesManagementPage = () => {
         });
         setOriginalStudents([]);
         setSelectedSupervisorSchools([]);
+        setSelectedSupervisorCorporations([]);
         setSchoolGrades([]);
         setOpenDialog(true);
     };
@@ -605,6 +629,7 @@ const RolesManagementPage = () => {
         setOpenDialog(false);
         setSelectedUser(null);
         setSelectedSupervisorSchools([]);
+        setSelectedSupervisorCorporations([]);
     };
 
     const handleDeleteClick = async (userId) => {
@@ -706,7 +731,9 @@ const RolesManagementPage = () => {
                 email: selectedUser.email,
                 roleId: roleIdNum,
                 // Asegura tipo numérico para school
-                school: selectedUser.school ? Number(selectedUser.school) : null
+                school: selectedUser.school ? Number(selectedUser.school) : null,
+                // Asegura tipo numérico para corporationId
+                corporationId: selectedUser.corporationId ? Number(selectedUser.corporationId) : null
             };
 
             if (selectedUser.password && selectedUser.password.trim() !== '') {
@@ -726,6 +753,7 @@ const RolesManagementPage = () => {
             // Supervisor: colegios a cargo (preferred)
             if (roleIdNum === 6) {
                 payload.supervisorSchools = (selectedSupervisorSchools || []).map(s => Number(s));
+                payload.supervisorCorporations = (selectedSupervisorCorporations || []).map(c => Number(c));
             }
 
             // Auxiliar: monitoras asignadas (comparar con roleId numérico del payload)
@@ -1879,12 +1907,17 @@ const RolesManagementPage = () => {
                                     value={selectedUser?.school || ''}
                                     onChange={async (e) => {
                                         const newSchoolId = e.target.value;
-                                        setSelectedUser(prev => ({ ...prev, school: newSchoolId }));
+                                        setSelectedUser(prev => ({ 
+                                            ...prev, 
+                                            school: newSchoolId,
+                                            corporationId: newSchoolId ? '' : prev.corporationId
+                                        }));
                                         if (Number(selectedUser?.roleId) === 3 && newSchoolId) {
                                             await fetchSchoolGrades(newSchoolId);
                                         }
                                     }}
                                     label="Colegio"
+                                    disabled={!!(selectedUser?.corporationId)}
                                 >
                                     <MenuItem value="">
                                         <em>Ninguno</em>
@@ -1892,6 +1925,34 @@ const RolesManagementPage = () => {
                                     {schools.map((sch) => (
                                         <MenuItem key={sch.id} value={sch.id}>
                                             {sch.name}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                            <FormControl variant="outlined" fullWidth>
+                                <InputLabel>Corporación</InputLabel>
+                                <Select
+                                    name="corporationId"
+                                    value={selectedUser?.corporationId || ''}
+                                    onChange={(e) => {
+                                        const newCorporationId = e.target.value;
+                                        setSelectedUser(prev => ({ 
+                                            ...prev, 
+                                            corporationId: newCorporationId,
+                                            school: newCorporationId ? '' : prev.school
+                                        }));
+                                    }}
+                                    label="Corporación"
+                                    disabled={!!(selectedUser?.school)}
+                                >
+                                    <MenuItem value="">
+                                        <em>Ninguna</em>
+                                    </MenuItem>
+                                    {corporations.map((corp) => (
+                                        <MenuItem key={corp.id} value={corp.id}>
+                                            {corp.name}
                                         </MenuItem>
                                     ))}
                                 </Select>
@@ -2113,10 +2174,14 @@ const RolesManagementPage = () => {
                         {Number(selectedUser?.roleId) === 6 && (
                             <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
                                 <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Colegios a cargo
+                                    Clientes a cargo
                                 </Typography>
                                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona uno o más colegios; todos los pilotos asignados a esos colegios serán enlazados automáticamente.
+                                    Selecciona uno o más clientes (colegios y corporaciones); todos los pilotos asignados serán enlazados automáticamente.
+                                </Typography>
+                                
+                                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                    Colegios
                                 </Typography>
                                 <FormControl fullWidth sx={{ mb: 2 }} size="small">
                                     <InputLabel>Seleccionar Colegios</InputLabel>
@@ -2136,18 +2201,49 @@ const RolesManagementPage = () => {
                                     </Select>
                                 </FormControl>
 
-                                <Typography variant="subtitle2" sx={{ mt: 1 }}>Pilotos enlazados automáticamente:</Typography>
+                                <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
+                                    Corporaciones
+                                </Typography>
+                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                    <InputLabel>Seleccionar Corporaciones</InputLabel>
+                                    <Select
+                                        multiple
+                                        value={selectedSupervisorCorporations}
+                                        onChange={(e) => setSelectedSupervisorCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                        label="Seleccionar Corporaciones"
+                                        renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
+                                    >
+                                        {corporations.map(c => (
+                                            <MenuItem key={c.id} value={c.id}>
+                                                <Checkbox checked={selectedSupervisorCorporations.includes(c.id)} />
+                                                <ListItemText primary={c.name} />
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+
+                                <Typography variant="subtitle2" sx={{ mt: 2 }}>Pilotos enlazados automáticamente:</Typography>
                                 <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
                                     {(() => {
-                                        // Compute pilots that belong to selectedSupervisorSchools
-                                        if (selectedSupervisorSchools.length === 0) return (
-                                            <Typography variant="body2" color="text.secondary">No se seleccionaron colegios.</Typography>
+                                        // Compute pilots that belong to selected schools or corporations
+                                        const schoolPilots = selectedSupervisorSchools.length > 0 
+                                            ? allPilots.filter(p => selectedSupervisorSchools.includes(Number(p.school)))
+                                            : [];
+                                        const corpPilots = selectedSupervisorCorporations.length > 0
+                                            ? allPilots.filter(p => selectedSupervisorCorporations.includes(Number(p.corporationId)))
+                                            : [];
+                                        const allLinkedPilots = [...schoolPilots, ...corpPilots];
+                                        
+                                        if (allLinkedPilots.length === 0) return (
+                                            <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay pilotos asignados.</Typography>
                                         );
-                                        const autoPilots = allPilots.filter(p => selectedSupervisorSchools.includes(Number(p.school)));
-                                        if (autoPilots.length === 0) return (
-                                            <Typography variant="body2" color="text.secondary">No se encontraron pilotos en los colegios seleccionados.</Typography>
+                                        
+                                        // Remove duplicates by ID
+                                        const uniquePilots = allLinkedPilots.filter((p, idx, arr) => 
+                                            arr.findIndex(pilot => pilot.id === p.id) === idx
                                         );
-                                        return autoPilots.map(p => (
+                                        
+                                        return uniquePilots.map(p => (
                                             <Typography key={p.id} variant="body2">{p.name} — {p.email} (ID: {p.id})</Typography>
                                         ));
                                     })()}

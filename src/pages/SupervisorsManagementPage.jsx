@@ -48,15 +48,26 @@ const SupervisorsContainer = styled.div`
     }
 `;
 
-// Helper para agrupar los pilotos asignados por schoolName
-const groupBySchool = (arr) => {
+// Helper para agrupar los pilotos asignados por organización (colegio o corporación)
+// Usa una clave única combinando tipo y ID para evitar colisiones
+const groupByOrganization = (arr) => {
     const result = {};
     arr.forEach((item) => {
-        const school = item.schoolName || 'Sin Colegio';
-        if (!result[school]) {
-            result[school] = [];
+        // Crear una clave única: "tipo-id-nombre"
+        const orgType = item.organizationType || 'school';
+        const orgId = item.organizationId || 'none';
+        const orgName = item.schoolName || 'Sin Asignar';
+        const key = `${orgType}-${orgId}-${orgName}`;
+        
+        if (!result[key]) {
+            result[key] = {
+                displayName: orgName,
+                type: orgType,
+                id: orgId,
+                pilots: []
+            };
         }
-        result[school].push(item);
+        result[key].pilots.push(item);
     });
     return result;
 };
@@ -200,10 +211,11 @@ const SupervisorsManagementPage = () => {
                             {filteredSupervisors
                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                 .map((sup, index) => {
-                                    const schools = Object.keys(groupBySchool(sup.assignedPilots || []));
-                                    const selected = selectedSchool[sup.email] || schools[0] || '';
-                                    const pilotsBySchool = groupBySchool(sup.assignedPilots || []);
-                                    const pilots = pilotsBySchool[selected] || [];
+                                    const orgGroups = groupByOrganization(sup.assignedPilots || []);
+                                    const orgKeys = Object.keys(orgGroups);
+                                    const selected = selectedSchool[sup.email] || orgKeys[0] || '';
+                                    const selectedGroup = orgGroups[selected];
+                                    const pilots = selectedGroup ? selectedGroup.pilots : [];
                                     const key = `${sup.email}-${selected}`;
                                     const currentPage = pilotPages[key] || 0;
                                     const totalPages = Math.ceil(pilots.length / PILOTS_PER_PAGE);
@@ -234,24 +246,27 @@ const SupervisorsManagementPage = () => {
                                                         <Typography>Ver pilotos asignados</Typography>
                                                     </AccordionSummary>
                                                     <AccordionDetails>
-                                                        {schools.length === 0 ? (
+                                                        {orgKeys.length === 0 ? (
                                                             <Typography>
                                                                 No hay pilotos asignados a este supervisor.
                                                             </Typography>
                                                         ) : (
                                                             <>
                                                                 <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                                                                    <InputLabel>Colegio</InputLabel>
+                                                                    <InputLabel>Colegio/Corporación</InputLabel>
                                                                     <Select
                                                                         value={selected}
-                                                                        label="Colegio"
+                                                                        label="Colegio/Corporación"
                                                                         onChange={e => handleSchoolChange(sup.email, e.target.value)}
                                                                     >
-                                                                        {schools.map(school => (
-                                                                            <MenuItem key={school} value={school}>
-                                                                                {school}
-                                                                            </MenuItem>
-                                                                        ))}
+                                                                        {orgKeys.map(orgKey => {
+                                                                            const org = orgGroups[orgKey];
+                                                                            return (
+                                                                                <MenuItem key={orgKey} value={orgKey}>
+                                                                                    {org.displayName}
+                                                                                </MenuItem>
+                                                                            );
+                                                                        })}
                                                                     </Select>
                                                                 </FormControl>
                                                                 {pilotsToShow.map((p) => (
@@ -338,10 +353,11 @@ const SupervisorsManagementPage = () => {
                                         {filteredSupervisors
                                             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                             .map((sup, index) => {
-                                                const schools = Object.keys(groupBySchool(sup.assignedPilots || []));
-                                                const selected = selectedSchool[sup.email] || schools[0] || '';
-                                                const pilotsBySchool = groupBySchool(sup.assignedPilots || []);
-                                                const pilots = pilotsBySchool[selected] || [];
+                                                const orgGroups = groupByOrganization(sup.assignedPilots || []);
+                                                const orgKeys = Object.keys(orgGroups);
+                                                const selected = selectedSchool[sup.email] || orgKeys[0] || '';
+                                                const selectedGroup = orgGroups[selected];
+                                                const pilots = selectedGroup ? selectedGroup.pilots : [];
                                                 const key = `${sup.email}-${selected}`;
                                                 const currentPage = pilotPages[key] || 0;
                                                 const totalPages = Math.ceil(pilots.length / PILOTS_PER_PAGE);
@@ -365,24 +381,27 @@ const SupervisorsManagementPage = () => {
                                                                     <Typography>Ver pilotos asignados</Typography>
                                                                 </AccordionSummary>
                                                                 <AccordionDetails>
-                                                                    {schools.length === 0 ? (
+                                                                    {orgKeys.length === 0 ? (
                                                                         <Typography>
                                                                             No hay pilotos asignados a este supervisor.
                                                                         </Typography>
                                                                     ) : (
                                                                         <>
                                                                             <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                                                                                <InputLabel>Colegio</InputLabel>
+                                                                                <InputLabel>Colegio/Corporación</InputLabel>
                                                                                 <Select
                                                                                     value={selected}
-                                                                                    label="Colegio"
+                                                                                    label="Colegio/Corporación"
                                                                                     onChange={e => handleSchoolChange(sup.email, e.target.value)}
                                                                                 >
-                                                                                    {schools.map(school => (
-                                                                                        <MenuItem key={school} value={school}>
-                                                                                            {school}
-                                                                                        </MenuItem>
-                                                                                    ))}
+                                                                                    {orgKeys.map(orgKey => {
+                                                                                        const org = orgGroups[orgKey];
+                                                                                        return (
+                                                                                            <MenuItem key={orgKey} value={orgKey}>
+                                                                                                {org.displayName}
+                                                                                            </MenuItem>
+                                                                                        );
+                                                                                    })}
                                                                                 </Select>
                                                                             </FormControl>
                                                                             <Table size="small" sx={{ overflowX: 'auto' }}>
