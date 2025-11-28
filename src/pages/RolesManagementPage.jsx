@@ -175,6 +175,8 @@ function getFieldValue(user, field) {
             return user.FamilyDetail ? user.FamilyDetail.familyLastName : '';
         case 'role':
             return user.Role ? user.Role.name : '';
+        case 'client':
+            return user.School ? user.School.name : (user.corporation ? user.corporation.name : '');
         case 'school':
             return user.School ? user.School.name : '';
         case 'updatedAt':
@@ -354,6 +356,7 @@ const RolesManagementPage = () => {
     const [updatedFilter, setUpdatedFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('');
     const [schoolFilter, setSchoolFilter] = useState('');
+    const [corporationFilter, setCorporationFilter] = useState('');
 
     // Orden
     const [order, setOrder] = useState('asc');
@@ -810,6 +813,9 @@ const RolesManagementPage = () => {
         }
         if (schoolFilter) {
             if (Number(u.school) !== Number(schoolFilter)) return false;
+        }
+        if (corporationFilter) {
+            if (Number(u.corporationId) !== Number(corporationFilter)) return false;
         }
         if (duplicateFilter === 'duplicated' && !isFamilyLastNameDuplicated(u, users)) return false;
         if (duplicateFilter === 'notDuplicated' && isFamilyLastNameDuplicated(u, users)) return false;
@@ -1498,6 +1504,23 @@ const RolesManagementPage = () => {
                             ))}
                         </Select>
                     </FormControl>
+                    <FormControl size="small" sx={{ width: 150 }}>
+                        <InputLabel>Corporación</InputLabel>
+                        <Select
+                            label="Corporación"
+                            value={corporationFilter}
+                            onChange={(e) => setCorporationFilter(e.target.value)}
+                        >
+                            <MenuItem value="">
+                                <em>Todos</em>
+                            </MenuItem>
+                            {corporations.map(corp => (
+                                <MenuItem key={corp.id} value={corp.id}>
+                                    {corp.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                     <Button
                         variant="contained"
                         color="info"
@@ -1592,8 +1615,8 @@ const RolesManagementPage = () => {
                                         </Grid>
                                         <Grid item xs={12}>
                                             <MobileField>
-                                                <MobileLabel>Colegio</MobileLabel>
-                                                <MobileValue>{user.School ? user.School.name : '—'}</MobileValue>
+                                                <MobileLabel>Cliente</MobileLabel>
+                                                <MobileValue>{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</MobileValue>
                                             </MobileField>
                                         </Grid>
                                         <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 1 }}>
@@ -1693,15 +1716,15 @@ const RolesManagementPage = () => {
                                                     Rol
                                                 </TableSortLabel>
                                             </TableCell>
-                                            <TableCell sortDirection={orderBy === 'school' ? order : false}>
+                                            <TableCell sortDirection={orderBy === 'client' ? order : false}>
                                                 <TableSortLabel
-                                                    active={orderBy === 'school'}
-                                                    direction={orderBy === 'school' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('school')}
+                                                    active={orderBy === 'client'}
+                                                    direction={orderBy === 'client' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('client')}
                                                     hideSortIcon={false}
                                                     sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
                                                 >
-                                                    Colegio
+                                                    Cliente
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell sortDirection={orderBy === 'updatedAt' ? order : false}>
@@ -1742,8 +1765,8 @@ const RolesManagementPage = () => {
                                                 <ResponsiveTableCell data-label="Rol">
                                                     {user.Role ? user.Role.name : '—'}
                                                 </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Colegio">
-                                                    {user.School ? user.School.name : '—'}
+                                                <ResponsiveTableCell data-label="Cliente">
+                                                    {user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Actualizado el">
                                                     {user.updatedAt

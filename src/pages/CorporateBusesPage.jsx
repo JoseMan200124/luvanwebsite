@@ -133,7 +133,7 @@ const CorporateBusesPage = () => {
     const fetchPilots = useCallback(async () => {
         if (!corporationId) return;
         try {
-            // Fetch pilots - adjust endpoint if needed for corporations
+            // Fetch only pilots that belong to this corporation
             const url = `/users/pilots?corporationId=${corporationId}`;
             const response = await api.get(url, {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -142,43 +142,15 @@ const CorporateBusesPage = () => {
             setAvailablePilots(pilots);
         } catch (err) {
             console.error('Error fetching pilots:', err);
-            // Fallback: try to get all pilots with roleId=5
-            try {
-                const response = await api.get('/users/pilots', {
-                    headers: { Authorization: `Bearer ${auth.token}` }
-                });
-                setAvailablePilots(Array.isArray(response.data.users) ? response.data.users : []);
-            } catch (fallbackErr) {
-                console.error('Fallback fetch also failed:', fallbackErr);
-                setAvailablePilots([]);
-            }
+            setAvailablePilots([]);
         }
     }, [auth.token, corporationId]);
 
+    // Monitoras are not used for corporations, but keep empty array for compatibility
     const fetchMonitors = useCallback(async () => {
-        if (!corporationId) return;
-        try {
-            // Fetch monitors - adjust endpoint if needed for corporations
-            const url = `/users/monitors?corporationId=${corporationId}`;
-            const response = await api.get(url, {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            const monitors = Array.isArray(response.data.users) ? response.data.users : [];
-            setAvailableMonitors(monitors);
-        } catch (err) {
-            console.error('Error fetching monitors:', err);
-            // Fallback: try to get all monitors with roleId=4
-            try {
-                const response = await api.get('/users/monitors', {
-                    headers: { Authorization: `Bearer ${auth.token}` }
-                });
-                setAvailableMonitors(Array.isArray(response.data.users) ? response.data.users : []);
-            } catch (fallbackErr) {
-                console.error('Fallback fetch also failed:', fallbackErr);
-                setAvailableMonitors([]);
-            }
-        }
-    }, [auth.token, corporationId]);
+        // Monitoras don't apply to corporations
+        setAvailableMonitors([]);
+    }, []);
 
     useEffect(() => {
         if (auth.token && corporationId) {
@@ -237,9 +209,10 @@ const CorporateBusesPage = () => {
                         schoolId: null // Ensure it's not assigned to a school
                     };
 
-                    // Add pilot/monitor explicitly (null if not assigned)
+                    // Add pilot explicitly (null if not assigned)
+                    // Monitoras don't apply to corporations, always set to null
                     updateData.pilotId = pilotAssignments[busId] ? pilotAssignments[busId] : null;
-                    updateData.monitoraId = monitorAssignments[busId] ? monitorAssignments[busId] : null;
+                    updateData.monitoraId = null;
 
                     await api.put(`/buses/${busId}`, updateData, {
                         headers: { Authorization: `Bearer ${auth.token}` }
@@ -283,16 +256,21 @@ const CorporateBusesPage = () => {
 
     const getAvailableBuses = (currentRouteNumber) => {
         return buses.filter(bus => {
-            // Bus available if:
-            // 1. Has no routeNumber assigned, or
-            // 2. Is assigned to current routeNumber, or  
-            // 3. Is not assigned to any route number of this corporation
-            const isAssignedToCurrentRoute = bus.routeNumber === currentRouteNumber;
-            const isAssignedToOtherRoute = bus.routeNumber && 
+            // Bus is assigned to current route of this corporation
+            const isAssignedToCurrentRoute = bus.routeNumber === currentRouteNumber && 
+                bus.corporationId === parseInt(corporationId);
+            
+            // Bus is completely unassigned (no school, no corporation)
+            const isUnassigned = !bus.schoolId && !bus.corporationId;
+            
+            // Bus is assigned to another route of this same corporation (not available)
+            const isAssignedToOtherRouteInThisCorporation = bus.routeNumber && 
                 bus.routeNumber !== currentRouteNumber && 
                 bus.corporationId === parseInt(corporationId);
             
-            return !isAssignedToOtherRoute || isAssignedToCurrentRoute;
+            // Available if: assigned to current route OR completely unassigned
+            // Not available if: assigned to another route in this corporation, or assigned to a school or other corporation
+            return isAssignedToCurrentRoute || (isUnassigned && !isAssignedToOtherRouteInThisCorporation);
         });
     };
 
@@ -440,25 +418,19 @@ const CorporateBusesPage = () => {
                                                     />
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Autocomplete
-                                                        disabled={!assignedBusId}
-                                                        options={availableMonitors.slice().sort((a,b)=>{
-                                                            const an = (a.name || a.email || '').toLowerCase();
-                                                            const bn = (b.name || b.email || '').toLowerCase();
-                                                            return an < bn ? -1 : an > bn ? 1 : 0;
-                                                        })}
-                                                        getOptionLabel={(option) => option ? (option.name || option.email) : ''}
-                                                        isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
-                                                        value={assignedBusId ? availableMonitors.find(m => m.id === monitorAssignments[assignedBusId]) || null : null}
-                                                        onChange={(_, newValue) => assignedBusId && handleMonitorAssignmentChange(assignedBusId, newValue ? newValue.id : null)}
-                                                        renderInput={(params) => (
-                                                            <TextField
-                                                                {...params}
-                                                                label="Seleccionar Monitora"
-                                                                variant="outlined"
-                                                            />
-                                                        )}
-                                                        clearOnEscape
+                                                    <TextField
+                                                        disabled
+                                                        value="No aplica"
+                                                        variant="outlined"
+                                                        label="Monitora"
+                                                        InputProps={{
+                                                            readOnly: true,
+                                                        }}
+                                                        sx={{ 
+                                                            '& .MuiInputBase-input.Mui-disabled': {
+                                                                WebkitTextFillColor: '#999',
+                                                            }
+                                                        }}
                                                     />
                                                 </TableCell>
                                                 <TableCell>
@@ -493,13 +465,16 @@ const CorporateBusesPage = () => {
                                 • Cada número de ruta puede tener asignado solo un bus
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
-                                • Un bus solo puede estar asignado a un número de ruta a la vez
+                                • Solo se muestran buses que no están asignados a ningún colegio ni corporación
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
-                                • Los pilotos y monitoras solo se pueden asignar si hay un bus asignado
+                                • Los pilotos solo se pueden asignar si hay un bus asignado
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
-                                • Los pilotos y monitoras deben pertenecer a la misma corporación
+                                • Solo se muestran pilotos que pertenecen a esta corporación
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                • Las monitoras no aplican para corporaciones
                             </Typography>
                         </Box>
                     )}
