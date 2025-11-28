@@ -100,7 +100,7 @@ const EmployeeDashboardPage = () => {
       console.error('[EmployeeDashboard] loadAll error:', e);
       setEmployeeInfo(null);
       setSchedules([]);
-      setSnackbar({ open:true, sev:'error', msg: 'No se pudo cargar información del empleado.' });
+      setSnackbar({ open:true, sev:'error', msg: 'No se pudo cargar información del colaborador.' });
     } finally {
       setLoading(false);
     }
@@ -209,8 +209,8 @@ const EmployeeDashboardPage = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 3, background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`, color: '#fff' }}>
                 <Avatar sx={{ width: 72, height: 72, bgcolor: theme.palette.secondary.main }}>{initials}</Avatar>
                 <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>{safeStr(employeeInfo?.name || 'Empleado')}</Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.9 }}>{employeeInfo?.role?.name || 'Empleado'}</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>{safeStr(employeeInfo?.name || 'Colaborador')}</Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.9 }}>{employeeInfo?.role?.name || 'Colaborador'}</Typography>
                   {employeeInfo?.corporation && (
                     <Chip size="small" label={employeeInfo.corporation.name} sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }} />
                   )}

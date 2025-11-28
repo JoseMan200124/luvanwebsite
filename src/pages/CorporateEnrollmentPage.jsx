@@ -274,12 +274,12 @@ const CorporateEnrollmentPage = () => {
                             mb: 3
                         }}
                     >
-                        Formulario de Inscripción de Empleado
+                        Formulario de Inscripción de Colaborador
                     </Typography>
 
                     <form onSubmit={handleSubmit} style={{ flexGrow: 1 }}>
                         <Typography variant="h6" sx={{ mb: 2 }}>
-                            Información del Empleado
+                            Información del Colaborador
                         </Typography>
                         
                         <TextField
@@ -301,7 +301,7 @@ const CorporateEnrollmentPage = () => {
                         />
 
                         <TextField
-                            label="Teléfono del Empleado"
+                            label="Teléfono del Colaborador"
                             fullWidth
                             margin="normal"
                             value={phoneNumber}

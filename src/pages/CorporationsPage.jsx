@@ -805,7 +805,7 @@ const CorporationsPage = () => {
                             
                             {corporationSchedules.length === 0 && (
                                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                    No hay horarios agregados. Los horarios permiten definir diferentes turnos para los empleados.
+                                    No hay horarios agregados. Los horarios permiten definir diferentes turnos para los colaboradores.
                                 </Typography>
                             )}
                         </Box>
@@ -1137,7 +1137,7 @@ const CorporationsPage = () => {
                                                 color="text.secondary" 
                                                 sx={{ mb: 1, fontWeight: 600 }}
                                             >
-                                                Total de Empleados: {corporation.employeesCount || 0}
+                                                Total de Colaboradores: {corporation.employeesCount || 0}
                                             </Typography>
                                             
                                             {/* Botón principal de gestionar */}

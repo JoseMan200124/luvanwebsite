@@ -653,7 +653,7 @@ const CorporateDashboardPage = () => {
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <TrendingUp color="primary" />
-                                        Empleados Registrados
+                                        Colaboradores Registrados
                                     </Typography>
                                     <Divider sx={{ mb: 2 }} />
                                     
@@ -662,7 +662,7 @@ const CorporateDashboardPage = () => {
                                             {employeeSummary.total}
                                         </Typography>
                                         <Typography variant="body2" color="textSecondary">
-                                            Total de empleados
+                                            Total de colaboradores
                                         </Typography>
                                     </Box>
 
@@ -678,7 +678,7 @@ const CorporateDashboardPage = () => {
                                             </ListItemIcon>
                                             <ListItemText 
                                                 primary="Activos" 
-                                                secondary={`${employeeSummary.active} empleados`}
+                                                secondary={`${employeeSummary.active} colaboradores`}
                                             />
                                         </ListItem>
                                         <ListItem>
@@ -692,7 +692,7 @@ const CorporateDashboardPage = () => {
                                             </ListItemIcon>
                                             <ListItemText 
                                                 primary="Inactivos" 
-                                                secondary={`${employeeSummary.total - employeeSummary.active} empleados`}
+                                                secondary={`${employeeSummary.total - employeeSummary.active} colaboradores`}
                                             />
                                         </ListItem>
                                     </List>
@@ -711,7 +711,7 @@ const CorporateDashboardPage = () => {
                                                         </ListItemIcon>
                                                         <ListItemText 
                                                             primary={dept.name}
-                                                            secondary={`${dept.count} empleados`}
+                                                            secondary={`${dept.count} colaboradores`}
                                                         />
                                                     </ListItem>
                                                 ))}
@@ -728,10 +728,10 @@ const CorporateDashboardPage = () => {
                                 <CardContent sx={{ textAlign: 'center' }}>
                                     <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
                                     <Typography variant="h6" gutterBottom>
-                                        Gestión de Empleados
+                                        Gestión de Colaboradores
                                     </Typography>
                                     <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar todos los empleados registrados en esta corporación
+                                        Ver y gestionar todos los colaboradores registrados en esta corporación
                                     </Typography>
                                     <Button
                                         variant="contained"
@@ -742,7 +742,7 @@ const CorporateDashboardPage = () => {
                                         fullWidth
                                         sx={{ borderRadius: 2 }}
                                     >
-                                        Ver Empleados
+                                        Ver Colaboradores
                                     </Button>
                                 </CardContent>
                             </SummaryCard>

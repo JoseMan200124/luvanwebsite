@@ -117,7 +117,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
         }
 
         if (!employee || !employee.id) {
-            alert('No se encontró el empleado');
+            alert('No se encontró el colaborador');
             return;
         }
 
@@ -257,7 +257,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                     marginBottom: 12 
                 }}>
                     <h3 style={{ fontSize: 18, fontWeight: 600 }}>
-                        Horario del Empleado
+                        Horario del Colaborador
                     </h3>
                     <button 
                         type="button" 
@@ -286,7 +286,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                     <div style={{ fontSize: 15, fontWeight: 700 }}>
-                                        {employee?.name || 'Empleado'}
+                                        {employee?.name || 'Colaborador'}
                                     </div>
                                     <div style={{ fontSize: 15, color: '#6B7280' }}>
                                         {employee?.FamilyDetail?.department || '—'}
@@ -735,7 +735,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                                 return corporation?.routeNumbers && Array.isArray(corporation.routeNumbers) 
                                                     ? corporation.routeNumbers.map(route => (
                                                         <option key={route} value={route}>
-                                                            Ruta {route} (Sin horario del empleado)
+                                                            Ruta {route} (Sin horario del colaborador)
                                                         </option>
                                                     ))
                                                     : null;
@@ -744,11 +744,11 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                             // Obtener el horario del empleado
                                             const employeeSchedule = corporation.schedules[employeeScheduleIndex];
                                             if (!employeeSchedule) {
-                                                console.log('[EmployeeScheduleModal] No se encontró el horario del empleado en índice:', employeeScheduleIndex);
-                                                return <option disabled>No se encontró el horario del empleado</option>;
+                                                console.log('[EmployeeScheduleModal] No se encontró el horario del colaborador en índice:', employeeScheduleIndex);
+                                                return <option disabled>No se encontró el horario del colaborador</option>;
                                             }
                                             
-                                            console.log('[EmployeeScheduleModal] Horario del empleado:', employeeSchedule);
+                                            console.log('[EmployeeScheduleModal] Horario del colaborador:', employeeSchedule);
                                             
                                             // Filtrar rutas que tengan el mismo horario asignado
                                             const routeSchedules = corporation?.routeSchedules || [];
@@ -1042,7 +1042,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                         }}>
                             <h3 style={{ marginTop: 0 }}>Eliminar todos los horarios</h3>
                             <div style={{ marginTop: 8 }}>
-                                ¿Seguro que deseas eliminar todos los horarios de {employee?.name || 'este empleado'}?
+                                ¿Seguro que deseas eliminar todos los horarios de {employee?.name || 'este colaborador'}?
                             </div>
                             <div style={{ 
                                 display: 'flex', 

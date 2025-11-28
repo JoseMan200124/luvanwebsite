@@ -103,7 +103,7 @@ const RouteEmployeesModal = ({
             setEmployees(response.data.employees || []);
         } catch (err) {
             console.error('Error fetching employees:', err);
-            setError('Error al cargar los empleados');
+            setError('Error al cargar los colaboradores');
         } finally {
             setLoading(false);
         }
@@ -191,7 +191,7 @@ const RouteEmployeesModal = ({
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <DirectionsBus color="primary" />
                         <Typography variant="h6">
-                            Empleados - Ruta {routeNumber} - {scheduleName} ({stopTypeLabel})
+                            Colaboradores - Ruta {routeNumber} - {scheduleName} ({stopTypeLabel})
                         </Typography>
                     </Box>
                     <IconButton onClick={onClose} size="small">
@@ -264,7 +264,7 @@ const RouteEmployeesModal = ({
                         {/* Results Summary */}
                         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Typography variant="body2" color="textSecondary">
-                                Mostrando {sortedEmployees.length} de {employees.length} empleados
+                                Mostrando {sortedEmployees.length} de {employees.length} colaboradores
                             </Typography>
                         </Box>
 
@@ -316,7 +316,7 @@ const RouteEmployeesModal = ({
                                         <TableRow>
                                             <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
                                                 <Typography variant="body2" color="textSecondary">
-                                                    No hay empleados asignados a esta ruta y horario
+                                                    No hay colaboradores asignados a esta ruta y horario
                                                 </Typography>
                                             </TableCell>
                                         </TableRow>

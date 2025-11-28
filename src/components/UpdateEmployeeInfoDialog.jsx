@@ -215,13 +215,13 @@ const UpdateEmployeeInfoDialog = ({ open, onClose, initialData = {}, onSaved }) 
 
     return (
         <Dialog open={open} onClose={() => onClose && onClose()} fullWidth maxWidth="md">
-            <DialogTitle>Actualizar Datos de Empleado</DialogTitle>
+            <DialogTitle>Actualizar Datos de Colaborador</DialogTitle>
             <DialogContent dividers>
                 {loading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>
                 ) : (
                     <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-                        <Typography variant="h6" sx={{ mb: 1 }}>Información del Empleado</Typography>
+                        <Typography variant="h6" sx={{ mb: 1 }}>Información del Colaborador</Typography>
 
                         <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
                             <TextField label="Nombres" fullWidth margin="normal" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
