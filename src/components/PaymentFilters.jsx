@@ -14,6 +14,7 @@ const PaymentFilters = ({ search, onSearchChange, status, onStatusChange, autoDe
                     <MenuItem value="PAGADO">Pagado</MenuItem>
                     <MenuItem value="PENDIENTE">Pago Pendiente</MenuItem>
                     <MenuItem value="MORA">Mora</MenuItem>
+                    <MenuItem value="INACTIVO">Inactivo</MenuItem>
                 </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: 140 }}>

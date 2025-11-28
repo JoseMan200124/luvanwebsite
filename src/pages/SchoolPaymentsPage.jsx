@@ -115,6 +115,7 @@ const SchoolPaymentsPage = () => {
     const [totalPaidCount, setTotalPaidCount] = useState(0);
     const [totalMoraCount, setTotalMoraCount] = useState(0);
     const [totalPendingCount, setTotalPendingCount] = useState(0);
+    const [totalInactiveCount, setTotalInactiveCount] = useState(0);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     // Loading indicator for initial data fetch
     const [loading, setLoading] = useState(true);
@@ -126,9 +127,11 @@ const SchoolPaymentsPage = () => {
     const [collapsedExtra, setCollapsedExtra] = useState(true);
 
     // Indicators derived from analysisData/combinedEarnings
+    // IMPORTANTE: Solo contar usuarios activos (state !== 0)
     const pagadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PAGADO')?.count || 0;
     const moraCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'MORA')?.count || 0;
     const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
+    const inactivoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'INACTIVO')?.count || 0;
     const currentMonthEarnings = combinedEarnings.find(item =>
         item.year === moment().year() && item.month === (moment().month() + 1)
     )?.total || 0;
@@ -221,9 +224,16 @@ const SchoolPaymentsPage = () => {
             setPaymentsAll(arr);
             setFiltered(arr);
             setTotalPayments(total || (Array.isArray(arr) ? arr.length : 0));
-            setTotalPaidCount(typeof res.data.totalPaidCount === 'number' ? res.data.totalPaidCount : (arr.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PAGADO').length));
-            setTotalPendingCount(typeof res.data.totalPendingCount === 'number' ? res.data.totalPendingCount : (arr.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PENDIENTE').length));
-            setTotalMoraCount(typeof res.data.totalMoraCount === 'number' ? res.data.totalMoraCount : (arr.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'MORA').length));
+            
+            // IMPORTANTE: Excluir usuarios inactivos de los conteos de PAGADO/PENDIENTE/MORA
+            const isUserActive = (pmt) => Number(pmt.User?.state) !== 0;
+            const activePayments = arr.filter(isUserActive);
+            const inactivePayments = arr.filter(pmt => !isUserActive(pmt));
+            
+            setTotalPaidCount(typeof res.data.totalPaidCount === 'number' ? res.data.totalPaidCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PAGADO').length);
+            setTotalPendingCount(typeof res.data.totalPendingCount === 'number' ? res.data.totalPendingCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PENDIENTE').length);
+            setTotalMoraCount(typeof res.data.totalMoraCount === 'number' ? res.data.totalMoraCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'MORA').length);
+            setTotalInactiveCount(typeof res.data.totalInactiveCount === 'number' ? res.data.totalInactiveCount : inactivePayments.length);
             setPage(0);
         } catch (err) {
             console.error('fetchAllPayments', err);
@@ -242,14 +252,22 @@ const SchoolPaymentsPage = () => {
             setCombinedEarnings(Array.isArray(data?.monthlyEarnings) ? data.monthlyEarnings : []);
     } catch (e) {
             // fallback: derive from current payments (best-effort)
+            // IMPORTANTE: Excluir usuarios inactivos de los conteos de PAGADO/MORA/PENDIENTE
             try {
-                const paid = (paymentsAll || []).filter(p => (p.finalStatus||'').toUpperCase() === 'PAGADO').length;
-                const mora = (paymentsAll || []).filter(p => (p.finalStatus||'').toUpperCase() === 'MORA').length;
-                const pend = (paymentsAll || []).filter(p => (p.finalStatus||'').toUpperCase() === 'PENDIENTE').length;
+                const isUserActive = (p) => Number(p.User?.state) !== 0;
+                const activePayments = (paymentsAll || []).filter(isUserActive);
+                const inactivePayments = (paymentsAll || []).filter(p => !isUserActive(p));
+                
+                const paid = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'PAGADO').length;
+                const mora = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'MORA').length;
+                const pend = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'PENDIENTE').length;
+                const inactivo = inactivePayments.length;
+                
                 const derived = { statusDistribution: [
                     { finalStatus: 'PAGADO', count: paid },
                     { finalStatus: 'MORA', count: mora },
-                    { finalStatus: 'PENDIENTE', count: pend }
+                    { finalStatus: 'PENDIENTE', count: pend },
+                    { finalStatus: 'INACTIVO', count: inactivo }
                 ] };
                 setAnalysisData(derived);
                 // build a tiny combinedEarnings for last 6 months with zeros
@@ -320,9 +338,19 @@ const SchoolPaymentsPage = () => {
             const st = statusFilter ? String(statusFilter).toUpperCase().trim() : '';
             const qq = search ? String(search).toLowerCase().trim() : '';
             const arr = (paymentsAll || []).filter(p => {
+                // Determinar si el usuario está inactivo (state = 0)
+                const isUserInactive = Number(p.User?.state) === 0;
+                
                 if (st) {
-                    const s = (p.finalStatus || p.status || '').toUpperCase();
-                    if (s !== st) return false;
+                    if (st === 'INACTIVO') {
+                        // Filtrar solo usuarios inactivos
+                        if (!isUserInactive) return false;
+                    } else {
+                        // Para otros estados, excluir usuarios inactivos y filtrar por finalStatus
+                        if (isUserInactive) return false;
+                        const s = (p.finalStatus || p.status || '').toUpperCase();
+                        if (s !== st) return false;
+                    }
                 }
                 if (qq) {
                     const familyLast = (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toLowerCase();
@@ -474,6 +502,9 @@ const SchoolPaymentsPage = () => {
     const [previewReceipt, setPreviewReceipt] = useState(null); // object { id, fileUrl, userId }
     // guard to avoid processing the same openRegister/showReceipt query multiple times
     const processedOpenRegisterRef = useRef(new Set());
+
+    // Pending periods dialog
+    const [openPendingPeriodsDialog, setOpenPendingPeriodsDialog] = useState(false);
 
     // Notas (editor)
     const [openNotesDialog, setOpenNotesDialog] = useState(false);
@@ -1247,9 +1278,20 @@ const SchoolPaymentsPage = () => {
             const monthStrPad = month ? String(month).padStart(2, '0') : null;
 
             historiesAll.forEach(h => {
-                // Filtrar familias con estado inactivo (state = 0)
+                // Determinar si el usuario está inactivo (state = 0)
                 const userState = h.User?.state ?? h.Payment?.User?.state ?? 1;
-                if (Number(userState) === 0) return; // Ignorar usuarios inactivos
+                const isUserInactive = Number(userState) === 0;
+                
+                // Si el filtro es INACTIVO, solo incluir usuarios inactivos
+                // Si el filtro es otro estado, excluir usuarios inactivos
+                if (exportFinalStatus === 'INACTIVO') {
+                    if (!isUserInactive) return; // Solo usuarios inactivos
+                } else if (exportFinalStatus && exportFinalStatus !== 'GENERAL') {
+                    if (isUserInactive) return; // Excluir usuarios inactivos
+                } else {
+                    // GENERAL: incluir todos excepto inactivos
+                    if (isUserInactive) return;
+                }
                 
                 const familyLast = h.familyLastName || h.familyLast || h.familyLastname || h.User?.FamilyDetail?.familyLastName || h.User?.familyLastName || '';
                 // Use only finalStatus (as required). Fallback to Payment.finalStatus if the snapshot doesn't include it.
@@ -1377,13 +1419,22 @@ const SchoolPaymentsPage = () => {
             const estadoNorm = estado ? String(estado).toUpperCase().trim() : '';
             const arr = Array.isArray(paymentsAll) ? paymentsAll : [];
             const filteredRows = arr.filter(p => {
-                // Filtrar familias con estado inactivo (state = 0)
+                // Determinar si el usuario está inactivo (state = 0)
                 const userState = p.User?.state ?? 1;
-                if (Number(userState) === 0) return false; // Ignorar usuarios inactivos
+                const isUserInactive = Number(userState) === 0;
                 
-                if (!estadoNorm) return true;
-                const s = (p.finalStatus || p.status || '').toString().toUpperCase();
-                return s === estadoNorm;
+                if (estadoNorm === 'INACTIVO') {
+                    // Filtrar solo usuarios inactivos
+                    return isUserInactive;
+                } else if (estadoNorm) {
+                    // Para otros estados, excluir usuarios inactivos y filtrar por finalStatus
+                    if (isUserInactive) return false;
+                    const s = (p.finalStatus || p.status || '').toString().toUpperCase();
+                    return s === estadoNorm;
+                } else {
+                    // Sin filtro de estado: excluir usuarios inactivos
+                    return !isUserInactive;
+                }
             });
 
             if (!filteredRows || filteredRows.length === 0) {
@@ -1739,6 +1790,7 @@ const SchoolPaymentsPage = () => {
                         <Chip label={`Pagados: ${totalPaidCount}`} color="success" />
                         <Chip label={`Pendientes: ${totalPendingCount}`} color="warning" />
                         <Chip label={`En Mora: ${totalMoraCount}`} color="error" />
+                        <Chip label={`Inactivos: ${totalInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
                         <Box sx={{ flex: 1 }} />
                     </ChipsRow>
                 </Grid>
@@ -1800,6 +1852,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="PAGADO">PAGADO</MenuItem>
                                             <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
                                             <MenuItem value="MORA">MORA</MenuItem>
+                                            <MenuItem value="INACTIVO">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
                                     <FormControl fullWidth>
@@ -1862,6 +1915,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="PAGADO">PAGADO</MenuItem>
                                             <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
                                             <MenuItem value="MORA">MORA</MenuItem>
+                                            <MenuItem value="INACTIVO">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
                                 </Box>
@@ -1904,7 +1958,7 @@ const SchoolPaymentsPage = () => {
                                     </Grid>
                                     <Grid item xs={12} md={5}>
                                         <Box sx={{ maxWidth: 420 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                                                 {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
                                                 {registerPaymentTarget && (
@@ -1915,6 +1969,32 @@ const SchoolPaymentsPage = () => {
                                             { (registerPaymentTarget && (registerPaymentTarget.automaticDebit || registerPaymentTarget.User?.FamilyDetail?.automaticDebit)) && (
                                                 <Chip label="D/A" size="small" color="primary" sx={{ height: 22, fontSize: '0.75rem' }} />
                                             ) }
+                                            {/* Button to show pending periods */}
+                                            {registerPaymentTarget?.unpaidPeriods && (() => {
+                                                try {
+                                                    const allPeriods = typeof registerPaymentTarget.unpaidPeriods === 'string'
+                                                        ? JSON.parse(registerPaymentTarget.unpaidPeriods)
+                                                        : registerPaymentTarget.unpaidPeriods;
+                                                    // Filtrar solo períodos con amount > 0
+                                                    const periods = allPeriods.filter(p => Number(p.amount || 0) > 0);
+                                                    if (Array.isArray(periods) && periods.length > 0) {
+                                                        return (
+                                                            <Button
+                                                                size="small"
+                                                                variant="outlined"
+                                                                color="warning"
+                                                                onClick={() => setOpenPendingPeriodsDialog(true)}
+                                                                sx={{ height: 24, fontSize: '0.7rem', textTransform: 'none' }}
+                                                            >
+                                                                Ver períodos pendientes ({periods.length})
+                                                            </Button>
+                                                        );
+                                                    }
+                                                } catch (e) {
+                                                    // ignore parse errors
+                                                }
+                                                return null;
+                                            })()}
                                         </Box>
                                         {/* Payment summary block: Tarifa, Mora, Crédito, Total a pagar */}
                                         <Box sx={{ mb: 2, p: 2, backgroundColor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
@@ -1930,11 +2010,38 @@ const SchoolPaymentsPage = () => {
                                                 </Typography>
                                             </Box>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                                                     <Typography variant="body2" color="text.secondary">Mora</Typography>
                                                     {registerPaymentTarget?.penaltyPaused && (
                                                         <Chip label="Mora congelada" size="small" color="default" sx={{ height: 22, fontSize: '0.7rem' }} />
                                                     )}
+                                                    {/* Mostrar desde qué fecha se calcula la mora */}
+                                                    {dialogMora > 0 && (() => {
+                                                        try {
+                                                            const periods = registerPaymentTarget?.unpaidPeriods
+                                                                ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
+                                                                    ? JSON.parse(registerPaymentTarget.unpaidPeriods)
+                                                                    : registerPaymentTarget.unpaidPeriods)
+                                                                : [];
+                                                            if (Array.isArray(periods) && periods.length > 0) {
+                                                                const oldestPeriod = periods[0];
+                                                                if (oldestPeriod.dueDate) {
+                                                                    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                                                                    const dueDate = moment(oldestPeriod.dueDate);
+                                                                    const day = dueDate.date();
+                                                                    const monthName = monthNames[dueDate.month()];
+                                                                    return (
+                                                                        <Typography variant="caption" color="warning.main" sx={{ fontSize: '0.7rem' }}>
+                                                                            (desde el {day} de {monthName})
+                                                                        </Typography>
+                                                                    );
+                                                                }
+                                                            }
+                                                        } catch (e) {
+                                                            // ignore
+                                                        }
+                                                        return null;
+                                                    })()}
                                                 </Box>
                                                 <Typography variant="body2">{formatCurrency(dialogMora)}</Typography>
                                             </Box>
@@ -2120,6 +2227,84 @@ const SchoolPaymentsPage = () => {
                                 <Button variant="contained" onClick={handleSendEmail} disabled={!emailSubject && !emailMessage}>Enviar</Button>
                             </DialogActions>
                         </Dialog>
+
+                        {/* Dialog: Períodos Pendientes de Pago */}
+                        <Dialog open={openPendingPeriodsDialog} onClose={() => setOpenPendingPeriodsDialog(false)} fullWidth maxWidth="sm">
+                            <DialogTitle>Períodos Pendientes de Pago</DialogTitle>
+                            <DialogContent>
+                                {(() => {
+                                    try {
+                                        const allPeriods = registerPaymentTarget?.unpaidPeriods
+                                            ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
+                                                ? JSON.parse(registerPaymentTarget.unpaidPeriods)
+                                                : registerPaymentTarget.unpaidPeriods)
+                                            : [];
+                                        // Filtrar solo períodos con amount > 0 (los que aún deben dinero)
+                                        const periods = allPeriods.filter(p => Number(p.amount || 0) > 0);
+                                        if (!Array.isArray(periods) || periods.length === 0) {
+                                            return <Typography variant="body2" color="text.secondary">No hay períodos pendientes de pago.</Typography>;
+                                        }
+                                        return (
+                                            <Box sx={{ mt: 1 }}>
+                                                {periods.map((p, idx) => {
+                                                    // Convertir periodo a nombre de mes en español
+                                                    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                                                    let displayPeriod = p.periodName || p.period;
+                                                    if (p.period && /^\d{4}-\d{2}$/.test(p.period)) {
+                                                        const [year, month] = p.period.split('-');
+                                                        const monthIndex = parseInt(month, 10) - 1;
+                                                        if (monthIndex >= 0 && monthIndex < 12) {
+                                                            displayPeriod = `${monthNames[monthIndex]} ${year}`;
+                                                        }
+                                                    }
+                                                    return (
+                                                    <Box
+                                                        key={p.period || idx}
+                                                        sx={{
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center',
+                                                            p: 1.5,
+                                                            mb: 1,
+                                                            backgroundColor: idx % 2 === 0 ? '#fafafa' : '#fff',
+                                                            borderRadius: 1,
+                                                            border: '1px solid rgba(0,0,0,0.08)'
+                                                        }}
+                                                    >
+                                                        <Box>
+                                                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                                                {displayPeriod}
+                                                            </Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                Vencimiento: {p.dueDate ? moment(p.dueDate).format('DD/MM/YYYY') : 'N/A'}
+                                                            </Typography>
+                                                        </Box>
+                                                        <Box sx={{ textAlign: 'right' }}>
+                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#d32f2f' }}>
+                                                                Q {Number(p.amount || 0).toFixed(2)}
+                                                            </Typography>
+                                                        </Box>
+                                                    </Box>
+                                                    );
+                                                })}
+                                                <Box sx={{ mt: 2, pt: 1, borderTop: '1px dashed rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between' }}>
+                                                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Total pendiente:</Typography>
+                                                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#d32f2f' }}>
+                                                        Q {periods.reduce((sum, p) => sum + Number(p.amount || 0), 0).toFixed(2)}
+                                                    </Typography>
+                                                </Box>
+                                            </Box>
+                                        );
+                                    } catch (e) {
+                                        return <Typography variant="body2" color="error">Error al cargar períodos pendientes.</Typography>;
+                                    }
+                                })()}
+                            </DialogContent>
+                            <DialogActions>
+                                <Button onClick={() => setOpenPendingPeriodsDialog(false)}>Cerrar</Button>
+                            </DialogActions>
+                        </Dialog>
+
                         {/* Dialog: Preview de Boleta (triggered from notification) */}
                         <Dialog open={!!previewReceipt} onClose={() => setPreviewReceipt(null)} fullWidth maxWidth="md">
                             <DialogTitle>Vista previa de Boleta</DialogTitle>
