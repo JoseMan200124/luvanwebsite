@@ -23,6 +23,7 @@ import AttendanceManagementPage from './pages/AttendanceManagementPage';
 import StudentIncidentsPage from './pages/StudentIncidentsPage';
 import BusIncidentsPage from './pages/BusIncidentsPage';
 import BusEmergenciesPage from './pages/BusEmergenciesPage';
+import MechanicRequestsPage from './pages/MechanicRequestsPage';
 import RouteTimeLogsPage from './pages/RouteTimeLogsPage';
 import FuelRecordsPage from './pages/FuelRecordsPage';
 import CorporationsPage from './pages/CorporationsPage';
@@ -164,6 +165,13 @@ export const modules = [
                 name: 'Emergencias de Buses',
                 path: 'emergencias-buses',
                 component: BusEmergenciesPage,
+                roles: ['Administrador', 'Gestor', 'Supervisor'],
+            },
+            {
+                key: 'solicitudes-mecanica',
+                name: 'Solicitudes de Mecánica',
+                path: 'solicitudes-mecanica',
+                component: MechanicRequestsPage,
                 roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
