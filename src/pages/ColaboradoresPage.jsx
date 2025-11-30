@@ -1,4 +1,4 @@
-// src/pages/EmployeesPage.jsx
+// src/pages/ColaboradoresPage.jsx
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
     Typography,
@@ -58,7 +58,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
-import EmployeeScheduleModal from '../components/modals/EmployeeScheduleModal';
+import ColaboradorScheduleModal from '../components/modals/ColaboradorScheduleModal';
 import ExcelJS from 'exceljs';
 import moment from 'moment-timezone';
 
@@ -122,14 +122,14 @@ const formatTime12Hour = (time24) => {
     return `${hour12}:${minutes} ${ampm}`;
 };
 
-const EmployeesPage = () => {
+const ColaboradoresPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
     const { fiscalYear, corporationId } = useParams();
 
-    const [employees, setEmployees] = useState([]);
-    const [filteredEmployees, setFilteredEmployees] = useState([]);
+    const [colaboradores, setColaboradores] = useState([]);
+    const [filteredColaboradores, setFilteredColaboradores] = useState([]);
     const [loading, setLoading] = useState(false);
     const [sortBy, setSortBy] = useState(null);
     const [sortOrder, setSortOrder] = useState('asc');
@@ -138,7 +138,7 @@ const EmployeesPage = () => {
     const [statusFilter, setStatusFilter] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [selectedEmployee, setSelectedEmployee] = useState(null);
+    const [selectedColaborador, setSelectedColaborador] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     
     // Diálogos
@@ -162,8 +162,8 @@ const EmployeesPage = () => {
     // Estado de la corporación
     const [corporationData, setCorporationData] = useState(location.state?.corporation || null);
     
-    // Formulario de empleado - SOLO campos del formulario de inscripción + phoneNumber
-    const [employeeForm, setEmployeeForm] = useState({
+    // Formulario de colaborador - SOLO campos del formulario de inscripción + phoneNumber
+    const [colaboradorForm, setColaboradorForm] = useState({
         username: '',
         firstName: '',
         lastName: '',
@@ -192,33 +192,33 @@ const EmployeesPage = () => {
         extraFields: false
     });
 
-    // Funciones auxiliares para determinar el estado de los empleados
-    const isEmployeeNew = (employee) => {
-        if (!employee.EmployeeDetail) return false;
-        if (employee.EmployeeDetail.isNew === false) return false;
-        const createdAt = new Date(employee.createdAt);
+    // Funciones auxiliares para determinar el estado de los colaboradores
+    const isColaboradorNew = (colaborador) => {
+        if (!colaborador.ColaboradorDetail) return false;
+        if (colaborador.ColaboradorDetail.isNew === false) return false;
+        const createdAt = new Date(colaborador.createdAt);
         const now = new Date();
         const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
         return diffDays <= 14;
     };
 
-    const isEmployeeDuplicated = (employee, allEmployees) => {
-        const email = employee.email?.trim().toLowerCase();
+    const isColaboradorDuplicated = (colaborador, allColaboradores) => {
+        const email = colaborador.email?.trim().toLowerCase();
         if (!email) return false;
-        const count = allEmployees.filter(
+        const count = allColaboradores.filter(
             e => e.email && e.email.trim().toLowerCase() === email
         ).length;
         return count > 1;
     };
 
-    const getEmployeeStatus = useCallback((employee) => {
-        // If employee has explicit state flag (DB uses 0/1), consider 0 as Inactivo
-        if (employee && (employee.state === 0 || employee.state === '0' || employee.state === false)) return 'Inactivo';
-        if (isEmployeeNew(employee)) return 'Nuevo';
-        if (isEmployeeDuplicated(employee, employees)) return 'Duplicado';
-        if (employee.EmployeeDetail && employee.EmployeeDetail.hasUpdatedData) return 'Actualizado';
+    const getColaboradorStatus = useCallback((colaborador) => {
+        // If colaborador has explicit state flag (DB uses 0/1), consider 0 as Inactivo
+        if (colaborador && (colaborador.state === 0 || colaborador.state === '0' || colaborador.state === false)) return 'Inactivo';
+        if (isColaboradorNew(colaborador)) return 'Nuevo';
+        if (isColaboradorDuplicated(colaborador, colaboradores)) return 'Duplicado';
+        if (colaborador.ColaboradorDetail && colaborador.ColaboradorDetail.hasUpdatedData) return 'Actualizado';
         return 'Activo';
-    }, [employees]);
+    }, [colaboradores]);
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -282,7 +282,7 @@ const EmployeesPage = () => {
             // Los campos JSON ya vienen parseados desde el backend gracias a los getters del modelo
             setCorporationData(corp);
             
-            console.log('[EmployeesPage] Corporation loaded:', {
+            console.log('[ColaboradoresPage] Corporation loaded:', {
                 name: corp.name,
                 routeNumbers: corp.routeNumbers,
                 routeSchedules: corp.routeSchedules,
@@ -294,12 +294,12 @@ const EmployeesPage = () => {
         }
     }, [auth.token, corporationId, corporationData]);
 
-    const fetchEmployees = useCallback(async () => {
+    const fetchColaboradores = useCallback(async () => {
         if (!corporationId) return;
         
         setLoading(true);
         try {
-            const response = await api.get(`/corporations/${corporationId}/employees`, {
+            const response = await api.get(`/corporations/${corporationId}/colaboradores`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
@@ -308,11 +308,11 @@ const EmployeesPage = () => {
                 }
             });
             
-            const employeesData = response.data.employees || [];
-            setEmployees(employeesData);
-            setFilteredEmployees(employeesData);
+            const colaboradoresData = response.data.colaboradores || [];
+            setColaboradores(colaboradoresData);
+            setFilteredColaboradores(colaboradoresData);
         } catch (err) {
-            console.error('Error fetching employees:', err);
+            console.error('Error fetching colaboradores:', err);
             setSnackbar({ 
                 open: true, 
                 message: 'Error al obtener colaboradores.', 
@@ -326,29 +326,29 @@ const EmployeesPage = () => {
     useEffect(() => {
         if (auth.token && corporationId) {
             fetchCorporationData();
-            fetchEmployees();
+            fetchColaboradores();
         }
-    }, [auth.token, corporationId, fetchCorporationData, fetchEmployees]);
+    }, [auth.token, corporationId, fetchCorporationData, fetchColaboradores]);
 
     // Filtrado y ordenamiento
     useEffect(() => {
-        let filtered = [...employees];
+        let filtered = [...colaboradores];
         
         // Búsqueda
         if (searchQuery.trim()) {
-            filtered = filtered.filter(emp => 
-                emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                emp.email?.toLowerCase().includes(searchQuery.toLowerCase())
+            filtered = filtered.filter(col => 
+                col.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                col.email?.toLowerCase().includes(searchQuery.toLowerCase())
             );
         }
         
-        // Filtro por estado (usando getEmployeeStatus)
+        // Filtro por estado (usando getColaboradorStatus)
         if (statusFilter) {
-            filtered = filtered.filter(emp => getEmployeeStatus(emp) === statusFilter);
+            filtered = filtered.filter(col => getColaboradorStatus(col) === statusFilter);
         }
         
-        setFilteredEmployees(filtered);
-    }, [employees, searchQuery, statusFilter, getEmployeeStatus]);
+        setFilteredColaboradores(filtered);
+    }, [colaboradores, searchQuery, statusFilter, getColaboradorStatus]);
 
     const handleBackToDashboard = () => {
         navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}`, {
@@ -382,7 +382,7 @@ const EmployeesPage = () => {
     };
 
     const handleOpenCreateDialog = () => {
-        setEmployeeForm({
+        setColaboradorForm({
             username: '',
             firstName: '',
             lastName: '',
@@ -416,60 +416,60 @@ const EmployeesPage = () => {
         setOpenCreateDialog(true);
     };
 
-    const handleOpenEditDialog = (employee) => {
-        setSelectedEmployee(employee);
+    const handleOpenEditDialog = (colaborador) => {
+        setSelectedColaborador(colaborador);
         
-        console.log('[EmployeesPage] Opening edit dialog for employee:', {
-            employeeName: employee.name,
-            hasEmployeeDetail: !!employee.EmployeeDetail,
-            extraFields: employee.EmployeeDetail?.extraFields,
-            extraFieldsType: typeof employee.EmployeeDetail?.extraFields,
+        console.log('[ColaboradoresPage] Opening edit dialog for colaborador:', {
+            colaboradorName: colaborador.name,
+            hasColaboradorDetail: !!colaborador.ColaboradorDetail,
+            extraFields: colaborador.ColaboradorDetail?.extraFields,
+            extraFieldsType: typeof colaborador.ColaboradorDetail?.extraFields,
             corporationExtraFields: corporationData?.extraEnrollmentFields
         });
         
         // Convertir selectedSchedule de índice numérico (si ya lo es) o mantener -1
         let scheduleIndex = -1;
-        if (employee.EmployeeDetail?.selectedSchedule !== undefined && employee.EmployeeDetail?.selectedSchedule !== null) {
-            scheduleIndex = Number(employee.EmployeeDetail.selectedSchedule);
+        if (colaborador.ColaboradorDetail?.selectedSchedule !== undefined && colaborador.ColaboradorDetail?.selectedSchedule !== null) {
+            scheduleIndex = Number(colaborador.ColaboradorDetail.selectedSchedule);
             if (isNaN(scheduleIndex)) scheduleIndex = -1;
         }
         
-        setEmployeeForm({
-            username: employee.name || '',
-            firstName: employee.EmployeeDetail?.firstName || '',
-            lastName: employee.EmployeeDetail?.lastName || '',
-            name: employee.name || '',
-            email: employee.email || '',
+        setColaboradorForm({
+            username: colaborador.name || '',
+            firstName: colaborador.ColaboradorDetail?.firstName || '',
+            lastName: colaborador.ColaboradorDetail?.lastName || '',
+            name: colaborador.name || '',
+            email: colaborador.email || '',
             password: '',
-            phoneNumber: employee.phoneNumber || '',
-            serviceAddress: employee.EmployeeDetail?.serviceAddress || '',
-            zoneOrSector: employee.EmployeeDetail?.zoneOrSector || '',
-            routeType: employee.EmployeeDetail?.routeType || 'Completa',
-            emergencyContact: employee.EmployeeDetail?.emergencyContact || '',
-            emergencyRelationship: employee.EmployeeDetail?.emergencyRelationship || '',
-            emergencyPhone: employee.EmployeeDetail?.emergencyPhone || '',
+            phoneNumber: colaborador.phoneNumber || '',
+            serviceAddress: colaborador.ColaboradorDetail?.serviceAddress || '',
+            zoneOrSector: colaborador.ColaboradorDetail?.zoneOrSector || '',
+            routeType: colaborador.ColaboradorDetail?.routeType || 'Completa',
+            emergencyContact: colaborador.ColaboradorDetail?.emergencyContact || '',
+            emergencyRelationship: colaborador.ColaboradorDetail?.emergencyRelationship || '',
+            emergencyPhone: colaborador.ColaboradorDetail?.emergencyPhone || '',
             selectedSchedule: scheduleIndex,
-            scheduleSlots: employee.ScheduleSlots || []
+            scheduleSlots: colaborador.ScheduleSlots || []
         });
-        // Inicializar campos extra con los valores existentes del empleado o defaults de la corporación
+        // Inicializar campos extra con los valores existentes del colaborador o defaults de la corporación
         const corpFields = Array.isArray(corporationData?.extraEnrollmentFields) ? corporationData.extraEnrollmentFields : [];
         const initialExtra = {};
         
-        // Parsear extraFields del empleado si es string
-        let empExtras = employee.EmployeeDetail?.extraFields || {};
-        if (typeof empExtras === 'string') {
+        // Parsear extraFields del colaborador si es string
+        let colExtras = colaborador.ColaboradorDetail?.extraFields || {};
+        if (typeof colExtras === 'string') {
             try {
-                empExtras = JSON.parse(empExtras);
+                colExtras = JSON.parse(colExtras);
             } catch (e) {
-                empExtras = {};
+                colExtras = {};
             }
         }
         
         // Crear mapa de claves normalizadas (trim) para búsqueda flexible
-        const empExtrasNormalized = {};
-        Object.keys(empExtras).forEach(k => {
+        const colExtrasNormalized = {};
+        Object.keys(colExtras).forEach(k => {
             const trimmedKey = k.trim();
-            empExtrasNormalized[trimmedKey] = empExtras[k];
+            colExtrasNormalized[trimmedKey] = colExtras[k];
         });
         
         corpFields.forEach((f, idx) => {
@@ -478,17 +478,17 @@ const EmployeesPage = () => {
             
             // Buscar valor guardado: primero con clave exacta, luego con clave trimmed
             let saved = f.default !== undefined ? f.default : '';
-            if (empExtras[fieldName] !== undefined) {
-                saved = empExtras[fieldName];
-            } else if (empExtrasNormalized[trimmedFieldName] !== undefined) {
-                saved = empExtrasNormalized[trimmedFieldName];
+            if (colExtras[fieldName] !== undefined) {
+                saved = colExtras[fieldName];
+            } else if (colExtrasNormalized[trimmedFieldName] !== undefined) {
+                saved = colExtrasNormalized[trimmedFieldName];
             }
             
             initialExtra[fieldName] = saved;
         });
         
-        // También incluir cualquier extraFields que existan en EmployeeDetail pero no estén en corpFields
-        Object.keys(empExtras).forEach(k => { 
+        // También incluir cualquier extraFields que existan en ColaboradorDetail pero no estén en corpFields
+        Object.keys(colExtras).forEach(k => { 
             const trimmedK = k.trim();
             // Buscar si algún campo de corpFields coincide (exacto o trimmed)
             const existsInCorp = corpFields.some(f => {
@@ -496,13 +496,13 @@ const EmployeesPage = () => {
                 return fn === k || fn.trim() === trimmedK || fn === trimmedK;
             });
             if (!existsInCorp && initialExtra[k] === undefined) {
-                initialExtra[k] = empExtras[k];
+                initialExtra[k] = colExtras[k];
             }
         });
         
         setExtraFieldsValues(initialExtra);
         
-        console.log('[EmployeesPage] Initialized extraFieldsValues:', initialExtra);
+        console.log('[ColaboradoresPage] Initialized extraFieldsValues:', initialExtra);
         
         setExpandedPanels({
             basicInfo: true,
@@ -513,18 +513,18 @@ const EmployeesPage = () => {
         setOpenEditDialog(true);
     };
 
-    const handleOpenDeleteDialog = (employee) => {
-        setSelectedEmployee(employee);
+    const handleOpenDeleteDialog = (colaborador) => {
+        setSelectedColaborador(colaborador);
         setOpenDeleteDialog(true);
     };
 
-    const handleOpenToggleStateDialog = (employee) => {
-        setSelectedEmployee(employee);
+    const handleOpenToggleStateDialog = (colaborador) => {
+        setSelectedColaborador(colaborador);
         setOpenToggleStateDialog(true);
     };
 
-    const handleOpenScheduleDialog = (employee) => {
-        setSelectedEmployee(employee);
+    const handleOpenScheduleDialog = (colaborador) => {
+        setSelectedColaborador(colaborador);
         setOpenScheduleDialog(true);
     };
 
@@ -534,43 +534,43 @@ const EmployeesPage = () => {
         setOpenDeleteDialog(false);
         setOpenToggleStateDialog(false);
         setOpenScheduleDialog(false);
-        setSelectedEmployee(null);
+        setSelectedColaborador(null);
     };
 
     const handleFormChange = (field, value) => {
-        setEmployeeForm(prev => ({ ...prev, [field]: value }));
+        setColaboradorForm(prev => ({ ...prev, [field]: value }));
     };
 
     const handleAccordionChange = (panel) => (event, isExpanded) => {
         setExpandedPanels(prev => ({ ...prev, [panel]: isExpanded }));
     };
 
-    const handleCreateEmployee = async () => {
+    const handleCreateColaborador = async () => {
         try {
             const payload = {
-                name: employeeForm.username || employeeForm.name,
-                email: employeeForm.email,
-                password: employeeForm.password,
-                phoneNumber: employeeForm.phoneNumber,
-                employeeDetail: {
-                    firstName: employeeForm.firstName || null,
-                    lastName: employeeForm.lastName || null,
-                    serviceAddress: employeeForm.serviceAddress,
-                    zoneOrSector: employeeForm.zoneOrSector,
-                    routeType: employeeForm.routeType,
-                    emergencyContact: employeeForm.emergencyContact,
-                    emergencyRelationship: employeeForm.emergencyRelationship,
-                    emergencyPhone: employeeForm.emergencyPhone,
-                    selectedSchedule: employeeForm.selectedSchedule
+                name: colaboradorForm.username || colaboradorForm.name,
+                email: colaboradorForm.email,
+                password: colaboradorForm.password,
+                phoneNumber: colaboradorForm.phoneNumber,
+                colaboradorDetail: {
+                    firstName: colaboradorForm.firstName || null,
+                    lastName: colaboradorForm.lastName || null,
+                    serviceAddress: colaboradorForm.serviceAddress,
+                    zoneOrSector: colaboradorForm.zoneOrSector,
+                    routeType: colaboradorForm.routeType,
+                    emergencyContact: colaboradorForm.emergencyContact,
+                    emergencyRelationship: colaboradorForm.emergencyRelationship,
+                    emergencyPhone: colaboradorForm.emergencyPhone,
+                    selectedSchedule: colaboradorForm.selectedSchedule
                 },
-                scheduleSlots: employeeForm.scheduleSlots
+                scheduleSlots: colaboradorForm.scheduleSlots
             };
             // Incluir campos extra si existen
             if (extraFieldsValues && Object.keys(extraFieldsValues).length > 0) {
-                payload.employeeDetail.extraFields = extraFieldsValues;
+                payload.colaboradorDetail.extraFields = extraFieldsValues;
             }
             
-            await api.post(`/corporations/${corporationId}/employees`, payload, {
+            await api.post(`/corporations/${corporationId}/colaboradores`, payload, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 }
@@ -583,9 +583,9 @@ const EmployeesPage = () => {
             });
             
             handleCloseDialogs();
-            fetchEmployees();
+            fetchColaboradores();
         } catch (err) {
-            console.error('Error creating employee:', err);
+            console.error('Error creating colaborador:', err);
             setSnackbar({
                 open: true,
                 message: err.response?.data?.error || 'Error al crear colaborador',
@@ -594,37 +594,37 @@ const EmployeesPage = () => {
         }
     };
 
-    const handleUpdateEmployee = async () => {
-        if (!selectedEmployee) return;
+    const handleUpdateColaborador = async () => {
+        if (!selectedColaborador) return;
         
         try {
             const payload = {
-                name: employeeForm.username || employeeForm.name,
-                email: employeeForm.email,
-                phoneNumber: employeeForm.phoneNumber,
-                employeeDetail: {
-                    firstName: employeeForm.firstName,
-                    lastName: employeeForm.lastName,
-                    serviceAddress: employeeForm.serviceAddress,
-                    zoneOrSector: employeeForm.zoneOrSector,
-                    routeType: employeeForm.routeType,
-                    emergencyContact: employeeForm.emergencyContact,
-                    emergencyRelationship: employeeForm.emergencyRelationship,
-                    emergencyPhone: employeeForm.emergencyPhone,
-                    selectedSchedule: employeeForm.selectedSchedule
+                name: colaboradorForm.username || colaboradorForm.name,
+                email: colaboradorForm.email,
+                phoneNumber: colaboradorForm.phoneNumber,
+                colaboradorDetail: {
+                    firstName: colaboradorForm.firstName,
+                    lastName: colaboradorForm.lastName,
+                    serviceAddress: colaboradorForm.serviceAddress,
+                    zoneOrSector: colaboradorForm.zoneOrSector,
+                    routeType: colaboradorForm.routeType,
+                    emergencyContact: colaboradorForm.emergencyContact,
+                    emergencyRelationship: colaboradorForm.emergencyRelationship,
+                    emergencyPhone: colaboradorForm.emergencyPhone,
+                    selectedSchedule: colaboradorForm.selectedSchedule
                 }
             };
             // Incluir campos extra si existen
             if (extraFieldsValues && Object.keys(extraFieldsValues).length > 0) {
-                payload.employeeDetail.extraFields = extraFieldsValues;
+                payload.colaboradorDetail.extraFields = extraFieldsValues;
             }
             
             // Si se proporciona contraseña, incluirla
-            if (employeeForm.password) {
-                payload.password = employeeForm.password;
+            if (colaboradorForm.password) {
+                payload.password = colaboradorForm.password;
             }
             
-            await api.put(`/corporations/${corporationId}/employees/${selectedEmployee.id}`, payload, {
+            await api.put(`/corporations/${corporationId}/colaboradores/${selectedColaborador.id}`, payload, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 }
@@ -637,9 +637,9 @@ const EmployeesPage = () => {
             });
             
             handleCloseDialogs();
-            fetchEmployees();
+            fetchColaboradores();
         } catch (err) {
-            console.error('Error updating employee:', err);
+            console.error('Error updating colaborador:', err);
             setSnackbar({
                 open: true,
                 message: err.response?.data?.error || 'Error al actualizar colaborador',
@@ -648,11 +648,11 @@ const EmployeesPage = () => {
         }
     };
 
-    const handleDeleteEmployee = async () => {
-        if (!selectedEmployee) return;
+    const handleDeleteColaborador = async () => {
+        if (!selectedColaborador) return;
         
         try {
-            await api.delete(`/users/${selectedEmployee.id}`, {
+            await api.delete(`/users/${selectedColaborador.id}`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 }
@@ -665,9 +665,9 @@ const EmployeesPage = () => {
             });
             
             handleCloseDialogs();
-            fetchEmployees();
+            fetchColaboradores();
         } catch (err) {
-            console.error('Error deleting employee:', err);
+            console.error('Error deleting colaborador:', err);
             setSnackbar({
                 open: true,
                 message: err.response?.data?.message || 'Error al eliminar colaborador',
@@ -677,14 +677,14 @@ const EmployeesPage = () => {
     };
 
     const handleToggleState = async () => {
-        if (!selectedEmployee) return;
+        if (!selectedColaborador) return;
         
         // Determinar el nuevo estado (opuesto al actual)
-        const currentState = Number(selectedEmployee.state);
+        const currentState = Number(selectedColaborador.state);
         const newState = currentState === 1 ? 0 : 1;
         
         try {
-            await api.put(`/users/${selectedEmployee.id}/toggle-state`, 
+            await api.put(`/users/${selectedColaborador.id}/toggle-state`, 
                 { state: newState },
                 {
                     headers: {
@@ -700,9 +700,9 @@ const EmployeesPage = () => {
             });
             
             handleCloseDialogs();
-            fetchEmployees();
+            fetchColaboradores();
         } catch (err) {
-            console.error('Error toggling employee state:', err);
+            console.error('Error toggling colaborador state:', err);
             setSnackbar({
                 open: true,
                 message: err.response?.data?.message || 'Error al cambiar estado del colaborador',
@@ -711,12 +711,12 @@ const EmployeesPage = () => {
         }
     };
 
-    // Función para descargar empleados NUEVOS
-    const handleDownloadNewEmployees = async () => {
+    // Función para descargar colaboradores NUEVOS
+    const handleDownloadNewColaboradores = async () => {
         try {
-            const newEmployees = employees.filter(emp => isEmployeeNew(emp));
+            const newColaboradores = colaboradores.filter(col => isColaboradorNew(col));
             
-            if (newEmployees.length === 0) {
+            if (newColaboradores.length === 0) {
                 setSnackbar({
                     open: true,
                     message: 'No hay colaboradores nuevos para descargar',
@@ -739,8 +739,8 @@ const EmployeesPage = () => {
                 { header: 'Fecha Creación', key: 'createdAt', width: 20 }
             ];
             
-            newEmployees.forEach(emp => {
-                const detail = emp.EmployeeDetail || {};
+            newColaboradores.forEach(col => {
+                const detail = col.ColaboradorDetail || {};
                 const scheduleIndex = detail.selectedSchedule;
                 let scheduleName = 'Sin horario';
                 
@@ -750,14 +750,14 @@ const EmployeesPage = () => {
                 }
                 
                 worksheet.addRow({
-                    name: emp.name || '',
-                    email: emp.email || '',
-                    phone: emp.phoneNumber || '',
+                    name: col.name || '',
+                    email: col.email || '',
+                    phone: col.phoneNumber || '',
                     serviceAddress: detail.serviceAddress || '',
                     zoneOrSector: detail.zoneOrSector || '',
                     routeType: detail.routeType || '',
                     schedule: scheduleName,
-                    createdAt: emp.createdAt ? moment(emp.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
                 });
             });
             
@@ -785,7 +785,7 @@ const EmployeesPage = () => {
                 severity: 'success'
             });
         } catch (err) {
-            console.error('Error downloading new employees:', err);
+            console.error('Error downloading new colaboradores:', err);
             setSnackbar({
                 open: true,
                 message: 'Error al descargar colaboradores',
@@ -794,10 +794,10 @@ const EmployeesPage = () => {
         }
     };
 
-    // Función para descargar TODOS los empleados
-    const handleDownloadAllEmployees = async () => {
+    // Función para descargar TODOS los colaboradores
+    const handleDownloadAllColaboradores = async () => {
         try {
-            if (employees.length === 0) {
+            if (colaboradores.length === 0) {
                 setSnackbar({
                     open: true,
                     message: 'No hay colaboradores para descargar',
@@ -826,8 +826,8 @@ const EmployeesPage = () => {
                 { header: 'Última Actualización', key: 'updatedAt', width: 20 }
             ];
             
-            employees.forEach(emp => {
-                const detail = emp.EmployeeDetail || {};
+            colaboradores.forEach(col => {
+                const detail = col.ColaboradorDetail || {};
                 const scheduleIndex = detail.selectedSchedule;
                 let scheduleName = 'Sin horario';
                 
@@ -837,9 +837,9 @@ const EmployeesPage = () => {
                 }
                 
                 worksheet.addRow({
-                    name: emp.name || '',
-                    email: emp.email || '',
-                    phone: emp.phoneNumber || '',
+                    name: col.name || '',
+                    email: col.email || '',
+                    phone: col.phoneNumber || '',
                     serviceAddress: detail.serviceAddress || '',
                     zoneOrSector: detail.zoneOrSector || '',
                     routeType: detail.routeType || '',
@@ -847,10 +847,10 @@ const EmployeesPage = () => {
                     emergencyRelationship: detail.emergencyRelationship || '',
                     emergencyPhone: detail.emergencyPhone || '',
                     schedule: scheduleName,
-                    stops: emp.ScheduleSlots?.length || 0,
-                    status: getEmployeeStatus(emp),
-                    createdAt: emp.createdAt ? moment(emp.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
-                    updatedAt: emp.updatedAt ? moment(emp.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                    stops: col.ScheduleSlots?.length || 0,
+                    status: getColaboradorStatus(col),
+                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
+                    updatedAt: col.updatedAt ? moment(col.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
                 });
             });
             
@@ -878,7 +878,7 @@ const EmployeesPage = () => {
                 severity: 'success'
             });
         } catch (err) {
-            console.error('Error downloading all employees:', err);
+            console.error('Error downloading all colaboradores:', err);
             setSnackbar({
                 open: true,
                 message: 'Error al descargar colaboradores',
@@ -904,7 +904,7 @@ const EmployeesPage = () => {
             const formData = new FormData();
             formData.append('file', bulkFile);
             
-            await api.post(`/corporations/${corporationId}/employees/bulk`, formData, {
+            await api.post(`/corporations/${corporationId}/colaboradores/bulk`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${auth.token}`,
@@ -919,7 +919,7 @@ const EmployeesPage = () => {
             
             setOpenBulkDialog(false);
             setBulkFile(null);
-            fetchEmployees();
+            fetchColaboradores();
         } catch (err) {
             console.error('Error in bulk upload:', err);
             setSnackbar({
@@ -946,7 +946,7 @@ const EmployeesPage = () => {
         setCircularLoading(true);
         
         try {
-            await api.post(`/mail/circular/employees/${corporationId}`, {
+            await api.post(`/mail/circular/colaboradores/${corporationId}`, {
                 subject: circularSubject,
                 message: circularMessage
             }, {
@@ -978,10 +978,10 @@ const EmployeesPage = () => {
 
     const currentCorporation = corporationData || location.state?.corporation;
 
-    // Aplicar ordenamiento a los empleados filtrados antes de paginar
-    const sortedEmployees = (() => {
-        if (!sortBy) return filteredEmployees;
-        const copy = filteredEmployees.slice();
+    // Aplicar ordenamiento a los colaboradores filtrados antes de paginar
+    const sortedColaboradores = (() => {
+        if (!sortBy) return filteredColaboradores;
+        const copy = filteredColaboradores.slice();
         copy.sort((a, b) => {
             let va = '';
             let vb = '';
@@ -999,8 +999,8 @@ const EmployeesPage = () => {
                     vb = b.updatedAt || b.createdAt || '';
                     break;
                 case 'status':
-                    va = getEmployeeStatus(a);
-                    vb = getEmployeeStatus(b);
+                    va = getColaboradorStatus(a);
+                    vb = getColaboradorStatus(b);
                     break;
                 default:
                     va = '';
@@ -1021,9 +1021,9 @@ const EmployeesPage = () => {
         return copy;
     })();
 
-    const paginatedEmployees = sortedEmployees.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+    const paginatedColaboradores = sortedColaboradores.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
-    const renderEmployeeDialog = (isEdit = false) => (
+    const renderColaboradorDialog = (isEdit = false) => (
         <Dialog 
             open={isEdit ? openEditDialog : openCreateDialog} 
             onClose={handleCloseDialogs}
@@ -1051,7 +1051,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Nombres"
-                                        value={employeeForm.firstName}
+                                        value={colaboradorForm.firstName}
                                         onChange={(e) => handleFormChange('firstName', e.target.value)}
                                         required
                                     />
@@ -1060,7 +1060,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Apellidos"
-                                        value={employeeForm.lastName}
+                                        value={colaboradorForm.lastName}
                                         onChange={(e) => handleFormChange('lastName', e.target.value)}
                                         required
                                     />
@@ -1069,7 +1069,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Nombre Usuario"
-                                        value={employeeForm.username}
+                                        value={colaboradorForm.username}
                                         onChange={(e) => handleFormChange('username', e.target.value)}
                                         required
                                     />
@@ -1079,7 +1079,7 @@ const EmployeesPage = () => {
                                         fullWidth
                                         label="Email"
                                         type="email"
-                                        value={employeeForm.email}
+                                        value={colaboradorForm.email}
                                         onChange={(e) => handleFormChange('email', e.target.value)}
                                         required
                                     />
@@ -1089,7 +1089,7 @@ const EmployeesPage = () => {
                                         fullWidth
                                         label={isEdit ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
                                         type="password"
-                                        value={employeeForm.password}
+                                        value={colaboradorForm.password}
                                         onChange={(e) => handleFormChange('password', e.target.value)}
                                         required={!isEdit}
                                     />
@@ -1098,7 +1098,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Teléfono"
-                                        value={employeeForm.phoneNumber}
+                                        value={colaboradorForm.phoneNumber}
                                         onChange={(e) => handleFormChange('phoneNumber', e.target.value)}
                                     />
                                 </Grid>
@@ -1106,7 +1106,7 @@ const EmployeesPage = () => {
                                     <FormControl fullWidth>
                                         <InputLabel>Horario</InputLabel>
                                         <Select
-                                            value={employeeForm.selectedSchedule}
+                                            value={colaboradorForm.selectedSchedule}
                                             label="Horario"
                                             onChange={(e) => handleFormChange('selectedSchedule', e.target.value)}
                                         >
@@ -1218,7 +1218,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Dirección de Servicio"
-                                        value={employeeForm.serviceAddress}
+                                        value={colaboradorForm.serviceAddress}
                                         onChange={(e) => handleFormChange('serviceAddress', e.target.value)}
                                         multiline
                                         rows={2}
@@ -1228,7 +1228,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Zona o Sector"
-                                        value={employeeForm.zoneOrSector}
+                                        value={colaboradorForm.zoneOrSector}
                                         onChange={(e) => handleFormChange('zoneOrSector', e.target.value)}
                                     />
                                 </Grid>
@@ -1236,7 +1236,7 @@ const EmployeesPage = () => {
                                     <FormControl fullWidth>
                                         <InputLabel>Tipo de Ruta</InputLabel>
                                         <Select
-                                            value={employeeForm.routeType}
+                                            value={colaboradorForm.routeType}
                                             label="Tipo de Ruta"
                                             onChange={(e) => handleFormChange('routeType', e.target.value)}
                                         >
@@ -1250,7 +1250,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Contacto de Emergencia"
-                                        value={employeeForm.emergencyContact}
+                                        value={colaboradorForm.emergencyContact}
                                         onChange={(e) => handleFormChange('emergencyContact', e.target.value)}
                                     />
                                 </Grid>
@@ -1258,7 +1258,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Relación (Emergencia)"
-                                        value={employeeForm.emergencyRelationship}
+                                        value={colaboradorForm.emergencyRelationship}
                                         onChange={(e) => handleFormChange('emergencyRelationship', e.target.value)}
                                     />
                                 </Grid>
@@ -1266,7 +1266,7 @@ const EmployeesPage = () => {
                                     <TextField
                                         fullWidth
                                         label="Teléfono de Emergencia"
-                                        value={employeeForm.emergencyPhone}
+                                        value={colaboradorForm.emergencyPhone}
                                         onChange={(e) => handleFormChange('emergencyPhone', e.target.value)}
                                     />
                                 </Grid>
@@ -1278,9 +1278,9 @@ const EmployeesPage = () => {
             <DialogActions>
                 <Button onClick={handleCloseDialogs}>Cancelar</Button>
                 <Button 
-                    onClick={isEdit ? handleUpdateEmployee : handleCreateEmployee}
+                    onClick={isEdit ? handleUpdateColaborador : handleCreateColaborador}
                     variant="contained"
-                    disabled={!employeeForm.username || !employeeForm.email || (!isEdit && !employeeForm.password)}
+                    disabled={!colaboradorForm.username || !colaboradorForm.email || (!isEdit && !colaboradorForm.password)}
                 >
                     {isEdit ? 'Actualizar' : 'Crear'}
                 </Button>
@@ -1315,7 +1315,7 @@ const EmployeesPage = () => {
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
                                 <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {filteredEmployees.length} colaboradores
+                                    {filteredColaboradores.length} colaboradores
                                 </Typography>
                             </Box>
                         </Box>
@@ -1432,7 +1432,7 @@ const EmployeesPage = () => {
                                 color="success"
                                 startIcon={<GetApp />}
                                 fullWidth
-                                onClick={handleDownloadNewEmployees}
+                                onClick={handleDownloadNewColaboradores}
                             >
                                 Descargar Nuevos
                             </Button>
@@ -1443,7 +1443,7 @@ const EmployeesPage = () => {
                                 color="success"
                                 startIcon={<GetApp />}
                                 fullWidth
-                                onClick={handleDownloadAllEmployees}
+                                onClick={handleDownloadAllColaboradores}
                             >
                                 Descargar Todos
                             </Button>
@@ -1452,7 +1452,7 @@ const EmployeesPage = () => {
                 </CardContent>
             </Card>
 
-            {/* Tabla de empleados */}
+            {/* Tabla de colaboradores */}
             <Card>
                 <CardContent>
                     {loading ? (
@@ -1506,22 +1506,22 @@ const EmployeesPage = () => {
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {paginatedEmployees.map((employee) => (
-                                            <TableRow key={employee.id} hover>
+                                        {paginatedColaboradores.map((colaborador) => (
+                                            <TableRow key={colaborador.id} hover>
                                                 <TableCell>
                                                     <Typography variant="subtitle2" fontWeight="bold">
-                                                        {employee.name}
+                                                        {colaborador.name}
                                                     </Typography>
                                                 </TableCell>
                                                 <TableCell>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                         <Mail fontSize="small" color="action" />
-                                                        {employee.email}
+                                                        {colaborador.email}
                                                     </Box>
                                                 </TableCell>
                                                 <TableCell>
                                                     {(() => {
-                                                        const scheduleIndex = Number(employee.EmployeeDetail?.selectedSchedule);
+                                                        const scheduleIndex = Number(colaborador.ColaboradorDetail?.selectedSchedule);
                                                         if (scheduleIndex >= 0 && Array.isArray(corporationData?.schedules) && corporationData.schedules[scheduleIndex]) {
                                                             const schedule = corporationData.schedules[scheduleIndex];
                                                             return (
@@ -1543,7 +1543,7 @@ const EmployeesPage = () => {
                                                 <TableCell>
                                                     <Typography variant="body2">
                                                         {(() => {
-                                                            const d = new Date(employee.updatedAt || employee.createdAt);
+                                                            const d = new Date(colaborador.updatedAt || colaborador.createdAt);
                                                             const dd = String(d.getDate()).padStart(2, '0');
                                                             const mm = String(d.getMonth() + 1).padStart(2, '0');
                                                             const yyyy = d.getFullYear();
@@ -1554,26 +1554,26 @@ const EmployeesPage = () => {
                                                     </Typography>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {getEmployeeStatus(employee) === 'Activo' ? (
+                                                    {getColaboradorStatus(colaborador) === 'Activo' ? (
                                                         <Chip
                                                             label="Activo"
                                                             color="success"
                                                             size="small"
                                                             clickable
-                                                            onClick={() => handleOpenToggleStateDialog(employee)}
+                                                            onClick={() => handleOpenToggleStateDialog(colaborador)}
                                                         />
-                                                    ) : getEmployeeStatus(employee) === 'Inactivo' ? (
+                                                    ) : getColaboradorStatus(colaborador) === 'Inactivo' ? (
                                                         <Chip
-                                                            label={getEmployeeStatus(employee)}
-                                                            color={getStatusColor(getEmployeeStatus(employee))}
+                                                            label={getColaboradorStatus(colaborador)}
+                                                            color={getStatusColor(getColaboradorStatus(colaborador))}
                                                             size="small"
                                                             clickable
-                                                            onClick={() => handleOpenToggleStateDialog(employee)}
+                                                            onClick={() => handleOpenToggleStateDialog(colaborador)}
                                                         />
                                                     ) : (
                                                         <Chip
-                                                            label={getEmployeeStatus(employee)}
-                                                            color={getStatusColor(getEmployeeStatus(employee))}
+                                                            label={getColaboradorStatus(colaborador)}
+                                                            color={getStatusColor(getColaboradorStatus(colaborador))}
                                                             size="small"
                                                         />
                                                     )}
@@ -1582,19 +1582,19 @@ const EmployeesPage = () => {
                                                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
                                                         <IconButton 
                                                             size="small" 
-                                                            onClick={() => handleOpenToggleStateDialog(employee)}
-                                                            title={Number(employee.state) === 1 ? 'Desactivar' : 'Activar'}
-                                                            color={Number(employee.state) === 1 ? 'warning' : 'success'}
+                                                            onClick={() => handleOpenToggleStateDialog(colaborador)}
+                                                            title={Number(colaborador.state) === 1 ? 'Desactivar' : 'Activar'}
+                                                            color={Number(colaborador.state) === 1 ? 'warning' : 'success'}
                                                         >
-                                                            {Number(employee.state) === 1 ? <ToggleOn fontSize="small" /> : <ToggleOff fontSize="small" />}
+                                                            {Number(colaborador.state) === 1 ? <ToggleOn fontSize="small" /> : <ToggleOff fontSize="small" />}
                                                         </IconButton>
-                                                        <IconButton size="small" onClick={() => handleOpenEditDialog(employee)} title="Editar">
+                                                        <IconButton size="small" onClick={() => handleOpenEditDialog(colaborador)} title="Editar">
                                                             <Edit fontSize="small" />
                                                         </IconButton>
-                                                        <IconButton size="small" onClick={() => handleOpenDeleteDialog(employee)} title="Eliminar" color="error">
+                                                        <IconButton size="small" onClick={() => handleOpenDeleteDialog(colaborador)} title="Eliminar" color="error">
                                                             <Delete fontSize="small" />
                                                         </IconButton>
-                                                        <IconButton size="small" onClick={() => handleOpenScheduleDialog(employee)} title="Horarios">
+                                                        <IconButton size="small" onClick={() => handleOpenScheduleDialog(colaborador)} title="Horarios">
                                                             <DirectionsBus fontSize="small" />
                                                         </IconButton>
                                                     </Box>
@@ -1602,7 +1602,7 @@ const EmployeesPage = () => {
                                             </TableRow>
                                         ))}
 
-                                        {paginatedEmployees.length === 0 && (
+                                        {paginatedColaboradores.length === 0 && (
                                             <TableRow>
                                                 <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                                                     <Typography variant="body1" color="textSecondary">
@@ -1617,7 +1617,7 @@ const EmployeesPage = () => {
 
                             <TablePagination
                                 component="div"
-                                count={sortedEmployees.length}
+                                count={sortedColaboradores.length}
                                 page={page}
                                 onPageChange={(e, newPage) => setPage(newPage)}
                                 rowsPerPage={rowsPerPage}
@@ -1633,21 +1633,21 @@ const EmployeesPage = () => {
             </Card>
 
             {/* Diálogos */}
-            {renderEmployeeDialog(false)}
-            {renderEmployeeDialog(true)}
+            {renderColaboradorDialog(false)}
+            {renderColaboradorDialog(true)}
 
             {/* Diálogo de eliminar */}
             <Dialog open={openDeleteDialog} onClose={handleCloseDialogs}>
                 <DialogTitle>Confirmar Eliminación</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        ¿Está seguro que desea eliminar al colaborador "{selectedEmployee?.name}"?
+                        ¿Está seguro que desea eliminar al colaborador "{selectedColaborador?.name}"?
                         Esta acción no es reversible..
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <Button onClick={handleDeleteEmployee} color="error" variant="contained">
+                    <Button onClick={handleDeleteColaborador} color="error" variant="contained">
                         Eliminar
                     </Button>
                 </DialogActions>
@@ -1656,12 +1656,12 @@ const EmployeesPage = () => {
             {/* Diálogo de toggle state (activar/desactivar) */}
             <Dialog open={openToggleStateDialog} onClose={handleCloseDialogs}>
                 <DialogTitle>
-                    {selectedEmployee && Number(selectedEmployee.state) === 1 ? 'Desactivar' : 'Activar'} Colaborador
+                    {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'Desactivar' : 'Activar'} Colaborador
                 </DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        ¿Está seguro que desea {selectedEmployee && Number(selectedEmployee.state) === 1 ? 'desactivar' : 'activar'} al colaborador "{selectedEmployee?.name}"?
-                        {selectedEmployee && Number(selectedEmployee.state) === 1 
+                        ¿Está seguro que desea {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'desactivar' : 'activar'} al colaborador "{selectedColaborador?.name}"?
+                        {selectedColaborador && Number(selectedColaborador.state) === 1 
                             ? ' El colaborador no podrá acceder al sistema mientras esté desactivado.' 
                             : ' El colaborador podrá acceder al sistema nuevamente.'}
                     </DialogContentText>
@@ -1670,22 +1670,22 @@ const EmployeesPage = () => {
                     <Button onClick={handleCloseDialogs}>Cancelar</Button>
                     <Button 
                         onClick={handleToggleState} 
-                        color={selectedEmployee && Number(selectedEmployee.state) === 1 ? 'warning' : 'success'}
+                        color={selectedColaborador && Number(selectedColaborador.state) === 1 ? 'warning' : 'success'}
                         variant="contained"
                     >
-                        {selectedEmployee && Number(selectedEmployee.state) === 1 ? 'Desactivar' : 'Activar'}
+                        {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'Desactivar' : 'Activar'}
                     </Button>
                 </DialogActions>
             </Dialog>
 
             {/* Modal de horario completo igual al de estudiantes */}
-            <EmployeeScheduleModal 
-                employee={selectedEmployee}
+            <ColaboradorScheduleModal 
+                colaborador={selectedColaborador}
                 corporation={corporationData}
                 open={openScheduleDialog}
                 onClose={handleCloseDialogs}
                 onScheduleUpdated={async () => {
-                    await fetchEmployees();
+                    await fetchColaboradores();
                     setSnackbar({
                         open: true,
                         message: 'Horario actualizado correctamente',
@@ -1797,4 +1797,4 @@ const EmployeesPage = () => {
     );
 };
 
-export default EmployeesPage;
+export default ColaboradoresPage;

@@ -36,8 +36,8 @@ import SchoolPaymentsPage from './pages/SchoolPaymentsPage';
 import CorporateDashboardPage from './pages/CorporateDashboardPage';
 import CorporateBusesPage from './pages/CorporateBusesPage';
 import CorporateProtocolsPage from './pages/CorporateProtocolsPage';
-import EmployeesPage from './pages/EmployeesPage';
-import EmployeeDashboardPage from './pages/EmployeeDashboardPage';
+import ColaboradoresPage from './pages/ColaboradoresPage';
+import ColaboradorDashboardPage from './pages/ColaboradorDashboardPage';
 import { modules } from './modules';
 import AdminAuditHidden from './pages/AdminAuditHidden';
 
@@ -220,10 +220,10 @@ function App() {
                             }
                         />
                         <Route
-                            path="corporaciones/:fiscalYear/:corporationId/empleados"
+                            path="corporaciones/:fiscalYear/:corporationId/colaboradores"
                             element={
                                 <ProtectedRoute roles={['Gestor','Administrador']}>
-                                    <EmployeesPage />
+                                    <ColaboradoresPage />
                                 </ProtectedRoute>
                             }
                         />
@@ -284,12 +284,12 @@ function App() {
                         }
                     />
 
-                    {/* ---------------- Área EMPLEADO (sin sidebar) --------- */}
+                    {/* ---------------- Área COLABORADOR (sin sidebar) --------- */}
                     <Route
-                        path="/employee/dashboard"
+                        path="/colaborador/dashboard"
                         element={
-                            <ProtectedRoute roles={['Empleado', 8]}>
-                                <EmployeeDashboardPage />
+                            <ProtectedRoute roles={['Colaborador', 8]}>
+                                <ColaboradorDashboardPage />
                             </ProtectedRoute>
                         }
                     />

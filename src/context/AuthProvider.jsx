@@ -104,7 +104,7 @@ const AuthProvider = ({ children }) => {
         try {
             const response = await loginUser({ email, password });
             const { token, passwordExpired, refreshToken } = response.data; const decoded = jwtDecode(token);
-            const restrictedRoles = [3, 8]; // allow Padres (3) and Empleados (8) to use this dialog
+            const restrictedRoles = [3, 8]; // allow Padres (3) and Colaboradores (8) to use this dialog
             if (!restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la página principal.`);
             localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
             setAuth({ user: { ...decoded, roleId: decoded.roleId }, token }); return { passwordExpired, roleId: decoded.roleId };

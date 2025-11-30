@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import api from '../../utils/axiosConfig';
 
-// Modal de horarios para empleados - similar a StudentScheduleModal
-export default function EmployeeScheduleModal({ employee, corporation, open, onClose, onScheduleUpdated }) {
+// Modal de horarios para colaboradores - similar a StudentScheduleModal
+export default function ColaboradorScheduleModal({ colaborador, corporation, open, onClose, onScheduleUpdated }) {
     const [scheduleSlots, setScheduleSlots] = useState([]);
     const [loading, setLoading] = useState(false);
     const [assignOpen, setAssignOpen] = useState(false);
@@ -37,18 +37,18 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
     };
 
     const loadScheduleSlots = async () => {
-        if (!employee || !employee.id) return;
+        if (!colaborador || !colaborador.id) return;
         setLoading(true);
         try {
-            // Cargar los horarios del empleado usando el nuevo endpoint
-            const response = await api.get(`/schedule-slots/employee/${employee.id}`);
+            // Cargar los horarios del colaborador usando el nuevo endpoint
+            const response = await api.get(`/schedule-slots/colaborador/${colaborador.id}`);
             const slots = response.data || [];
-            console.log('[EmployeeScheduleModal] loaded slots RAW:', slots);
-            console.log('[EmployeeScheduleModal] loaded slots COUNT:', slots.length);
+            console.log('[ColaboradorScheduleModal] loaded slots RAW:', slots);
+            console.log('[ColaboradorScheduleModal] loaded slots COUNT:', slots.length);
             
             // Verificar estructura de cada slot
             slots.forEach((slot, idx) => {
-                console.log(`[EmployeeScheduleModal] Slot ${idx}:`, {
+                console.log(`[ColaboradorScheduleModal] Slot ${idx}:`, {
                     id: slot.id,
                     time: slot.time,
                     note: slot.note,
@@ -62,7 +62,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
             
             setScheduleSlots(slots);
         } catch (err) {
-            console.error('[EmployeeScheduleModal] Error loading slots:', err);
+            console.error('[ColaboradorScheduleModal] Error loading slots:', err);
             setScheduleSlots([]);
         } finally {
             setLoading(false);
@@ -70,10 +70,10 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
     };
 
     useEffect(() => {
-        if (!open || !employee) return;
+        if (!open || !colaborador) return;
         loadScheduleSlots();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, employee]);
+    }, [open, colaborador]);
 
     const openAssignPopup = (slot = null, day = null) => {
         setAssignEditing(null);
@@ -109,14 +109,14 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
     const saveAssignedSchedule = async () => {
         const { pickupTime, stopName, routeNumber, stopType, days } = assignForm;
         
-        console.log('[EmployeeScheduleModal] saveAssignedSchedule - assignForm:', assignForm);
+        console.log('[ColaboradorScheduleModal] saveAssignedSchedule - assignForm:', assignForm);
         
         if (!pickupTime || !stopName || !routeNumber || !stopType || !days || days.length === 0) {
             alert('Completa todos los campos obligatorios (hora, parada, ruta, tipo y días)');
             return;
         }
 
-        if (!employee || !employee.id) {
+        if (!colaborador || !colaborador.id) {
             alert('No se encontró el colaborador');
             return;
         }
@@ -127,7 +127,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
         }
 
         const payload = {
-            employeeId: employee.id,
+            colaboradorId: colaborador.id,
             corporationId: corporation.id,
             time: pickupTime,
             note: stopName,
@@ -136,7 +136,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
             days: days
         };
 
-        console.log('[EmployeeScheduleModal] Saving schedule with payload:', payload);
+        console.log('[ColaboradorScheduleModal] Saving schedule with payload:', payload);
 
         try {
             if (!assignEditing) {
@@ -161,7 +161,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                             routeNumber: routeNumber,
                             stopType: stopType,
                             days: days,
-                            employeeId: employee.id,
+                            colaboradorId: colaborador.id,
                             corporationId: corporation.id
                         });
                     } else {
@@ -185,7 +185,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
             setAssignEditing(null);
             if (onScheduleUpdated) onScheduleUpdated();
         } catch (err) {
-            console.error('[EmployeeScheduleModal] Error saving schedule:', err);
+            console.error('[ColaboradorScheduleModal] Error saving schedule:', err);
             alert('Error guardando el horario: ' + (err.response?.data?.message || err.message));
         }
     };
@@ -209,7 +209,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
             await loadScheduleSlots();
             if (onScheduleUpdated) onScheduleUpdated();
         } catch (err) {
-            console.error('[EmployeeScheduleModal] Error deleting slot:', err);
+            console.error('[ColaboradorScheduleModal] Error deleting slot:', err);
             alert('Error eliminando el horario');
         }
     };
@@ -222,7 +222,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
             await loadScheduleSlots();
             if (onScheduleUpdated) onScheduleUpdated();
         } catch (err) {
-            console.error('[EmployeeScheduleModal] Error deleting all slots:', err);
+            console.error('[ColaboradorScheduleModal] Error deleting all slots:', err);
             alert('Error eliminando los horarios');
         }
     };
@@ -286,10 +286,10 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                     <div style={{ fontSize: 15, fontWeight: 700 }}>
-                                        {employee?.name || 'Colaborador'}
+                                        {colaborador?.name || 'Colaborador'}
                                     </div>
                                     <div style={{ fontSize: 15, color: '#6B7280' }}>
-                                        {employee?.FamilyDetail?.department || '—'}
+                                        {colaborador?.FamilyDetail?.department || '—'}
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: 8 }}>
@@ -338,13 +338,13 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                         const includesDay = hasDays && s.days.includes(day);
                                         
                                         if (!hasDays) {
-                                            console.log('[EmployeeScheduleModal] Slot sin days array:', s);
+                                            console.log('[ColaboradorScheduleModal] Slot sin days array:', s);
                                         }
                                         
                                         return hasDays && includesDay;
                                     });
 
-                                    console.log(`[EmployeeScheduleModal] ${day} - daySlots:`, daySlots);
+                                    console.log(`[ColaboradorScheduleModal] ${day} - daySlots:`, daySlots);
 
                                     // Separar por tipo (entrada/salida basado en stopType)
                                     const entradaSlots = daySlots.filter(s => 
@@ -354,7 +354,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                         s.stopType === 'salida'
                                     );
                                     
-                                    console.log(`[EmployeeScheduleModal] ${day} - entrada:`, entradaSlots.length, 'salida:', salidaSlots.length);
+                                    console.log(`[ColaboradorScheduleModal] ${day} - entrada:`, entradaSlots.length, 'salida:', salidaSlots.length);
 
                                     const renderCard = (slot) => (
                                         <div 
@@ -508,7 +508,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                         const includesDay = hasDays && s.days.includes(day);
                                         
                                         if (!hasDays) {
-                                            console.log('[EmployeeScheduleModal] Slot sin days array:', s);
+                                            console.log('[ColaboradorScheduleModal] Slot sin days array:', s);
                                         }
                                         
                                         return hasDays && includesDay;
@@ -718,20 +718,20 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                         <option value="">Seleccionar ruta...</option>
                                         {(() => {
                                             // Debug logging
-                                            console.log('[EmployeeScheduleModal] Debug info:', {
-                                                employee: employee,
-                                                employeeScheduleIndex: employee?.EmployeeDetail?.selectedSchedule,
+                                            console.log('[ColaboradorScheduleModal] Debug info:', {
+                                                colaborador: colaborador,
+                                                colaboradorScheduleIndex: colaborador?.ColaboradorDetail?.selectedSchedule,
                                                 corporationSchedules: corporation?.schedules,
                                                 routeNumbers: corporation?.routeNumbers,
                                                 routeSchedules: corporation?.routeSchedules
                                             });
                                             
-                                            // Obtener el índice del horario del empleado
-                                            const employeeScheduleIndex = Number(employee?.EmployeeDetail?.selectedSchedule);
+                                            // Obtener el índice del horario del colaborador
+                                            const colaboradorScheduleIndex = Number(colaborador?.ColaboradorDetail?.selectedSchedule);
                                             
-                                            // Si el empleado no tiene horario asignado, mostrar todas las rutas
-                                            if (isNaN(employeeScheduleIndex) || employeeScheduleIndex < 0 || !Array.isArray(corporation?.schedules)) {
-                                                console.log('[EmployeeScheduleModal] Mostrando todas las rutas (sin horario asignado)');
+                                            // Si el colaborador no tiene horario asignado, mostrar todas las rutas
+                                            if (isNaN(colaboradorScheduleIndex) || colaboradorScheduleIndex < 0 || !Array.isArray(corporation?.schedules)) {
+                                                console.log('[ColaboradorScheduleModal] Mostrando todas las rutas (sin horario asignado)');
                                                 return corporation?.routeNumbers && Array.isArray(corporation.routeNumbers) 
                                                     ? corporation.routeNumbers.map(route => (
                                                         <option key={route} value={route}>
@@ -741,25 +741,25 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                                     : null;
                                             }
                                             
-                                            // Obtener el horario del empleado
-                                            const employeeSchedule = corporation.schedules[employeeScheduleIndex];
-                                            if (!employeeSchedule) {
-                                                console.log('[EmployeeScheduleModal] No se encontró el horario del colaborador en índice:', employeeScheduleIndex);
+                                            // Obtener el horario del colaborador
+                                            const colaboradorSchedule = corporation.schedules[colaboradorScheduleIndex];
+                                            if (!colaboradorSchedule) {
+                                                console.log('[ColaboradorScheduleModal] No se encontró el horario del colaborador en índice:', colaboradorScheduleIndex);
                                                 return <option disabled>No se encontró el horario del colaborador</option>;
                                             }
                                             
-                                            console.log('[EmployeeScheduleModal] Horario del colaborador:', employeeSchedule);
+                                            console.log('[ColaboradorScheduleModal] Horario del colaborador:', colaboradorSchedule);
                                             
                                             // Filtrar rutas que tengan el mismo horario asignado
                                             const routeSchedules = corporation?.routeSchedules || [];
                                             
                                             // Si no hay routeSchedules configurados, mostrar todas las rutas
                                             if (!Array.isArray(routeSchedules) || routeSchedules.length === 0) {
-                                                console.log('[EmployeeScheduleModal] No hay routeSchedules configurados, mostrando todas las rutas');
+                                                console.log('[ColaboradorScheduleModal] No hay routeSchedules configurados, mostrando todas las rutas');
                                                 return corporation?.routeNumbers && Array.isArray(corporation.routeNumbers) 
                                                     ? corporation.routeNumbers.map(route => (
                                                         <option key={route} value={route}>
-                                                            Ruta {route} - {employeeSchedule.name}
+                                                            Ruta {route} - {colaboradorSchedule.name}
                                                         </option>
                                                     ))
                                                     : null;
@@ -771,39 +771,39 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                                                     return String(rs.routeNumber) === String(routeNum);
                                                 });
                                                 
-                                                console.log('[EmployeeScheduleModal] Ruta:', routeNum, 'routeSchedule:', routeSchedule);
+                                                console.log('[ColaboradorScheduleModal] Ruta:', routeNum, 'routeSchedule:', routeSchedule);
                                                 
                                                 if (!routeSchedule || !Array.isArray(routeSchedule.schedules)) {
-                                                    console.log('[EmployeeScheduleModal] Ruta', routeNum, 'no tiene horarios asignados');
+                                                    console.log('[ColaboradorScheduleModal] Ruta', routeNum, 'no tiene horarios asignados');
                                                     return false; // No tiene horarios asignados
                                                 }
                                                 
                                                 // Log para ver estructura de schedules
                                                 if (routeSchedule.schedules.length > 0) {
-                                                    console.log('[EmployeeScheduleModal] Primer elemento de schedules:', routeSchedule.schedules[0], 'tipo:', typeof routeSchedule.schedules[0]);
+                                                    console.log('[ColaboradorScheduleModal] Primer elemento de schedules:', routeSchedule.schedules[0], 'tipo:', typeof routeSchedule.schedules[0]);
                                                 }
                                                 
-                                                // Verificar si el horario del empleado está en los horarios de la ruta
+                                                // Verificar si el horario del colaborador está en los horarios de la ruta
                                                 // Si schedules contiene objetos, comparar por nombre
                                                 // Si schedules contiene strings, comparar directamente
                                                 let hasSchedule;
                                                 if (routeSchedule.schedules.length > 0 && typeof routeSchedule.schedules[0] === 'object') {
                                                     // schedules es array de objetos { name, entryTime, exitTime }
-                                                    hasSchedule = routeSchedule.schedules.some(s => s.name === employeeSchedule.name);
+                                                    hasSchedule = routeSchedule.schedules.some(s => s.name === colaboradorSchedule.name);
                                                 } else {
                                                     // schedules es array de strings
-                                                    hasSchedule = routeSchedule.schedules.includes(employeeSchedule.name);
+                                                    hasSchedule = routeSchedule.schedules.includes(colaboradorSchedule.name);
                                                 }
                                                 
-                                                console.log('[EmployeeScheduleModal] Ruta', routeNum, 'schedules:', routeSchedule.schedules, 'incluye', employeeSchedule.name, '?', hasSchedule);
+                                                console.log('[ColaboradorScheduleModal] Ruta', routeNum, 'schedules:', routeSchedule.schedules, 'incluye', colaboradorSchedule.name, '?', hasSchedule);
                                                 
                                                 return hasSchedule;
                                             }) || [];
                                             
-                                            console.log('[EmployeeScheduleModal] Rutas filtradas:', filteredRoutes);
+                                            console.log('[ColaboradorScheduleModal] Rutas filtradas:', filteredRoutes);
                                             
                                             if (filteredRoutes.length === 0) {
-                                                return <option disabled>No hay rutas con el horario "{employeeSchedule.name}"</option>;
+                                                return <option disabled>No hay rutas con el horario "{colaboradorSchedule.name}"</option>;
                                             }
                                             
                                             return filteredRoutes.map(route => (
@@ -1042,7 +1042,7 @@ export default function EmployeeScheduleModal({ employee, corporation, open, onC
                         }}>
                             <h3 style={{ marginTop: 0 }}>Eliminar todos los horarios</h3>
                             <div style={{ marginTop: 8 }}>
-                                ¿Seguro que deseas eliminar todos los horarios de {employee?.name || 'este colaborador'}?
+                                ¿Seguro que deseas eliminar todos los horarios de {colaborador?.name || 'este colaborador'}?
                             </div>
                             <div style={{ 
                                 display: 'flex', 

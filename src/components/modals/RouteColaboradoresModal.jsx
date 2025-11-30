@@ -1,4 +1,4 @@
-// src/components/modals/RouteEmployeesModal.jsx
+// src/components/modals/RouteColaboradoresModal.jsx
 
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
@@ -26,7 +26,7 @@ import { Close as CloseIcon, DirectionsBus } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
 
-const RouteEmployeesModal = ({ 
+const RouteColaboradoresModal = ({ 
     open, 
     onClose, 
     routeNumber, 
@@ -38,7 +38,7 @@ const RouteEmployeesModal = ({
     selectedDay 
 }) => {
     const { auth } = useContext(AuthContext);
-    const [employees, setEmployees] = useState([]);
+    const [colaboradores, setColaboradores] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     
@@ -81,7 +81,7 @@ const RouteEmployeesModal = ({
         return hh * 60 + mm;
     };
 
-    const fetchEmployees = useCallback(async () => {
+    const fetchColaboradores = useCallback(async () => {
         if (!routeNumber || scheduleIndex === undefined || scheduleIndex === null || scheduleIndex < 0 || !corporationId) {
             return;
         }
@@ -90,7 +90,7 @@ const RouteEmployeesModal = ({
         setError(null);
         
         try {
-            const response = await api.get(`/routes/employees-corporate/${corporationId}/${routeNumber}/${scheduleIndex}/${stopType}`, {
+            const response = await api.get(`/routes/colaboradores-corporate/${corporationId}/${routeNumber}/${scheduleIndex}/${stopType}`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
@@ -100,9 +100,9 @@ const RouteEmployeesModal = ({
                 }
             });
             
-            setEmployees(response.data.employees || []);
+            setColaboradores(response.data.colaboradores || []);
         } catch (err) {
-            console.error('Error fetching employees:', err);
+            console.error('Error fetching colaboradores:', err);
             setError('Error al cargar los colaboradores');
         } finally {
             setLoading(false);
@@ -111,12 +111,12 @@ const RouteEmployeesModal = ({
 
     useEffect(() => {
         if (open) {
-            fetchEmployees();
+            fetchColaboradores();
         }
-    }, [open, fetchEmployees]);
+    }, [open, fetchColaboradores]);
 
-    // Filter employees
-    const filteredEmployees = employees.filter(emp => {
+    // Filter colaboradores
+    const filteredColaboradores = colaboradores.filter(emp => {
         const nameMatch = !filters.name || emp.name?.toLowerCase().includes(filters.name.toLowerCase());
         const emailMatch = !filters.email || emp.email?.toLowerCase().includes(filters.email.toLowerCase());
         const stopTimeMatch = !filters.stopTime || emp.stopTime?.includes(filters.stopTime);
@@ -125,8 +125,8 @@ const RouteEmployeesModal = ({
         return nameMatch && emailMatch && stopTimeMatch && noteMatch;
     });
 
-    // Sort employees
-    const sortedEmployees = [...filteredEmployees].sort((a, b) => {
+    // Sort colaboradores
+    const sortedColaboradores = [...filteredColaboradores].sort((a, b) => {
         if (!sortBy) return 0;
         
         let valA = '';
@@ -264,7 +264,7 @@ const RouteEmployeesModal = ({
                         {/* Results Summary */}
                         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Typography variant="body2" color="textSecondary">
-                                Mostrando {sortedEmployees.length} de {employees.length} colaboradores
+                                Mostrando {sortedColaboradores.length} de {colaboradores.length} colaboradores
                             </Typography>
                         </Box>
 
@@ -312,7 +312,7 @@ const RouteEmployeesModal = ({
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                    {sortedEmployees.length === 0 ? (
+                                    {sortedColaboradores.length === 0 ? (
                                         <TableRow>
                                             <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
                                                 <Typography variant="body2" color="textSecondary">
@@ -321,7 +321,7 @@ const RouteEmployeesModal = ({
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        sortedEmployees.map((emp, index) => (
+                                        sortedColaboradores.map((emp, index) => (
                                             <TableRow key={index} hover>
                                                 <TableCell>
                                                     <Typography variant="body2" fontWeight="bold">
@@ -362,4 +362,4 @@ const RouteEmployeesModal = ({
     );
 };
 
-export default RouteEmployeesModal;
+export default RouteColaboradoresModal;

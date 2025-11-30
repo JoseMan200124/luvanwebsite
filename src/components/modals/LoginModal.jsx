@@ -84,11 +84,11 @@ const LoginModal = ({ open, onClose, onLoginSuccess }) => {
                 message: '¡Inicio de sesión exitoso!',
                 severity: 'success',
             });
-            // Llamar al endpoint de prefill según el rol: Padres => update-parent-info, Empleados => update-employee-info
+            // Llamar al endpoint de prefill según el rol: Padres => update-parent-info, Colaboradores => update-colaborador-info
             let response;
             try {
                 if (Number(roleId) === 8) {
-                    response = await api.get('/update-employee-info', { params: { email: trimmedEmail } });
+                    response = await api.get('/update-colaborador-info', { params: { email: trimmedEmail } });
                 } else {
                     response = await api.get('/update-parent-info', { params: { email: trimmedEmail } });
                 }

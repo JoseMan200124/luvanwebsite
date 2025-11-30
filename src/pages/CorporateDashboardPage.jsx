@@ -45,7 +45,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
-import RouteEmployeesModal from '../components/modals/RouteEmployeesModal';
+import RouteColaboradoresModal from '../components/modals/RouteColaboradoresModal';
 import { generateCorporateRouteOccupancyPDF } from '../utils/pdfExport';
 
 const PageContainer = styled.div`
@@ -81,7 +81,7 @@ const CorporateDashboardPage = () => {
 
     const [corporationData, setCorporationData] = useState(null);
     const [routeOccupancy, setRouteOccupancy] = useState([]);
-    const [employeeSummary, setEmployeeSummary] = useState({
+    const [colaboradorSummary, setColaboradorSummary] = useState({
         total: 0,
         active: 0,
         byDepartment: []
@@ -92,7 +92,7 @@ const CorporateDashboardPage = () => {
     // Estado para el filtro de día (default Lunes)
     const [selectedDay, setSelectedDay] = useState('monday');
     
-    // Estado para el modal de empleados por ruta
+    // Estado para el modal de colaboradores por ruta
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedRoute, setSelectedRoute] = useState({
         routeNumber: null,
@@ -186,11 +186,11 @@ const CorporateDashboardPage = () => {
         }
     }, [auth.token, corporationId, fiscalYear, selectedDay]);
 
-    const fetchEmployeeSummary = useCallback(async () => {
+    const fetchColaboradorSummary = useCallback(async () => {
         if (!corporationId) return;
         
         try {
-            const response = await api.get(`/corporations/${corporationId}/employees`, {
+            const response = await api.get(`/corporations/${corporationId}/colaboradores`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
@@ -199,11 +199,11 @@ const CorporateDashboardPage = () => {
                 }
             });
             
-            const employees = response.data.employees || [];
+            const colaboradores = response.data.colaboradores || [];
             
             // Count by department
             const departmentCounts = {};
-            employees.forEach(emp => {
+            colaboradores.forEach(emp => {
                 if (emp.FamilyDetail?.department) {
                     const dept = emp.FamilyDetail.department;
                     departmentCounts[dept] = (departmentCounts[dept] || 0) + 1;
@@ -215,15 +215,15 @@ const CorporateDashboardPage = () => {
                 count
             }));
             
-            setEmployeeSummary({
-                total: employees.length,
-                active: employees.filter(emp => Number(emp.state) === 1).length,
+            setColaboradorSummary({
+                total: colaboradores.length,
+                active: colaboradores.filter(emp => Number(emp.state) === 1).length,
                 byDepartment
             });
         } catch (err) {
-            console.error('Error fetching employee summary:', err);
+            console.error('Error fetching colaborador summary:', err);
             // Por ahora usamos datos de ejemplo
-            setEmployeeSummary({
+            setColaboradorSummary({
                 total: 45,
                 active: 42,
                 byDepartment: []
@@ -237,19 +237,19 @@ const CorporateDashboardPage = () => {
             Promise.all([
                 fetchCorporationData(),
                 fetchRouteOccupancy(),
-                fetchEmployeeSummary()
+                fetchColaboradorSummary()
             ]).finally(() => {
                 setLoading(false);
             });
         }
-    }, [auth.token, corporationId, fetchCorporationData, fetchRouteOccupancy, fetchEmployeeSummary]);
+    }, [auth.token, corporationId, fetchCorporationData, fetchRouteOccupancy, fetchColaboradorSummary]);
 
     const handleBackToSelection = () => {
         navigate('/admin/corporaciones');
     };
 
-    const handleViewEmployees = () => {
-        navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/empleados`, {
+    const handleViewColaboradores = () => {
+        navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/colaboradores`, {
             state: {
                 fiscalYear: fiscalYear || stateFiscalYear,
                 corporation: corporationData || stateCorporation
@@ -275,7 +275,7 @@ const CorporateDashboardPage = () => {
         });
     };
 
-    // Manejador para abrir el modal de empleados por ruta
+    // Manejador para abrir el modal de colaboradores por ruta
     const handleOpenRouteModal = (routeNumber, scheduleIndex, scheduleName, stopType) => {
         setSelectedRoute({
             routeNumber,
@@ -647,7 +647,7 @@ const CorporateDashboardPage = () => {
                 {/* Sección B: Right column with summary and actions */}
                 <Grid item xs={12} lg={4}>
                     <Grid container spacing={3}>
-                        {/* Resumen de empleados */}
+                        {/* Resumen de colaboradores */}
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent>
@@ -659,7 +659,7 @@ const CorporateDashboardPage = () => {
                                     
                                     <Box sx={{ textAlign: 'center', mb: 2 }}>
                                         <Typography variant="h3" color="primary" fontWeight="bold">
-                                            {employeeSummary.total}
+                                            {colaboradorSummary.total}
                                         </Typography>
                                         <Typography variant="body2" color="textSecondary">
                                             Total de colaboradores
@@ -678,7 +678,7 @@ const CorporateDashboardPage = () => {
                                             </ListItemIcon>
                                             <ListItemText 
                                                 primary="Activos" 
-                                                secondary={`${employeeSummary.active} colaboradores`}
+                                                secondary={`${colaboradorSummary.active} colaboradores`}
                                             />
                                         </ListItem>
                                         <ListItem>
@@ -692,19 +692,19 @@ const CorporateDashboardPage = () => {
                                             </ListItemIcon>
                                             <ListItemText 
                                                 primary="Inactivos" 
-                                                secondary={`${employeeSummary.total - employeeSummary.active} colaboradores`}
+                                                secondary={`${colaboradorSummary.total - colaboradorSummary.active} colaboradores`}
                                             />
                                         </ListItem>
                                     </List>
 
-                                    {employeeSummary.byDepartment.length > 0 && (
+                                    {colaboradorSummary.byDepartment.length > 0 && (
                                         <>
                                             <Divider sx={{ my: 2 }} />
                                             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
                                                 Por Departamento:
                                             </Typography>
                                             <List dense>
-                                                {employeeSummary.byDepartment.map((dept, idx) => (
+                                                {colaboradorSummary.byDepartment.map((dept, idx) => (
                                                     <ListItem key={idx}>
                                                         <ListItemIcon>
                                                             <DepartmentIcon fontSize="small" />
@@ -718,11 +718,11 @@ const CorporateDashboardPage = () => {
                                             </List>
                                         </>
                                     )}
-                                </CardContent>
-                            </SummaryCard>
+                            </CardContent>
+                        </SummaryCard>
                         </Grid>
 
-                        {/* Gestión de Empleados */}
+                        {/* Gestión de Colaboradores */}
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent sx={{ textAlign: 'center' }}>
@@ -738,7 +738,7 @@ const CorporateDashboardPage = () => {
                                         color="primary"
                                         size="large"
                                         startIcon={<Group />}
-                                        onClick={handleViewEmployees}
+                                        onClick={handleViewColaboradores}
                                         fullWidth
                                         sx={{ borderRadius: 2 }}
                                     >
@@ -819,8 +819,8 @@ const CorporateDashboardPage = () => {
                 </Alert>
             </Snackbar>
 
-            {/* Modal de empleados por ruta */}
-            <RouteEmployeesModal
+            {/* Modal de colaboradores por ruta */}
+            <RouteColaboradoresModal
                 open={modalOpen}
                 onClose={handleCloseRouteModal}
                 routeNumber={selectedRoute.routeNumber}

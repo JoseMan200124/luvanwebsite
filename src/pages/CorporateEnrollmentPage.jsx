@@ -37,7 +37,7 @@ const CorporateEnrollmentPage = () => {
     const [loading, setLoading] = useState(true);
     const [corporationData, setCorporationData] = useState(null);
 
-    // Campos del formulario de empleado
+    // Campos del formulario de colaborador
     const [lastName, setLastName] = useState('');
     const [firstName, setFirstName] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');

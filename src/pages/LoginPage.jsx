@@ -168,7 +168,7 @@ const LoginPage = () => {
             if (roleId === 3) {
                 navigate('/parent/dashboard');
             } else if (roleId === 8) {
-                navigate('/employee/dashboard');
+                navigate('/colaborador/dashboard');
             } else {
                 navigate('/admin/dashboard');
             }

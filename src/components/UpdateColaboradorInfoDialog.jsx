@@ -1,4 +1,4 @@
-// src/components/UpdateEmployeeInfoDialog.jsx
+// src/components/UpdateColaboradorInfoDialog.jsx
 import React, { useEffect, useState } from 'react';
 import {
     Dialog,
@@ -22,12 +22,12 @@ import {
 } from '@mui/material';
 import api from '../utils/axiosConfig';
 
-const UpdateEmployeeInfoDialog = ({ open, onClose, initialData = {}, onSaved }) => {
+const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved }) => {
     const [loading, setLoading] = useState(false);
 
     const [corporationId, setCorporationId] = useState('');
 
-    // Campos del formulario de empleado
+    // Campos del formulario de colaborador
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
@@ -81,18 +81,18 @@ const UpdateEmployeeInfoDialog = ({ open, onClose, initialData = {}, onSaved }) 
         if (!open) return;
         // populate from initialData when dialog opens
         setCorporationId(initialData?.corporation?.id || '');
-        setFirstName(initialData?.employeeDetail?.firstName || '');
-        setLastName(initialData?.employeeDetail?.lastName || '');
+        setFirstName(initialData?.colaboradorDetail?.firstName || '');
+        setLastName(initialData?.colaboradorDetail?.lastName || '');
         setPhoneNumber(initialData?.phoneNumber || '');
-        setServiceAddress(initialData?.employeeDetail?.serviceAddress || '');
-        setZoneOrSector(initialData?.employeeDetail?.zoneOrSector || '');
-        setPrefillExtraFields(initialData?.employeeDetail?.extraFields || {});
-        setRouteType(initialData?.employeeDetail?.routeType || 'Completa');
-        setSelectedSchedule(initialData?.selectedSchedule ?? initialData?.employeeDetail?.selectedSchedule ?? -1);
+        setServiceAddress(initialData?.colaboradorDetail?.serviceAddress || '');
+        setZoneOrSector(initialData?.colaboradorDetail?.zoneOrSector || '');
+        setPrefillExtraFields(initialData?.colaboradorDetail?.extraFields || {});
+        setRouteType(initialData?.colaboradorDetail?.routeType || 'Completa');
+        setSelectedSchedule(initialData?.selectedSchedule ?? initialData?.colaboradorDetail?.selectedSchedule ?? -1);
         setFormExtraValues({});
-        setEmergencyContact(initialData?.employeeDetail?.emergencyContact || '');
-        setEmergencyRelationship(initialData?.employeeDetail?.emergencyRelationship || '');
-        setEmergencyPhone(initialData?.employeeDetail?.emergencyPhone || '');
+        setEmergencyContact(initialData?.colaboradorDetail?.emergencyContact || '');
+        setEmergencyRelationship(initialData?.colaboradorDetail?.emergencyRelationship || '');
+        setEmergencyPhone(initialData?.colaboradorDetail?.emergencyPhone || '');
         setAccountFullName(initialData?.accountName || '');
         console.log("initialData: " ,initialData);
         
@@ -101,7 +101,7 @@ const UpdateEmployeeInfoDialog = ({ open, onClose, initialData = {}, onSaved }) 
 
         // fetch corporation data to load schedules and extraFields
         if (initialData?.corporation?.id || initialData?.corporationId) {
-            fetchCorporationData(initialData?.corporation?.id || initialData?.corporationId, initialData?.extraFields || initialData?.employeeDetail?.extraFields || {});
+            fetchCorporationData(initialData?.corporation?.id || initialData?.corporationId, initialData?.extraFields || initialData?.colaboradorDetail?.extraFields || {});
         } else {
             // if no corporation id, clear schedules and extras
             setSchedules([]);
@@ -198,7 +198,7 @@ const UpdateEmployeeInfoDialog = ({ open, onClose, initialData = {}, onSaved }) 
         };
 
         try {
-            await api.put(`/update-employee-info/${corporationId}`, payload);
+            await api.put(`/update-colaborador-info/${corporationId}`, payload);
 
             setSnackbar({ open: true, message: '¡Registro actualizado correctamente!', severity: 'success' });
             onSaved && onSaved();
@@ -323,4 +323,4 @@ const UpdateEmployeeInfoDialog = ({ open, onClose, initialData = {}, onSaved }) 
     );
 };
 
-export default UpdateEmployeeInfoDialog;
+export default UpdateColaboradorInfoDialog;

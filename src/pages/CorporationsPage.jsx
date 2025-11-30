@@ -259,7 +259,7 @@ const CorporationsPage = () => {
                     routeNumbers: Array.isArray(parsedRoutes) ? parsedRoutes : [],
                     businessHours: parsedBusinessHours,
                     extraEnrollmentFields: Array.isArray(parsedExtraFields) ? parsedExtraFields : [],
-                    employeesCount: Number(corp.employeesCount) || 0,
+                    colaboradoresCount: Number(corp.colaboradoresCount) || 0,
                     transportFee: Number(corp.transportFee) || 0
                 };
             });
@@ -1131,13 +1131,13 @@ const CorporationsPage = () => {
                                                 {corporation.name}
                                             </Typography>
 
-                                            {/* Total de Empleados */}
+                                            {/* Total de Colaboradores */}
                                             <Typography 
                                                 variant="body2" 
                                                 color="text.secondary" 
                                                 sx={{ mb: 1, fontWeight: 600 }}
                                             >
-                                                Total de Colaboradores: {corporation.employeesCount || 0}
+                                                Total de Colaboradores: {corporation.colaboradoresCount || 0}
                                             </Typography>
                                             
                                             {/* Botón principal de gestionar */}

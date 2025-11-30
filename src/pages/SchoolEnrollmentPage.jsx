@@ -127,7 +127,7 @@ const SchoolEnrollmentPage = () => {
                     state: {
                         title: '¡Gracias por inscribirse!',
                         body: 'En breve le llegará un correo electrónico con su usuario.',
-                        footer: 'Por favor asegúrese de ingresar desde la aplicación móvil.'
+                        footer: 'Transportes Luvan'
                     }
                 });
             }, 2000);

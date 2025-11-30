@@ -1,4 +1,4 @@
-// src/pages/EmployeeDashboardPage.jsx
+// src/pages/ColaboradorDashboardPage.jsx
 import React, { useEffect, useState, useContext, useMemo } from 'react';
 import {
   Box,
@@ -23,7 +23,7 @@ import { styled } from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import ParentNavbar from '../components/ParentNavbar';
-import UpdateEmployeeInfoDialog from '../components/UpdateEmployeeInfoDialog';
+import UpdateColaboradorInfoDialog from '../components/UpdateColaboradorInfoDialog';
 
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
 const LoaderBox   = styled(Box)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
@@ -54,14 +54,14 @@ const tagSlotsByDay = (slotsForDay) => {
   return [];
 };
 
-const EmployeeDashboardPage = () => {
+const ColaboradorDashboardPage = () => {
   const { auth } = useContext(AuthContext);
   const theme = useTheme();
 
   const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({ open:false, sev:'success', msg:'' });
 
-  const [employeeInfo, setEmployeeInfo] = useState(null);
+  const [colaboradorInfo, setColaboradorInfo] = useState(null);
   const [schedules, setSchedules] = useState([]);
   const [openEditDialog, setOpenEditDialog] = useState(false);
 
@@ -74,8 +74,8 @@ const EmployeeDashboardPage = () => {
       if (!userId) throw new Error('Usuario no autenticado');
 
       const [infoRes, slotsRes] = await Promise.all([
-        api.get(`/corporations/employees/${userId}`),
-        api.get(`/schedule-slots/employee/${userId}`)
+        api.get(`/corporations/colaboradores/${userId}`),
+        api.get(`/schedule-slots/colaborador/${userId}`)
       ]);
 
       let infoData = infoRes?.data || null;
@@ -83,22 +83,22 @@ const EmployeeDashboardPage = () => {
       const needsFallback = !infoData?.phoneNumber && auth?.user?.email;
       if (needsFallback) {
         try {
-          const fb = await api.get(`/update-employee-info`, { params: { email: auth.user.email } });
+          const fb = await api.get(`/update-colaborador-info`, { params: { email: auth.user.email } });
           // merge phoneNumber and selectedSchedule if present
           if (fb?.data) {
             infoData = { ...infoData, ...fb.data };
           }
         } catch (err) {
           // ignore fallback errors
-          console.debug('[EmployeeDashboard] fallback info fetch failed', err?.message || err);
+          console.debug('[ColaboradorDashboard] fallback info fetch failed', err?.message || err);
         }
       }
 
-      setEmployeeInfo(infoData);
+      setColaboradorInfo(infoData);
       setSchedules(Array.isArray(slotsRes?.data) ? slotsRes.data : []);
     } catch (e) {
-      console.error('[EmployeeDashboard] loadAll error:', e);
-      setEmployeeInfo(null);
+      console.error('[ColaboradorDashboard] loadAll error:', e);
+      setColaboradorInfo(null);
       setSchedules([]);
       setSnackbar({ open:true, sev:'error', msg: 'No se pudo cargar información del colaborador.' });
     } finally {
@@ -163,8 +163,8 @@ const EmployeeDashboardPage = () => {
 
   // Prefer corporation schedule (selectedSchedule index) when available
   const scheduleText = useMemo(() => {
-    const corpSchedules = employeeInfo?.corporation?.schedules;
-    const sel = employeeInfo?.selectedSchedule ?? employeeInfo?.employeeDetail?.selectedSchedule ?? -1;
+    const corpSchedules = colaboradorInfo?.corporation?.schedules;
+    const sel = colaboradorInfo?.selectedSchedule ?? colaboradorInfo?.colaboradorDetail?.selectedSchedule ?? -1;
     if (Array.isArray(corpSchedules) && sel != null && Number(sel) >= 0 && Number(sel) < corpSchedules.length) {
       const s = corpSchedules[Number(sel)];
       // prefer readable name, else try to show time range if provided
@@ -183,7 +183,7 @@ const EmployeeDashboardPage = () => {
     }
     // fallback to computed summary from stops
     return scheduleSummary;
-  }, [employeeInfo, scheduleSummary]);
+  }, [colaboradorInfo, scheduleSummary]);
 
   if (loading) {
     return (
@@ -197,7 +197,7 @@ const EmployeeDashboardPage = () => {
   }
 
   // Helper: initials for avatar
-  const initials = (employeeInfo?.name || '').split(' ').map(s => s[0]).slice(0,2).join('').toUpperCase() || 'E';
+  const initials = (colaboradorInfo?.name || '').split(' ').map(s => s[0]).slice(0,2).join('').toUpperCase() || 'C';
 
   return (
     <>
@@ -209,10 +209,10 @@ const EmployeeDashboardPage = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 3, background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`, color: '#fff' }}>
                 <Avatar sx={{ width: 72, height: 72, bgcolor: theme.palette.secondary.main }}>{initials}</Avatar>
                 <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>{safeStr(employeeInfo?.name || 'Colaborador')}</Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.9 }}>{employeeInfo?.role?.name || 'Colaborador'}</Typography>
-                  {employeeInfo?.corporation && (
-                    <Chip size="small" label={employeeInfo.corporation.name} sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>{safeStr(colaboradorInfo?.name || 'Colaborador')}</Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.9 }}>{colaboradorInfo?.role?.name || 'Colaborador'}</Typography>
+                  {colaboradorInfo?.corporation && (
+                    <Chip size="small" label={colaboradorInfo.corporation.name} sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }} />
                   )}
                 </Box>
               </Box>
@@ -224,35 +224,35 @@ const EmployeeDashboardPage = () => {
                   </Grid>
 
                   <Grid item xs={12}>
-                    <Typography variant="body2"><strong>Dirección:</strong> {safeStr(employeeInfo?.employeeDetail?.serviceAddress) || '—'}</Typography>
+                    <Typography variant="body2"><strong>Dirección:</strong> {safeStr(colaboradorInfo?.colaboradorDetail?.serviceAddress) || '—'}</Typography>
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="body2"><strong>Zona/Sector:</strong> {safeStr(employeeInfo?.employeeDetail?.zoneOrSector) || '—'}</Typography>
+                    <Typography variant="body2"><strong>Zona/Sector:</strong> {safeStr(colaboradorInfo?.colaboradorDetail?.zoneOrSector) || '—'}</Typography>
                   </Grid>
                   <Grid item xs={12}>
                     <Typography variant="body2"><strong>Teléfono:</strong> {safeStr(
-                      employeeInfo?.phoneNumber ||
-                      employeeInfo?.phone ||
-                      employeeInfo?.user?.phoneNumber ||
-                      employeeInfo?.user?.phone ||
-                      employeeInfo?.account?.phoneNumber ||
-                      employeeInfo?.employeeDetail?.phone
+                      colaboradorInfo?.phoneNumber ||
+                      colaboradorInfo?.phone ||
+                      colaboradorInfo?.user?.phoneNumber ||
+                      colaboradorInfo?.user?.phone ||
+                      colaboradorInfo?.account?.phoneNumber ||
+                      colaboradorInfo?.colaboradorDetail?.phone
                     ) || '—'}</Typography>
                   </Grid>
                   <Grid item xs={12}>
                     <Typography variant="body2"><strong>Horario:</strong> {safeStr(scheduleText) || '—'}</Typography>
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="body2"><strong>Tipo ruta:</strong> {safeStr(employeeInfo?.employeeDetail?.routeType) || '—'}</Typography>
+                    <Typography variant="body2"><strong>Tipo ruta:</strong> {safeStr(colaboradorInfo?.colaboradorDetail?.routeType) || '—'}</Typography>
                   </Grid>
 
                   <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
 
                   <Grid item xs={12}>
                     <Typography variant="subtitle2" color="text.secondary">Contacto de Emergencia</Typography>
-                     <Typography variant="body2">{safeStr(employeeInfo?.employeeDetail?.emergencyContact) ? (<><strong>Nombre:</strong> {safeStr(employeeInfo?.employeeDetail?.emergencyContact)}</>) : ' '}</Typography>
-                    <Typography variant="body2">{safeStr(employeeInfo?.employeeDetail?.emergencyPhone) ? (<><strong>Teléfono:</strong> {safeStr(employeeInfo?.employeeDetail?.emergencyPhone)}</>) : ' '}</Typography>
-                    <Typography variant="body2">{safeStr(employeeInfo?.employeeDetail?.emergencyRelationship) ? (<><strong>Parentesco:</strong> {safeStr(employeeInfo?.employeeDetail?.emergencyRelationship)}</>) : ' '}</Typography>
+                     <Typography variant="body2">{safeStr(colaboradorInfo?.colaboradorDetail?.emergencyContact) ? (<><strong>Nombre:</strong> {safeStr(colaboradorInfo?.colaboradorDetail?.emergencyContact)}</>) : ' '}</Typography>
+                    <Typography variant="body2">{safeStr(colaboradorInfo?.colaboradorDetail?.emergencyPhone) ? (<><strong>Teléfono:</strong> {safeStr(colaboradorInfo?.colaboradorDetail?.emergencyPhone)}</>) : ' '}</Typography>
+                    <Typography variant="body2">{safeStr(colaboradorInfo?.colaboradorDetail?.emergencyRelationship) ? (<><strong>Parentesco:</strong> {safeStr(colaboradorInfo?.colaboradorDetail?.emergencyRelationship)}</>) : ' '}</Typography>
                   </Grid>
 
                   <Grid item xs={12} sx={{ mt: 2, textAlign: 'center' }}>
@@ -314,14 +314,14 @@ const EmployeeDashboardPage = () => {
       <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open:false })} anchorOrigin={{ vertical:'bottom', horizontal:'center' }}>
         <Alert severity={snackbar.sev} onClose={() => setSnackbar({ ...snackbar, open:false })} sx={{ width: '100%' }}>{snackbar.msg}</Alert>
       </Snackbar>
-      <UpdateEmployeeInfoDialog
+      <UpdateColaboradorInfoDialog
         open={openEditDialog}
         onClose={() => setOpenEditDialog(false)}
-        initialData={employeeInfo || {}}
+        initialData={colaboradorInfo || {}}
         onSaved={() => { setOpenEditDialog(false); loadAll(); setSnackbar({ open:true, sev:'success', msg: 'Datos actualizados correctamente.' }); }}
       />
     </>
   );
 };
 
-export default EmployeeDashboardPage;
+export default ColaboradorDashboardPage;

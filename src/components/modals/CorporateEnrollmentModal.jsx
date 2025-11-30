@@ -37,7 +37,7 @@ const CorporateEnrollmentModal = ({ open, onClose }) => {
                     variant="outlined"
                     color="secondary"
                     fullWidth
-                    onClick={() => navigate('/update-employee-info')}
+                    onClick={() => navigate('/update-colaborador-info')}
                 >
                     Ir a Actualizar Datos
                 </Button>

@@ -27,10 +27,10 @@ api.interceptors.request.use(
             const url = (config.url || '').toString();
             const isSchoolYearsEndpoint = url.includes('/school-years');
             const isProtocolsEndpoint = url.includes('/protocols');
-            // Do not attach schoolYear param for some public prefill endpoints (parents/employees)
+            // Do not attach schoolYear param for some public prefill endpoints (parents/colaboradores)
             const isUpdateParentPrefill = url.includes('/update-parent-info');
-            const isUpdateEmployeePrefill = url.includes('/update-employee-info');
-            if (method === 'get' && !isSchoolYearsEndpoint && !isProtocolsEndpoint && !isUpdateParentPrefill && !isUpdateEmployeePrefill) {
+            const isUpdateColaboradorPrefill = url.includes('/update-colaborador-info');
+            if (method === 'get' && !isSchoolYearsEndpoint && !isProtocolsEndpoint && !isUpdateParentPrefill && !isUpdateColaboradorPrefill) {
                 if (!config.params) config.params = {};
                 if (typeof config.params === 'object' && !('schoolYear' in config.params)) {
                     config.params.schoolYear = selectedSchoolYear;
