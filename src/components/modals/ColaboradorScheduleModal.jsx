@@ -2,6 +2,16 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import api from '../../utils/axiosConfig';
 
+// Función para convertir tiempo de 24h a 12h con AM/PM
+const formatTime12Hour = (time24) => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+};
+
 // Modal de horarios para colaboradores - similar a StudentScheduleModal
 export default function ColaboradorScheduleModal({ colaborador, corporation, open, onClose, onScheduleUpdated }) {
     const [scheduleSlots, setScheduleSlots] = useState([]);
@@ -375,7 +385,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                                 marginBottom: 6 
                                             }}>
                                                 <div style={{ fontSize: 15, fontWeight: 700 }}>
-                                                    {slot.time}
+                                                    {formatTime12Hour(slot.time)}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: 8 }}>
                                                     <button 
@@ -541,7 +551,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                                 marginBottom: 6 
                                             }}>
                                                 <div style={{ fontSize: 15, fontWeight: 700 }}>
-                                                    {slot.time}
+                                                    {formatTime12Hour(slot.time)}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: 8 }}>
                                                     <button 
