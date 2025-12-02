@@ -159,6 +159,9 @@ const ColaboradoresPage = () => {
     const [circularMessage, setCircularMessage] = useState('');
     const [circularLoading, setCircularLoading] = useState(false);
     
+    // Estado para reporte de paradas
+    const [stopReportLoading, setStopReportLoading] = useState(false);
+    
     // Estado de la corporación
     const [corporationData, setCorporationData] = useState(location.state?.corporation || null);
     
@@ -191,6 +194,18 @@ const ColaboradoresPage = () => {
         schedules: false,
         extraFields: false
     });
+
+    // Función para obtener fecha/hora formateada para nombres de archivo
+    const getFormattedDateTime = () => {
+        const currentDate = new Date();
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const hours = String(currentDate.getHours()).padStart(2, '0');
+        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
+        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
+        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+    };
 
     // Funciones auxiliares para determinar el estado de los colaboradores
     const isColaboradorNew = (colaborador) => {
@@ -976,6 +991,218 @@ const ColaboradoresPage = () => {
         }
     };
 
+    // Función para descargar reporte de paradas de colaboradores
+    const handleDownloadRouteReport = async () => {
+        if (!corporationId) {
+            setSnackbar({ open: true, message: 'No hay corporación seleccionada.', severity: 'warning' });
+            return;
+        }
+
+        setStopReportLoading(true);
+        try {
+            // Filtrar colaboradores que tienen ScheduleSlots asignados
+            const colaboradoresWithRoutes = colaboradores.filter(col => 
+                Array.isArray(col.ScheduleSlots) && col.ScheduleSlots.length > 0
+            );
+
+            if (colaboradoresWithRoutes.length === 0) {
+                setSnackbar({ open: true, message: 'No hay colaboradores con paradas asignadas para generar el reporte.', severity: 'warning' });
+                setStopReportLoading(false);
+                return;
+            }
+
+            const workbook = new ExcelJS.Workbook();
+            
+            const weekdaysMap = [
+                { key: 'monday', label: 'Lunes' },
+                { key: 'tuesday', label: 'Martes' },
+                { key: 'wednesday', label: 'Miércoles' },
+                { key: 'thursday', label: 'Jueves' },
+                { key: 'friday', label: 'Viernes' },
+                { key: 'saturday', label: 'Sábado' },
+                { key: 'sunday', label: 'Domingo' }
+            ];
+
+            // Headers simples: datos básicos + entrada/salida + contacto
+            const headers = [
+                'Nombre',
+                'Email',
+                'Teléfono',
+                'Tipo Ruta',
+                'Dirección Servicio',
+                'Zona/Sector',
+                'Horario Corporativo',
+                'Entrada Hora',
+                'Entrada Ruta',
+                'Entrada Parada',
+                'Salida Hora',
+                'Salida Ruta',
+                'Salida Parada',
+                'Contacto Emergencia',
+                'Teléfono Emergencia',
+                'Parentesco Emergencia'
+            ];
+
+            const parseRouteNumber = (r) => {
+                if (r == null) return null;
+                const s = String(r).trim();
+                if (s === '') return null;
+                const n = Number(s);
+                return Number.isFinite(n) ? n : null;
+            };
+
+            // Crear una hoja por cada día de la semana
+            weekdaysMap.forEach((day) => {
+                const sheet = workbook.addWorksheet(day.label);
+
+                const headerRow = sheet.addRow(headers);
+                headerRow.eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                });
+
+                // Filtrar colaboradores que tienen slots para este día específico
+                const colaboradoresForDay = colaboradoresWithRoutes.filter(col => {
+                    const slots = Array.isArray(col.ScheduleSlots) ? col.ScheduleSlots : [];
+                    return slots.some(slot => {
+                        let slotDays = [];
+                        if (Array.isArray(slot.days)) slotDays = slot.days;
+                        else if (typeof slot.days === 'string') {
+                            try {
+                                const parsed = JSON.parse(slot.days);
+                                if (Array.isArray(parsed)) slotDays = parsed;
+                                else slotDays = [slot.days];
+                            } catch (e) {
+                                slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days];
+                            }
+                        } else if (slot.days) slotDays = [slot.days];
+
+                        const normalizedDays = slotDays.map(d => d ? d.toString().toLowerCase() : '').filter(Boolean);
+                        return normalizedDays.includes(day.key);
+                    });
+                });
+
+                colaboradoresForDay.forEach((col, colIndex) => {
+                    const detail = col.ColaboradorDetail || {};
+                    const slots = Array.isArray(col.ScheduleSlots) ? col.ScheduleSlots : [];
+                    
+                    // Get schedule name
+                    const scheduleIndex = detail.selectedSchedule;
+                    let scheduleName = 'Sin horario';
+                    if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
+                        const sched = corporationData.schedules[scheduleIndex];
+                        scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                    }
+
+                    // Filtrar slots por día
+                    const daySlotsFiltered = slots.filter(slot => {
+                        let slotDays = [];
+                        if (Array.isArray(slot.days)) slotDays = slot.days;
+                        else if (typeof slot.days === 'string') {
+                            try {
+                                const parsed = JSON.parse(slot.days);
+                                if (Array.isArray(parsed)) slotDays = parsed;
+                                else slotDays = [slot.days];
+                            } catch (e) {
+                                slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days];
+                            }
+                        } else if (slot.days) slotDays = [slot.days];
+
+                        const normalizedDays = slotDays.map(d => d ? d.toString().toLowerCase() : '').filter(Boolean);
+                        return normalizedDays.includes(day.key);
+                    });
+
+                    // Separar por tipo: entrada y salida
+                    const entradaSlot = daySlotsFiltered.find(s => s.stopType === 'entrada') || null;
+                    const salidaSlot = daySlotsFiltered.find(s => s.stopType === 'salida') || null;
+
+                    // Construir fila de datos
+                    const row = [
+                        col.name || '',
+                        col.email || '',
+                        col.phoneNumber || '',
+                        detail.routeType || '',
+                        detail.serviceAddress || '',
+                        detail.zoneOrSector || '',
+                        scheduleName,
+                        entradaSlot ? formatTime12Hour(entradaSlot.time || '') : '',
+                        entradaSlot ? parseRouteNumber(entradaSlot.routeNumber) : null,
+                        entradaSlot ? (entradaSlot.note || '') : '',
+                        salidaSlot ? formatTime12Hour(salidaSlot.time || '') : '',
+                        salidaSlot ? parseRouteNumber(salidaSlot.routeNumber) : null,
+                        salidaSlot ? (salidaSlot.note || '') : '',
+                        detail.emergencyContact || '',
+                        detail.emergencyPhone || '',
+                        detail.emergencyRelationship || ''
+                    ];
+
+                    const rowObj = sheet.addRow(row);
+                    const isEven = (colIndex + 1) % 2 === 0;
+                    rowObj.eachCell((cell) => {
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        cell.border = { top: { style: 'thin', color: { argb: 'FFD0D0D0' } }, left: { style: 'thin', color: { argb: 'FFD0D0D0' } }, bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } }, right: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
+                    });
+                });
+
+                // Auto-size columns
+                sheet.columns.forEach((column, index) => {
+                    const header = headers[index];
+                    let maxWidth = header ? header.length : 10;
+                    sheet.eachRow((row, rowNumber) => {
+                        if (rowNumber > 1) {
+                            const cell = row.getCell(index + 1);
+                            const cellLength = String(cell.value || '').length;
+                            if (cellLength > maxWidth) maxWidth = cellLength;
+                        }
+                    });
+                    column.width = Math.min(Math.max(maxWidth, 10), 50);
+                });
+
+                // Add auto filter
+                if (sheet.rowCount > 1 && headers.length > 0) {
+                    const getColumnLetter = (columnNumber) => {
+                        let letter = '';
+                        while (columnNumber > 0) {
+                            const remainder = (columnNumber - 1) % 26;
+                            letter = String.fromCharCode(65 + remainder) + letter;
+                            columnNumber = Math.floor((columnNumber - 1) / 26);
+                        }
+                        return letter;
+                    };
+                    const maxColumns = Math.min(headers.length, 1024);
+                    const lastColumnLetter = getColumnLetter(maxColumns);
+                    const filterRange = `A1:${lastColumnLetter}${sheet.rowCount}`;
+                    sheet.autoFilter = filterRange;
+                }
+
+                sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+            });
+
+            const corpName = currentCorporation?.name || 'Corporativo';
+            const fileName = `reporte_paradas_${corpName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: `Reporte de paradas para ${corpName} descargado exitosamente`, severity: 'success' });
+        } catch (error) {
+            console.error('[handleDownloadRouteReport] Error:', error);
+            setSnackbar({ open: true, message: 'Error al descargar el reporte de paradas', severity: 'error' });
+        } finally {
+            setStopReportLoading(false);
+        }
+    };
+
     const currentCorporation = corporationData || location.state?.corporation;
 
     // Aplicar ordenamiento a los colaboradores filtrados antes de paginar
@@ -1393,7 +1620,7 @@ const ColaboradoresPage = () => {
             <Card sx={{ mb: 3 }}>
                 <CardContent>
                     <Grid container spacing={2}>
-                        <Grid item xs={12} md={2.4}>
+                        <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
                                 color="primary"
@@ -1404,18 +1631,19 @@ const ColaboradoresPage = () => {
                                 Carga Masiva
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={2.4}>
+                        <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
                                 color="primary"
                                 startIcon={<Add />}
                                 fullWidth
                                 onClick={handleOpenCreateDialog}
+                                sx={{ fontSize: '0.811rem' }}
                             >
                                 Añadir Colaborador
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={2.4}>
+                        <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
                                 color="secondary"
@@ -1426,7 +1654,7 @@ const ColaboradoresPage = () => {
                                 Enviar Circular
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={2.4}>
+                        <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
                                 color="success"
@@ -1437,7 +1665,7 @@ const ColaboradoresPage = () => {
                                 Descargar Nuevos
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={2.4}>
+                        <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
                                 color="success"
@@ -1446,6 +1674,18 @@ const ColaboradoresPage = () => {
                                 onClick={handleDownloadAllColaboradores}
                             >
                                 Descargar Todos
+                            </Button>
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                            <Button
+                                variant="contained"
+                                color="info"
+                                startIcon={stopReportLoading ? <CircularProgress size={20} color="inherit" /> : <DirectionsBus />}
+                                fullWidth
+                                onClick={handleDownloadRouteReport}
+                                disabled={stopReportLoading}
+                            >
+                                {stopReportLoading ? 'Generando...' : 'Reporte Paradas'}
                             </Button>
                         </Grid>
                     </Grid>
