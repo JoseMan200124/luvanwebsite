@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
+import UpdateParentInfoDialog from '../components/UpdateParentInfoDialog';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 
@@ -178,6 +179,10 @@ const ParentDashboardPage = () => {
   const [selectedDay, setSelectedDay] = useState('all'); // 'all' | monday | ... | friday
   const [selectedStudent, setSelectedStudent] = useState('all'); // 'all' | <id>
 
+  // Estado para el diálogo de actualización de datos
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [updateDialogData, setUpdateDialogData] = useState({});
+
   // Llama /parents/:id/route-info y, si hay estudiantes con id, trae sus slots
   const loadAll = async () => {
     setLoading(true);
@@ -217,6 +222,23 @@ const ParentDashboardPage = () => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.user?.id]);
+
+  // Función para abrir el diálogo de actualización
+  const handleOpenUpdateDialog = async () => {
+    try {
+      const email = auth?.user?.email;
+      if (!email) {
+        setSnackbar({ open: true, sev: 'error', msg: 'No se encontró el correo del usuario.' });
+        return;
+      }
+      const res = await api.get(`/update-parent-info?email=${encodeURIComponent(email)}`);
+      setUpdateDialogData(res?.data || {});
+      setUpdateDialogOpen(true);
+    } catch (e) {
+      console.error('[ParentDashboard] Error fetching update data:', e);
+      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar la información para actualizar.' });
+    }
+  };
 
   // ---------- Derivados (listas para mostrar) ----------
   // ...existing code... (derivedRoutes removed because not used)
@@ -286,6 +308,17 @@ const ParentDashboardPage = () => {
                     </>
                   )}
                 </Grid>
+
+                <Divider sx={{ my: 2 }} />
+
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  fullWidth
+                  onClick={handleOpenUpdateDialog}
+                >
+                  Actualizar Mis Datos
+                </Button>
               </CardContent>
             </SectionCard>
           </Grid>
@@ -620,6 +653,17 @@ const ParentDashboardPage = () => {
           {snackbar.msg}
         </Alert>
       </Snackbar>
+
+      {/* Diálogo para actualizar datos de familia */}
+      <UpdateParentInfoDialog
+        open={updateDialogOpen}
+        onClose={() => setUpdateDialogOpen(false)}
+        initialData={updateDialogData}
+        onSaved={() => {
+          loadAll();
+          setSnackbar({ open: true, sev: 'success', msg: '¡Datos actualizados correctamente!' });
+        }}
+      />
     </>
   );
 };

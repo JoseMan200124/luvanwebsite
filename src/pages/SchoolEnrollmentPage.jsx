@@ -19,7 +19,6 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
-import EnrollmentModal from '../components/modals/EnrollmentModal';
 
 const SchoolEnrollmentPage = () => {
     const { schoolId } = useParams();
@@ -27,7 +26,6 @@ const SchoolEnrollmentPage = () => {
     const navigate = useNavigate();
     
     const [loading, setLoading] = useState(true);
-    const [isEnrollmentModalOpen, setEnrollmentModalOpen] = useState(true);
 
     const [grades, setGrades] = useState([]);
     const [extraFields, setExtraFields] = useState([]);
@@ -231,12 +229,6 @@ const SchoolEnrollmentPage = () => {
     }
 
     return (
-        <><EnrollmentModal
-                open={isEnrollmentModalOpen}
-                onClose={() => setEnrollmentModalOpen(false)}
-                disableEscapeKeyDown
-                disableBackdropClick
-            />
         <Box
             sx={{
                 backgroundColor: '#f7f7f7',
@@ -666,7 +658,6 @@ const SchoolEnrollmentPage = () => {
                 </Snackbar>
             </Box>
         </Box>
-        </>
     );
 };
 
