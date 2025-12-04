@@ -234,6 +234,30 @@ const SchoolBusesPage = () => {
             });
             const currentBuses = currentBusesResp.data.buses || currentBusesResp.data || [];
             
+            // Helper para obtener info del bus por ID
+            const getBusPlate = (busId) => {
+                const bus = currentBuses.find(b => b.id === busId) || buses.find(b => b.id === busId);
+                return bus ? bus.plate : `ID:${busId}`;
+            };
+
+            const getBusCurrentAssignment = (busId) => {
+                const bus = currentBuses.find(b => b.id === busId);
+                if (!bus) return '';
+                if (bus.schoolId && bus.school) {
+                    return ` (actualmente asignado a colegio: ${bus.school.name || bus.school.shortName || 'ID:' + bus.schoolId})`;
+                }
+                if (bus.corporationId && bus.corporation) {
+                    return ` (actualmente asignado a corporación: ${bus.corporation.name || 'ID:' + bus.corporationId})`;
+                }
+                if (bus.schoolId) {
+                    return ` (actualmente asignado a otro colegio ID:${bus.schoolId})`;
+                }
+                if (bus.corporationId) {
+                    return ` (actualmente asignado a corporación ID:${bus.corporationId})`;
+                }
+                return '';
+            };
+            
             // Crear mapa de asignaciones actuales en el servidor
             const serverAssignments = {};
             currentBuses.forEach(bus => {
@@ -258,79 +282,113 @@ const SchoolBusesPage = () => {
                 }
             });
 
-            const updateOperations = [];
             const errors = [];
+            const successfulChanges = [];
 
-            // 1. Identificar buses que necesitan ser desasignados 
-            //    (están en servidor pero no en UI, o cambiaron de ruta)
-            for (const [routeNumber, serverData] of Object.entries(serverAssignments)) {
+            // Procesar cada ruta que tiene cambios
+            for (const routeNumber of schoolRouteNumbers) {
+                const serverData = serverAssignments[routeNumber];
                 const desiredData = desiredAssignments[routeNumber];
-                
-                // Si la ruta ya no tiene bus asignado en UI, o tiene un bus diferente
-                if (!desiredData || desiredData.busId !== serverData.busId) {
-                    updateOperations.push({
-                        busId: serverData.busId,
-                        data: {
+
+                // Caso 1: La ruta tenía un bus y ahora no tiene ninguno (solo limpiar)
+                if (serverData && !desiredData) {
+                    try {
+                        await api.put(`/buses/${serverData.busId}`, {
                             routeNumber: null,
                             schoolId: null,
                             pilotId: null,
                             monitoraId: null
-                        },
-                        action: 'clear'
-                    });
+                        }, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                        successfulChanges.push(`Ruta ${routeNumber}: bus ${getBusPlate(serverData.busId)} desasignado`);
+                    } catch (err) {
+                        const busPlate = getBusPlate(serverData.busId);
+                        errors.push(`Error al desasignar bus ${busPlate} de ruta ${routeNumber}: ${err.response?.data?.message || err.message}`);
+                    }
+                    continue;
                 }
-            }
 
-            // 2. Identificar buses que necesitan ser asignados o actualizados
-            for (const [routeNumber, desiredData] of Object.entries(desiredAssignments)) {
-                const serverData = serverAssignments[routeNumber];
-                
-                // Nuevo bus para esta ruta, o mismo bus pero necesita actualizar piloto/monitora
-                const needsUpdate = !serverData || 
-                    serverData.busId !== desiredData.busId ||
-                    serverData.pilotId !== desiredData.pilotId ||
-                    serverData.monitoraId !== desiredData.monitoraId;
-                
-                if (needsUpdate) {
-                    updateOperations.push({
-                        busId: desiredData.busId,
-                        data: {
+                // Caso 2: La ruta no tenía bus y ahora tiene uno (solo asignar)
+                if (!serverData && desiredData) {
+                    try {
+                        await api.put(`/buses/${desiredData.busId}`, {
                             routeNumber: routeNumber,
                             schoolId: parseInt(schoolId),
                             pilotId: desiredData.pilotId,
                             monitoraId: desiredData.monitoraId
-                        },
-                        action: 'assign'
-                    });
+                        }, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                        successfulChanges.push(`Ruta ${routeNumber}: bus ${getBusPlate(desiredData.busId)} asignado`);
+                    } catch (err) {
+                        const busPlate = getBusPlate(desiredData.busId);
+                        const currentAssignment = getBusCurrentAssignment(desiredData.busId);
+                        errors.push(`Error al asignar bus ${busPlate} a ruta ${routeNumber}${currentAssignment}: ${err.response?.data?.message || err.message}`);
+                    }
+                    continue;
                 }
-            }
 
-            // 3. Ejecutar primero las operaciones de "clear" y luego las de "assign"
-            //    para evitar conflictos de routeNumber duplicado
-            const clearOps = updateOperations.filter(op => op.action === 'clear');
-            const assignOps = updateOperations.filter(op => op.action === 'assign');
-
-            // Ejecutar clears primero
-            for (const op of clearOps) {
-                try {
-                    await api.put(`/buses/${op.busId}`, op.data, {
-                        headers: { Authorization: `Bearer ${auth.token}` }
-                    });
-                } catch (err) {
-                    console.error(`Error clearing bus ${op.busId}:`, err);
-                    errors.push(`Error al limpiar bus ${op.busId}: ${err.response?.data?.message || err.message}`);
+                // Caso 3: La ruta tiene el mismo bus pero cambió piloto/monitora (solo actualizar)
+                if (serverData && desiredData && serverData.busId === desiredData.busId) {
+                    const needsUpdate = serverData.pilotId !== desiredData.pilotId || 
+                                       serverData.monitoraId !== desiredData.monitoraId;
+                    if (needsUpdate) {
+                        try {
+                            await api.put(`/buses/${desiredData.busId}`, {
+                                routeNumber: routeNumber,
+                                schoolId: parseInt(schoolId),
+                                pilotId: desiredData.pilotId,
+                                monitoraId: desiredData.monitoraId
+                            }, {
+                                headers: { Authorization: `Bearer ${auth.token}` }
+                            });
+                            successfulChanges.push(`Ruta ${routeNumber}: actualizado piloto/monitora`);
+                        } catch (err) {
+                            const busPlate = getBusPlate(desiredData.busId);
+                            errors.push(`Error al actualizar bus ${busPlate} en ruta ${routeNumber}: ${err.response?.data?.message || err.message}`);
+                        }
+                    }
+                    continue;
                 }
-            }
 
-            // Ejecutar assigns después
-            for (const op of assignOps) {
-                try {
-                    await api.put(`/buses/${op.busId}`, op.data, {
-                        headers: { Authorization: `Bearer ${auth.token}` }
-                    });
-                } catch (err) {
-                    console.error(`Error assigning bus ${op.busId}:`, err);
-                    errors.push(`Error al asignar bus ${op.busId} a ruta ${op.data.routeNumber}: ${err.response?.data?.message || err.message}`);
+                // Caso 4: La ruta cambió de bus (limpiar el anterior y asignar el nuevo)
+                if (serverData && desiredData && serverData.busId !== desiredData.busId) {
+                    // Primero intentamos asignar el nuevo bus
+                    try {
+                        await api.put(`/buses/${desiredData.busId}`, {
+                            routeNumber: routeNumber,
+                            schoolId: parseInt(schoolId),
+                            pilotId: desiredData.pilotId,
+                            monitoraId: desiredData.monitoraId
+                        }, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                        
+                        // Si el nuevo bus se asignó correctamente, ahora limpiamos el anterior
+                        try {
+                            await api.put(`/buses/${serverData.busId}`, {
+                                routeNumber: null,
+                                schoolId: null,
+                                pilotId: null,
+                                monitoraId: null
+                            }, {
+                                headers: { Authorization: `Bearer ${auth.token}` }
+                            });
+                        } catch (clearErr) {
+                            // El bus anterior no se pudo limpiar, pero el nuevo ya está asignado
+                            console.warn(`No se pudo limpiar el bus anterior ${serverData.busId}:`, clearErr);
+                        }
+                        
+                        successfulChanges.push(`Ruta ${routeNumber}: cambiado de bus ${getBusPlate(serverData.busId)} a ${getBusPlate(desiredData.busId)}`);
+                    } catch (err) {
+                        // Si falla la asignación del nuevo bus, NO tocamos el anterior
+                        // La ruta mantiene su asignación original
+                        const busPlate = getBusPlate(desiredData.busId);
+                        const currentAssignment = getBusCurrentAssignment(desiredData.busId);
+                        errors.push(`Error al cambiar bus de ruta ${routeNumber} a ${busPlate}${currentAssignment}: ${err.response?.data?.message || err.message}`);
+                    }
+                    continue;
                 }
             }
 
@@ -338,16 +396,16 @@ const SchoolBusesPage = () => {
             if (errors.length > 0) {
                 setSnackbar({ 
                     open: true, 
-                    message: `Guardado parcial. Errores: ${errors.join('; ')}`, 
-                    severity: 'warning' 
+                    message: `Errores: ${errors.join('; ')}`, 
+                    severity: 'error' 
                 });
-            } else if (updateOperations.length === 0) {
+            } else if (successfulChanges.length === 0) {
                 setSnackbar({ open: true, message: 'No hay cambios que guardar', severity: 'info' });
             } else {
                 setSnackbar({ open: true, message: 'Asignaciones guardadas exitosamente', severity: 'success' });
             }
             
-            fetchBuses(); // Refrescar datos
+            fetchBuses(); // Refrescar datos para sincronizar UI con servidor
         } catch (err) {
             console.error('Error saving assignments:', err);
             setSnackbar({ 
