@@ -260,7 +260,7 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
                             Reintentar
                         </Button>
                     </Box>
-                ) : visibleStudents.length === 0 ? (
+                ) : students.length === 0 ? (
                     <Box sx={{ 
                         display: 'flex', 
                         justifyContent: 'center', 
@@ -384,41 +384,51 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                    {visibleStudents.map((student, index) => (
-                                        <TableRow key={student.id || index} hover>
-                                            <TableCell>
-                                                <Typography variant="body2" fontWeight="medium">
-                                                    {student.apellidosFamilia}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2">
-                                                    {student.nombresEstudiante}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2">
-                                                    {student.grado}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2" fontWeight="medium">
-                                                    {student.horarioParada}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography 
-                                                    variant="body2" 
-                                                    sx={{ 
-                                                        fontStyle: student.notaParada === 'Sin nota' ? 'italic' : 'normal',
-                                                        color: student.notaParada === 'Sin nota' ? 'grey.500' : 'text.primary'
-                                                    }}
-                                                >
-                                                    {student.notaParada}
+                                    {visibleStudents.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                                                <Typography variant="body2" color="textSecondary">
+                                                    No se encontraron estudiantes con los filtros aplicados
                                                 </Typography>
                                             </TableCell>
                                         </TableRow>
-                                    ))}
+                                    ) : (
+                                        visibleStudents.map((student, index) => (
+                                            <TableRow key={student.id || index} hover>
+                                                <TableCell>
+                                                    <Typography variant="body2" fontWeight="medium">
+                                                        {student.apellidosFamilia}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2">
+                                                        {student.nombresEstudiante}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2">
+                                                        {student.grado}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2" fontWeight="medium">
+                                                        {student.horarioParada}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography 
+                                                        variant="body2" 
+                                                        sx={{ 
+                                                            fontStyle: student.notaParada === 'Sin nota' ? 'italic' : 'normal',
+                                                            color: student.notaParada === 'Sin nota' ? 'grey.500' : 'text.primary'
+                                                        }}
+                                                    >
+                                                        {student.notaParada}
+                                                    </Typography>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
                                 </TableBody>
                             </Table>
                         </TableContainer>
