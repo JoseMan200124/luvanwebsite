@@ -384,19 +384,86 @@ const SchoolBusesPage = () => {
         navigate(-1);
     };
 
-    const getAvailableBuses = (currentRouteNumber) => {
-        return buses.filter(bus => {
-            // Bus disponible si:
-            // 1. No tiene routeNumber asignado, o
-            // 2. Está asignado al routeNumber actual, o  
-            // 3. No está asignado a ningún número de ruta de este colegio
-            const isAssignedToCurrentRoute = bus.routeNumber === currentRouteNumber;
-            const isAssignedToOtherRoute = bus.routeNumber && 
-                bus.routeNumber !== currentRouteNumber && 
-                bus.schoolId === parseInt(schoolId);
-            
-            return !isAssignedToOtherRoute || isAssignedToCurrentRoute;
+    // Obtener buses disponibles para una ruta específica
+    // Excluye buses que ya están asignados a otras rutas en el estado actual (no guardado)
+    const getAvailableBusesForRoute = (currentRouteNumber) => {
+        // Obtener IDs de buses ya asignados a otras rutas en el estado actual
+        const busesAssignedToOtherRoutes = new Set();
+        Object.entries(routeBusAssignments).forEach(([routeNum, busId]) => {
+            if (routeNum !== currentRouteNumber && busId) {
+                busesAssignedToOtherRoutes.add(busId);
+            }
         });
+
+        return buses.filter(bus => {
+            // Si el bus está asignado a la ruta actual, siempre mostrarlo
+            if (routeBusAssignments[currentRouteNumber] === bus.id) {
+                return true;
+            }
+            // Excluir buses ya asignados a otras rutas en el estado actual
+            if (busesAssignedToOtherRoutes.has(bus.id)) {
+                return false;
+            }
+            // Excluir buses asignados a otros colegios (en BD)
+            if (bus.schoolId && bus.schoolId !== parseInt(schoolId)) {
+                return false;
+            }
+            return true;
+        });
+    };
+
+    // Obtener pilotos disponibles para un bus específico
+    // Excluye pilotos que ya están asignados a otros buses en el estado actual
+    const getAvailablePilotsForBus = (currentBusId) => {
+        // Obtener IDs de pilotos ya asignados a otros buses
+        const pilotsAssignedToOtherBuses = new Set();
+        Object.entries(pilotAssignments).forEach(([busId, pilotId]) => {
+            if (parseInt(busId) !== currentBusId && pilotId) {
+                pilotsAssignedToOtherBuses.add(pilotId);
+            }
+        });
+
+        return availablePilots
+            .filter(pilot => {
+                // Si el piloto está asignado al bus actual, siempre mostrarlo
+                if (pilotAssignments[currentBusId] === pilot.id) {
+                    return true;
+                }
+                // Excluir pilotos ya asignados a otros buses
+                return !pilotsAssignedToOtherBuses.has(pilot.id);
+            })
+            .sort((a, b) => {
+                const an = (a.name || a.email || '').toLowerCase();
+                const bn = (b.name || b.email || '').toLowerCase();
+                return an < bn ? -1 : an > bn ? 1 : 0;
+            });
+    };
+
+    // Obtener monitoras disponibles para un bus específico
+    // Excluye monitoras que ya están asignadas a otros buses en el estado actual
+    const getAvailableMonitorsForBus = (currentBusId) => {
+        // Obtener IDs de monitoras ya asignadas a otros buses
+        const monitorsAssignedToOtherBuses = new Set();
+        Object.entries(monitorAssignments).forEach(([busId, monitorId]) => {
+            if (parseInt(busId) !== currentBusId && monitorId) {
+                monitorsAssignedToOtherBuses.add(monitorId);
+            }
+        });
+
+        return availableMonitors
+            .filter(monitor => {
+                // Si la monitora está asignada al bus actual, siempre mostrarla
+                if (monitorAssignments[currentBusId] === monitor.id) {
+                    return true;
+                }
+                // Excluir monitoras ya asignadas a otros buses
+                return !monitorsAssignedToOtherBuses.has(monitor.id);
+            })
+            .sort((a, b) => {
+                const an = (a.name || a.email || '').toLowerCase();
+                const bn = (b.name || b.email || '').toLowerCase();
+                return an < bn ? -1 : an > bn ? 1 : 0;
+            });
     };
 
     const getBusInfo = (busId) => {
@@ -502,7 +569,9 @@ const SchoolBusesPage = () => {
                                 <TableBody>
                                     {schoolRouteNumbers.map((routeNumber) => {
                                         const assignedBusId = routeBusAssignments[routeNumber];
-                                        const availableBuses = getAvailableBuses(routeNumber);
+                                        const availableBusesForThisRoute = getAvailableBusesForRoute(routeNumber);
+                                        const availablePilotsForThisBus = assignedBusId ? getAvailablePilotsForBus(assignedBusId) : [];
+                                        const availableMonitorsForThisBus = assignedBusId ? getAvailableMonitorsForBus(assignedBusId) : [];
                                         
                                         return (
                                             <TableRow key={routeNumber}>
@@ -514,10 +583,10 @@ const SchoolBusesPage = () => {
                                                 <TableCell>
                                                     <Autocomplete
                                                         disableClearable={false}
-                                                        options={availableBuses}
+                                                        options={availableBusesForThisRoute}
                                                         getOptionLabel={(option) => option ? `${option.plate} (${option.capacity || 'N/A'})` : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
-                                                        value={availableBuses.find(b => b.id === assignedBusId) || null}
+                                                        value={buses.find(b => b.id === assignedBusId) || null}
                                                         onChange={(_, newValue) => handleAssignmentChange(routeNumber, newValue ? newValue.id : null)}
                                                         renderInput={(params) => (
                                                             <TextField
@@ -536,11 +605,7 @@ const SchoolBusesPage = () => {
                                                 <TableCell>
                                                     <Autocomplete
                                                         disabled={!assignedBusId}
-                                                        options={availablePilots.slice().sort((a,b)=>{
-                                                            const an = (a.name || a.email || '').toLowerCase();
-                                                            const bn = (b.name || b.email || '').toLowerCase();
-                                                            return an < bn ? -1 : an > bn ? 1 : 0;
-                                                        })}
+                                                        options={availablePilotsForThisBus}
                                                         getOptionLabel={(option) => option ? (option.name || option.email) : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
                                                         value={assignedBusId ? availablePilots.find(p => p.id === pilotAssignments[assignedBusId]) || null : null}
@@ -558,11 +623,7 @@ const SchoolBusesPage = () => {
                                                 <TableCell>
                                                     <Autocomplete
                                                         disabled={!assignedBusId}
-                                                        options={availableMonitors.slice().sort((a,b)=>{
-                                                            const an = (a.name || a.email || '').toLowerCase();
-                                                            const bn = (b.name || b.email || '').toLowerCase();
-                                                            return an < bn ? -1 : an > bn ? 1 : 0;
-                                                        })}
+                                                        options={availableMonitorsForThisBus}
                                                         getOptionLabel={(option) => option ? (option.name || option.email) : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
                                                         value={assignedBusId ? availableMonitors.find(m => m.id === monitorAssignments[assignedBusId]) || null : null}
