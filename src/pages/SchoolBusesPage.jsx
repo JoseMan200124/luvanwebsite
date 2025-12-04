@@ -160,10 +160,54 @@ const SchoolBusesPage = () => {
         }
     }, [auth.token, schoolId, fetchSchoolData, fetchBuses, fetchPilots, fetchMonitors]);
 
-    const handleAssignmentChange = (routeNumber, busId) => {
+    const handleAssignmentChange = (routeNumber, newBusId) => {
+        // Obtener el bus anterior asignado a esta ruta
+        const previousBusId = routeBusAssignments[routeNumber];
+        
+        // Si hay un bus anterior y un nuevo bus, transferir piloto y monitora
+        if (previousBusId && newBusId && previousBusId !== newBusId) {
+            const previousPilotId = pilotAssignments[previousBusId];
+            const previousMonitorId = monitorAssignments[previousBusId];
+            
+            // Transferir asignaciones al nuevo bus
+            setPilotAssignments(prev => {
+                const updated = { ...prev };
+                // Asignar al nuevo bus el piloto del anterior
+                if (previousPilotId) {
+                    updated[newBusId] = previousPilotId;
+                }
+                // Limpiar el bus anterior (ya no está asignado a esta ruta)
+                delete updated[previousBusId];
+                return updated;
+            });
+            
+            setMonitorAssignments(prev => {
+                const updated = { ...prev };
+                // Asignar al nuevo bus la monitora del anterior
+                if (previousMonitorId) {
+                    updated[newBusId] = previousMonitorId;
+                }
+                // Limpiar el bus anterior
+                delete updated[previousBusId];
+                return updated;
+            });
+        } else if (previousBusId && !newBusId) {
+            // Si se está quitando el bus (sin nuevo bus), limpiar asignaciones del anterior
+            setPilotAssignments(prev => {
+                const updated = { ...prev };
+                delete updated[previousBusId];
+                return updated;
+            });
+            setMonitorAssignments(prev => {
+                const updated = { ...prev };
+                delete updated[previousBusId];
+                return updated;
+            });
+        }
+        
         setRouteBusAssignments(prev => ({
             ...prev,
-            [routeNumber]: busId || null
+            [routeNumber]: newBusId || null
         }));
     };
 
