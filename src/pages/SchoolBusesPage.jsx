@@ -184,45 +184,133 @@ const SchoolBusesPage = () => {
     const handleSaveAssignments = async () => {
         setSaving(true);
         try {
-            // Primero, limpiar todas las asignaciones existentes para este colegio
-            const busesToClear = buses.filter(bus => 
-                bus.schoolId === parseInt(schoolId) && (bus.routeNumber || bus.pilotId || bus.monitoraId)
-            );
+            // Obtener el estado actual de buses desde el servidor para comparar
+            const currentBusesResp = await api.get('/buses/simple', {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            const currentBuses = currentBusesResp.data.buses || currentBusesResp.data || [];
             
-            for (const bus of busesToClear) {
-                await api.put(`/buses/${bus.id}`, {
-                    routeNumber: null,
-                    pilotId: null,
-                    monitoraId: null,
-                    schoolId: null
-                }, {
-                    headers: { Authorization: `Bearer ${auth.token}` }
-                });
-            }
-
-            // Luego, asignar los nuevos números de ruta, pilotos y monitoras
-            for (const [routeNumber, busId] of Object.entries(routeBusAssignments)) {
-                if (busId && routeNumber) {
-                    const updateData = {
-                        routeNumber: routeNumber,
-                        schoolId: parseInt(schoolId)
+            // Crear mapa de asignaciones actuales en el servidor
+            const serverAssignments = {};
+            currentBuses.forEach(bus => {
+                if (bus.schoolId === parseInt(schoolId) && bus.routeNumber) {
+                    serverAssignments[bus.routeNumber] = {
+                        busId: bus.id,
+                        pilotId: bus.pilotId,
+                        monitoraId: bus.monitoraId
                     };
+                }
+            });
 
-                    // Añadir piloto/monitora explícitamente (null si no asignado)
-                    updateData.pilotId = pilotAssignments[busId] ? pilotAssignments[busId] : null;
-                    updateData.monitoraId = monitorAssignments[busId] ? monitorAssignments[busId] : null;
+            // Crear mapa de asignaciones deseadas (UI actual)
+            const desiredAssignments = {};
+            Object.entries(routeBusAssignments).forEach(([routeNumber, busId]) => {
+                if (busId) {
+                    desiredAssignments[routeNumber] = {
+                        busId: busId,
+                        pilotId: pilotAssignments[busId] || null,
+                        monitoraId: monitorAssignments[busId] || null
+                    };
+                }
+            });
 
-                    await api.put(`/buses/${busId}`, updateData, {
-                        headers: { Authorization: `Bearer ${auth.token}` }
+            const updateOperations = [];
+            const errors = [];
+
+            // 1. Identificar buses que necesitan ser desasignados 
+            //    (están en servidor pero no en UI, o cambiaron de ruta)
+            for (const [routeNumber, serverData] of Object.entries(serverAssignments)) {
+                const desiredData = desiredAssignments[routeNumber];
+                
+                // Si la ruta ya no tiene bus asignado en UI, o tiene un bus diferente
+                if (!desiredData || desiredData.busId !== serverData.busId) {
+                    updateOperations.push({
+                        busId: serverData.busId,
+                        data: {
+                            routeNumber: null,
+                            schoolId: null,
+                            pilotId: null,
+                            monitoraId: null
+                        },
+                        action: 'clear'
                     });
                 }
             }
 
-            setSnackbar({ open: true, message: 'Asignaciones guardadas exitosamente', severity: 'success' });
+            // 2. Identificar buses que necesitan ser asignados o actualizados
+            for (const [routeNumber, desiredData] of Object.entries(desiredAssignments)) {
+                const serverData = serverAssignments[routeNumber];
+                
+                // Nuevo bus para esta ruta, o mismo bus pero necesita actualizar piloto/monitora
+                const needsUpdate = !serverData || 
+                    serverData.busId !== desiredData.busId ||
+                    serverData.pilotId !== desiredData.pilotId ||
+                    serverData.monitoraId !== desiredData.monitoraId;
+                
+                if (needsUpdate) {
+                    updateOperations.push({
+                        busId: desiredData.busId,
+                        data: {
+                            routeNumber: routeNumber,
+                            schoolId: parseInt(schoolId),
+                            pilotId: desiredData.pilotId,
+                            monitoraId: desiredData.monitoraId
+                        },
+                        action: 'assign'
+                    });
+                }
+            }
+
+            // 3. Ejecutar primero las operaciones de "clear" y luego las de "assign"
+            //    para evitar conflictos de routeNumber duplicado
+            const clearOps = updateOperations.filter(op => op.action === 'clear');
+            const assignOps = updateOperations.filter(op => op.action === 'assign');
+
+            // Ejecutar clears primero
+            for (const op of clearOps) {
+                try {
+                    await api.put(`/buses/${op.busId}`, op.data, {
+                        headers: { Authorization: `Bearer ${auth.token}` }
+                    });
+                } catch (err) {
+                    console.error(`Error clearing bus ${op.busId}:`, err);
+                    errors.push(`Error al limpiar bus ${op.busId}: ${err.response?.data?.message || err.message}`);
+                }
+            }
+
+            // Ejecutar assigns después
+            for (const op of assignOps) {
+                try {
+                    await api.put(`/buses/${op.busId}`, op.data, {
+                        headers: { Authorization: `Bearer ${auth.token}` }
+                    });
+                } catch (err) {
+                    console.error(`Error assigning bus ${op.busId}:`, err);
+                    errors.push(`Error al asignar bus ${op.busId} a ruta ${op.data.routeNumber}: ${err.response?.data?.message || err.message}`);
+                }
+            }
+
+            // Mostrar resultado
+            if (errors.length > 0) {
+                setSnackbar({ 
+                    open: true, 
+                    message: `Guardado parcial. Errores: ${errors.join('; ')}`, 
+                    severity: 'warning' 
+                });
+            } else if (updateOperations.length === 0) {
+                setSnackbar({ open: true, message: 'No hay cambios que guardar', severity: 'info' });
+            } else {
+                setSnackbar({ open: true, message: 'Asignaciones guardadas exitosamente', severity: 'success' });
+            }
+            
             fetchBuses(); // Refrescar datos
         } catch (err) {
             console.error('Error saving assignments:', err);
-            setSnackbar({ open: true, message: 'Error al guardar asignaciones', severity: 'error' });
+            setSnackbar({ 
+                open: true, 
+                message: `Error al guardar asignaciones: ${err.response?.data?.message || err.message}`, 
+                severity: 'error' 
+            });
         } finally {
             setSaving(false);
         }
