@@ -46,15 +46,26 @@ const AuxiliaresContainer = styled.div`
     }
 `;
 
-// Helper para agrupar las monitoras asignadas por schoolName
-const groupBySchool = (arr) => {
+// Helper para agrupar las monitoras asignadas por organización (colegio o corporación)
+// Usa una clave única combinando tipo y ID para evitar colisiones
+const groupByOrganization = (arr) => {
     const result = {};
     arr.forEach((item) => {
-        const school = item.schoolName || 'Sin Colegio';
-        if (!result[school]) {
-            result[school] = [];
+        // Crear una clave única: "tipo-id-nombre"
+        const orgType = item.organizationType || 'school';
+        const orgId = item.organizationId || 'none';
+        const orgName = item.schoolName || 'Sin Asignar';
+        const key = `${orgType}-${orgId}-${orgName}`;
+        
+        if (!result[key]) {
+            result[key] = {
+                displayName: orgName,
+                type: orgType,
+                id: orgId,
+                monitoras: []
+            };
         }
-        result[school].push(item);
+        result[key].monitoras.push(item);
     });
     return result;
 };
@@ -198,10 +209,11 @@ const AuxiliaresManagementPage = () => {
                             {filteredAuxiliares
                                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                 .map((aux, index) => {
-                                    const schools = Object.keys(groupBySchool(aux.monitorasAsignadas || []));
-                                    const selected = selectedSchool[aux.email] || schools[0] || '';
-                                    const monitorasBySchool = groupBySchool(aux.monitorasAsignadas || []);
-                                    const monitoras = monitorasBySchool[selected] || [];
+                                    const orgGroups = groupByOrganization(aux.assignedMonitoras || []);
+                                    const orgKeys = Object.keys(orgGroups);
+                                    const selected = selectedSchool[aux.email] || orgKeys[0] || '';
+                                    const selectedGroup = orgGroups[selected];
+                                    const monitoras = selectedGroup ? selectedGroup.monitoras : [];
                                     const key = `${aux.email}-${selected}`;
                                     const currentPage = monitoraPages[key] || 0;
                                     const totalPages = Math.ceil(monitoras.length / MONITORAS_PER_PAGE);
@@ -232,24 +244,27 @@ const AuxiliaresManagementPage = () => {
                                                         <Typography>Ver monitoras asignadas</Typography>
                                                     </AccordionSummary>
                                                     <AccordionDetails>
-                                                        {schools.length === 0 ? (
+                                                        {orgKeys.length === 0 ? (
                                                             <Typography>
                                                                 No hay monitoras asignadas a este auxiliar.
                                                             </Typography>
                                                         ) : (
                                                             <>
                                                                 <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                                                                    <InputLabel>Colegio</InputLabel>
+                                                                    <InputLabel>Colegio/Corporación</InputLabel>
                                                                     <Select
                                                                         value={selected}
-                                                                        label="Colegio"
+                                                                        label="Colegio/Corporación"
                                                                         onChange={e => handleSchoolChange(aux.email, e.target.value)}
                                                                     >
-                                                                        {schools.map(school => (
-                                                                            <MenuItem key={school} value={school}>
-                                                                                {school}
-                                                                            </MenuItem>
-                                                                        ))}
+                                                                        {orgKeys.map(orgKey => {
+                                                                            const org = orgGroups[orgKey];
+                                                                            return (
+                                                                                <MenuItem key={orgKey} value={orgKey}>
+                                                                                    {org.displayName}
+                                                                                </MenuItem>
+                                                                            );
+                                                                        })}
                                                                     </Select>
                                                                 </FormControl>
                                                                 {monitorasToShow.map((m, idx) => (
@@ -265,13 +280,10 @@ const AuxiliaresManagementPage = () => {
                                                                             <strong>Email:</strong> {m.email}
                                                                         </Typography>
                                                                         <Typography variant="body2">
-                                                                            <strong>Teléfono:</strong> {m.phoneNumber || 'N/A'}
+                                                                            <strong>Incidentes:</strong> {m.incidentsCount ?? 0}
                                                                         </Typography>
                                                                         <Typography variant="body2">
-                                                                            <strong>Incidentes:</strong> {m.incidentsCount || 0}
-                                                                        </Typography>
-                                                                        <Typography variant="body2">
-                                                                            <strong>Emergencias:</strong> {m.emergenciesCount || 0}
+                                                                            <strong>Emergencias:</strong> {m.emergenciesCount ?? 0}
                                                                         </Typography>
                                                                     </Paper>
                                                                 ))}
@@ -333,10 +345,11 @@ const AuxiliaresManagementPage = () => {
                                         {filteredAuxiliares
                                             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                             .map((aux, index) => {
-                                                const schools = Object.keys(groupBySchool(aux.monitorasAsignadas || []));
-                                                const selected = selectedSchool[aux.email] || schools[0] || '';
-                                                const monitorasBySchool = groupBySchool(aux.monitorasAsignadas || []);
-                                                const monitoras = monitorasBySchool[selected] || [];
+                                                const orgGroups = groupByOrganization(aux.assignedMonitoras || []);
+                                                const orgKeys = Object.keys(orgGroups);
+                                                const selected = selectedSchool[aux.email] || orgKeys[0] || '';
+                                                const selectedGroup = orgGroups[selected];
+                                                const monitoras = selectedGroup ? selectedGroup.monitoras : [];
                                                 const key = `${aux.email}-${selected}`;
                                                 const currentPage = monitoraPages[key] || 0;
                                                 const totalPages = Math.ceil(monitoras.length / MONITORAS_PER_PAGE);
@@ -360,24 +373,27 @@ const AuxiliaresManagementPage = () => {
                                                                     <Typography>Ver monitoras asignadas</Typography>
                                                                 </AccordionSummary>
                                                                 <AccordionDetails>
-                                                                    {schools.length === 0 ? (
+                                                                    {orgKeys.length === 0 ? (
                                                                         <Typography>
                                                                             No hay monitoras asignadas a este auxiliar.
                                                                         </Typography>
                                                                     ) : (
                                                                         <>
                                                                             <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                                                                                <InputLabel>Colegio</InputLabel>
+                                                                                <InputLabel>Colegio/Corporación</InputLabel>
                                                                                 <Select
                                                                                     value={selected}
-                                                                                    label="Colegio"
+                                                                                    label="Colegio/Corporación"
                                                                                     onChange={e => handleSchoolChange(aux.email, e.target.value)}
                                                                                 >
-                                                                                    {schools.map(school => (
-                                                                                        <MenuItem key={school} value={school}>
-                                                                                            {school}
-                                                                                        </MenuItem>
-                                                                                    ))}
+                                                                                    {orgKeys.map(orgKey => {
+                                                                                        const org = orgGroups[orgKey];
+                                                                                        return (
+                                                                                            <MenuItem key={orgKey} value={orgKey}>
+                                                                                                {org.displayName}
+                                                                                            </MenuItem>
+                                                                                        );
+                                                                                    })}
                                                                                 </Select>
                                                                             </FormControl>
                                                                             <Table size="small" sx={{ overflowX: 'auto' }}>
@@ -385,7 +401,6 @@ const AuxiliaresManagementPage = () => {
                                                                                     <TableRow>
                                                                                         <TableCell>Nombre</TableCell>
                                                                                         <TableCell>Email</TableCell>
-                                                                                        <TableCell>Teléfono</TableCell>
                                                                                         <TableCell>Incidentes</TableCell>
                                                                                         <TableCell>Emergencias</TableCell>
                                                                                     </TableRow>
@@ -395,15 +410,14 @@ const AuxiliaresManagementPage = () => {
                                                                                         <TableRow key={`${m.email}-${idx}`}>
                                                                                             <TableCell>{m.name}</TableCell>
                                                                                             <TableCell>{m.email}</TableCell>
-                                                                                            <TableCell>{m.phoneNumber || 'N/A'}</TableCell>
-                                                                                            <TableCell>{m.incidentsCount || 0}</TableCell>
-                                                                                            <TableCell>{m.emergenciesCount || 0}</TableCell>
+                                                                                            <TableCell>{m.incidentsCount ?? 0}</TableCell>
+                                                                                            <TableCell>{m.emergenciesCount ?? 0}</TableCell>
                                                                                         </TableRow>
                                                                                     ))}
                                                                                     {monitorasToShow.length === 0 && (
                                                                                         <TableRow>
-                                                                                            <TableCell colSpan={5} align="center">
-                                                                                                No hay monitoras asignadas en este colegio.
+                                                                                            <TableCell colSpan={4} align="center">
+                                                                                                No hay monitoras asignadas en esta organización.
                                                                                             </TableCell>
                                                                                         </TableRow>
                                                                                     )}

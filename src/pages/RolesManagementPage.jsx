@@ -323,7 +323,8 @@ const RolesManagementPage = () => {
     const [selectedSupervisorCorporations, setSelectedSupervisorCorporations] = useState([]);
 
     const [allMonitoras, setAllMonitoras] = useState([]);
-    const [selectedAuxiliarMonitoras, setSelectedAuxiliarMonitoras] = useState([]);
+    const [selectedAuxiliarSchools, setSelectedAuxiliarSchools] = useState([]);
+    const [selectedAuxiliarCorporations, setSelectedAuxiliarCorporations] = useState([]);
 
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [bulkFile, setBulkFile] = useState(null);
@@ -460,16 +461,6 @@ const RolesManagementPage = () => {
         }
     };
 
-    const handleToggleAuxiliarMonitora = useCallback((monitoraId) => {
-        setSelectedAuxiliarMonitoras(prev => {
-            if (prev.includes(monitoraId)) {
-                return prev.filter(id => id !== monitoraId);
-            } else {
-                return [...prev, monitoraId];
-            }
-        });
-    }, []);
-
     const handleEditClick = async (user) => {
         if (isUserNew(user)) {
             try {
@@ -558,22 +549,34 @@ const RolesManagementPage = () => {
                     setSelectedSupervisorCorporations([]);
                 }
             }
+        
         // Para el caso de Auxiliar
-        if (user.Role?.name === 'Auxiliar') {
-            const auxMonitoras = [];
-            try {
-                // Intentamos obtener las monitoras asignadas
-                const auxMonitorasResp = await api.get(`/users/${user.id}/assigned-monitoras`);
-                if (auxMonitorasResp.data && auxMonitorasResp.data.monitoraIds) {
-                    // Convertir a números para consistencia
-                    auxMonitoras.push(...auxMonitorasResp.data.monitoraIds.map(id => Number(id)));
-                }
-            } catch (error) {
-                console.error('Error al obtener monitoras asignadas al auxiliar:', error);
+        if (parsedRoleId === 7 || (user.Role && user.Role.name === 'Auxiliar')) {
+            console.log('🔍 Auxiliar detected, user data:', { 
+                attachedAuxiliarSchools: user.attachedAuxiliarSchools,
+                auxiliarSchools: user.auxiliarSchools,
+                school: user.school 
+            });
+            // Load attached schools for auxiliar
+            const attachedSchools = user.attachedAuxiliarSchools || [];
+            if (attachedSchools.length > 0) {
+                setSelectedAuxiliarSchools(attachedSchools.map(s => Number(s)));
+            } else if (user.school) {
+                setSelectedAuxiliarSchools([Number(user.school)]);
+            } else {
+                setSelectedAuxiliarSchools([]);
             }
-            setSelectedAuxiliarMonitoras(auxMonitoras);
+            
+            // Temporarily disabled - monitoras not assigned to corporations yet
+            // const attachedCorporations = user.attachedAuxiliarCorporations || [];
+            // if (attachedCorporations.length > 0) {
+            //     setSelectedAuxiliarCorporations(attachedCorporations.map(c => Number(c)));
+            // } else {
+            //     setSelectedAuxiliarCorporations([]);
+            // }
         } else {
-            setSelectedAuxiliarMonitoras([]);
+            setSelectedAuxiliarSchools([]);
+            // setSelectedAuxiliarCorporations([]);
         }
         setOpenDialog(true);
     };
@@ -624,6 +627,8 @@ const RolesManagementPage = () => {
         setOriginalStudents([]);
         setSelectedSupervisorSchools([]);
         setSelectedSupervisorCorporations([]);
+        setSelectedAuxiliarSchools([]);
+        setSelectedAuxiliarCorporations([]);
         setSchoolGrades([]);
         setOpenDialog(true);
     };
@@ -633,6 +638,8 @@ const RolesManagementPage = () => {
         setSelectedUser(null);
         setSelectedSupervisorSchools([]);
         setSelectedSupervisorCorporations([]);
+        setSelectedAuxiliarSchools([]);
+        setSelectedAuxiliarCorporations([]);
     };
 
     const handleDeleteClick = async (userId) => {
@@ -759,9 +766,10 @@ const RolesManagementPage = () => {
                 payload.supervisorCorporations = (selectedSupervisorCorporations || []).map(c => Number(c));
             }
 
-            // Auxiliar: monitoras asignadas (comparar con roleId numérico del payload)
+            // Auxiliar: colegios a cargo (igual que supervisores)
             if (roleIdNum === 7) {
-                payload.monitorasAsignadas = selectedAuxiliarMonitoras;
+                payload.auxiliarSchools = (selectedAuxiliarSchools || []).map(s => Number(s));
+                payload.auxiliarCorporations = (selectedAuxiliarCorporations || []).map(c => Number(c));
             }
 
             // Crear o actualizar (no envíes id en POST)
@@ -2276,35 +2284,82 @@ const RolesManagementPage = () => {
                         {selectedUser?.roleId === 7 && (
                             <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
                                 <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Monitoras a cargo
+                                    Clientes a cargo
                                 </Typography>
                                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona una o más monitoras que estarán a cargo de este Auxiliar.
+                                    Selecciona uno o más colegios; todas las monitoras asignadas serán enlazadas automáticamente.
                                 </Typography>
-                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto' }}>
-                                    {allMonitoras.length === 0 ? (
-                                        <Typography variant="body2" color="text.secondary">
-                                            No hay monitoras disponibles.
-                                        </Typography>
-                                    ) : (
-                                        allMonitoras.map((monitora) => {
-                                            const checked = selectedAuxiliarMonitoras.includes(monitora.id);
-                                            return (
-                                                <FormControlLabel
-                                                    key={monitora.id}
-                                                    control={
-                                                        <Checkbox
-                                                            checked={checked}
-                                                            onChange={() => handleToggleAuxiliarMonitora(monitora.id)}
-                                                            color="primary"
-                                                        />
-                                                    }
-                                                    label={`${monitora.name} - ${monitora.email} (ID: ${monitora.id})`}
-                                                    sx={{ display: 'block', mb: 1 }}
-                                                />
-                                            );
-                                        })
-                                    )}
+                                
+                                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                    Colegios
+                                </Typography>
+                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                    <InputLabel>Seleccionar Colegios</InputLabel>
+                                    <Select
+                                        multiple
+                                        value={selectedAuxiliarSchools}
+                                        onChange={(e) => setSelectedAuxiliarSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                        label="Seleccionar Colegios"
+                                        renderValue={(selected) => selected.map(id => (schools.find(s => s.id === id)?.name || id)).join(', ')}
+                                    >
+                                        {schools.map(s => (
+                                            <MenuItem key={s.id} value={s.id}>
+                                                <Checkbox checked={selectedAuxiliarSchools.includes(s.id)} />
+                                                <ListItemText primary={s.name} />
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+
+                                {/* Temporarily disabled - monitoras not assigned to corporations yet
+                                <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
+                                    Corporaciones
+                                </Typography>
+                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                    <InputLabel>Seleccionar Corporaciones</InputLabel>
+                                    <Select
+                                        multiple
+                                        value={selectedAuxiliarCorporations}
+                                        onChange={(e) => setSelectedAuxiliarCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                        label="Seleccionar Corporaciones"
+                                        renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
+                                    >
+                                        {corporations.map(c => (
+                                            <MenuItem key={c.id} value={c.id}>
+                                                <Checkbox checked={selectedAuxiliarCorporations.includes(c.id)} />
+                                                <ListItemText primary={c.name} />
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                                */}
+
+                                <Typography variant="subtitle2" sx={{ mt: 2 }}>Monitoras enlazadas automáticamente:</Typography>
+                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
+                                    {(() => {
+                                        // Compute monitoras that belong to selected schools or corporations
+                                        const schoolMonitoras = selectedAuxiliarSchools.length > 0 
+                                            ? allMonitoras.filter(m => selectedAuxiliarSchools.includes(Number(m.school)))
+                                            : [];
+                                        // Temporarily disabled - monitoras not assigned to corporations yet
+                                        // const corpMonitoras = selectedAuxiliarCorporations.length > 0
+                                        //     ? allMonitoras.filter(m => selectedAuxiliarCorporations.includes(Number(m.corporationId)))
+                                        //     : [];
+                                        const allLinkedMonitoras = [...schoolMonitoras]; // , ...corpMonitoras
+                                        
+                                        if (allLinkedMonitoras.length === 0) return (
+                                            <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay monitoras asignadas.</Typography>
+                                        );
+                                        
+                                        // Remove duplicates by ID
+                                        const uniqueMonitoras = allLinkedMonitoras.filter((m, idx, arr) => 
+                                            arr.findIndex(monitora => monitora.id === m.id) === idx
+                                        );
+                                        
+                                        return uniqueMonitoras.map(m => (
+                                            <Typography key={m.id} variant="body2">{m.name} — {m.email} (ID: {m.id})</Typography>
+                                        ));
+                                    })()}
                                 </Paper>
                             </Box>
                         )}
