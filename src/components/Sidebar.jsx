@@ -37,7 +37,7 @@ const SidebarContainer = styled.div`
 `;
 
 const SidebarHeader = styled.div`
-  ${tw`flex items-center justify-between p-4 bg-gray-900 rounded-t-lg`}
+    ${tw`flex items-center justify-between p-4 bg-gray-900 rounded-t-lg`}
 `;
 
 const ProfileInfo    = tw.div`flex items-center`;
@@ -87,7 +87,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     const [hoveredItem, setHoveredItem] = useState(null);
     const hoverTimer = useRef(null);
 
-    // Carga permisos al montar
+    // Carga permisos al montar / cuando cambie el rol
     useEffect(() => {
         if (auth?.token && auth?.user?.roleId) {
             api.get(`/permissions/role/${auth.user.roleId}`, {
@@ -96,7 +96,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                 .then(res => setPermissions(res.data.permissions || {}))
                 .catch(console.error);
         }
-    }, [auth.token, auth.user?.roleId]);
+    }, [auth?.token, auth?.user?.roleId]);
 
     const handleMenuClick = idx => {
         if (!isOpen) return;
@@ -112,10 +112,21 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
         if (window.innerWidth < 768) toggleSidebar();
     };
 
-    if (!auth.user) return null;
+    if (!auth?.user) return null;
+
     const user = { name: auth.user.name, role: auth.user.role, avatar: userImage };
 
     const canAccessDashboard = !!permissions['dashboard'];
+
+    // Admin / Gestor
+    const isAdminOrGestor = user.role === 'Administrador' || user.role === 'Gestor';
+
+    /**
+     * Visibilidad de "Roles y Permisos":
+     * - Siempre se muestra para Admin / Gestor,
+     *   sin importar qué valor venga en permissions['roles-permisos'].
+     */
+    const canSeeRolesPermisos = isAdminOrGestor;
 
     // Calcula la posición vertical del pop-up
     const getPopoutPosition = idx => HEADER_OFFSET + idx * ITEM_HEIGHT;
@@ -126,12 +137,15 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             setHoveredItem(idx);
         }
     };
+
     const handleItemMouseLeave = (idx, hasSubs) => {
         if (!isOpen && hasSubs) {
             hoverTimer.current = setTimeout(() => setHoveredItem(null), 200);
         }
     };
+
     const handlePopoutMouseEnter = () => clearTimeout(hoverTimer.current);
+
     const handlePopoutMouseLeave = () => {
         hoverTimer.current = setTimeout(() => setHoveredItem(null), 200);
     };
@@ -154,7 +168,11 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                 <MainMenu>
                     <SidebarMenu>
                         {canAccessDashboard && (
-                            <RouterLink to="/admin/dashboard" onClick={handleLinkClick} style={{ textDecoration:'none', color:'inherit' }}>
+                            <RouterLink
+                                to="/admin/dashboard"
+                                onClick={handleLinkClick}
+                                style={{ textDecoration: 'none', color: 'inherit' }}
+                            >
                                 <MenuItem>
                                     <div tw="flex items-center">
                                         <HomeIcon tw="mr-2" />
@@ -164,8 +182,12 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                             </RouterLink>
                         )}
 
-                        {/* Enlace a Historial */}
-                        <RouterLink to="/admin/historial" onClick={handleLinkClick} style={{ textDecoration:'none', color:'inherit' }}>
+                        {/* Enlace a Historial (sin restricción por ahora) */}
+                        <RouterLink
+                            to="/admin/historial"
+                            onClick={handleLinkClick}
+                            style={{ textDecoration: 'none', color: 'inherit' }}
+                        >
                             <MenuItem>
                                 <div tw="flex items-center">
                                     <HistoryIcon tw="mr-2" />
@@ -179,6 +201,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                             if (!permissions[module.key]) return null;
                             const hasSubs = module.submodules?.length > 0;
                             const isOpenMenu = openMenus[idx];
+
                             return (
                                 <React.Fragment key={module.key}>
                                     <MenuItem
@@ -190,7 +213,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                             {module.icon && <module.icon tw="mr-2" />}
                                             {isOpen && <span>{module.name}</span>}
                                         </div>
-                                        {isOpen && hasSubs && (isOpenMenu ? <ExpandLess/> : <ExpandMore/>)}
+                                        {isOpen && hasSubs && (isOpenMenu ? <ExpandLess /> : <ExpandMore />)}
                                     </MenuItem>
 
                                     {/* Submenú inline */}
@@ -201,7 +224,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                                     key={sm.key}
                                                     to={`/admin/${sm.path}`}
                                                     onClick={handleLinkClick}
-                                                    style={{ textDecoration:'none', color:'inherit' }}
+                                                    style={{ textDecoration: 'none', color: 'inherit' }}
                                                 >
                                                     <SubMenuItem>{sm.name}</SubMenuItem>
                                                 </RouterLink>
@@ -209,7 +232,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                         </div>
                                     )}
 
-                                    {/* Pop-up lateral */}
+                                    {/* Pop-up lateral cuando el sidebar está colapsado */}
                                     {!isOpen && hasSubs && hoveredItem === idx && (
                                         <SubMenuPopout
                                             popY={getPopoutPosition(idx)}
@@ -222,7 +245,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                                         key={sm.key}
                                                         to={`/admin/${sm.path}`}
                                                         onClick={handleLinkClick}
-                                                        style={{ textDecoration:'none', color:'inherit' }}
+                                                        style={{ textDecoration: 'none', color: 'inherit' }}
                                                     >
                                                         <PopoutItem>{sm.name}</PopoutItem>
                                                     </RouterLink>
@@ -237,8 +260,12 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                 </MainMenu>
 
                 <SidebarMenu tw="flex flex-col">
-                    {(user.role === 'Administrador' || user.role === 'Gestor') && permissions['roles-permisos'] && (
-                        <RouterLink to="/admin/roles-permisos" onClick={handleLinkClick} style={{ textDecoration:'none', color:'inherit' }}>
+                    {canSeeRolesPermisos && (
+                        <RouterLink
+                            to="/admin/roles-permisos"
+                            onClick={handleLinkClick}
+                            style={{ textDecoration: 'none', color: 'inherit' }}
+                        >
                             <MenuItem>
                                 <div tw="flex items-center">
                                     <Settings tw="mr-2" />
@@ -247,6 +274,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                             </MenuItem>
                         </RouterLink>
                     )}
+
                     <LogoutItem onClick={() => { handleLogout(); handleLinkClick(); }}>
                         <div tw="flex items-center">
                             <LogoutIcon tw="mr-2" />
