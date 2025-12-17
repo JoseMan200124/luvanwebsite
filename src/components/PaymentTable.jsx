@@ -15,7 +15,18 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
     const discount = Number(family.specialFee || family.discount || 0).toFixed(2);
     const requiresInvoice = !!family.requiresInvoice || !!p.requiresInvoice || false;
     const status = (p.finalStatus || '').toUpperCase();
-    const statusColor = status === 'PAGADO' ? 'green' : status === 'MORA' ? 'red' : 'orange';
+    
+    // V2: Mapeo de colores para estados
+    let statusColor = 'orange'; // PENDIENTE por defecto
+    if (status === 'CONFIRMADO' || status === 'ADELANTADO') {
+        statusColor = 'green'; // Al día
+    } else if (status === 'MORA' || status === 'ATRASADO') {
+        statusColor = 'red'; // Deudas/mora
+    } else if (status === 'EN_PROCESO') {
+        statusColor = '#ff9800'; // Amarillo/naranja (parcial)
+    } else if (status === 'INACTIVO') {
+        statusColor = '#9e9e9e'; // Gris
+    }
 
     return (
         <TableRow key={p.id} hover>

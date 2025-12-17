@@ -16,12 +16,23 @@ import {
     TableRow,
     TableCell,
     TableBody,
-    Checkbox
+    Checkbox,
+    Tooltip,
+    IconButton as MuiIconButton
 } from '@mui/material';
 import TablePagination from '@mui/material/TablePagination';
-import { ReceiptLong as ReceiptIcon, Pause as PauseIcon, MonetizationOn as MoneyIcon, Block as BlockIcon, PlayArrow as PlayArrowIcon, CheckCircle as CheckCircleIcon, Restore } from '@mui/icons-material';
+import { 
+    ReceiptLong as ReceiptIcon, 
+    Pause as PauseIcon, 
+    PlayArrow as PlayArrowIcon, 
+    Block as BlockIcon, 
+    CheckCircle as CheckCircleIcon, 
+    Restore,
+    HelpOutline as HelpIcon
+} from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
+import dateService from '../services/dateService';
 import ReceiptsPane from './ReceiptsPane';
 
 // cache TTL (ms)
@@ -52,16 +63,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     if (!global.__paymentHistCache) global.__paymentHistCache = new Map();
     const histCacheRef = React.useRef(global.__paymentHistCache);
 
-    // compute tariff: prefer school's transport fees based on routeType, fallback to payment tariff/rate
-    const school = payment?.User?.School || {};
-    // routeType is one of: 'Completa', 'Media AM', 'Media PM' — use exact mapping to school's fees
-    const routeType = (family.routeType || payment?.routeType || '');
-
-    const transportFeeComplete = Number(school.transportFeeComplete ?? school.transport_fee_complete ?? 0) || 0;
-    const transportFeeHalf = Number(school.transportFeeHalf ?? school.transport_fee_half ?? 0) || 0;
-    let computedTariff = 0;
-    if (routeType === 'Completa') computedTariff = transportFeeComplete;
-    else if (routeType === 'Media AM' || routeType === 'Media PM') computedTariff = transportFeeHalf;
+    const computedTariff = Number(payment?.monthlyFee || 0);
 
     const [openExonerateDialog, setOpenExonerateDialog] = useState(false);
     const [exonerateAmount, setExonerateAmount] = useState('');
@@ -104,14 +106,14 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     // Load payment histories from paymenthistory (ledger) via API
     useEffect(() => {
         const loadHistories = async () => {
-            if (!open || !payment?.User?.id) {
+            if (!open || !payment?.id) {
                 setHistories([]);
                 return;
             }
             setHistLoading(true);
             try {
-                const userId = payment.User.id;
-                const cacheKey = `${userId}:${histPage}:${histLimit}`;
+                const paymentId = payment.id;
+                const cacheKey = `${paymentId}:${histPage}:${histLimit}`;
                 const now = Date.now();
 
                 // Try cache
@@ -122,15 +124,36 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     setHistLoading(false);
                     return;
                 }
-                const params = { userId, limit: histLimit, page: histPage };
-                const res = await api.get('/payments/paymenthistory', { params });
-                const arr = res.data.histories || []; // controller returns { histories }
-                const total = res.data.totalRecords || res.data.total || 0;
-                setHistories(arr);
+                
+                // V2: Usar endpoint de transacciones del nuevo sistema
+                const res = await api.get(`/payments/${paymentId}/history`);
+                const transactions = res.data.transactions || [];
+                
+                // Transformar transacciones V2 a formato esperado por la UI
+                const arr = transactions.map(tx => ({
+                    id: tx.id,
+                    lastPaymentDate: tx.realPaymentDate || tx.createdAt,
+                    amountPaid: tx.amount,
+                    penaltyAfter: 0, // Las transacciones V2 no tienen penaltyAfter en cada tx
+                    receiptNumber: tx.receiptNumber || '',
+                    requiresInvoice: tx.invoiceSent || false,
+                    type: tx.type,
+                    source: tx.source,
+                    notes: tx.notes
+                }));
+                
+                const total = arr.length;
+                
+                // Paginar en cliente
+                const start = histPage * histLimit;
+                const end = start + histLimit;
+                const paginatedArr = arr.slice(start, end);
+                
+                setHistories(paginatedArr);
                 setHistTotal(total);
 
                 // Save to cache
-                histCacheRef.current.set(cacheKey, { ts: now, data: arr, total });
+                histCacheRef.current.set(cacheKey, { ts: now, data: paginatedArr, total });
             } catch (err) {
                 console.error('Error cargando historial de pagos:', err);
                 setHistories([]);
@@ -164,10 +187,10 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         // If this action modifies payment history on the server, invalidate client's cached pages for this user
         const mutating = ['exoneratePenalty', 'addTransaction', 'updateReceiptNumber', 'updatePayment', 'toggleRequiresInvoice', 'toggleAutoDebit', 'toggleFreezePenalty', 'suspend', 'activate'];
         try {
-            const uid = payment?.User?.id;
-            if (uid && mutating.includes(name)) {
-                // clear all cache entries for this userId
-                const prefix = `${uid}:`;
+            const paymentId = payment?.id;
+            if (paymentId && mutating.includes(name)) {
+                // clear all cache entries for this paymentId
+                const prefix = `${paymentId}:`;
                 for (const k of Array.from(histCacheRef.current.keys())) {
                     if (k.startsWith(prefix)) histCacheRef.current.delete(k);
                 }
@@ -181,14 +204,14 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         if (name === 'toggleFreezePenalty' || name === 'freezePenalty') {
             setLocalPayment(prev => {
                 if (!prev) return prev;
-                return { ...prev, penaltyPaused: !prev.penaltyPaused };
+                return { ...prev, penaltyFrozen: !prev.penaltyFrozen };
             });
         }
         if (name === 'suspend' || name === 'activate') {
-            const desiredState = name === 'suspend' ? 0 : 1;
+            const desiredStatus = name === 'suspend' ? 'INACTIVO' : 'ACTIVO';
             setLocalPayment(prev => {
                 if (!prev) return prev;
-                return { ...prev, User: { ...(prev.User || {}), state: desiredState } };
+                return { ...prev, status: desiredStatus };
             });
         }
 
@@ -206,6 +229,13 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             return;
         }
 
+        // Update local state for suspend/activate actions
+        if (name === 'suspend') {
+            setLocalPayment(prev => ({ ...prev, status: 'INACTIVO', finalStatus: 'INACTIVO' }));
+        } else if (name === 'activate') {
+            setLocalPayment(prev => ({ ...prev, status: 'ACTIVO' }));
+        }
+
         onAction(name, { payment: localPayment || payment, ...payload });
     };
 
@@ -214,11 +244,11 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         // Optimistically update UI
         setHistories((prev) => prev.map(h => (h.id === row.id ? { ...h, requiresInvoice: newVal } : h)));
 
-        // Invalidate cache for this user so subsequent reads are fresh
+        // Invalidate cache for this payment (discount may affect snapshots)
         try {
-            const uid = payment?.User?.id;
-            if (uid) {
-                const prefix = `${uid}:`;
+            const paymentId = payment?.id;
+            if (paymentId) {
+                const prefix = `${paymentId}:`;
                 for (const k of Array.from(histCacheRef.current.keys())) {
                     if (k.startsWith(prefix)) histCacheRef.current.delete(k);
                 }
@@ -227,26 +257,24 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             console.warn('Error invalidando cache tras toggle invoice:', err);
         }
 
-        // Persist change to backend. Prefer updating the specific history record when id present,
-        // otherwise create a meta history record for the payment.
+        // Persist change to backend using V2 transactions endpoint
         (async () => {
             try {
                 const payloadRow = { ...row, paymentId: payment?.id };
                 if (row && row.id) {
-                    // Update specific history row
-                    await api.put(`/payments/history/${row.id}/invoice`, { invoiceSended: newVal });
+                    // Update transaction invoice status (V2 endpoint)
+                    const response = await api.put(`/payments/v2/transactions/${row.id}/invoice`, { invoiceSent: newVal });
+                    console.log('✅ Factura actualizada exitosamente:', response.data);
                 } else {
-                    // Create a meta history record linked to the payment
-                    await api.put(`/payments/${payment?.id}/voice`, { invoiceSended: newVal }).catch(async () => {
-                        // fallback in case of typo or older backend: try the intended endpoint
-                        await api.put(`/payments/${payment?.id}/invoice`, { invoiceSended: newVal });
-                    });
+                    console.warn('No se puede actualizar factura: transacción sin ID');
+                    return;
                 }
 
                 // Notify parent of the successful change
                 onToggleInvoiceSent(payloadRow, newVal);
             } catch (err) {
-                console.error('Error guardando estado de factura en backend:', err);
+                console.error('❌ Error guardando estado de factura en backend:', err);
+                console.error('Response data:', err.response?.data);
                 // revert optimistic change on error
                 setHistories((prev) => prev.map(h => (h.id === row.id ? { ...h, requiresInvoice: !newVal } : h)));
             }
@@ -267,9 +295,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const handleSaveDiscount = () => {
         // Invalidate cached histories for this user (discount may affect snapshots)
         try {
-            const uid = (localPayment || payment)?.User?.id;
-            if (uid) {
-                const prefix = `${uid}:`;
+            const paymentId = (localPayment || payment)?.id;
+            if (paymentId) {
+                const prefix = `${paymentId}:`;
                 for (const k of Array.from(histCacheRef.current.keys())) {
                     if (k.startsWith(prefix)) histCacheRef.current.delete(k);
                 }
@@ -282,7 +310,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     // compute total after discount (clamp to zero)
     const parsedDiscount = Number(discount || 0) || 0;
-    const totalAfterDiscount = Math.max(0, Number(computedTariff * (family.Students || []).length || 0) - parsedDiscount);
+    const totalAfterDiscount = Math.max(0, Number(computedTariff || 0) - parsedDiscount);
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
@@ -296,9 +324,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 <Typography variant="h6"><strong>{family.familyLastName || '-'}</strong></Typography>
                                 {/** status badge */}
                                 {(() => {
-                                    // Prefer explicit FamilyDetail.active if present; otherwise derive from localPayment (optimistic) or prop
-                                    const userState = (localPayment || payment)?.User?.state;
-                                    const isActive = typeof family.active !== 'undefined' ? !!family.active : (userState === 1);
+                                    // Check payment status (ACTIVO, PENDIENTE, etc.) - not INACTIVO means active
+                                    const paymentStatus = (localPayment || payment)?.status;
+                                    const isActive = paymentStatus && paymentStatus !== 'INACTIVO';
                                     return (
                                         <Box component="span" sx={{ ml: 1 }}>
                                             <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, bgcolor: isActive ? 'success.main' : 'error.main', color: 'white', fontSize: 12 }}>
@@ -344,13 +372,35 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </Grid>
                 </Grid>
 
-                <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%' }}>
+                <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
                     <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => handleAction('receipts')}>Boletas</Button>
-                    {/* Freeze/resume mora: show 'Reanudar Mora' if penaltyPaused true */}
-                    <Button variant="outlined" startIcon={localPayment?.penaltyPaused ? <PlayArrowIcon /> : <PauseIcon />} onClick={() => handleAction('toggleFreezePenalty')}>{localPayment?.penaltyPaused ? 'Reanudar Mora' : 'Congelar Mora'}</Button>
-                    <Button variant="outlined" startIcon={<MoneyIcon />} onClick={() => setOpenExonerateDialog(true)}>Exonerar Mora</Button>
-                    {/* Suspend/Activate: toggle based on user state */}
-                    <Button variant="outlined" startIcon={localPayment?.User?.state === 1 ? <BlockIcon /> : <CheckCircleIcon />} onClick={() => handleAction(localPayment?.User?.state === 1 ? 'suspend' : 'activate')}>{localPayment?.User?.state === 1 ? 'Suspender' : 'Activar'}</Button>
+                    {/* Freeze/Unfreeze penalty button - disponible para todos los pagos */}
+                    <Button 
+                        variant="outlined" 
+                        color={localPayment?.penaltyFrozenAt ? "success" : "primary"}
+                        startIcon={localPayment?.penaltyFrozenAt ? <PlayArrowIcon /> : <PauseIcon />}
+                        onClick={async () => {
+                            if (localPayment?.penaltyFrozenAt) {
+                                handleAction('unfreezePenalty');
+                            } else {
+                                // Freeze with current date from backend (simulated or real)
+                                try {
+                                    const currentDate = await dateService.getCurrentDate();
+                                    const today = currentDate.format('YYYY-MM-DD');
+                                    handleAction('freezePenalty', { freezeDate: today });
+                                } catch (error) {
+                                    console.error('Error getting current date:', error);
+                                    // Fallback to local date if service fails
+                                    const today = moment().format('YYYY-MM-DD');
+                                    handleAction('freezePenalty', { freezeDate: today });
+                                }
+                            }
+                        }}
+                    >
+                        {localPayment?.penaltyFrozenAt ? 'Reanudar Mora' : 'Congelar Mora'}
+                    </Button>
+                    {/* Suspend/Activate: toggle based on payment status */}
+                    <Button variant="outlined" startIcon={(localPayment || payment)?.status !== 'INACTIVO' ? <BlockIcon /> : <CheckCircleIcon />} onClick={() => handleAction((localPayment || payment)?.status !== 'INACTIVO' ? 'suspend' : 'activate')}>{(localPayment || payment)?.status !== 'INACTIVO' ? 'Suspender' : 'Activar'}</Button>
                     {/* Delete/Revert payment */}
                     <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => setOpenDeleteDialog(true)}>Revertir pago</Button>
                 </Box>
@@ -414,52 +464,184 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 </Dialog>
 
                 <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Historial de Pagos</Typography>
+                <Box sx={{ overflowX: 'auto' }}>
                 <Table size="small">
                     <TableHead>
                         <TableRow>
-                            <TableCell align="center">Fecha de Pago</TableCell>
-                            <TableCell align="center">Monto</TableCell>
-                            <TableCell align="center">Mora</TableCell>
-                            <TableCell align="center">Número de Boleta</TableCell>
-                            <TableCell align="center">Factura Envíada</TableCell>
+                            <TableCell align="center" sx={{ minWidth: 100 }}>Fecha</TableCell>
+                            <TableCell align="center" sx={{ minWidth: 120 }}>Tipo</TableCell>
+                            <TableCell align="center" sx={{ minWidth: 100 }}>Monto</TableCell>
+                            <TableCell align="center" sx={{ minWidth: 100 }}>Fuente</TableCell>
+                            <TableCell align="center" sx={{ minWidth: 120 }}>N° Boleta</TableCell>
+                            <TableCell align="center" sx={{ minWidth: 100 }}>Factura</TableCell>
+                            <TableCell align="left" sx={{ minWidth: 200 }}>Notas</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {(!histLoading && histories.length === 0) && (
                             <TableRow>
-                                <TableCell colSpan={6} align="center">No hay pagos registrados.</TableCell>
+                                <TableCell colSpan={7} align="center">No hay transacciones registradas.</TableCell>
                             </TableRow>
                         )}
                         {histLoading && (
                             <TableRow>
-                                <TableCell colSpan={6} align="center">Cargando historial...</TableCell>
+                                <TableCell colSpan={7} align="center">Cargando historial...</TableCell>
                             </TableRow>
                         )}
                         {!histLoading && histories.map((h) => {
-                            // PaymentHistory fields: lastPaymentDate, amountPaid, tarif, penaltyBefore, totalDue, requiresInvoice, familyLastName
+                            // V2 Transaction fields
                             const dateVal = h.lastPaymentDate || null;
-                            // Prefer amountPaid (ledger actual paid amount). Fallback to tarif or totalDue for older records.
-                            const amountVal = (typeof h.amountPaid !== 'undefined' && h.amountPaid !== null) ? h.amountPaid : (h.tarif ?? h.totalDue ?? 0);
-                            const penaltyVal = h.penaltyAfter ?? 0;
-                            const receiptVal = h.receiptNumber || '';
+                            const amountVal = Number(h.amountPaid || 0);
+                            const typeVal = h.type || 'PAYMENT';
+                            const sourceVal = h.source || 'MANUAL';
+                            const receiptVal = h.receiptNumber || '—';
                             const invoiceReq = !!h.requiresInvoice;
+                            const notesVal = h.notes || '';
                             const key = h.id || `${dateVal || ''}-${amountVal}`;
 
+                            // Configuración de colores y etiquetas según el tipo de transacción
+                            let typeLabel = typeVal;
+                            let typeColor = 'default';
+                            let typeBgColor = '#e0e0e0';
+                            
+                            switch(typeVal?.toUpperCase()) {
+                                case 'PAYMENT':
+                                    typeLabel = '💰 Pago Tarifa';
+                                    typeColor = 'success';
+                                    typeBgColor = '#e8f5e9';
+                                    break;
+                                case 'PENALTY_PAYMENT':
+                                    typeLabel = '⚠️ Pago Mora';
+                                    typeColor = 'warning';
+                                    typeBgColor = '#fff3e0';
+                                    break;
+                                case 'PENALTY_EXONERATION':
+                                    typeLabel = '✨ Exoneración';
+                                    typeColor = 'info';
+                                    typeBgColor = '#e3f2fd';
+                                    break;
+                                case 'PENALTY_DISCOUNT':
+                                    typeLabel = '🎁 Descuento Mora';
+                                    typeColor = 'info';
+                                    typeBgColor = '#e1f5fe';
+                                    break;
+                                case 'ADJUSTMENT':
+                                    typeLabel = '🔧 Ajuste';
+                                    typeColor = 'default';
+                                    typeBgColor = '#f5f5f5';
+                                    break;
+                                case 'REVERSAL':
+                                    typeLabel = '↩️ Reversión';
+                                    typeColor = 'error';
+                                    typeBgColor = '#ffebee';
+                                    break;
+                                default:
+                                    typeLabel = typeVal || 'Otro';
+                                    break;
+                            }
+
+                            // Configuración de fuente
+                            let sourceLabel = sourceVal;
+                            let sourceBgColor = '#f5f5f5';
+                            
+                            switch(sourceVal?.toUpperCase()) {
+                                case 'MANUAL':
+                                    sourceLabel = '✋ Manual';
+                                    sourceBgColor = '#fff9c4';
+                                    break;
+                                case 'AUTO_DEBIT':
+                                    sourceLabel = '🤖 Débito Auto';
+                                    sourceBgColor = '#c8e6c9';
+                                    break;
+                                case 'ONLINE':
+                                    sourceLabel = '🌐 En Línea';
+                                    sourceBgColor = '#b3e5fc';
+                                    break;
+                                case 'BANK':
+                                    sourceLabel = '🏦 Banco';
+                                    sourceBgColor = '#d1c4e9';
+                                    break;
+                                default:
+                                    sourceLabel = sourceVal || 'Otro';
+                                    break;
+                            }
+
                             return (
-                                <TableRow key={key}>
-                                    <TableCell align="center">{dateVal ? moment.parseZone(dateVal).format('DD/MM/YY') : '—'}</TableCell>
-                                    <TableCell align="center">Q {Number(amountVal).toFixed(2)}</TableCell>
-                                    <TableCell align="center">Q {Number(penaltyVal).toFixed(2)}</TableCell>
-                                    <TableCell align="center">{receiptVal}</TableCell>
+                                <TableRow key={key} hover>
+                                    <TableCell align="center">
+                                        <Typography variant="body2">
+                                            {dateVal ? moment.parseZone(dateVal).format('DD/MM/YY') : '—'}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        <Box 
+                                            sx={{ 
+                                                display: 'inline-block',
+                                                px: 1.5, 
+                                                py: 0.5, 
+                                                borderRadius: 1,
+                                                backgroundColor: typeBgColor,
+                                                fontSize: '0.75rem',
+                                                fontWeight: 600
+                                            }}
+                                        >
+                                            {typeLabel}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        <Typography 
+                                            variant="body2" 
+                                            sx={{ 
+                                                fontWeight: 600,
+                                                color: amountVal >= 0 ? 'success.main' : 'error.main'
+                                            }}
+                                        >
+                                            Q {amountVal.toFixed(2)}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        <Box 
+                                            sx={{ 
+                                                display: 'inline-block',
+                                                px: 1, 
+                                                py: 0.25, 
+                                                borderRadius: 0.5,
+                                                backgroundColor: sourceBgColor,
+                                                fontSize: '0.7rem'
+                                            }}
+                                        >
+                                            {sourceLabel}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                            {receiptVal}
+                                        </Typography>
+                                    </TableCell>
                                     <TableCell align="center">
                                         <Checkbox checked={invoiceReq} onChange={() => handleToggleInvoiceRow(h)} />
+                                    </TableCell>
+                                    <TableCell align="left">
+                                        <Typography 
+                                            variant="caption" 
+                                            sx={{ 
+                                                display: 'block',
+                                                maxWidth: 200,
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis'
+                                            }}
+                                            title={notesVal}
+                                        >
+                                            {notesVal || '—'}
+                                        </Typography>
                                     </TableCell>
                                 </TableRow>
                             );
                         })}
                         {/* Pagination row inserted as last table row */}
                         <TableRow>
-                            <TableCell colSpan={6} sx={{ border: 'none', py: 1 }}>
+                            <TableCell colSpan={7} sx={{ border: 'none', py: 1 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                                     <TablePagination
                                         component="div"
@@ -476,6 +658,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         </TableRow>
                     </TableBody>
                 </Table>
+                </Box>
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Cerrar</Button>

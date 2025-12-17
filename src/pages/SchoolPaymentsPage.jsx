@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useContext, useCallback, useRef } from 'react';
 import moment from 'moment';
+import 'moment/locale/es'; // Importar locale español
 import {
     Typography,
     Box,
@@ -23,7 +24,10 @@ import {
     FormControl,
     InputLabel,
     Select,
-    MenuItem
+    MenuItem,
+    Tabs,
+    Tab,
+    Switch
 } from '@mui/material';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
@@ -44,6 +48,7 @@ import {
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowBack, School as SchoolIcon, CalendarToday } from '@mui/icons-material';
 import DownloadIcon from '@mui/icons-material/GetApp';
+import { getCurrentDate } from '../hooks/useCurrentDate';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -55,6 +60,7 @@ import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
 
+moment.locale('es'); // Configurar moment en español
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
     padding: 2rem;
@@ -128,8 +134,13 @@ const SchoolPaymentsPage = () => {
 
     // Indicators derived from analysisData/combinedEarnings
     // IMPORTANTE: Solo contar usuarios activos (state !== 0)
-    const pagadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PAGADO')?.count || 0;
+    // V2: Estados son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO, INACTIVO
+    const confirmadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'CONFIRMADO')?.count || 0;
+    const adelantadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ADELANTADO')?.count || 0;
+    const pagadoCount = confirmadoCount + adelantadoCount; // CONFIRMADO + ADELANTADO = pagos al día
     const moraCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'MORA')?.count || 0;
+    const atrasadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ATRASADO')?.count || 0;
+    const enProcesoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'EN_PROCESO')?.count || 0;
     const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
     const inactivoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'INACTIVO')?.count || 0;
     const currentMonthEarnings = combinedEarnings.find(item =>
@@ -144,12 +155,12 @@ const SchoolPaymentsPage = () => {
             try {
                 // Trigger background recalculation so UI load is not blocked.
                 // Fire-and-forget: do not await the request.
-                api.post('/payments/recalc-school', { schoolId, background: true }).catch(err => {
+                api.post('/payments/recalc-school', { schoolId, schoolYear, background: true }).catch(err => {
                     // Log but don't block UI
                     console.error('Background recalc failed to start', err);
                 });
-                // Trigger auto-debits for ALL schools as a fire-and-forget operation
-                api.post('/payments/process-auto-debits').catch(err => {
+                // Trigger auto-debits for this school as a fire-and-forget operation
+                api.post('/payments/process-auto-debits', { schoolId, schoolYear }).catch(err => {
                     console.error('Background auto-debits failed to start', err);
                 });
             } catch (e) {
@@ -192,11 +203,11 @@ const SchoolPaymentsPage = () => {
     // Fetch all payments for the school in one request and store locally.
     // Tries a single large request first and falls back to iterative paging if backend enforces pagination.
     const fetchAllPayments = async (status = '', q = '') => {
-        if (!schoolId) return;
+        if (!schoolId || !schoolYear) return;
         try {
             const st = status ? String(status).toUpperCase().trim() : '';
             const qq = q ? String(q).trim() : '';
-            const params = { schoolId, page: 1, limit: 10000 };
+            const params = { schoolId, schoolYear, page: 1, limit: 10000 };
             if (st) params.status = st;
             if (qq) params.search = qq;
             // include auto-debit filter if set: 'yes'|'no'
@@ -214,7 +225,7 @@ const SchoolPaymentsPage = () => {
                 const pages = Math.ceil(Number(total) / per);
                 const all = [];
                 for (let p = 0; p < pages; p++) {
-                    const r = await api.get('/payments', { params: { schoolId, page: p + 1, limit: per, ...(st ? { status: st } : {}), ...(qq ? { search: qq } : {}) } });
+                    const r = await api.get('/payments', { params: { schoolId, schoolYear, page: p + 1, limit: per, ...(st ? { status: st } : {}), ...(qq ? { search: qq } : {}) } });
                     const part = r.data.payments || r.data.rows || [];
                     if (Array.isArray(part) && part.length > 0) all.push(...part);
                 }
@@ -230,7 +241,9 @@ const SchoolPaymentsPage = () => {
             const activePayments = arr.filter(isUserActive);
             const inactivePayments = arr.filter(pmt => !isUserActive(pmt));
             
-            setTotalPaidCount(typeof res.data.totalPaidCount === 'number' ? res.data.totalPaidCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PAGADO').length);
+            // V2: CONFIRMADO + ADELANTADO = Al día
+            const paidPayments = activePayments.filter(pmt => ['CONFIRMADO', 'ADELANTADO'].includes((pmt.finalStatus||'').toUpperCase()));
+            setTotalPaidCount(typeof res.data.totalPaidCount === 'number' ? res.data.totalPaidCount : paidPayments.length);
             setTotalPendingCount(typeof res.data.totalPendingCount === 'number' ? res.data.totalPendingCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PENDIENTE').length);
             setTotalMoraCount(typeof res.data.totalMoraCount === 'number' ? res.data.totalMoraCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'MORA').length);
             setTotalInactiveCount(typeof res.data.totalInactiveCount === 'number' ? res.data.totalInactiveCount : inactivePayments.length);
@@ -245,7 +258,7 @@ const SchoolPaymentsPage = () => {
     const fetchPaymentsAnalysis = async (schId) => {
         if (!schId) return;
         try {
-            const res = await api.get('/payments/analysis', { params: { schoolId: schId } });
+            const res = await api.get('/payments/analysis', { params: { schoolId: schId, schoolYear } });
             // expected shape: { statusDistribution: [...], monthlyEarnings: [...] }
             const data = res.data || null;
             setAnalysisData(data);
@@ -258,14 +271,21 @@ const SchoolPaymentsPage = () => {
                 const activePayments = (paymentsAll || []).filter(isUserActive);
                 const inactivePayments = (paymentsAll || []).filter(p => !isUserActive(p));
                 
-                const paid = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'PAGADO').length;
+                // V2: Estados son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO, INACTIVO
+                const confirmado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'CONFIRMADO').length;
+                const adelantado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'ADELANTADO').length;
                 const mora = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'MORA').length;
+                const atrasado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'ATRASADO').length;
+                const enProceso = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'EN_PROCESO').length;
                 const pend = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'PENDIENTE').length;
                 const inactivo = inactivePayments.length;
                 
                 const derived = { statusDistribution: [
-                    { finalStatus: 'PAGADO', count: paid },
+                    { finalStatus: 'CONFIRMADO', count: confirmado },
+                    { finalStatus: 'ADELANTADO', count: adelantado },
                     { finalStatus: 'MORA', count: mora },
+                    { finalStatus: 'ATRASADO', count: atrasado },
+                    { finalStatus: 'EN_PROCESO', count: enProceso },
                     { finalStatus: 'PENDIENTE', count: pend },
                     { finalStatus: 'INACTIVO', count: inactivo }
                 ] };
@@ -349,7 +369,13 @@ const SchoolPaymentsPage = () => {
                         // Para otros estados, excluir usuarios inactivos y filtrar por finalStatus
                         if (isUserInactive) return false;
                         const s = (p.finalStatus || p.status || '').toUpperCase();
-                        if (s !== st) return false;
+                        
+                        // V2: PAGADO incluye CONFIRMADO y ADELANTADO
+                        if (st === 'PAGADO') {
+                            if (!['CONFIRMADO', 'ADELANTADO'].includes(s)) return false;
+                        } else {
+                            if (s !== st) return false;
+                        }
                     }
                 }
                 if (qq) {
@@ -431,6 +457,7 @@ const SchoolPaymentsPage = () => {
 
     // Dialog states
     const [openRegisterDialog, setOpenRegisterDialog] = useState(false);
+    const [paymentTab, setPaymentTab] = useState(0); // 0 = Pago de Tarifa, 1 = Pago de Mora
     const [registerPaymentTarget, setRegisterPaymentTarget] = useState(null);
     const [registerAmount, setRegisterAmount] = useState('');
     const [registerPaymentExtra, setRegisterPaymentExtra] = useState({
@@ -498,13 +525,28 @@ const SchoolPaymentsPage = () => {
     const [openReceiptDialog, setOpenReceiptDialog] = useState(false);
     const [receiptTarget, setReceiptTarget] = useState(null);
     const [receiptNumberDraft, setReceiptNumberDraft] = useState('');
+    
+    // Pay Penalty dialog states
+    const [openPayPenaltyDialog, setOpenPayPenaltyDialog] = useState(false);
+    const [payPenaltyAmount, setPayPenaltyAmount] = useState('');
+    const [payPenaltyBoleta, setPayPenaltyBoleta] = useState('');
+    const [payPenaltyAccount, setPayPenaltyAccount] = useState('');
+    const [payPenaltyDate, setPayPenaltyDate] = useState(moment().format('YYYY-MM-DD'));
+
+    // Exonerate/Discount Penalty dialog states
+    const [openDiscountPenaltyDialog, setOpenDiscountPenaltyDialog] = useState(false);
+    const [discountPenaltyAmount, setDiscountPenaltyAmount] = useState('');
+    const [discountPenaltyType, setDiscountPenaltyType] = useState('DISCOUNT');
+    const [discountPenaltyNotes, setDiscountPenaltyNotes] = useState('');
+    
+    // Exonerate toggle
+    const [isExonerating, setIsExonerating] = useState(false);
+    const [exonerateAmount, setExonerateAmount] = useState('');
+    
     // New: receipt preview flow triggered from notification
     const [previewReceipt, setPreviewReceipt] = useState(null); // object { id, fileUrl, userId }
     // guard to avoid processing the same openRegister/showReceipt query multiple times
     const processedOpenRegisterRef = useRef(new Set());
-
-    // Pending periods dialog
-    const [openPendingPeriodsDialog, setOpenPendingPeriodsDialog] = useState(false);
 
     // Notas (editor)
     const [openNotesDialog, setOpenNotesDialog] = useState(false);
@@ -516,15 +558,6 @@ const SchoolPaymentsPage = () => {
     const [emailSubject, setEmailSubject] = useState('');
     const [emailMessage, setEmailMessage] = useState('');
 
-    // Handlers
-    const ensureRecalc = useCallback(async (payment) => {
-        try {
-            if (payment?.id) await api.post(`/payments/${payment.id}/recalc`);
-        } catch (e) {
-            // ignore recalc errors; continue UI flow
-        }
-    }, []);
-
     // guard to avoid concurrent loads / re-entrancy when opening the register dialog
     const openRegisterInProgressRef = useRef(false);
     const handleOpenRegister = useCallback((payment) => {
@@ -532,6 +565,14 @@ const SchoolPaymentsPage = () => {
         if (openRegisterInProgressRef.current) return;
         openRegisterInProgressRef.current = true;
 
+        console.log('DEBUG handleOpenRegister received payment:', {
+            id: payment?.id,
+            userId: payment?.userId,
+            penaltyDue: payment?.penaltyDue,
+            penaltyDue_type: typeof payment?.penaltyDue,
+            keys: payment ? Object.keys(payment).slice(0, 10) : []
+        });
+        
         setRegisterPaymentTarget(payment);
         // clear any previously selected receipt when opening for a new target
         setSelectedReceipt(null);
@@ -543,6 +584,15 @@ const SchoolPaymentsPage = () => {
             extraordinaryDiscount: 0,
             bankAccountNumber: payment.bankAccountNumber || (school ? school.bankAccount : '') || ''
         });
+        
+        // Inicializar campos de la pestaña de mora con los mismos valores por defecto
+        setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+        setPayPenaltyBoleta(payment.receiptNumber || '');
+        setPayPenaltyAccount(payment.bankAccountNumber || (school ? school.bankAccount : '') || '');
+        setPayPenaltyAmount('');
+        setDiscountPenaltyAmount('');
+        setIsExonerating(false);
+        setExonerateAmount('');
 
     // Do not open dialog immediately. We'll open it after initial loads complete so the UI shows data-ready state.
 
@@ -566,13 +616,26 @@ const SchoolPaymentsPage = () => {
                     try { await fetchAllSchools(); } catch (e) { /* ignore */ }
                 }
 
-                // Ensure payment is recalculated on-demand so UI shows fresh totals for this user
-                try {
-                    if (payment?.id) {
-                        await api.post(`/payments/${payment.id}/recalc`);
+                // CRÍTICO: Recalcular mora primero para asegurar datos actualizados
+                let updatedPayment = payment;
+                if (payment?.id) {
+                    try {
+                        console.log('[handleOpenRegister] Recalculating payment before opening dialog...');
+                        const recalcResponse = await api.post(`/payments/${payment.id}/recalc`);
+                        console.log('[handleOpenRegister] Recalc response:', recalcResponse.data);
+                        
+                        // Obtener el payment actualizado desde el backend
+                        const paymentResponse = await api.get(`/payments/${payment.id}`);
+                        // El endpoint retorna { payment, currentPenalty, currentStatus, statusDetails }
+                        updatedPayment = paymentResponse.data.payment;
+                        console.log('[handleOpenRegister] Updated payment fetched:', updatedPayment);
+                        
+                        // Actualizar el target con los datos frescos
+                        setRegisterPaymentTarget(updatedPayment);
+                    } catch (e) {
+                        console.error('[handleOpenRegister] Error recalculating/fetching payment:', e);
+                        // Continue with original payment data if recalc fails
                     }
-                } catch (e) {
-                    // ignore recalc errors; continue loading receipts/history
                 }
 
                 const cacheKey = `${userId}:${regHistPage}:${regHistLimit}`;
@@ -639,13 +702,13 @@ const SchoolPaymentsPage = () => {
     // Recalculate summary when payment date changes
     useEffect(() => {
         if (openRegisterDialog && registerPaymentTarget?.id && registerPaymentExtra.paymentDate) {
-            // If leftover != 0, calculate penalty starting from nextPaymentDate instead of lastPaymentDate
-            const baseDate = (registerPaymentTarget?.leftover && Number(registerPaymentTarget.leftover) !== 0)
+            // If balanceDue != 0, calculate penalty starting from nextPaymentDate instead of lastPaymentDate
+            const baseDate = (registerPaymentTarget?.balanceDue && Number(registerPaymentTarget.balanceDue) !== 0)
                 ? registerPaymentTarget.nextPaymentDate
                 : null;
             fetchPaymentSummary(registerPaymentTarget.id, registerPaymentExtra.paymentDate, baseDate);
         }
-    }, [openRegisterDialog, registerPaymentTarget?.id, registerPaymentExtra.paymentDate, registerPaymentTarget?.leftover, registerPaymentTarget?.nextPaymentDate, fetchPaymentSummary]);
+    }, [openRegisterDialog, registerPaymentTarget?.id, registerPaymentExtra.paymentDate, registerPaymentTarget?.balanceDue, registerPaymentTarget?.nextPaymentDate, fetchPaymentSummary]);
  
     // Handle query params after handleOpenRegister is defined
     useEffect(() => {
@@ -662,7 +725,7 @@ const SchoolPaymentsPage = () => {
         (async () => {
             try {
                 // Load payments for this school (attempt larger limit to find the user's payment)
-                const res = await api.get('/payments', { params: { schoolId, page: 1, limit: 1000 } });
+                const res = await api.get('/payments', { params: { schoolId, schoolYear, page: 1, limit: 1000 } });
                 const paymentsArr = res.data.payments || res.data.rows || [];
                 const found = paymentsArr.find(p => String(p.User?.id) === String(userIdFromQuery) || String(p.userId) === String(userIdFromQuery));
                 if (found) {
@@ -684,7 +747,7 @@ const SchoolPaymentsPage = () => {
                 console.error('Error handling openRegister query', e);
             }
         })();
-    }, [location.search, schoolId, handleOpenRegister]);
+    }, [location.search, schoolId, schoolYear, handleOpenRegister]);
 
     // If navigation provided a payment object in location.state, open the register dialog immediately
     useEffect(() => {
@@ -746,47 +809,39 @@ const SchoolPaymentsPage = () => {
     const handleConfirmRegister = async () => {
         if (!registerPaymentTarget) return;
         try {
-            await api.post(`/payments/${registerPaymentTarget.id}/add-transaction`, {
-                amountPaid: registerAmount,
-                paymentDate: registerPaymentExtra.paymentDate,
-                numeroBoleta: registerPaymentExtra.numeroBoleta,
-                extraordinaryDiscount: registerPaymentExtra.extraordinaryDiscount,
-                bankAccountNumber: registerPaymentExtra.bankAccountNumber
+            // Usar endpoint pay-tariff del nuevo sistema
+            await api.post(`/payments/pay-tariff`, {
+                paymentId: registerPaymentTarget.id,
+                amount: registerAmount,
+                realPaymentDate: registerPaymentExtra.paymentDate,
+                receiptNumber: registerPaymentExtra.numeroBoleta,
+                bankAccount: registerPaymentExtra.bankAccountNumber,
+                extraordinaryDiscount: registerPaymentExtra.extraordinaryDiscount || 0,
+                notes: registerPaymentExtra.extraordinaryDiscount > 0 
+                    ? `Descuento extraordinario: Q${registerPaymentExtra.extraordinaryDiscount}` 
+                    : undefined
             });
-            // If the payment was for an inactive user, activate the account automatically
-            try {
-                const userId = registerPaymentTarget?.User?.id || registerPaymentTarget?.userId || null;
-                const userState = registerPaymentTarget?.User?.state;
-                if (userId && (userState === 0 || userState === '0')) {
-                    // Activate user (logical activation)
-                    await api.patch(`/users/${userId}/state`, { state: 1 });
-                    setSnackbar({ open: true, message: 'Pago registrado. Familia activada automáticamente.', severity: 'success' });
-                } else {
-                    setSnackbar({ open: true, message: 'Pago registrado', severity: 'success' });
-                }
-            } catch (e) {
-                // Activation failed but payment succeeded; inform user
-                console.error('Error activating user after payment', e);
-                setSnackbar({ open: true, message: 'Pago registrado (error activando cuenta)', severity: 'warning' });
-            }
+            
+            setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
             setOpenRegisterDialog(false);
-                // Invalidate cached payment histories for this user so modals will fetch fresh data
-                invalidatePaymentHistCacheForUser(registerPaymentTarget?.User?.id || registerPaymentTarget?.userId);
-                // refresh full dataset after mutation
-                fetchAllPayments(statusFilter, search);
+            
+            // Invalidate cached payment histories for this user so modals will fetch fresh data
+            invalidatePaymentHistCacheForUser(registerPaymentTarget?.User?.id || registerPaymentTarget?.userId);
+            
+            // refresh full dataset after mutation
+            fetchAllPayments(statusFilter, search);
         } catch (err) {
             console.error(err);
-            setSnackbar({ open: true, message: 'Error registrando pago', severity: 'error' });
+            const errorMsg = err?.response?.data?.error || 'Error registrando pago';
+            setSnackbar({ open: true, message: errorMsg, severity: 'error' });
         }
     };
 
     const handleOpenReceipt = useCallback(async (payment) => {
-        // ensure fresh recalculation for this payment before showing receipt dialog
-        await ensureRecalc(payment);
         setReceiptTarget(payment);
         setReceiptNumberDraft(payment.receiptNumber || '');
         setOpenReceiptDialog(true);
-    }, [ensureRecalc]);
+    }, []);
     const handleSaveReceipt = async () => {
         if (!receiptTarget) return;
         try {
@@ -824,11 +879,9 @@ const SchoolPaymentsPage = () => {
     const [openManageModal, setOpenManageModal] = useState(false);
     const [manageTarget, setManageTarget] = useState(null);
     const handleManagePayments = useCallback(async (payment) => {
-        // ensure fresh recalculation for this payment before opening manage modal
-        await ensureRecalc(payment);
         setManageTarget(payment);
         setOpenManageModal(true);
-    }, [ensureRecalc]);
+    }, []);
 
     // Download payment history as a presentable PDF (jsPDF + autotable)
     const handleDownloadHistory = useCallback(async (payment) => {
@@ -841,7 +894,7 @@ const SchoolPaymentsPage = () => {
 
             const attemptFetch = async (params) => {
                 try {
-                    const r = await api.get('/payments/paymenthistory', { params });
+                    const r = await api.get('/payments/paymenthistory', { params: { ...params, schoolYear } });
                     return r;
                 } catch (e) {
                     console.error('[handleDownloadHistory] fetch error', e && e.response ? e.response.data || e.response : e);
@@ -849,46 +902,67 @@ const SchoolPaymentsPage = () => {
                 }
             };
 
-            let res = await attemptFetch({ userId, page: 0, limit: 200 });
-            let histories = res.data.histories || res.data || [];
-            const totalReported = res.data.totalRecords ?? res.data.totalCount ?? res.data.count ?? null;
-
-            if ((Array.isArray(histories) && histories.length === 0) && totalReported && Number(totalReported) > 0) {
-                try {
-                    const per = 200;
-                    const pages = Math.ceil(Number(totalReported) / per);
-                    const all = [];
-                    for (let p = 0; p < pages; p++) {
-                        const r2 = await attemptFetch({ userId, page: p, limit: per });
-                        const part = r2.data.histories || r2.data || [];
-                        if (Array.isArray(part) && part.length > 0) all.push(...part);
-                    }
-                    if (all.length > 0) histories = all;
-                } catch (e) {
-                    console.warn('[handleDownloadHistory] iterative fetch failed', e);
-                }
+            // Intentar obtener transacciones del endpoint V2
+            let res;
+            let transactions = [];
+            let histories = []; // Declarar la variable histories
+            
+            try {
+                // Primero intentar con el endpoint V2 de transacciones
+                res = await api.get(`/payments/${payment.id}/history`);
+                transactions = res.data.transactions || [];
+            } catch (txError) {
+                console.warn('No se pudo obtener transacciones V2, intentando con historial antiguo:', txError);
+                // Fallback al endpoint antiguo de historial
+                res = await attemptFetch({ userId, page: 0, limit: 200 });
+                histories = res.data.histories || res.data || [];
             }
 
-            if (!histories || histories.length === 0) {
-                const paymentId = payment?.id || null;
-                if (paymentId) {
+            // Si obtuvimos transacciones V2, usar esas
+            if (transactions.length > 0) {
+                // Procesar transacciones V2
+                // No necesitamos paginación iterativa ya que el endpoint devuelve todas
+            } else {
+                // Si no, usar el sistema antiguo de histories
+                const totalReported = res?.data?.totalRecords ?? res?.data?.totalCount ?? res?.data?.count ?? null;
+
+                if ((Array.isArray(histories) && histories.length === 0) && totalReported && Number(totalReported) > 0) {
                     try {
-                        const res2 = await attemptFetch({ paymentId, page: 0, limit: 1000 });
-                        const fallbackHist = res2.data.histories || res2.data || [];
-                        if (Array.isArray(fallbackHist) && fallbackHist.length > 0) {
-                            histories = fallbackHist;
-                        } else {
-                            setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
+                        const per = 200;
+                        const pages = Math.ceil(Number(totalReported) / per);
+                        const all = [];
+                        for (let p = 0; p < pages; p++) {
+                            const r2 = await attemptFetch({ userId, page: p, limit: per });
+                            const part = r2.data.histories || r2.data || [];
+                            if (Array.isArray(part) && part.length > 0) all.push(...part);
+                        }
+                        if (all.length > 0) histories = all;
+                    } catch (e) {
+                        console.warn('[handleDownloadHistory] iterative fetch failed', e);
+                    }
+                }
+
+                if (!histories || histories.length === 0) {
+                    const paymentId = payment?.id || null;
+                    if (paymentId) {
+                        try {
+                            const res2 = await attemptFetch({ paymentId, page: 0, limit: 1000 });
+                            const fallbackHist = res2.data.histories || res2.data || [];
+                            if (Array.isArray(fallbackHist) && fallbackHist.length > 0) {
+                                histories = fallbackHist;
+                            } else {
+                                setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
+                                return;
+                            }
+                        } catch (e) {
+                            console.error('[handleDownloadHistory] fallback fetch error', e && e.response ? e.response.data || e.response : e);
+                            setSnackbar({ open: true, message: 'Error consultando historial (fallback)', severity: 'error' });
                             return;
                         }
-                    } catch (e) {
-                        console.error('[handleDownloadHistory] fallback fetch error', e && e.response ? e.response.data || e.response : e);
-                        setSnackbar({ open: true, message: 'Error consultando historial (fallback)', severity: 'error' });
+                    } else {
+                        setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
                         return;
                     }
-                } else {
-                    setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
-                    return;
                 }
             }
 
@@ -922,15 +996,24 @@ const SchoolPaymentsPage = () => {
                 doc.addImage(logoData, 'PNG', 40, cursorY, logoWidth, logoHeight);
             }
 
-            // Header text
+            // Título de la tabla según si tenemos transacciones V2 o historial antiguo
+            const isV2Data = transactions.length > 0;
+            
+            // Header text con indicador de versión
             doc.setFontSize(18);
             doc.setFont(undefined, 'bold');
-            const title = 'Estado de Cuenta - Historial de Pagos';
+            const title = `Estado de Cuenta - Historial de ${isV2Data ? 'Transacciones (V2)' : 'Pagos'}`;
             const titleX = logoData ? 40 + logoWidth + 20 : 40;
             doc.text(title, titleX, cursorY + 24);
             doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
             doc.text(`Generado: ${moment().format('YYYY-MM-DD HH:mm')}`, titleX, cursorY + 42);
+            
+            if (isV2Data) {
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'italic');
+                doc.text('Sistema V2 - Detalle completo de transacciones', titleX, cursorY + 54);
+            }
 
             // increase vertical spacing between logo and the family summary block
             cursorY += Math.max(logoHeight, 60) + 18;
@@ -940,9 +1023,9 @@ const SchoolPaymentsPage = () => {
             const studentsArr = Array.isArray(payment?.User?.FamilyDetail?.Students) ? payment.User.FamilyDetail.Students : [];
             const studentCount = studentsArr.length || payment?.studentCount || 0;
             const routeType = payment?.User?.FamilyDetail?.routeType || '';
-            const tarifa = Number(payment?.tarif || 0);
+            const tarifa = Number(payment?.netMonthlyFee || 0);
             const descuento = Number(payment?.User?.FamilyDetail?.specialFee ?? payment?.specialFee ?? 0);
-            const leftover = Number(payment?.leftover || 0);
+            const leftover = Number(payment?.balanceDue || 0);
 
             doc.setFontSize(11);
             doc.setFont(undefined, 'bold');
@@ -1027,61 +1110,112 @@ const SchoolPaymentsPage = () => {
             doc.setFont(undefined, 'normal');
             doc.text(`Q ${leftover.toFixed(2)}`, rightValueX + 15, rightStartY + 48);
 
-            // Table: Fecha | Tarifa | Mora | Total a Pagar | Pago Registrado | Saldo/Credito
-            // center all columns for a compact, centered layout
-            const tableColumnStyles = {
-                0: { halign: 'center' },
-                1: { halign: 'center' },
-                2: { halign: 'center' },
-                3: { halign: 'center' },
-                4: { halign: 'center' },
-                5: { halign: 'center' }
-            };
+            // Construcción de la tabla según el tipo de datos
+            let tableHeaders, tableBody, tableColumnStyles;
+            
+            if (isV2Data && transactions.length > 0) {
+                // Tabla V2 con transacciones detalladas
+                tableHeaders = ['Fecha', 'Tipo', 'Monto', 'Fuente', 'N° Boleta', 'Notas'];
+                tableColumnStyles = {
+                    0: { halign: 'center', cellWidth: 60 },  // Fecha
+                    1: { halign: 'center', cellWidth: 80 },  // Tipo
+                    2: { halign: 'right', cellWidth: 60 },   // Monto
+                    3: { halign: 'center', cellWidth: 70 },  // Fuente
+                    4: { halign: 'center', cellWidth: 70 },  // Boleta
+                    5: { halign: 'left', cellWidth: 175 }    // Notas
+                };
+                
+                tableBody = transactions.map(tx => {
+                    const fecha = tx.realPaymentDate || tx.createdAt 
+                        ? moment.parseZone(tx.realPaymentDate || tx.createdAt).format('DD/MM/YY')
+                        : '—';
+                    
+                    // Mapeo de tipos para el PDF
+                    let tipoLabel = tx.type || 'Otro';
+                    switch((tx.type || '').toUpperCase()) {
+                        case 'PAYMENT': tipoLabel = 'Pago Tarifa'; break;
+                        case 'PENALTY_PAYMENT': tipoLabel = 'Pago Mora'; break;
+                        case 'PENALTY_EXONERATION': tipoLabel = 'Exoneración'; break;
+                        case 'PENALTY_DISCOUNT': tipoLabel = 'Desc. Mora'; break;
+                        case 'ADJUSTMENT': tipoLabel = 'Ajuste'; break;
+                        case 'REVERSAL': tipoLabel = 'Reversión'; break;
+                    }
+                    
+                    // Mapeo de fuentes
+                    let fuenteLabel = tx.source || 'Otro';
+                    switch((tx.source || '').toUpperCase()) {
+                        case 'MANUAL': fuenteLabel = 'Manual'; break;
+                        case 'AUTO_DEBIT': fuenteLabel = 'Débito Auto'; break;
+                        case 'ONLINE': fuenteLabel = 'En Línea'; break;
+                        case 'BANK': fuenteLabel = 'Banco'; break;
+                    }
+                    
+                    const monto = Number(tx.amount || 0).toFixed(2);
+                    const boleta = tx.receiptNumber || '—';
+                    const notas = (tx.notes || '').substring(0, 80); // Limitar longitud de notas
+                    
+                    return [fecha, tipoLabel, `Q ${monto}`, fuenteLabel, boleta, notas];
+                });
+            } else {
+                // Tabla antigua con historial de pagos
+                tableHeaders = ['Fecha', 'Tarifa', 'Desc. Fam.', 'Desc. Extra', 'Mora', 'Total Pagar', 'Pago Reg.', 'Crédito'];
+                tableColumnStyles = {
+                    0: { halign: 'center', cellWidth: 55 },
+                    1: { halign: 'center', cellWidth: 50 },
+                    2: { halign: 'center', cellWidth: 50 },
+                    3: { halign: 'center', cellWidth: 50 },
+                    4: { halign: 'center', cellWidth: 50 },
+                    5: { halign: 'center', cellWidth: 60 },
+                    6: { halign: 'center', cellWidth: 55 },
+                    7: { halign: 'center', cellWidth: 55 }
+                };
+                
+                tableBody = (histories || []).map(h => {
+                    const fecha = h.paymentDate ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '—';
+                    const tarifaHist = Number(typeof h.tarif !== 'undefined' ? h.tarif : 0);
+                    const descuentoFamilia = Number(typeof h.familyDiscount !== 'undefined' ? h.familyDiscount : 0);
+                    const descuentoExtra = Number(typeof h.extraordinaryDiscount !== 'undefined' ? h.extraordinaryDiscount : 0);
+                    const penaltyBefore = Number(typeof h.penaltyBefore !== 'undefined' ? h.penaltyBefore : 0);
+                    const totalDueBefore = Number(typeof h.totalDueBefore !== 'undefined' ? h.totalDueBefore : 0);
+                    const totalToPay = totalDueBefore - descuentoExtra - descuentoFamilia;
+                    const pagoRegistrado = Number(typeof h.amountPaid !== 'undefined' ? h.amountPaid : 0);
+                    const credito = Number(typeof h.creditBalanceAfter !== 'undefined' ? h.creditBalanceAfter : 0);
 
-            // Strict mapping per user request:
-            // Fecha (paymentDate)
-            // Tarifa (tarif)
-            // Mora (penaltyBefore)
-            // Total a pagar (totalToPay)
-            // Pago registrado (amountPaid)
-            // Crédito (creditBalanceAfter)
-            // No fallbacks, no calculations. If field missing -> show 0 (or '0' for Fecha as requested).
-            const tableBody = (histories || []).map(h => {
-                const fecha = h.paymentDate ? moment.parseZone(h.paymentDate).format('YYYY-MM-DD') : '0';
-                const tarifaHist = Number(typeof h.tarif !== 'undefined' ? h.tarif : 0);
-                const descuentoFamilia = Number(typeof h.familyDiscount !== 'undefined' ? h.familyDiscount : 0);
-                const descuentoExtra = Number(typeof h.extraordinaryDiscount !== 'undefined' ? h.extraordinaryDiscount : 0);
-                const penaltyBefore = Number(typeof h.penaltyBefore !== 'undefined' ? h.penaltyBefore : 0);
-                const penaltyAfter = Number(typeof h.penaltyAfter !== 'undefined' ? h.penaltyAfter : 0);
-                const totalDueBefore = Number(typeof h.totalDueBefore !== 'undefined' ? h.totalDueBefore : 0);
-                const totalToPay = totalDueBefore - descuentoExtra - descuentoFamilia;
-                const pagoRegistrado = Number(typeof h.amountPaid !== 'undefined' ? h.amountPaid : 0);
-                const credito = Number(typeof h.creditBalanceAfter !== 'undefined' ? h.creditBalanceAfter : 0);
-
-                return [
-                    fecha,
-                    `Q ${tarifaHist.toFixed(2)}`,
-                    `Q ${descuentoFamilia.toFixed(2)}`,
-                    `Q ${descuentoExtra.toFixed(2)}`,
-                    `Q ${penaltyBefore.toFixed(2)}`,
-                    `Q ${totalToPay.toFixed(2)}`,
-                    `Q ${pagoRegistrado.toFixed(2)}`,
-                    `Q ${credito.toFixed(2)}`
-                ];
-            });
+                    return [
+                        fecha,
+                        `Q ${tarifaHist.toFixed(2)}`,
+                        `Q ${descuentoFamilia.toFixed(2)}`,
+                        `Q ${descuentoExtra.toFixed(2)}`,
+                        `Q ${penaltyBefore.toFixed(2)}`,
+                        `Q ${totalToPay.toFixed(2)}`,
+                        `Q ${pagoRegistrado.toFixed(2)}`,
+                        `Q ${credito.toFixed(2)}`
+                    ];
+                });
+            }
 
             // Add table with autoTable
             autoTable(doc, {
                 startY: cursorY,
-                head: [[ 'Fecha', 'Tarifa', 'Descuento Familia', 'Descuento Extra', 'Mora', 'Total a Pagar', 'Pago Registrado', 'Crédito' ]],
+                head: [tableHeaders],
                 body: tableBody,
-                styles: { fontSize: 9, cellPadding: 6, lineColor: [200,200,200], lineWidth: 0.5 },
-                headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center' },
+                styles: { 
+                    fontSize: isV2Data ? 8 : 9, 
+                    cellPadding: isV2Data ? 5 : 6, 
+                    lineColor: [200,200,200], 
+                    lineWidth: 0.5,
+                    overflow: 'linebreak'
+                },
+                headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center', fontStyle: 'bold' },
                 alternateRowStyles: { fillColor: [245,245,245] },
                 columnStyles: tableColumnStyles,
                 theme: 'grid',
                 didDrawPage: (data) => {
-                    // footer if needed
+                    // Footer con número de página
+                    const pageCount = doc.internal.getNumberOfPages();
+                    doc.setFontSize(8);
+                    doc.setTextColor(150);
+                    doc.text(`Página ${data.pageNumber} de ${pageCount}`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 20, { align: 'center' });
                 }
             });
 
@@ -1095,16 +1229,14 @@ const SchoolPaymentsPage = () => {
             console.error('handleDownloadHistory', err);
             setSnackbar({ open: true, message: 'Error descargando reporte PDF', severity: 'error' });
         }
-    }, []);
+    }, [schoolYear]);
 
     // Notes handlers
     const handleOpenNotes = useCallback(async (payment) => {
-        // ensure fresh recalculation for this payment before editing notes
-        await ensureRecalc(payment);
         setNotesTarget(payment);
         setNotesDraft(payment?.notes || '');
         setOpenNotesDialog(true);
-    }, [ensureRecalc]);
+    }, []);
     const handleCloseNotes = () => {
         setOpenNotesDialog(false);
         setNotesTarget(null);
@@ -1113,7 +1245,7 @@ const SchoolPaymentsPage = () => {
     const handleSaveNotes = async () => {
         if (!notesTarget) return;
         try {
-            await api.put(`/payments/${notesTarget.id}/notes`, { notes: notesDraft });
+            await api.put(`/payments/v2/${notesTarget.id}/notes`, { notes: notesDraft });
             setSnackbar({ open: true, message: 'Notas actualizadas', severity: 'success' });
             handleCloseNotes();
             // Invalidate cache for this user so modal will fetch fresh histories
@@ -1129,8 +1261,6 @@ const SchoolPaymentsPage = () => {
         // Implement common management actions using available backend endpoints
         const payment = payload && payload.payment ? payload.payment : payload || manageTarget;
 
-        // ensure fresh recalculation for this payment before performing any action
-        await ensureRecalc(payment);
         try {
             if (!payment || !payment.id) {
                 setSnackbar({ open: true, message: 'Pago no válido', severity: 'error' });
@@ -1143,22 +1273,38 @@ const SchoolPaymentsPage = () => {
                     setSnackbar({ open: true, message: 'Monto inválido para exonerar', severity: 'error' });
                     return;
                 }
-                await api.post(`/payments/${payment.id}/exoneratePenalty`, { exonerateAmount: amount });
+                await api.post(`/payments/${payment.id}/exonerate-penalty`, { discountAmount: amount, type: 'EXONERATION' });
                 setSnackbar({ open: true, message: 'Mora exonerada', severity: 'success' });
-            } else if (actionName === 'freezePenalty' || actionName === 'toggleFreezePenalty') {
-                // toggle penaltyPaused using updatePayment
-                const current = !!payment.penaltyPaused;
-                await api.put(`/payments/${payment.id}`, { penaltyPaused: !current });
-                setSnackbar({ open: true, message: `${!current ? 'Mora congelada' : 'Mora reanudada'}`, severity: 'success' });
-            } else if (actionName === 'suspend' || actionName === 'activate') {
-                const userId = payment.User?.id;
-                if (!userId) {
-                    setSnackbar({ open: true, message: 'Usuario asociado no encontrado', severity: 'error' });
-                    return;
+            } else if (actionName === 'freezePenalty') {
+                // Congelar mora con fecha específica del backend (simulada o real)
+                let freezeDate;
+                if (payload?.freezeDate) {
+                    freezeDate = payload.freezeDate;
+                } else {
+                    // Obtener fecha actual del backend
+                    const currentDate = await getCurrentDate();
+                    freezeDate = currentDate.format('YYYY-MM-DD');
                 }
-                const desiredState = actionName === 'suspend' ? 0 : 1;
-                await api.patch(`/users/${userId}/state`, { state: desiredState });
-                setSnackbar({ open: true, message: desiredState === 0 ? 'Familia suspendida' : 'Familia activada', severity: 'success' });
+                console.log('[FREEZE_PENALTY] Sending request:', { paymentId: payment.id, freezeDate });
+                const response = await api.post('/payments/penalties/freeze', { 
+                    paymentId: payment.id,
+                    freezeDate,
+                    notes: `Mora congelada manualmente el ${moment(freezeDate).format('DD/MM/YYYY')}`
+                });
+                console.log('[FREEZE_PENALTY] Response received:', response.data);
+                setSnackbar({ open: true, message: 'Mora congelada', severity: 'success' });
+            } else if (actionName === 'unfreezePenalty') {
+                // Descongelar mora (reanudar acumulación)
+                await api.post('/payments/penalties/unfreeze', { 
+                    paymentId: payment.id,
+                    notes: 'Mora reanudada manualmente'
+                });
+                setSnackbar({ open: true, message: 'Mora reanudada', severity: 'success' });
+            } else if (actionName === 'suspend' || actionName === 'activate') {
+                // Cambiar status del payment usando endpoints V2
+                const endpoint = actionName === 'suspend' ? 'suspend' : 'activate';
+                await api.post(`/payments/v2/${payment.id}/${endpoint}`);
+                setSnackbar({ open: true, message: actionName === 'suspend' ? 'Familia suspendida' : 'Familia activada', severity: 'success' });
             } else if (actionName === 'toggleAutoDebit') {
                 const userId = payload?.payment?.User?.id || payment.User?.id;
                 if (!userId) return setSnackbar({ open: true, message: 'Usuario no encontrado', severity: 'error' });
@@ -1171,9 +1317,9 @@ const SchoolPaymentsPage = () => {
                 await api.put(`/payments/${payment.id}/set-invoice-need`, { requiresInvoice: !!val });
                 setSnackbar({ open: true, message: `Requiere factura: ${val ? 'Sí' : 'No'}`, severity: 'success' });
             } else if (actionName === 'deletePayment') {
-                // Delete / revert a payment record entirely. Backend must expose DELETE /payments/:id
+                // Revert last payment transaction
                 try {
-                    await api.delete(`/payments/${payment.id}`);
+                    await api.post(`/payments/${payment.id}/revert`);
                     setSnackbar({ open: true, message: 'Pago revertido', severity: 'success' });
                     // invalidate caches for this user and refresh payments/analysis
                     invalidatePaymentHistCacheForUser(payment?.User?.id || payment?.userId || manageTarget?.User?.id || manageTarget?.userId);
@@ -1186,6 +1332,34 @@ const SchoolPaymentsPage = () => {
                     console.error('Error revirtiendo pago', e);
                     setSnackbar({ open: true, message: 'Error revirtiendo pago', severity: 'error' });
                 }
+            } else if (actionName === 'payPenalty') {
+                // Pagar mora congelada
+                const { amountPaid, numeroBoleta, bankAccountNumber, paidAt } = payload;
+                if (!amountPaid || Number.isNaN(amountPaid) || amountPaid <= 0) {
+                    setSnackbar({ open: true, message: 'Monto inválido para pagar mora', severity: 'error' });
+                    return;
+                }
+                await api.post(`/payments/${payment.id}/pay-penalty`, {
+                    amountPaid,
+                    numeroBoleta,
+                    bankAccountNumber,
+                    paidAt
+                });
+                setSnackbar({ open: true, message: 'Pago de mora registrado exitosamente', severity: 'success' });
+            } else if (actionName === 'discountPenalty') {
+                // Exonerar o aplicar descuento a mora congelada
+                const { discountAmount, type, notes } = payload;
+                if (!discountAmount || Number.isNaN(discountAmount) || discountAmount <= 0) {
+                    setSnackbar({ open: true, message: 'Monto inválido para exonerar/descontar', severity: 'error' });
+                    return;
+                }
+                await api.post(`/payments/${payment.id}/exonerate-penalty`, {
+                    discountAmount,
+                    type,
+                    notes
+                });
+                const message = type === 'EXONERATION' ? 'Mora exonerada exitosamente' : 'Descuento aplicado a mora';
+                setSnackbar({ open: true, message, severity: 'success' });
             } else {
                 setSnackbar({ open: true, message: `Acción no manejada: ${actionName}`, severity: 'info' });
             }
@@ -1194,22 +1368,20 @@ const SchoolPaymentsPage = () => {
             invalidatePaymentHistCacheForUser(payment?.User?.id || payment?.userId || manageTarget?.User?.id || manageTarget?.userId);
             fetchAllPayments(statusFilter, search);
         } catch (err) {
-            console.error('handleManageAction', err);
-            setSnackbar({ open: true, message: 'Error ejecutando acción', severity: 'error' });
+            console.error('[handleManageAction] Error with action:', actionName);
+            console.error('[handleManageAction] Error details:', err);
+            console.error('[handleManageAction] Response data:', err?.response?.data);
+            const errorMsg = err?.response?.data?.error || err?.message || 'Error ejecutando acción';
+            setSnackbar({ open: true, message: errorMsg, severity: 'error' });
         }
     };
 
     const handleToggleInvoiceSent = async (row, newVal) => {
         try {
-            // The payments controller exposes PUT /payments/:paymentId/set-invoice-need
-            // We have the payment (manageTarget) context; if row belongs to a transaction
-            const paymentId = row.paymentId || row.payment?.id || manageTarget?.id;
-            if (!paymentId) {
-                setSnackbar({ open: true, message: 'Pago no encontrado para la transacción', severity: 'error' });
-                return;
-            }
-            await api.put(`/payments/${paymentId}/set-invoice-need`, { requiresInvoice: !!newVal });
-            setSnackbar({ open: true, message: `Factura enviada: ${newVal ? 'Sí' : 'No'}`, severity: 'success' });
+            // V2: La actualización ya se hizo en ManagePaymentsModal a nivel de transacción
+            // Ya no necesitamos actualizar a nivel de pago porque ese campo no existe en V2
+            
+            setSnackbar({ open: true, message: `Factura ${newVal ? 'marcada como enviada' : 'desmarcada'}`, severity: 'success' });
             // Invalidate cache for this user so modal will fetch fresh histories
             invalidatePaymentHistCacheForUser(row?.userId || row?.User?.id || manageTarget?.User?.id || manageTarget?.userId);
             fetchAllPayments(statusFilter, search);
@@ -1570,38 +1742,37 @@ const SchoolPaymentsPage = () => {
 
     // Derived values for the Register Payment dialog summary
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
-    // Tarifa: prefer explicit fee fields
-    const dialogTarifa = Number(registerPaymentTarget?.tarif || 0);
-    // Mora (accumulated penalty)
-    // If the payment has penaltyPaused === true, show the paused accumulatedPenalty
-    // (do NOT recalculate from paymentSummary). Otherwise prefer the calculated
-    // summary (paymentSummary.adjustedPenalty) and fallback to the stored value.
-    const dialogMora = registerPaymentTarget?.penaltyPaused
-        ? Number(registerPaymentTarget?.accumulatedPenalty || 0)
-        : (paymentSummary?.adjustedPenalty !== undefined
-            ? Number(paymentSummary.adjustedPenalty)
-            : Number(registerPaymentTarget?.accumulatedPenalty || 0));
-    // Crédito a favor: always use the payment table's creditBalance field only
-    const dialogCredito = Number(registerPaymentTarget?.creditBalance ?? 0);
-    // Descuento de familia (special fee) comes from User.FamilyDetail.specialFee
-    // IMPORTANTE: El descuento familiar solo se aplica en el PRIMER pago del período.
-    // Backend lo detecta con: leftover === tarif (significa que el descuento aún no se aplicó)
-    // Solo mostramos el descuento si se va a aplicar en este pago
-    const dialogFamilySpecialFee = Number(registerPaymentTarget?.User?.FamilyDetail?.specialFee ?? 0);
-    const dialogLeftover = Number(registerPaymentTarget?.leftover || 0);
     
-    // Determinar si el descuento familiar se aplicará en este pago
-    // Usamos una tolerancia pequeña (0.01) para comparar decimales
-    const toMoney = (num) => Math.round(parseFloat(num || 0) * 100) / 100;
-    const willApplyFamilyDiscount = dialogFamilySpecialFee > 0 && 
-                                     Math.abs(toMoney(dialogLeftover) - toMoney(dialogTarifa)) < 0.01;
+    // Valores del sistema V2
+    // monthlyFee = tarifa base × cantidad de estudiantes (antes de descuentos)
+    const dialogMonthlyFee = Number(registerPaymentTarget?.monthlyFee || 0);
+    
+    // specialDiscount = descuento familiar aplicado
+    const dialogFamilySpecialFee = Number(registerPaymentTarget?.specialDiscount || 0);
+    
+    // netMonthlyFee = monthlyFee - specialDiscount (lo que realmente debe pagar mensualmente)
+    const dialogNetMonthlyFee = Number(registerPaymentTarget?.netMonthlyFee || 0);
+    
+    // Calcular tarifa base por estudiante
+    const studentCount = (registerPaymentTarget?.User?.FamilyDetail?.Students || []).length || 1;
+    const dialogBaseFee = studentCount > 0 ? dialogMonthlyFee / studentCount : dialogMonthlyFee;
+    
+    // Tipo de ruta
+    const routeType = registerPaymentTarget?.User?.FamilyDetail?.routeType || 'N/A';
+    
+    // Mora de la base de datos (solo para mostrar aviso, no se calcula en esta pestaña)
+    const basePenaltyDue = Number(registerPaymentTarget?.penaltyDue || 0);
+    
+    const dialogCredito = Number(registerPaymentTarget?.creditBalance ?? 0);
+    
+    // Saldo pendiente: usar balanceDue
+    const dialogLeftover = Number(registerPaymentTarget?.balanceDue || 0);
     
     const dialogExtraDiscount = Number(registerPaymentExtra?.extraordinaryDiscount || 0);
-    // Total to pay: start from leftover + mora, then subtract credito, extraordinary discount, 
-    // and family discount (only if it will be applied)
+    
+    // Total a pagar en pestaña de Tarifa: NO incluye mora (se paga por separado)
     const dialogTotalToPay = Math.max(0, 
-        dialogLeftover + dialogMora - dialogCredito - dialogExtraDiscount - 
-        (willApplyFamilyDiscount ? dialogFamilySpecialFee : 0)
+        dialogLeftover - dialogCredito - dialogExtraDiscount
     );
 
 
@@ -1927,11 +2098,12 @@ const SchoolPaymentsPage = () => {
                         </Dialog>
 
                         {/* Dialog: Registrar Pago */}
-                        <Dialog open={openRegisterDialog} onClose={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); }} fullWidth maxWidth="lg">
+                        <Dialog open={openRegisterDialog} onClose={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); setPaymentTab(0); }} fullWidth maxWidth="lg">
                             <DialogTitle>Registrar Pago</DialogTitle>
                             <DialogContent>
                                 <Box sx={{ position: 'relative' }}>
                                 <Grid container spacing={2}>
+                                    {/* Panel de Boletas (Columna Izquierda - Siempre Visible) */}
                                     <Grid item xs={12} md={7}>
                                         <Box sx={{ border: '1px solid rgba(0,0,0,0.06)', borderRadius: 1, p: 1, height: 580, overflow: 'auto', backgroundColor: '#fff' }}>
                                             <ReceiptsPane
@@ -1956,7 +2128,28 @@ const SchoolPaymentsPage = () => {
                                             />
                                         </Box>
                                     </Grid>
+                                    
+                                    {/* Panel de Formulario (Columna Derecha - Con Pestañas) */}
                                     <Grid item xs={12} md={5}>
+                                        {/* Pestañas para separar Pago de Tarifa y Pago de Mora */}
+                                        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+                                            <Tabs value={paymentTab} onChange={(e, newValue) => setPaymentTab(newValue)}>
+                                                <Tab label="Pago de Tarifa" />
+                                                <Tab 
+                                                    label={`Pago de Mora ${basePenaltyDue > 0 ? `(Q ${basePenaltyDue.toFixed(2)})` : '(Q 0.00)'}`}
+                                                    sx={{
+                                                        color: basePenaltyDue > 0 ? 'error.main' : 'inherit',
+                                                        fontWeight: basePenaltyDue > 0 ? 700 : 400,
+                                                        '&.Mui-selected': {
+                                                            color: basePenaltyDue > 0 ? 'error.main' : 'primary.main'
+                                                        }
+                                                    }}
+                                                />
+                                            </Tabs>
+                                        </Box>
+
+                                        {/* Tab Panel 0: Pago de Tarifa */}
+                                        {paymentTab === 0 && (
                                         <Box sx={{ maxWidth: 420 }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
@@ -1969,102 +2162,209 @@ const SchoolPaymentsPage = () => {
                                             { (registerPaymentTarget && (registerPaymentTarget.automaticDebit || registerPaymentTarget.User?.FamilyDetail?.automaticDebit)) && (
                                                 <Chip label="D/A" size="small" color="primary" sx={{ height: 22, fontSize: '0.75rem' }} />
                                             ) }
-                                            {/* Button to show pending periods */}
-                                            {registerPaymentTarget?.unpaidPeriods && (() => {
+                                            {registerPaymentTarget?.autoDebit && (
+                                                <Chip label="D/A" size="small" color="primary" sx={{ height: 22, fontSize: '0.75rem' }} />
+                                            )}
+                                        </Box>
+                                        {/* Payment summary block: Desglose detallado del cálculo */}
+                                        <Box sx={{ mb: 2, p: 2, backgroundColor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>📋 Desglose de Pago</Typography>
+                                            
+                                            {/* Sección: Cargos Base */}
+                                            <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', display: 'block', mb: 1 }}>
+                                                    CARGOS BASE
+                                                </Typography>
+                                                
+                                                {/* Tarifa base por estudiante */}
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        Tarifa base
+                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
+                                                            (Ruta {routeType})
+                                                        </Typography>
+                                                    </Typography>
+                                                    <Typography variant="body2">{formatCurrency(dialogBaseFee)}</Typography>
+                                                </Box>
+                                                
+                                                {/* Tarifa mensual total (base × estudiantes) */}
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        Tarifa mensual
+                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
+                                                            ({studentCount} {studentCount === 1 ? 'estudiante' : 'estudiantes'})
+                                                        </Typography>
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatCurrency(dialogMonthlyFee)}</Typography>
+                                                </Box>
+                                            </Box>
+
+                                            {/* Sección: Descuentos y Créditos */}
+                                            {(dialogCredito > 0 || dialogFamilySpecialFee > 0 || dialogExtraDiscount > 0) && (
+                                                <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'success.main', display: 'block', mb: 1 }}>
+                                                        DESCUENTOS Y CRÉDITOS
+                                                    </Typography>
+                                                    
+                                                    {dialogCredito > 0 && (
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                            <Typography variant="body2" color="text.secondary">Crédito a favor</Typography>
+                                                            <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                                                - {formatCurrency(dialogCredito)}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                    
+                                                    {dialogFamilySpecialFee > 0 && (
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                Descuento familiar
+                                                            </Typography>
+                                                            <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                                                - {formatCurrency(dialogFamilySpecialFee)}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                    
+                                                    {dialogExtraDiscount > 0 && (
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                            <Typography variant="body2" color="text.secondary">Descuento extraordinario</Typography>
+                                                            <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                                                - {formatCurrency(dialogExtraDiscount)}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            )}
+
+                                            {/* Desglose por períodos pendientes si hay varios meses */}
+                                            {(() => {
                                                 try {
-                                                    const allPeriods = typeof registerPaymentTarget.unpaidPeriods === 'string'
-                                                        ? JSON.parse(registerPaymentTarget.unpaidPeriods)
-                                                        : registerPaymentTarget.unpaidPeriods;
-                                                    // Filtrar solo períodos con amount > 0
+                                                    const allPeriods = registerPaymentTarget?.unpaidPeriods
+                                                        ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
+                                                            ? JSON.parse(registerPaymentTarget.unpaidPeriods)
+                                                            : registerPaymentTarget.unpaidPeriods)
+                                                        : [];
                                                     const periods = allPeriods.filter(p => Number(p.amount || 0) > 0);
-                                                    if (Array.isArray(periods) && periods.length > 0) {
+                                                    
+                                                    if (Array.isArray(periods) && periods.length > 1) {
+                                                        const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                                                        
                                                         return (
-                                                            <Button
-                                                                size="small"
-                                                                variant="outlined"
-                                                                color="warning"
-                                                                onClick={() => setOpenPendingPeriodsDialog(true)}
-                                                                sx={{ height: 24, fontSize: '0.7rem', textTransform: 'none' }}
-                                                            >
-                                                                Ver períodos pendientes ({periods.length})
-                                                            </Button>
+                                                            <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                                                                <Box sx={{ p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ff9800' }}>
+                                                                    <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1.5, color: '#e65100' }}>
+                                                                        ⚠️ Períodos pendientes ({periods.length} meses):
+                                                                    </Typography>
+                                                                    {periods.map((period, idx) => {
+                                                                        const periodDate = moment(period.period);
+                                                                        const monthName = monthNames[periodDate.month()];
+                                                                        const year = periodDate.year();
+                                                                        const dueDate = period.dueDate ? moment(period.dueDate).format('DD/MM/YY') : 'N/A';
+                                                                        
+                                                                        // Verificar si es pago parcial
+                                                                        const periodNetAmount = dialogMonthlyFee - dialogFamilySpecialFee;
+                                                                        const isParcial = Number(period.amount || 0) < periodNetAmount && Number(period.amount || 0) > 0;
+                                                                        const amountPaid = isParcial ? (periodNetAmount - Number(period.amount || 0)) : 0;
+                                                                        
+                                                                        return (
+                                                                            <Box key={idx} sx={{ mb: idx < periods.length - 1 ? 2 : 0, pb: idx < periods.length - 1 ? 2 : 0, borderBottom: idx < periods.length - 1 ? '1px dashed rgba(0,0,0,0.15)' : 'none' }}>
+                                                                                <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5, color: 'text.primary' }}>
+                                                                                    • {monthName} {year}
+                                                                                    <Typography component="span" sx={{ fontSize: '0.65rem', ml: 0.5, color: 'text.disabled' }}>
+                                                                                        (Vence: {dueDate})
+                                                                                    </Typography>
+                                                                                    {isParcial && (
+                                                                                        <Typography component="span" sx={{ 
+                                                                                            fontSize: '0.65rem', 
+                                                                                            ml: 1, 
+                                                                                            px: 0.75, 
+                                                                                            py: 0.25,
+                                                                                            backgroundColor: '#fff3e0',
+                                                                                            color: '#e65100',
+                                                                                            borderRadius: '4px',
+                                                                                            fontWeight: 600
+                                                                                        }}>
+                                                                                            📝 PAGO PARCIAL
+                                                                                        </Typography>
+                                                                                    )}
+                                                                                </Typography>
+                                                                                
+                                                                                {/* Tarifa mensual */}
+                                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2 }}>
+                                                                                    <Typography variant="caption" color="text.secondary">
+                                                                                        Tarifa mensual:
+                                                                                    </Typography>
+                                                                                    <Typography variant="caption">
+                                                                                        {formatCurrency(dialogMonthlyFee)}
+                                                                                    </Typography>
+                                                                                </Box>
+                                                                                
+                                                                                {/* Descuento familiar completo aplicado cada mes */}
+                                                                                {dialogFamilySpecialFee > 0 && (
+                                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
+                                                                                        <Typography variant="caption" color="text.secondary">
+                                                                                            Descuento familiar:
+                                                                                        </Typography>
+                                                                                        <Typography variant="caption" sx={{ color: 'success.main' }}>
+                                                                                            - {formatCurrency(dialogFamilySpecialFee)}
+                                                                                        </Typography>
+                                                                                    </Box>
+                                                                                )}
+                                                                                
+                                                                                {/* Mostrar desglose de pago parcial */}
+                                                                                {isParcial && (
+                                                                                    <>
+                                                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
+                                                                                            <Typography variant="caption" sx={{ color: 'info.main', fontStyle: 'italic' }}>
+                                                                                                Ya pagado:
+                                                                                            </Typography>
+                                                                                            <Typography variant="caption" sx={{ color: 'info.main', fontWeight: 500 }}>
+                                                                                                {formatCurrency(amountPaid)}
+                                                                                            </Typography>
+                                                                                        </Box>
+                                                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
+                                                                                            <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 500 }}>
+                                                                                                Saldo pendiente:
+                                                                                            </Typography>
+                                                                                            <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>
+                                                                                                {formatCurrency(period.amount)}
+                                                                                            </Typography>
+                                                                                        </Box>
+                                                                                    </>
+                                                                                )}
+                                                                                
+                                                                                {/* Subtotal del período */}
+                                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2, pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                                                                                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                                                                        {isParcial ? 'A pagar este período:' : 'Subtotal período:'}
+                                                                                    </Typography>
+                                                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                                                                                        {formatCurrency(period.amount)}
+                                                                                    </Typography>
+                                                                                </Box>
+                                                                            </Box>
+                                                                        );
+                                                                    })}
+                                                                </Box>
+                                                            </Box>
                                                         );
                                                     }
                                                 } catch (e) {
-                                                    // ignore parse errors
+                                                    console.error('Error parsing periods:', e);
                                                 }
                                                 return null;
                                             })()}
-                                        </Box>
-                                        {/* Payment summary block: Tarifa, Mora, Crédito, Total a pagar */}
-                                        <Box sx={{ mb: 2, p: 2, backgroundColor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
-                                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Resumen de Pago</Typography>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                                                <Typography variant="body2" color="text.secondary">Tarifa</Typography>
-                                                <Typography variant="body2">{formatCurrency(dialogTarifa)}</Typography>
-                                            </Box>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                <Typography variant="body2" color="text.secondary">Saldo pendiente</Typography>
-                                                <Typography variant="body2" sx={{ color: dialogLeftover > 0 ? '#d32f2f' : 'inherit', fontWeight: dialogLeftover > 0 ? 600 : 400 }}>
-                                                    {formatCurrency(dialogLeftover)}
+
+                                            {/* Total a pagar */}
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1.5, borderTop: '2px solid rgba(0,0,0,0.12)' }}>
+                                                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>💰 Total a pagar</Typography>
+                                                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'primary.main' }}>
+                                                    {formatCurrency(dialogTotalToPay)}
                                                 </Typography>
                                             </Box>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                                    <Typography variant="body2" color="text.secondary">Mora</Typography>
-                                                    {registerPaymentTarget?.penaltyPaused && (
-                                                        <Chip label="Mora congelada" size="small" color="default" sx={{ height: 22, fontSize: '0.7rem' }} />
-                                                    )}
-                                                    {/* Mostrar desde qué fecha se calcula la mora */}
-                                                    {dialogMora > 0 && (() => {
-                                                        try {
-                                                            const periods = registerPaymentTarget?.unpaidPeriods
-                                                                ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
-                                                                    ? JSON.parse(registerPaymentTarget.unpaidPeriods)
-                                                                    : registerPaymentTarget.unpaidPeriods)
-                                                                : [];
-                                                            if (Array.isArray(periods) && periods.length > 0) {
-                                                                const oldestPeriod = periods[0];
-                                                                if (oldestPeriod.dueDate) {
-                                                                    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-                                                                    const dueDate = moment(oldestPeriod.dueDate);
-                                                                    const day = dueDate.date();
-                                                                    const monthName = monthNames[dueDate.month()];
-                                                                    return (
-                                                                        <Typography variant="caption" color="warning.main" sx={{ fontSize: '0.7rem' }}>
-                                                                            (desde el {day} de {monthName})
-                                                                        </Typography>
-                                                                    );
-                                                                }
-                                                            }
-                                                        } catch (e) {
-                                                            // ignore
-                                                        }
-                                                        return null;
-                                                    })()}
-                                                </Box>
-                                                <Typography variant="body2">{formatCurrency(dialogMora)}</Typography>
-                                            </Box>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                <Typography variant="body2" color="text.secondary">Crédito a favor</Typography>
-                                                <Typography variant="body2">{formatCurrency(dialogCredito)}</Typography>
-                                            </Box>
-                                            {/* Solo mostrar descuento familia si se va a aplicar (primer pago del mes) */}
-                                            {willApplyFamilyDiscount && (
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                    <Typography variant="body2" color="text.secondary">Descuento familia</Typography>
-                                                    <Typography variant="body2">{formatCurrency(dialogFamilySpecialFee)}</Typography>
-                                                </Box>
-                                            )}
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                <Typography variant="body2" color="text.secondary">Descuento extraordinario</Typography>
-                                                <Typography variant="body2">{formatCurrency(dialogExtraDiscount)}</Typography>
-                                            </Box>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px dashed rgba(0,0,0,0.06)' }}>
-                                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Total a pagar</Typography>
-                                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{formatCurrency(dialogTotalToPay)}</Typography>
-                                            </Box>
                                         </Box>
+
                                         <TextField
                                             label="Monto pagado"
                                             type="number"
@@ -2144,8 +2444,222 @@ const SchoolPaymentsPage = () => {
                                             </Select>
                                         </FormControl>
                                         </Box>
+                                        )}
+
+                                {/* Tab Panel 1: Pago de Mora */}
+                                {paymentTab === 1 && (
+                                <Box>
+                                    <Typography variant="h6" sx={{ mb: 2, color: basePenaltyDue > 0 ? 'error.main' : 'success.main' }}>
+                                        {basePenaltyDue > 0 ? '💰 Pago de Mora Acumulada' : '✅ Sin Mora Pendiente'}
+                                    </Typography>
+                                    
+                                    {/* Información de la familia */}
+                                    <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                                            {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
+                                            {registerPaymentTarget && (
+                                                ` (${(registerPaymentTarget.User?.FamilyDetail?.Students || []).length || (registerPaymentTarget.studentCount || 0)} estudiantes)`
+                                            )}
+                                        </Typography>
+                                        
+                                        {/* Desglose de mora */}
+                                        <Box sx={{ mt: 2, p: 2, bgcolor: '#fff', borderRadius: 1, border: '1px solid rgba(211, 47, 47, 0.2)' }}>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'error.main', display: 'block', mb: 1 }}>
+                                                MORA ACUMULADA
+                                            </Typography>
+                                            
+                                            {/* Indicador de mora congelada */}
+                                            {registerPaymentTarget?.penaltyFrozenAt && (
+                                                <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3cd', borderRadius: 1, border: '1px solid #ffc107' }}>
+                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: '#856404', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                        ❄️ Mora Congelada
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                                        Congelada desde el {moment(registerPaymentTarget.penaltyFrozenAt).format('DD [de] MMMM, YYYY')}
+                                                    </Typography>
+                                                </Box>
+                                            )}
+                                            
+                                            {registerPaymentTarget?.penaltyStartDate && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                                    📅 Desde el {moment(registerPaymentTarget.penaltyStartDate).format('DD [de] MMMM, YYYY')}
+                                                    {' '}({moment(registerPaymentExtra?.paymentDate || moment().format('YYYY-MM-DD')).diff(moment(registerPaymentTarget.penaltyStartDate), 'days')} días de atraso)
+                                                </Typography>
+                                            )}
+                                            
+                                            {/* Mora acumulada */}
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                                                <Typography variant="body2" color="text.secondary">Mora acumulada:</Typography>
+                                                <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 500 }}>
+                                                    {formatCurrency(basePenaltyDue)}
+                                                </Typography>
+                                            </Box>
+
+                                            {/* Exoneración (si hay monto en el campo) */}
+                                            {(() => {
+                                                const exonerateValue = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
+                                                if (exonerateValue > 0) {
+                                                    return (
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                {isExonerating ? 'Exoneración completa:' : 'Exoneración parcial:'}
+                                                            </Typography>
+                                                            <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                                                - {formatCurrency(exonerateValue)}
+                                                            </Typography>
+                                                        </Box>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+
+                                            {/* Total a pagar (mora - exoneración) */}
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Total a pagar:</Typography>
+                                                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: basePenaltyDue > 0 ? 'error.main' : 'success.main' }}>
+                                                    {(() => {
+                                                        const exonerateValue = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
+                                                        const total = Math.max(0, basePenaltyDue - exonerateValue);
+                                                        return formatCurrency(total);
+                                                    })()}
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+                                    </Box>
+
+                                    {/* Toggle de Exoneración Completa */}
+                                    {basePenaltyDue > 0 && (
+                                        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                                ✅ Exoneración Completa
+                                            </Typography>
+                                            <Switch 
+                                                checked={isExonerating}
+                                                onChange={(e) => {
+                                                    setIsExonerating(e.target.checked);
+                                                    if (e.target.checked) {
+                                                        // Cuando se activa exoneración completa:
+                                                        // - Monto a pagar = 0
+                                                        // - Número de boleta = 004
+                                                        // - Exonerar mora = total de la mora
+                                                        setPayPenaltyAmount('0');
+                                                        setPayPenaltyBoleta('004');
+                                                        setDiscountPenaltyAmount(basePenaltyDue.toString());
+                                                        setExonerateAmount(basePenaltyDue.toString());
+                                                    } else {
+                                                        // Limpiar campos al desactivar
+                                                        setPayPenaltyAmount('');
+                                                        setPayPenaltyBoleta('');
+                                                        setDiscountPenaltyAmount('');
+                                                        setExonerateAmount('');
+                                                    }
+                                                }}
+                                                color="success"
+                                            />
+                                        </Box>
+                                    )}
+
+                                    {/* Formulario de pago de mora (siempre visible, pero algunos campos bloqueados cuando está exonerando) */}
+                                    <TextField
+                                        label="Monto a Pagar"
+                                        type="number"
+                                        fullWidth
+                                        value={payPenaltyAmount}
+                                        onChange={(e) => setPayPenaltyAmount(e.target.value)}
+                                        inputProps={{ min: 0, step: '0.01', max: basePenaltyDue }}
+                                        sx={{ mb: 2 }}
+                                        disabled={basePenaltyDue === 0 || isExonerating}
+                                        helperText={isExonerating ? "Exoneración completa: No se realizará pago" : ""}
+                                    />
+                                    <TextField
+                                        label="Fecha del Pago"
+                                        type="date"
+                                        fullWidth
+                                        InputLabelProps={{ shrink: true }}
+                                        value={payPenaltyDate}
+                                        onChange={(e) => setPayPenaltyDate(e.target.value)}
+                                        sx={{ mb: 2 }}
+                                    />
+                                    <TextField
+                                        label="Número de Boleta"
+                                        fullWidth
+                                        value={payPenaltyBoleta}
+                                        onChange={(e) => setPayPenaltyBoleta(e.target.value)}
+                                        sx={{ mb: 2 }}
+                                        disabled={isExonerating}
+                                        helperText={isExonerating ? "004 - Exoneración completa" : ""}
+                                    />
+                                    <TextField
+                                        label="Exonerar Mora (Q)"
+                                        type="number"
+                                        fullWidth
+                                        value={discountPenaltyAmount}
+                                        onChange={(e) => setDiscountPenaltyAmount(e.target.value)}
+                                        inputProps={{ min: 0, step: '0.01', max: basePenaltyDue }}
+                                        sx={{ mb: 2 }}
+                                        disabled={basePenaltyDue === 0 || isExonerating}
+                                        helperText={isExonerating ? "Exoneración del monto completo de la mora" : ""}
+                                    />
+                                    <FormControl fullWidth sx={{ mb: 2 }}>
+                                        <InputLabel>Número de Cuenta</InputLabel>
+                                        <Select
+                                            label="Número de Cuenta"
+                                            value={payPenaltyAccount}
+                                            onChange={(e) => setPayPenaltyAccount(e.target.value)}
+                                        >
+                                            {(() => {
+                                                const seen = new Set();
+                                                const entries = [];
+                                                try {
+                                                    const sources = [];
+                                                    if (Array.isArray(allSchools) && allSchools.length > 0) sources.push(...allSchools);
+                                                    if (registerPaymentTarget?.schoolId && !sources.find(s => s.id === registerPaymentTarget.schoolId)) {
+                                                        const found = allSchools.find(s => s.id === registerPaymentTarget.schoolId);
+                                                        if (found) sources.push(found);
+                                                    }
+
+                                                    sources.forEach(sch => {
+                                                        const raw = sch?.bankAccount || '';
+                                                        if (!raw) return;
+                                                        const parts = raw.split(/[|,;]+/).map(p => p.trim()).filter(Boolean);
+                                                        if (parts.length > 0) {
+                                                            parts.forEach(p => {
+                                                                const key = `${sch.id}::${p}`;
+                                                                if (!seen.has(key)) { seen.add(key); entries.push({ key, value: p, label: `${sch.name} - ${p}` }); }
+                                                            });
+                                                        } else {
+                                                            const key = `${sch.id}::${raw}`;
+                                                            if (!seen.has(key)) { seen.add(key); entries.push({ key, value: raw, label: `${sch.name} - ${raw}` }); }
+                                                        }
+                                                    });
+                                                } catch (e) {
+                                                    // ignore
+                                                }
+                                                if (entries.length === 0) return <MenuItem value="">(No configurado)</MenuItem>;
+                                                    return entries.map(opt => <MenuItem key={opt.key} value={opt.value}>{opt.label}</MenuItem>);
+                                                })()}
+                                        </Select>
+                                    </FormControl>
+
+                                    {basePenaltyDue > 0 ? (
+                                        <Box sx={{ mt: 2, p: 2, bgcolor: '#fff3cd', borderRadius: 1, border: '1px solid #ffc107' }}>
+                                            <Typography variant="caption" color="text.secondary">
+                                                💡 <strong>Nota:</strong> Este pago se aplicará exclusivamente a la mora acumulada. 
+                                                El saldo de tarifa permanecerá sin cambios.
+                                            </Typography>
+                                        </Box>
+                                    ) : (
+                                        <Box sx={{ mt: 2, p: 2, bgcolor: '#d4edda', borderRadius: 1, border: '1px solid #c3e6cb' }}>
+                                            <Typography variant="caption" sx={{ color: '#155724' }}>
+                                                ✅ <strong>Esta familia no tiene mora pendiente.</strong>
+                                            </Typography>
+                                        </Box>
+                                    )}
+                                </Box>
+                                )}
                                     </Grid>
                                 </Grid>
+                                
                                 {/* Loading overlay when receipts/history are being fetched */}
                                 {(uploadedReceiptsLoading || regHistLoading) && (
                                     <Box sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', zIndex: 30 }}>
@@ -2156,13 +2670,112 @@ const SchoolPaymentsPage = () => {
                                 </Box>
                             </DialogContent>
                             <DialogActions>
-                                <Button onClick={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); }} disabled={uploadedReceiptsLoading || regHistLoading}>Cancelar</Button>
-                                <Button variant="contained" onClick={async () => {
-                                    await handleConfirmRegister();
-                                    // ensure receipt view reset after confirming
-                                    setSelectedReceipt(null);
-                                    setReceiptZoom(1);
-                                }} disabled={!registerAmount || uploadedReceiptsLoading || regHistLoading}>Registrar</Button>
+                                <Button onClick={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); setPaymentTab(0); }} disabled={uploadedReceiptsLoading || regHistLoading}>Cancelar</Button>
+                                
+                                {/* Botón para Pago de Tarifa */}
+                                {paymentTab === 0 && (
+                                    <Button variant="contained" onClick={async () => {
+                                        await handleConfirmRegister();
+                                        // ensure receipt view reset after confirming
+                                        setSelectedReceipt(null);
+                                        setReceiptZoom(1);
+                                    }} disabled={!registerAmount || uploadedReceiptsLoading || regHistLoading}>
+                                        Registrar Pago de Tarifa
+                                    </Button>
+                                )}
+                                
+                                {/* Botón para Pago de Mora */}
+                                {paymentTab === 1 && (
+                                    <Button variant="contained" color={isExonerating ? "success" : "warning"} onClick={async () => {
+                                        // Obtener valores de los campos
+                                        const amt = Number(payPenaltyAmount || 0);
+                                        const discount = Number(discountPenaltyAmount || 0);
+                                        
+                                        // Validar monto - permitir 0 si hay descuento/exoneración
+                                        if (Number.isNaN(amt) || amt < 0) {
+                                            setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
+                                            return;
+                                        }
+                                        
+                                        // Validar que al menos uno tenga valor (pago o exoneración)
+                                        if (amt === 0 && discount === 0) {
+                                            setSnackbar({ open: true, message: 'Debe ingresar un monto de pago o de exoneración', severity: 'error' });
+                                            return;
+                                        }
+                                        
+                                        // Validar que la suma no exceda la mora
+                                        const total = amt + discount;
+                                        if (total > basePenaltyDue) {
+                                            setSnackbar({ open: true, message: `El monto total (pago + exoneración) excede la mora adeudada (Q${basePenaltyDue.toFixed(2)})`, severity: 'error' });
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            const payloadData = {
+                                                paymentId: registerPaymentTarget.id,
+                                                amount: amt,
+                                                extraordinaryDiscount: discount || 0,
+                                                realPaymentDate: payPenaltyDate,
+                                                receiptNumber: payPenaltyBoleta,
+                                                bankAccount: payPenaltyAccount,
+                                                notes: discount > 0 ? `Descuento/Exoneración de mora: Q${discount.toFixed(2)}` : null,
+                                                source: 'manual'
+                                            };
+                                            console.log('[PAY PENALTY] Enviando payload:', payloadData);
+                                            
+                                            const response = await api.post('/payments/pay-penalty', payloadData);
+                                            console.log('[PAY PENALTY] Respuesta recibida:', response.data);
+                                            
+                                            setSnackbar({ 
+                                                open: true, 
+                                                message: isExonerating 
+                                                    ? `Mora exonerada: Q${discount.toFixed(2)}` 
+                                                    : 'Pago de mora registrado exitosamente', 
+                                                severity: 'success' 
+                                            });
+                                            setOpenRegisterDialog(false);
+                                            setIsExonerating(false);
+                                            setPayPenaltyAmount('');
+                                            setPayPenaltyBoleta('');
+                                            setPayPenaltyAccount('');
+                                            setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+                                            setDiscountPenaltyAmount('');
+                                            setExonerateAmount('');
+                                            setPaymentTab(0);
+                                            // Refrescar datos
+                                            await fetchAllPayments(statusFilter, search);
+                                        } catch (err) {
+                                            console.error('Error procesando mora:', err);
+                                            const errorMsg = err.response?.data?.message || 'Error al procesar el pago de mora';
+                                            setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+                                        }
+                                    }} disabled={uploadedReceiptsLoading || regHistLoading || basePenaltyDue === 0 || (() => {
+                                        // Validar campos requeridos para habilitar el botón
+                                        const amt = Number(payPenaltyAmount || 0);
+                                        const discount = Number(discountPenaltyAmount || 0);
+                                        
+                                        // Si es exoneración completa, solo validar fecha y cuenta
+                                        if (isExonerating) {
+                                            return !payPenaltyDate || !payPenaltyAccount;
+                                        }
+                                        
+                                        // Para pago normal: validar monto + fecha + boleta + cuenta
+                                        // Al menos debe tener monto de pago O descuento
+                                        if (amt === 0 && discount === 0) {
+                                            return true; // Deshabilitar si no hay monto
+                                        }
+                                        
+                                        // Si hay monto de pago, validar que haya boleta
+                                        if (amt > 0 && !payPenaltyBoleta) {
+                                            return true; // Deshabilitar si falta boleta
+                                        }
+                                        
+                                        // Validar fecha y cuenta (siempre requeridos)
+                                        return !payPenaltyDate || !payPenaltyAccount;
+                                    })()}>
+                                        {isExonerating ? 'Confirmar Exoneración' : 'Registrar Pago de Mora'}
+                                    </Button>
+                                )}
                             </DialogActions>
                         </Dialog>
 
@@ -2228,80 +2841,214 @@ const SchoolPaymentsPage = () => {
                             </DialogActions>
                         </Dialog>
 
-                        {/* Dialog: Períodos Pendientes de Pago */}
-                        <Dialog open={openPendingPeriodsDialog} onClose={() => setOpenPendingPeriodsDialog(false)} fullWidth maxWidth="sm">
-                            <DialogTitle>Períodos Pendientes de Pago</DialogTitle>
+                        {/* Dialog: Pagar Mora Congelada */}
+                        <Dialog open={openPayPenaltyDialog} onClose={() => setOpenPayPenaltyDialog(false)} maxWidth="sm" fullWidth>
+                            <DialogTitle>Pagar Mora {registerPaymentTarget?.penaltyFrozen ? 'Congelada' : 'Acumulada'}</DialogTitle>
                             <DialogContent>
-                                {(() => {
-                                    try {
-                                        const allPeriods = registerPaymentTarget?.unpaidPeriods
-                                            ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
-                                                ? JSON.parse(registerPaymentTarget.unpaidPeriods)
-                                                : registerPaymentTarget.unpaidPeriods)
-                                            : [];
-                                        // Filtrar solo períodos con amount > 0 (los que aún deben dinero)
-                                        const periods = allPeriods.filter(p => Number(p.amount || 0) > 0);
-                                        if (!Array.isArray(periods) || periods.length === 0) {
-                                            return <Typography variant="body2" color="text.secondary">No hay períodos pendientes de pago.</Typography>;
-                                        }
-                                        return (
-                                            <Box sx={{ mt: 1 }}>
-                                                {periods.map((p, idx) => {
-                                                    // Convertir periodo a nombre de mes en español
-                                                    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-                                                    let displayPeriod = p.periodName || p.period;
-                                                    if (p.period && /^\d{4}-\d{2}$/.test(p.period)) {
-                                                        const [year, month] = p.period.split('-');
-                                                        const monthIndex = parseInt(month, 10) - 1;
-                                                        if (monthIndex >= 0 && monthIndex < 12) {
-                                                            displayPeriod = `${monthNames[monthIndex]} ${year}`;
-                                                        }
-                                                    }
-                                                    return (
-                                                    <Box
-                                                        key={p.period || idx}
-                                                        sx={{
-                                                            display: 'flex',
-                                                            justifyContent: 'space-between',
-                                                            alignItems: 'center',
-                                                            p: 1.5,
-                                                            mb: 1,
-                                                            backgroundColor: idx % 2 === 0 ? '#fafafa' : '#fff',
-                                                            borderRadius: 1,
-                                                            border: '1px solid rgba(0,0,0,0.08)'
-                                                        }}
-                                                    >
-                                                        <Box>
-                                                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                                                                {displayPeriod}
-                                                            </Typography>
-                                                            <Typography variant="caption" color="text.secondary">
-                                                                Vencimiento: {p.dueDate ? moment(p.dueDate).format('DD/MM/YYYY') : 'N/A'}
-                                                            </Typography>
-                                                        </Box>
-                                                        <Box sx={{ textAlign: 'right' }}>
-                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#d32f2f' }}>
-                                                                Q {Number(p.amount || 0).toFixed(2)}
-                                                            </Typography>
-                                                        </Box>
-                                                    </Box>
-                                                    );
-                                                })}
-                                                <Box sx={{ mt: 2, pt: 1, borderTop: '1px dashed rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between' }}>
-                                                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Total pendiente:</Typography>
-                                                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#d32f2f' }}>
-                                                        Q {periods.reduce((sum, p) => sum + Number(p.amount || 0), 0).toFixed(2)}
-                                                    </Typography>
-                                                </Box>
-                                            </Box>
-                                        );
-                                    } catch (e) {
-                                        return <Typography variant="body2" color="error">Error al cargar períodos pendientes.</Typography>;
-                                    }
-                                })()}
+                                <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                    <Typography variant="body2" sx={{ mb: 1 }}>
+                                        <strong>Mora {registerPaymentTarget?.penaltyFrozen ? 'Congelada' : 'Acumulada'}:</strong> Q {Number(registerPaymentTarget?.penaltyDue || 0).toFixed(2)}
+                                    </Typography>
+                                    {registerPaymentTarget?.penaltyFrozen && (
+                                        <Typography variant="caption" color="text.secondary">
+                                            Congelada el: {registerPaymentTarget?.penaltyStartDate ? moment(registerPaymentTarget.penaltyStartDate).format('DD/MM/YYYY') : '—'}
+                                        </Typography>
+                                    )}
+                                    {!registerPaymentTarget?.penaltyFrozen && (
+                                        <Typography variant="caption" color="text.secondary">
+                                            💡 Puedes pagar esta mora por separado antes de pagar la tarifa completa.
+                                        </Typography>
+                                    )}
+                                </Box>
+                                <TextField 
+                                    fullWidth 
+                                    label="Monto a Pagar (Q)" 
+                                    type="number" 
+                                    value={payPenaltyAmount} 
+                                    onChange={(e) => setPayPenaltyAmount(e.target.value)}
+                                    sx={{ mb: 2 }}
+                                />
+                                <TextField 
+                                    fullWidth 
+                                    label="Fecha de Pago" 
+                                    type="date" 
+                                    value={payPenaltyDate} 
+                                    onChange={(e) => setPayPenaltyDate(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    sx={{ mb: 2 }}
+                                />
+                                <TextField 
+                                    fullWidth 
+                                    label="Número de Boleta" 
+                                    value={payPenaltyBoleta} 
+                                    onChange={(e) => setPayPenaltyBoleta(e.target.value)}
+                                    sx={{ mb: 2 }}
+                                />
+                                <TextField 
+                                    fullWidth 
+                                    label="Número de Cuenta Bancaria" 
+                                    value={payPenaltyAccount} 
+                                    onChange={(e) => setPayPenaltyAccount(e.target.value)}
+                                />
                             </DialogContent>
                             <DialogActions>
-                                <Button onClick={() => setOpenPendingPeriodsDialog(false)}>Cerrar</Button>
+                                <Button onClick={() => {
+                                    setOpenPayPenaltyDialog(false);
+                                    setPayPenaltyAmount('');
+                                    setPayPenaltyBoleta('');
+                                    setPayPenaltyAccount('');
+                                    setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+                                }}>Cancelar</Button>
+                                <Button variant="contained" onClick={async () => {
+                                    const amt = Number(payPenaltyAmount || 0);
+                                    if (!amt || Number.isNaN(amt) || amt <= 0) {
+                                        setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
+                                        return;
+                                    }
+                                    const currentPenalty = Number(registerPaymentTarget?.penaltyDue || 0);
+                                    if (amt > currentPenalty) {
+                                        setSnackbar({ open: true, message: `El monto excede la mora adeudada (Q${currentPenalty.toFixed(2)})`, severity: 'error' });
+                                        return;
+                                    }
+                                    try {
+                                        // Usar endpoint pay-penalty que maneja tanto mora congelada como acumulada
+                                        await api.post(`/payments/${registerPaymentTarget.id}/pay-penalty`, {
+                                            amountPaid: amt,
+                                            receiptNumber: payPenaltyBoleta,
+                                            bankAccountNumber: payPenaltyAccount,
+                                            paidAt: payPenaltyDate
+                                        });
+                                        setSnackbar({ open: true, message: 'Pago de mora registrado exitosamente', severity: 'success' });
+                                        setOpenPayPenaltyDialog(false);
+                                        setPayPenaltyAmount('');
+                                        setPayPenaltyBoleta('');
+                                        setPayPenaltyAccount('');
+                                        setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+                                        // Refrescar datos
+                                        await fetchAllPayments(statusFilter, search);
+                                        // Actualizar el registerPaymentTarget con los datos frescos
+                                        const updated = await api.get(`/payments/${registerPaymentTarget.id}`);
+                                        if (updated.data) {
+                                            setRegisterPaymentTarget(updated.data);
+                                        }
+                                    } catch (err) {
+                                        console.error('Error pagando mora:', err);
+                                        console.error('Error response:', err.response?.data);
+                                        const errorMsg = err.response?.data?.message || 'Error al registrar pago de mora';
+                                        setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+                                    }
+                                }}>Registrar Pago</Button>
+                            </DialogActions>
+                        </Dialog>
+
+                        {/* Dialog: Descontar/Exonerar Mora Congelada */}
+                        <Dialog open={openDiscountPenaltyDialog} onClose={() => setOpenDiscountPenaltyDialog(false)} maxWidth="sm" fullWidth>
+                            <DialogTitle>Descontar / Exonerar Mora {registerPaymentTarget?.penaltyFrozen ? 'Congelada' : 'Acumulada'}</DialogTitle>
+                            <DialogContent>
+                                <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                    <Typography variant="body2" sx={{ mb: 1 }}>
+                                        <strong>Mora {registerPaymentTarget?.penaltyFrozen ? 'Congelada' : 'Acumulada'}:</strong> Q {Number(registerPaymentTarget?.penaltyDue || 0).toFixed(2)}
+                                    </Typography>
+                                    {registerPaymentTarget?.penaltyFrozen && (
+                                        <Typography variant="caption" color="text.secondary">
+                                            Congelada el: {registerPaymentTarget?.penaltyStartDate ? moment(registerPaymentTarget.penaltyStartDate).format('DD/MM/YYYY') : '—'}
+                                        </Typography>
+                                    )}
+                                </Box>
+                                <Box sx={{ mb: 2 }}>
+                                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>Tipo de Operación</Typography>
+                                    <Box sx={{ display: 'flex', gap: 2 }}>
+                                        <Button 
+                                            variant={discountPenaltyType === 'DISCOUNT' ? 'contained' : 'outlined'}
+                                            onClick={() => setDiscountPenaltyType('DISCOUNT')}
+                                            fullWidth
+                                        >
+                                            Descuento Parcial
+                                        </Button>
+                                        <Button 
+                                            variant={discountPenaltyType === 'EXONERATION' ? 'contained' : 'outlined'}
+                                            onClick={() => setDiscountPenaltyType('EXONERATION')}
+                                            fullWidth
+                                        >
+                                            Exoneración Total
+                                        </Button>
+                                    </Box>
+                                </Box>
+                                <TextField 
+                                    fullWidth 
+                                    label="Monto a Descontar/Exonerar (Q)" 
+                                    type="number" 
+                                    value={discountPenaltyAmount} 
+                                    onChange={(e) => setDiscountPenaltyAmount(e.target.value)}
+                                    sx={{ mb: 2 }}
+                                />
+                                <TextField 
+                                    fullWidth 
+                                    label="Notas" 
+                                    multiline
+                                    rows={3}
+                                    value={discountPenaltyNotes} 
+                                    onChange={(e) => setDiscountPenaltyNotes(e.target.value)}
+                                    placeholder="Razón del descuento o exoneración..."
+                                />
+                            </DialogContent>
+                            <DialogActions>
+                                <Button onClick={() => {
+                                    setOpenDiscountPenaltyDialog(false);
+                                    setDiscountPenaltyAmount('');
+                                    setDiscountPenaltyType('DISCOUNT');
+                                    setDiscountPenaltyNotes('');
+                                }}>Cancelar</Button>
+                                <Button variant="contained" color="warning" onClick={async () => {
+                                    const amt = Number(discountPenaltyAmount || 0);
+                                    if (!amt || Number.isNaN(amt) || amt <= 0) {
+                                        setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
+                                        return;
+                                    }
+                                    const currentPenalty = (registerPaymentTarget?.frozenPenalty || 0) > 0 
+                                        ? registerPaymentTarget?.frozenPenalty 
+                                        : registerPaymentTarget?.accumulatedPenalty || 0;
+                                    if (amt > currentPenalty) {
+                                        setSnackbar({ open: true, message: `El monto excede la mora (Q${currentPenalty.toFixed(2)})`, severity: 'error' });
+                                        return;
+                                    }
+                                    try {
+                                        // Determinar si es mora congelada o acumulada
+                                        const isFrozen = (registerPaymentTarget?.frozenPenalty || 0) > 0;
+                                        
+                                        if (isFrozen) {
+                                            // Usar endpoint de exoneración de mora congelada
+                                            await api.post(`/payments/${registerPaymentTarget.id}/exonerate-penalty`, {
+                                                discountAmount: amt,
+                                                type: discountPenaltyType,
+                                                notes: discountPenaltyNotes
+                                            });
+                                        } else {
+                                            // Usar endpoint específico para exonerar mora acumulada
+                                            await api.post(`/payments/${registerPaymentTarget.id}/exonerate-accumulated-penalty`, {
+                                                discountAmount: amt,
+                                                type: discountPenaltyType,
+                                                notes: discountPenaltyNotes
+                                            });
+                                        }
+                                        const message = discountPenaltyType === 'EXONERATION' ? 'Mora exonerada exitosamente' : 'Descuento aplicado a mora';
+                                        setSnackbar({ open: true, message, severity: 'success' });
+                                        setOpenDiscountPenaltyDialog(false);
+                                        setDiscountPenaltyAmount('');
+                                        setDiscountPenaltyType('DISCOUNT');
+                                        setDiscountPenaltyNotes('');
+                                        // Refrescar datos
+                                        await fetchAllPayments(statusFilter, search);
+                                        // Actualizar el registerPaymentTarget con los datos frescos
+                                        const updated = await api.get(`/payments/${registerPaymentTarget.id}`);
+                                        if (updated.data) {
+                                            setRegisterPaymentTarget(updated.data);
+                                        }
+                                    } catch (err) {
+                                        console.error('Error descatando/exonerando mora:', err);
+                                        setSnackbar({ open: true, message: 'Error al descontar/exonerar mora', severity: 'error' });
+                                    }
+                                }}>{discountPenaltyType === 'EXONERATION' ? 'Exonerar' : 'Aplicar Descuento'}</Button>
                             </DialogActions>
                         </Dialog>
 
@@ -2342,7 +3089,7 @@ const SchoolPaymentsPage = () => {
                                             try {
                                                 const uid = localPreview.userId || new URLSearchParams(location.search).get('userId');
                                                 if (uid) {
-                                                    const res = await api.get('/payments', { params: { userId: uid, page: 1, limit: 1 } });
+                                                    const res = await api.get('/payments', { params: { userId: uid, schoolYear, page: 1, limit: 1 } });
                                                     const arr = res.data.payments || res.data.rows || [];
                                                     const first = arr[0];
                                                     if (first) {
