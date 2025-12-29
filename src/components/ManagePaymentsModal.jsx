@@ -18,8 +18,15 @@ import {
     TableBody,
     Checkbox,
     Tooltip,
-    IconButton as MuiIconButton
+    IconButton as MuiIconButton,
+    Divider,
+    List,
+    ListItem,
+    ListItemText,
+    Chip,
+    Stack
 } from '@mui/material';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import TablePagination from '@mui/material/TablePagination';
 import { 
     ReceiptLong as ReceiptIcon, 
@@ -28,7 +35,8 @@ import {
     Block as BlockIcon, 
     CheckCircle as CheckCircleIcon, 
     Restore,
-    HelpOutline as HelpIcon
+    HelpOutline as HelpIcon,
+    NoteAlt as NoteAltIcon
 } from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
@@ -58,10 +66,45 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [histPage, setHistPage] = useState(0);
     const [histLimit, setHistLimit] = useState(10);
     const [histTotal, setHistTotal] = useState(0);
+    // Sorting for history table
+    const [histOrderBy, setHistOrderBy] = useState('date'); // 'date' | 'type' | 'source'
+    const [histOrder, setHistOrder] = useState('desc'); // 'asc' | 'desc'
 
     // module-level cache (persists across renders)
     if (!global.__paymentHistCache) global.__paymentHistCache = new Map();
     const histCacheRef = React.useRef(global.__paymentHistCache);
+
+    const handleHistRequestSort = (property) => {
+        const isAsc = histOrderBy === property && histOrder === 'asc';
+        setHistOrder(isAsc ? 'desc' : 'asc');
+        setHistOrderBy(property);
+    };
+
+    const sortedHistories = React.useMemo(() => {
+        if (!Array.isArray(histories)) return [];
+        const arr = [...histories];
+        const cmp = (a, b) => {
+            const dir = histOrder === 'asc' ? 1 : -1;
+            if (histOrderBy === 'date') {
+                const da = a.lastPaymentDate ? new Date(a.lastPaymentDate).getTime() : 0;
+                const db = b.lastPaymentDate ? new Date(b.lastPaymentDate).getTime() : 0;
+                return (da - db) * dir;
+            }
+            if (histOrderBy === 'type') {
+                const ta = String(a.type || '').toLowerCase();
+                const tb = String(b.type || '').toLowerCase();
+                return ta < tb ? -1 * dir : ta > tb ? 1 * dir : 0;
+            }
+            if (histOrderBy === 'source') {
+                const sa = String(a.source || '').toLowerCase();
+                const sb = String(b.source || '').toLowerCase();
+                return sa < sb ? -1 * dir : sa > sb ? 1 * dir : 0;
+            }
+            return 0;
+        };
+        arr.sort(cmp);
+        return arr;
+    }, [histories, histOrderBy, histOrder]);
 
     const computedTariff = Number(payment?.monthlyFee || 0);
 
@@ -78,6 +121,12 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [selectedReceipt, setSelectedReceipt] = useState(null);
     const [receiptZoom, setReceiptZoom] = useState(1);
     const [boletaMonth, setBoletaMonth] = useState('');
+
+    // Transaction notes quick-view dialog state
+    const [openTxNotes, setOpenTxNotes] = useState(false);
+    const [txNotes, setTxNotes] = useState('');
+    // Help / legend dialog state for the table
+    const [openHelpLegend, setOpenHelpLegend] = useState(false);
 
     // derive month options only from uploaded receipts (Boletas should show uploaded files only)
     const boletaMonthOptions = React.useMemo(() => {
@@ -139,7 +188,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     requiresInvoice: tx.invoiceSent || false,
                     type: tx.type,
                     source: tx.source,
-                    notes: tx.notes
+                    notes: tx.notes,
+                    extraordinaryDiscount: Number(tx.extraordinaryDiscount ?? tx.extraDiscount ?? 0)
                 }));
                 
                 const total = arr.length;
@@ -463,33 +513,62 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </DialogActions>
                 </Dialog>
 
-                <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Historial de Pagos</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 1 }}>
+                    <Typography variant="h6">Historial de Pagos</Typography>
+                    <MuiIconButton size="small" onClick={() => setOpenHelpLegend(true)} title="Ayuda - Leyenda tabla" sx={{ ml: 0.5 }}>
+                        <HelpIcon fontSize="small" />
+                    </MuiIconButton>
+                </Box>
                 <Box sx={{ overflowX: 'auto' }}>
                 <Table size="small">
                     <TableHead>
                         <TableRow>
-                            <TableCell align="center" sx={{ minWidth: 100 }}>Fecha</TableCell>
-                            <TableCell align="center" sx={{ minWidth: 120 }}>Tipo</TableCell>
+                            <TableCell align="center" sx={{ minWidth: 100 }}>
+                                <TableSortLabel
+                                    active={histOrderBy === 'date'}
+                                    direction={histOrderBy === 'date' ? histOrder : 'desc'}
+                                    onClick={() => handleHistRequestSort('date')}
+                                >
+                                    Fecha
+                                </TableSortLabel>
+                            </TableCell>
+                            <TableCell align="center" sx={{ minWidth: 120 }}>
+                                <TableSortLabel
+                                    active={histOrderBy === 'type'}
+                                    direction={histOrderBy === 'type' ? histOrder : 'asc'}
+                                    onClick={() => handleHistRequestSort('type')}
+                                >
+                                    Tipo
+                                </TableSortLabel>
+                            </TableCell>
+                            <TableCell align="center" sx={{ minWidth: 100 }}>
+                                <TableSortLabel
+                                    active={histOrderBy === 'source'}
+                                    direction={histOrderBy === 'source' ? histOrder : 'asc'}
+                                    onClick={() => handleHistRequestSort('source')}
+                                >
+                                    Fuente
+                                </TableSortLabel>
+                            </TableCell>
                             <TableCell align="center" sx={{ minWidth: 100 }}>Monto</TableCell>
-                            <TableCell align="center" sx={{ minWidth: 100 }}>Fuente</TableCell>
+                            <TableCell align="center" sx={{ minWidth: 110 }}>Desc. Extra</TableCell>
                             <TableCell align="center" sx={{ minWidth: 120 }}>N° Boleta</TableCell>
                             <TableCell align="center" sx={{ minWidth: 100 }}>Factura</TableCell>
-                            <TableCell align="left" sx={{ minWidth: 200 }}>Notas</TableCell>
+                            <TableCell align="left" sx={{ minWidth: 140 }}>Notas</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {(!histLoading && histories.length === 0) && (
+                        {(!histLoading && sortedHistories.length === 0) && (
                             <TableRow>
-                                <TableCell colSpan={7} align="center">No hay transacciones registradas.</TableCell>
+                                <TableCell colSpan={8} align="center">No hay transacciones registradas.</TableCell>
                             </TableRow>
                         )}
                         {histLoading && (
                             <TableRow>
-                                <TableCell colSpan={7} align="center">Cargando historial...</TableCell>
+                                <TableCell colSpan={8} align="center">Cargando historial...</TableCell>
                             </TableRow>
                         )}
-                        {!histLoading && histories.map((h) => {
-                            // V2 Transaction fields
+                        {!histLoading && sortedHistories.slice(histPage * histLimit, histPage * histLimit + histLimit).map((h) => {
                             const dateVal = h.lastPaymentDate || null;
                             const amountVal = Number(h.amountPaid || 0);
                             const typeVal = h.type || 'PAYMENT';
@@ -499,66 +578,46 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             const notesVal = h.notes || '';
                             const key = h.id || `${dateVal || ''}-${amountVal}`;
 
-                            // Configuración de colores y etiquetas según el tipo de transacción
                             let typeLabel = typeVal;
-                            let typeColor = 'default';
                             let typeBgColor = '#e0e0e0';
-                            
                             switch(typeVal?.toUpperCase()) {
+                                case 'TARIFA':
                                 case 'PAYMENT':
-                                    typeLabel = '💰 Pago Tarifa';
-                                    typeColor = 'success';
+                                    typeLabel = 'TARIFA';
                                     typeBgColor = '#e8f5e9';
                                     break;
+                                case 'MORA':
                                 case 'PENALTY_PAYMENT':
-                                    typeLabel = '⚠️ Pago Mora';
-                                    typeColor = 'warning';
+                                    typeLabel = 'MORA';
                                     typeBgColor = '#fff3e0';
                                     break;
-                                case 'PENALTY_EXONERATION':
-                                    typeLabel = '✨ Exoneración';
-                                    typeColor = 'info';
-                                    typeBgColor = '#e3f2fd';
-                                    break;
+                                case 'CREDITO':
                                 case 'PENALTY_DISCOUNT':
-                                    typeLabel = '🎁 Descuento Mora';
-                                    typeColor = 'info';
+                                    typeLabel = 'CREDITO';
                                     typeBgColor = '#e1f5fe';
-                                    break;
-                                case 'ADJUSTMENT':
-                                    typeLabel = '🔧 Ajuste';
-                                    typeColor = 'default';
-                                    typeBgColor = '#f5f5f5';
-                                    break;
-                                case 'REVERSAL':
-                                    typeLabel = '↩️ Reversión';
-                                    typeColor = 'error';
-                                    typeBgColor = '#ffebee';
                                     break;
                                 default:
                                     typeLabel = typeVal || 'Otro';
                                     break;
                             }
 
-                            // Configuración de fuente
                             let sourceLabel = sourceVal;
                             let sourceBgColor = '#f5f5f5';
-                            
                             switch(sourceVal?.toUpperCase()) {
                                 case 'MANUAL':
-                                    sourceLabel = '✋ Manual';
+                                    sourceLabel = 'MANUAL';
                                     sourceBgColor = '#fff9c4';
                                     break;
                                 case 'AUTO_DEBIT':
-                                    sourceLabel = '🤖 Débito Auto';
+                                    sourceLabel = 'AUTO_DEBIT';
                                     sourceBgColor = '#c8e6c9';
                                     break;
-                                case 'ONLINE':
-                                    sourceLabel = '🌐 En Línea';
+                                case 'CREDIT_AUTO':
+                                    sourceLabel = 'CREDIT_AUTO';
                                     sourceBgColor = '#b3e5fc';
                                     break;
-                                case 'BANK':
-                                    sourceLabel = '🏦 Banco';
+                                case 'FULL_DISCOUNT':
+                                    sourceLabel = 'FULL_DISCOUNT';
                                     sourceBgColor = '#d1c4e9';
                                     break;
                                 default:
@@ -569,79 +628,37 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             return (
                                 <TableRow key={key} hover>
                                     <TableCell align="center">
-                                        <Typography variant="body2">
-                                            {dateVal ? moment.parseZone(dateVal).format('DD/MM/YY') : '—'}
-                                        </Typography>
+                                        <Typography variant="body2">{dateVal ? moment.parseZone(dateVal).format('DD/MM/YY') : '—'}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Box 
-                                            sx={{ 
-                                                display: 'inline-block',
-                                                px: 1.5, 
-                                                py: 0.5, 
-                                                borderRadius: 1,
-                                                backgroundColor: typeBgColor,
-                                                fontSize: '0.75rem',
-                                                fontWeight: 600
-                                            }}
-                                        >
-                                            {typeLabel}
-                                        </Box>
+                                        <Box sx={{ display: 'inline-block', px: 1.5, py: 0.5, borderRadius: 1, backgroundColor: typeBgColor, fontSize: '0.75rem', fontWeight: 600 }}>{typeLabel}</Box>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Typography 
-                                            variant="body2" 
-                                            sx={{ 
-                                                fontWeight: 600,
-                                                color: amountVal >= 0 ? 'success.main' : 'error.main'
-                                            }}
-                                        >
-                                            Q {amountVal.toFixed(2)}
-                                        </Typography>
+                                        <Box sx={{ display: 'inline-block', px: 1, py: 0.25, borderRadius: 0.5, backgroundColor: sourceBgColor, fontSize: '0.7rem' }}>{sourceLabel}</Box>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Box 
-                                            sx={{ 
-                                                display: 'inline-block',
-                                                px: 1, 
-                                                py: 0.25, 
-                                                borderRadius: 0.5,
-                                                backgroundColor: sourceBgColor,
-                                                fontSize: '0.7rem'
-                                            }}
-                                        >
-                                            {sourceLabel}
-                                        </Box>
+                                        <Typography variant="body2" sx={{ fontWeight: 600, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>Q {amountVal.toFixed(2)}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                                            {receiptVal}
-                                        </Typography>
+                                        <Typography variant="body2">Q {(Number(h.extraordinaryDiscount || 0)).toFixed(2)}</Typography>
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{receiptVal}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
                                         <Checkbox checked={invoiceReq} onChange={() => handleToggleInvoiceRow(h)} />
                                     </TableCell>
                                     <TableCell align="left">
-                                        <Typography 
-                                            variant="caption" 
-                                            sx={{ 
-                                                display: 'block',
-                                                maxWidth: 200,
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis'
-                                            }}
-                                            title={notesVal}
-                                        >
-                                            {notesVal || '—'}
-                                        </Typography>
+                                        <MuiIconButton size="small" onClick={() => { setTxNotes(h.notes || ''); setOpenTxNotes(true); }} title={notesVal ? 'Ver notas' : 'Agregar nota'}>
+                                            <NoteAltIcon fontSize="small" color={notesVal ? 'action' : 'disabled'} />
+                                        </MuiIconButton>
                                     </TableCell>
                                 </TableRow>
                             );
                         })}
-                        {/* Pagination row inserted as last table row */}
+
                         <TableRow>
-                            <TableCell colSpan={7} sx={{ border: 'none', py: 1 }}>
+                            <TableCell colSpan={8} sx={{ border: 'none', py: 1 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                                     <TablePagination
                                         component="div"
@@ -659,6 +676,86 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </TableBody>
                 </Table>
                 </Box>
+
+                {/* Dialog: Vista rápida de Notas de Transacciones */}
+                <Dialog open={openTxNotes} onClose={() => setOpenTxNotes(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Notas de Transacción</DialogTitle>
+                    <DialogContent>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{txNotes || '—'}</Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setOpenTxNotes(false)}>Cerrar</Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Dialog: Leyenda / Ayuda de la Tabla de Historial (mejor visual) */}
+                <Dialog open={openHelpLegend} onClose={() => setOpenHelpLegend(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Leyenda - Historial de Pagos</DialogTitle>
+                    <DialogContent>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle1" sx={{ mb: 1 }}>Columnas y etiquetas</Typography>
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Tipo</Typography>
+                                <List dense>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={<Chip label="TARIFA" size="small" sx={{ fontWeight: 700, backgroundColor: '#e8f5e9', color: 'rgba(0,0,0,0.87)' }} />}
+                                            secondary="Pago de la tarifa mensual."
+                                        />
+                                    </ListItem>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={<Chip label="MORA"  size="small" sx={{ fontWeight: 700, backgroundColor: '#fff3e0', color: 'rgba(0,0,0,0.87)' }} />}
+                                            secondary="Pago aplicado a mora."
+                                        />
+                                    </ListItem>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={<Chip label="CREDITO" size="small" sx={{ fontWeight: 700, backgroundColor: '#e1f5fe', color: 'rgba(0,0,0,0.87)' }} />}
+                                            secondary="Transacción que representa uso/actualización de crédito o descuentos."
+                                        />
+                                    </ListItem>
+                                </List>
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Fuente</Typography>
+                                <List dense>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                                primary={<Chip label="MANUAL" size="small" sx={{ fontWeight: 700, backgroundColor: '#fff9c4', color: 'rgba(0,0,0,0.87)' }} />}
+                                                secondary="Registro manual en el sistema."
+                                            />
+                                    </ListItem>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={<Chip label="AUTO_DEBIT" size="small" sx={{ fontWeight: 700, backgroundColor: '#c8e6c9', color: 'rgba(0,0,0,0.87)' }} />}
+                                            secondary="Débito automático."
+                                        />
+                                    </ListItem>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={<Chip label="CREDIT_AUTO" size="small" sx={{ fontWeight: 700, backgroundColor: '#b3e5fc', color: 'rgba(0,0,0,0.87)' }} />}
+                                            secondary="Uso automático de crédito disponible."
+                                        />
+                                    </ListItem>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={<Chip label="FULL_DISCOUNT" size="small" sx={{ fontWeight: 700, backgroundColor: '#d1c4e9', color: 'rgba(0,0,0,0.87)' }} />}
+                                            secondary="Descuento total aplicado automáticamente."
+                                        />
+                                    </ListItem>
+                                </List>
+                            </Grid>
+                        </Grid>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setOpenHelpLegend(false)}>Cerrar</Button>
+                    </DialogActions>
+                </Dialog>
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Cerrar</Button>
