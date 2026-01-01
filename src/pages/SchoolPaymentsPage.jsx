@@ -558,6 +558,10 @@ const SchoolPaymentsPage = () => {
     const [emailSubject, setEmailSubject] = useState('');
     const [emailMessage, setEmailMessage] = useState('');
 
+    // Diálogo para auto débito
+    const [openAutoDebitDialog, setOpenAutoDebitDialog] = useState(false);
+    const [autoDebitPayload, setAutoDebitPayload] = useState(null);
+
     // guard to avoid concurrent loads / re-entrancy when opening the register dialog
     const openRegisterInProgressRef = useRef(false);
     const handleOpenRegister = useCallback((payment) => {
@@ -1309,8 +1313,17 @@ const SchoolPaymentsPage = () => {
                 const userId = payload?.payment?.User?.id || payment.User?.id;
                 if (!userId) return setSnackbar({ open: true, message: 'Usuario no encontrado', severity: 'error' });
                 const val = payload?.value;
-                await api.put(`/users/${userId}`, { familyDetail: { autoDebit: !!val } });
-                setSnackbar({ open: true, message: `Débito automático ${val ? 'activado' : 'desactivado'}`, severity: 'success' });
+                
+                // Si se está ACTIVANDO el auto débito, mostrar diálogo para seleccionar mes
+                if (val === true) {
+                    setAutoDebitPayload({ userId, payment: payload?.payment || payment });
+                    setOpenAutoDebitDialog(true);
+                    return; // No ejecutar aún, esperar respuesta del diálogo
+                }
+                
+                // Si se está DESACTIVANDO, proceder directo
+                await api.put(`/users/${userId}`, { familyDetail: { autoDebit: false } });
+                setSnackbar({ open: true, message: 'Débito automático desactivado', severity: 'success' });
             } else if (actionName === 'toggleRequiresInvoice') {
                 // Use payments endpoint to set invoice need
                 const val = payload?.value;
@@ -2838,6 +2851,111 @@ const SchoolPaymentsPage = () => {
                             <DialogActions>
                                 <Button onClick={() => setOpenEmailDialog(false)}>Cancelar</Button>
                                 <Button variant="contained" onClick={handleSendEmail} disabled={!emailSubject && !emailMessage}>Enviar</Button>
+                            </DialogActions>
+                        </Dialog>
+
+                        {/* Dialog: Configurar Auto Débito */}
+                        <Dialog open={openAutoDebitDialog} onClose={() => setOpenAutoDebitDialog(false)} maxWidth="sm" fullWidth>
+                            <DialogTitle>Activar Débito Automático</DialogTitle>
+                            <DialogContent>
+                                <Box sx={{ mb: 3, p: 2, bgcolor: '#e3f2fd', borderRadius: 1, border: '1px solid #2196f3' }}>
+                                    <Typography variant="body2" sx={{ mb: 1 }}>
+                                        <strong>¿A partir de cuándo deseas aplicar el débito automático?</strong>
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Selecciona si el débito automático debe aplicarse al mes actual o al siguiente mes.
+                                    </Typography>
+                                </Box>
+                                <Typography variant="body2" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                    Selecciona una opción:
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    <Button 
+                                        variant="outlined" 
+                                        color="primary"
+                                        fullWidth
+                                        onClick={async () => {
+                                            try {
+                                                const { userId } = autoDebitPayload;
+                                                await api.put(`/users/${userId}`, { 
+                                                    familyDetail: { 
+                                                        autoDebit: true,
+                                                        applyToCurrentMonth: true 
+                                                    } 
+                                                });
+                                                setSnackbar({ 
+                                                    open: true, 
+                                                    message: 'Débito automático activado para el mes actual. Si ya pasó la fecha de pago, se procesará de inmediato y se exonerará la mora.', 
+                                                    severity: 'success' 
+                                                });
+                                                setOpenAutoDebitDialog(false);
+                                                setAutoDebitPayload(null);
+                                                // Actualizar vista
+                                                await fetchAllPayments(statusFilter, search);
+                                            } catch (err) {
+                                                console.error(err);
+                                                setSnackbar({ open: true, message: 'Error activando débito automático', severity: 'error' });
+                                            }
+                                        }}
+                                        sx={{ py: 2, textAlign: 'left', justifyContent: 'flex-start' }}
+                                    >
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                                                📅 Aplicar al mes actual
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                Si ya pasó la fecha de pago, se procesará inmediatamente y se exonerará la mora existente.
+                                            </Typography>
+                                        </Box>
+                                    </Button>
+                                    
+                                    <Button 
+                                        variant="outlined" 
+                                        color="secondary"
+                                        fullWidth
+                                        onClick={async () => {
+                                            try {
+                                                const { userId } = autoDebitPayload;
+                                                await api.put(`/users/${userId}`, { 
+                                                    familyDetail: { 
+                                                        autoDebit: true,
+                                                        applyToCurrentMonth: false 
+                                                    } 
+                                                });
+                                                setSnackbar({ 
+                                                    open: true, 
+                                                    message: 'Débito automático activado. Se aplicará a partir del siguiente mes.', 
+                                                    severity: 'success' 
+                                                });
+                                                setOpenAutoDebitDialog(false);
+                                                setAutoDebitPayload(null);
+                                                // Actualizar vista
+                                                await fetchAllPayments(statusFilter, search);
+                                            } catch (err) {
+                                                console.error(err);
+                                                setSnackbar({ open: true, message: 'Error activando débito automático', severity: 'error' });
+                                            }
+                                        }}
+                                        sx={{ py: 2, textAlign: 'left', justifyContent: 'flex-start' }}
+                                    >
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                                                📆 Aplicar al siguiente mes
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                El débito automático se aplicará cuando llegue el siguiente mes. El mes actual se procesa normalmente.
+                                            </Typography>
+                                        </Box>
+                                    </Button>
+                                </Box>
+                            </DialogContent>
+                            <DialogActions>
+                                <Button onClick={() => {
+                                    setOpenAutoDebitDialog(false);
+                                    setAutoDebitPayload(null);
+                                }}>
+                                    Cancelar
+                                </Button>
                             </DialogActions>
                         </Dialog>
 
