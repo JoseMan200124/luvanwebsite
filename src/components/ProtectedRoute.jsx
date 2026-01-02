@@ -40,6 +40,10 @@ const ProtectedRoute = ({ children, roles = [] }) => {
     // 4) Si se requiere verificar roles:
     if (roles.length > 0) {
         const userRoleName = auth.user?.role || 'Desconocido';
+        // El rol Auxiliar tiene acceso completo a todas las rutas
+        if (userRoleName === 'Auxiliar') {
+            return children;
+        }
         // Si el rol del usuario no está en la lista => redirect a dashboard (o donde prefieras)
         if (!roles.includes(userRoleName)) {
             return <Navigate to="/admin/dashboard" replace />;

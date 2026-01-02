@@ -89,6 +89,22 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
     // Carga permisos al montar / cuando cambie el rol
     useEffect(() => {
+        // El rol Auxiliar tiene acceso completo, no necesita cargar permisos
+        if (auth?.user?.role === 'Auxiliar') {
+            // Configurar todos los permisos como true para el rol Auxiliar
+            const allPermissions = {};
+            modules.forEach(module => {
+                allPermissions[module.key] = true;
+                if (module.submodules) {
+                    module.submodules.forEach(submodule => {
+                        allPermissions[submodule.key] = true;
+                    });
+                }
+            });
+            setPermissions(allPermissions);
+            return;
+        }
+        
         if (auth?.token && auth?.user?.roleId) {
             api.get(`/permissions/role/${auth.user.roleId}`, {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -96,7 +112,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                 .then(res => setPermissions(res.data.permissions || {}))
                 .catch(console.error);
         }
-    }, [auth?.token, auth?.user?.roleId]);
+    }, [auth?.token, auth?.user?.roleId, auth?.user?.role]);
 
     const handleMenuClick = idx => {
         if (!isOpen) return;
