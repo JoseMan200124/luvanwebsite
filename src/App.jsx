@@ -10,8 +10,9 @@ import LandingPage from './pages/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import AuthProvider from './context/AuthProvider';
+import PermissionsProvider from './context/PermissionsProvider';
 import MFAVerify from './components/MFAVerify';
-import PermissionsManagementPage from './pages/PermissionsManagmentPage';
+import PermissionsManagementPage from './pages/PermissionsManagementPage';
 import ContractsManagementPage from './pages/ContractsManagementPage';
 import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
@@ -53,7 +54,10 @@ function App() {
                         key={submodule.path}
                         path={submodule.path}
                         element={
-                            <ProtectedRoute roles={submodule.roles}>
+                            <ProtectedRoute 
+                                roles={submodule.roles}
+                                moduleKey={submodule.key}
+                            >
                                 <submodule.component />
                             </ProtectedRoute>
                         }
@@ -67,13 +71,14 @@ function App() {
     return (
         <Router>
             <AuthProvider>
-                <Routes>
-                    {/* ------------------ Rutas públicas ------------------ */}
-                    <Route path="/"                   element={<LandingPage />} />
-                    <Route path="/login"              element={<LoginPage />} />
-                    <Route path="/register"           element={<RegisterPage />} />
-                    <Route path="/mfa"                element={<MFAVerify />} />
-                    <Route path="/privacy-policy"     element={<PrivacyPolicyPage />} />
+                <PermissionsProvider>
+                    <Routes>
+                        {/* ------------------ Rutas públicas ------------------ */}
+                        <Route path="/"                   element={<LandingPage />} />
+                        <Route path="/login"              element={<LoginPage />} />
+                        <Route path="/register"           element={<RegisterPage />} />
+                        <Route path="/mfa"                element={<MFAVerify />} />
+                        <Route path="/privacy-policy"     element={<PrivacyPolicyPage />} />
                     <Route path="/thank-you"          element={<ThankYouPage />} />
 
                     {/* Forzar cambio de contraseña */}
@@ -295,6 +300,7 @@ function App() {
                     {/* Catch-all */}
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
+            </PermissionsProvider>
             </AuthProvider>
         </Router>
     );

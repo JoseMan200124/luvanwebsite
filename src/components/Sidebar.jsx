@@ -15,8 +15,8 @@ import {
     History as HistoryIcon
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
+import { PermissionsContext } from '../context/PermissionsProvider';
 import NotificationsMenu from './NotificationsMenu';
-import api from '../utils/axiosConfig';
 import userImage from '../assets/img/user.png';
 import { modules } from '../modules';
 
@@ -80,39 +80,12 @@ const PopoutItem = styled.li`${tw`px-4 py-2 hover:bg-gray-700 cursor-pointer`} t
 
 export default function Sidebar({ isOpen, toggleSidebar }) {
     const [openMenus, setOpenMenus] = useState({});
-    const [permissions, setPermissions] = useState({});
+    const { permissions } = useContext(PermissionsContext);
     const { auth, logout } = useContext(AuthContext);
     const navigate = useNavigate();
 
     const [hoveredItem, setHoveredItem] = useState(null);
     const hoverTimer = useRef(null);
-
-    // Carga permisos al montar / cuando cambie el rol
-    useEffect(() => {
-        // El rol Auxiliar tiene acceso completo, no necesita cargar permisos
-        if (auth?.user?.role === 'Auxiliar') {
-            // Configurar todos los permisos como true para el rol Auxiliar
-            const allPermissions = {};
-            modules.forEach(module => {
-                allPermissions[module.key] = true;
-                if (module.submodules) {
-                    module.submodules.forEach(submodule => {
-                        allPermissions[submodule.key] = true;
-                    });
-                }
-            });
-            setPermissions(allPermissions);
-            return;
-        }
-        
-        if (auth?.token && auth?.user?.roleId) {
-            api.get(`/permissions/role/${auth.user.roleId}`, {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            })
-                .then(res => setPermissions(res.data.permissions || {}))
-                .catch(console.error);
-        }
-    }, [auth?.token, auth?.user?.roleId, auth?.user?.role]);
 
     const handleMenuClick = idx => {
         if (!isOpen) return;
@@ -214,8 +187,20 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
                         {/* Módulos dinámicos */}
                         {modules.map((module, idx) => {
-                            if (!permissions[module.key]) return null;
+                            // Para módulos con submódulos, verificar si tiene acceso a alguno
                             const hasSubs = module.submodules?.length > 0;
+                            let canAccessModule = false;
+
+                            if (hasSubs) {
+                                // Verificar si tiene acceso a algún submódulo
+                                canAccessModule = module.submodules.some(sm => permissions[sm.key]);
+                            } else {
+                                // Verificar acceso directo al módulo
+                                canAccessModule = permissions[module.key];
+                            }
+
+                            if (!canAccessModule) return null;
+                            
                             const isOpenMenu = openMenus[idx];
 
                             return (
