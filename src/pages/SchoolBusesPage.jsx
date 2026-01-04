@@ -408,9 +408,10 @@ const SchoolBusesPage = () => {
                     continue;
                 }
 
-                // Caso 4: La ruta cambió de bus (limpiar el anterior y asignar el nuevo)
+                // Caso 4: La ruta cambió de bus (asignar el nuevo)
                 if (serverData && desiredData && serverData.busId !== desiredData.busId) {
-                    // Primero intentamos asignar el nuevo bus
+                    // Asignar el nuevo bus a esta ruta
+                    // El backend automáticamente liberará el bus anterior mediante reemplazo automático
                     try {
                         await api.put(`/buses/${desiredData.busId}`, {
                             routeNumber: routeNumber,
@@ -421,25 +422,13 @@ const SchoolBusesPage = () => {
                             headers: { Authorization: `Bearer ${auth.token}` }
                         });
                         
-                        // Si el nuevo bus se asignó correctamente, ahora limpiamos el anterior
-                        try {
-                            await api.put(`/buses/${serverData.busId}`, {
-                                routeNumber: null,
-                                schoolId: null,
-                                pilotId: null,
-                                monitoraId: null
-                            }, {
-                                headers: { Authorization: `Bearer ${auth.token}` }
-                            });
-                        } catch (clearErr) {
-                            // El bus anterior no se pudo limpiar, pero el nuevo ya está asignado
-                            console.warn(`No se pudo limpiar el bus anterior ${serverData.busId}:`, clearErr);
-                        }
+                        // NOTA: NO limpiamos el bus anterior manualmente
+                        // El backend ya lo hace automáticamente al asignar el nuevo bus
+                        // Esto evita conflictos en escenarios de intercambio de buses
                         
                         successfulChanges.push(`Ruta ${routeNumber}: cambiado de bus ${getBusPlate(serverData.busId)} a ${getBusPlate(desiredData.busId)}`);
                     } catch (err) {
-                        // Si falla la asignación del nuevo bus, NO tocamos el anterior
-                        // La ruta mantiene su asignación original
+                        // Si falla la asignación del nuevo bus, la ruta mantiene su asignación original
                         const busPlate = getBusPlate(desiredData.busId);
                         const currentAssignment = getBusCurrentAssignment(desiredData.busId);
                         errors.push(`Error al cambiar bus de ruta ${routeNumber} a ${busPlate}${currentAssignment}: ${err.response?.data?.message || err.message}`);
