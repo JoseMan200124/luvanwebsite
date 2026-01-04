@@ -27,7 +27,8 @@ import {
     MenuItem,
     Tabs,
     Tab,
-    Switch
+    Switch,
+    Tooltip
 } from '@mui/material';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
@@ -43,10 +44,12 @@ import {
     ResponsiveContainer,
     Cell,
     Tooltip as RechartsTooltip,
-    Legend
+    Legend,
+    PieChart,
+    Pie
 } from 'recharts';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowBack, School as SchoolIcon, CalendarToday } from '@mui/icons-material';
+import { ArrowBack, School as SchoolIcon, CalendarToday, InfoOutlined } from '@mui/icons-material';
 import DownloadIcon from '@mui/icons-material/GetApp';
 import { getCurrentDate } from '../hooks/useCurrentDate';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -146,6 +149,40 @@ const SchoolPaymentsPage = () => {
     const currentMonthEarnings = combinedEarnings.find(item =>
         item.year === moment().year() && item.month === (moment().month() + 1)
     )?.total || 0;
+
+    // KPIs adicionales para toma de decisiones
+    const totalFamilias = analysisData?.totalPayments || totalPayments;
+    const familiasActivas = totalFamilias - inactivoCount;
+    const tasaPago = familiasActivas > 0 ? ((pagadoCount / familiasActivas) * 100).toFixed(1) : 0;
+    const tasaMora = familiasActivas > 0 ? ((moraCount / familiasActivas) * 100).toFixed(1) : 0;
+    const ingresoTotal = Number(analysisData?.netIncome || 0);
+    const ingresoMora = Number(analysisData?.lateFeeIncome || 0);
+    const totalPendiente = Number(analysisData?.sumTotalDue || 0);
+    const totalDescuentos = Number(analysisData?.totalSpecialFee || 0);
+    const moraPendiente = Number(analysisData?.totals?.penaltyDue || 0);
+    const creditoAcumulado = Number(analysisData?.totals?.creditBalance || 0);
+    
+    // Promedios y proyecciones
+    const promedioIngresoPorFamilia = familiasActivas > 0 ? (ingresoTotal / familiasActivas).toFixed(2) : 0;
+    const ingresoMensualPromedio = combinedEarnings.length > 0 
+        ? (combinedEarnings.reduce((acc, item) => acc + Number(item.total || 0), 0) / combinedEarnings.filter(i => i.total > 0).length || 1).toFixed(2)
+        : 0;
+    
+    // Eficiencia de cobro: (Ingreso Real / Ingreso Potencial) * 100
+    const ingresoPotencial = Number(analysisData?.totals?.netMonthlyFee || 0) * (combinedEarnings.filter(i => i.total > 0).length || 1);
+    const eficienciaCobro = ingresoPotencial > 0 ? ((ingresoTotal / ingresoPotencial) * 100).toFixed(1) : 0;
+    
+    // Tendencia (comparar mes actual vs mes anterior)
+    const currentMonth = moment().month() + 1;
+    const currentYear = moment().year();
+    const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+    const prevMonthEarnings = combinedEarnings.find(item => 
+        item.year === prevYear && item.month === prevMonth
+    )?.total || 0;
+    const tendencia = prevMonthEarnings > 0 
+        ? (((currentMonthEarnings - prevMonthEarnings) / prevMonthEarnings) * 100).toFixed(1)
+        : 0;
 
     useEffect(() => {
         (async () => {
@@ -1855,69 +1892,245 @@ const SchoolPaymentsPage = () => {
                                 {/* If analysisData available show extended grid and chart */}
                                 {analysisData ? (
                                     <Box sx={{ mt: 2 }}>
-                                        <Box sx={{ mb: 3, p: 2, background: '#f9fafb', borderRadius: 2, boxShadow: 1 }}>
+                                        {/* KPIs Principales */}
+                                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#1976d2' }}>📊 Indicadores Clave (KPIs)</Typography>
+                                        <Box sx={{ mb: 3, p: 2, background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)', borderRadius: 2, boxShadow: 1 }}>
                                             <Grid container spacing={2}>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Total Familias: </strong></Typography>
-                                                    <Typography variant="h6">{analysisData.totalPayments ?? totalPayments}</Typography>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" color="text.secondary">Tasa de Pago</Typography>
+                                                            <Tooltip title="Porcentaje de familias activas que están al día con sus pagos" arrow>
+                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                            </Tooltip>
+                                                        </Box>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#4caf50' }}>{tasaPago}%</Typography>
+                                                        <Typography variant="caption" color="text.secondary">{pagadoCount} de {familiasActivas} familias</Typography>
+                                                    </Box>
                                                 </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Familias Pagadas: </strong></Typography>
-                                                    <Typography variant="h6">{pagadoCount}</Typography>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" color="text.secondary">Tasa de Mora</Typography>
+                                                            <Tooltip title="Porcentaje de familias activas con pagos atrasados y acumulación de penalidades" arrow>
+                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                            </Tooltip>
+                                                        </Box>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#f44336' }}>{tasaMora}%</Typography>
+                                                        <Typography variant="caption" color="text.secondary">{moraCount} familias en mora</Typography>
+                                                    </Box>
                                                 </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Familias en Mora: </strong></Typography>
-                                                    <Typography variant="h6">{moraCount}</Typography>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" color="text.secondary">Eficiencia de Cobro</Typography>
+                                                            <Tooltip title="Efectividad del cobro: (Ingreso real / Ingreso potencial) × 100. Muestra pérdidas por descuentos, créditos y moras no cobradas" arrow>
+                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                            </Tooltip>
+                                                        </Box>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#2196f3' }}>{eficienciaCobro}%</Typography>
+                                                        <Typography variant="caption" color="text.secondary">Ingreso real vs potencial</Typography>
+                                                    </Box>
                                                 </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Familias Pendientes: </strong></Typography>
-                                                    <Typography variant="h6">{pendienteCount}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Ingreso Neto:</strong></Typography>
-                                                    <Typography variant="h6">Q {Number(analysisData.netIncome ?? 0).toFixed(2)}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Ingreso por Mora:</strong></Typography>
-                                                    <Typography variant="h6">Q {Number(analysisData.lateFeeIncome ?? 0).toFixed(2)}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Ingreso a la Fecha:</strong></Typography>
-                                                    <Typography variant="h6">Q {currentMonthEarnings.toFixed(2)}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Pendiente a la Fecha:</strong></Typography>
-                                                    <Typography variant="h6">Q {analysisData.sumTotalDue ?? 0}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2"><strong>Total Descuentos:</strong></Typography>
-                                                    <Typography variant="h6">Q {Number(analysisData.totalSpecialFee ?? 0).toFixed(2)}</Typography>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" color="text.secondary">Tendencia Mensual</Typography>
+                                                            <Tooltip title="Variación porcentual de ingresos del mes actual vs mes anterior." arrow>
+                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                            </Tooltip>
+                                                        </Box>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: Number(tendencia) >= 0 ? '#4caf50' : '#f44336' }}>
+                                                            {Number(tendencia) >= 0 ? '+' : ''}{tendencia}%
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">vs mes anterior</Typography>
+                                                    </Box>
                                                 </Grid>
                                             </Grid>
                                         </Box>
 
-                                        <Grid container spacing={2}>
-                                            <Grid item xs={12}>
-                                                <Typography variant="subtitle1" gutterBottom>
-                                                    Ganancias Mensuales (Pagos + Extraordinarios)
-                                                </Typography>
-                                                <Box sx={{ width: '100%', height: 300 }}>
-                                                    <ResponsiveContainer width="100%" height="100%">
-                                                        <BarChart
-                                                            data={(combinedEarnings || []).map(item => ({ ...item, label: moment({ year: item.year, month: item.month - 1 }).format('MMMM YYYY') }))}
-                                                        >
-                                                            <CartesianGrid strokeDasharray="3 3" />
-                                                            <XAxis dataKey="label" />
-                                                            <YAxis />
-                                                            <RechartsTooltip formatter={(value) => `Q ${value}`} />
-                                                            <Legend />
-                                                            <Bar dataKey="total">{(combinedEarnings || []).map((entry, index) => {
-                                                                const colors = ['#0088FE', '#FFBB28', '#FF8042', '#00C49F', '#FF6633', '#9933FF', '#33CCFF', '#66CC33'];
-                                                                return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
-                                                            })}
-                                                            </Bar>
-                                                        </BarChart>
-                                                    </ResponsiveContainer>
+                                        {/* Métricas Financieras */}
+                                        <Typography variant="h6" sx={{ mb: 2, mt: 3, fontWeight: 600, color: '#1976d2' }}>💰 Métricas Financieras</Typography>
+                                        <Box sx={{ mb: 3, p: 2, background: '#f9fafb', borderRadius: 2, boxShadow: 1 }}>
+                                            <Grid container spacing={2}>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Total del Año</strong></Typography>
+                                                        <Tooltip title="Todo el dinero cobrado durante el año escolar actual (tarifas + moras pagadas; No incluye créditos acumulados)" arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>Q {ingresoTotal.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Mes Actual</strong></Typography>
+                                                        <Tooltip title="Dinero cobrado únicamente en el mes en curso." arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#2196f3', fontWeight: 600 }}>Q {currentMonthEarnings.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Promedio Mensual</strong></Typography>
+                                                        <Tooltip title="Promedio de ingresos por mes durante el año." arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>Q {Number(ingresoMensualPromedio).toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Promedio por Familia</strong></Typography>
+                                                        <Tooltip title="Cuánto paga en promedio cada familia activa." arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>Q {Number(promedioIngresoPorFamilia).toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso por Mora</strong></Typography>
+                                                        <Tooltip title="Dinero cobrado específicamente por moras." arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#ff9800', fontWeight: 600 }}>Q {ingresoMora.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Total Pendiente de Cobro</strong></Typography>
+                                                        <Tooltip title="Suma de todas las deudas actuales de tarifas sin pagar." arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#f44336', fontWeight: 600 }}>Q {totalPendiente.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Mora Pendiente</strong></Typography>
+                                                        <Tooltip title="Suma de todas las penalidades por mora acumuladas y no pagadas." arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#d32f2f', fontWeight: 600 }}>Q {moraPendiente.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Crédito Acumulado</strong></Typography>
+                                                        <Tooltip title="Dinero a favor de las familias por pagos adelantados o sobrepagos. Se aplica automáticamente a futuros cobros" arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>Q {creditoAcumulado.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Total Descuentos</strong></Typography>
+                                                        <Tooltip title="Suma de todos los descuentos especiales otorgados a las familias." arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#795548', fontWeight: 600 }}>Q {totalDescuentos.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                </Grid>
+                                            </Grid>
+                                        </Box>
+
+                                        {/* Distribución de Familias */}
+                                        <Typography variant="h6" sx={{ mb: 2, mt: 3, fontWeight: 600, color: '#1976d2' }}>👥 Distribución de Familias</Typography>
+                                        <Box sx={{ mb: 3, p: 2, background: '#f9fafb', borderRadius: 2, boxShadow: 1 }}>
+                                            <Grid container spacing={2}>
+                                                <Grid item xs={12} sm={6} md={2}>
+                                                    <Typography variant="body2" color="text.secondary"><strong>Total Familias</strong></Typography>
+                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{totalFamilias}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={2}>
+                                                    <Typography variant="body2" color="text.secondary"><strong>Activas</strong></Typography>
+                                                    <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>{familiasActivas}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={2}>
+                                                    <Typography variant="body2" color="text.secondary"><strong>Pagadas</strong></Typography>
+                                                    <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>{pagadoCount}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={2}>
+                                                    <Typography variant="body2" color="text.secondary"><strong>En Mora</strong></Typography>
+                                                    <Typography variant="h6" sx={{ color: '#f44336', fontWeight: 600 }}>{moraCount}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={2}>
+                                                    <Typography variant="body2" color="text.secondary"><strong>Pendientes</strong></Typography>
+                                                    <Typography variant="h6" sx={{ color: '#ff9800', fontWeight: 600 }}>{pendienteCount}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={2}>
+                                                    <Typography variant="body2" color="text.secondary"><strong>Inactivas</strong></Typography>
+                                                    <Typography variant="h6" sx={{ color: '#9e9e9e', fontWeight: 600 }}>{inactivoCount}</Typography>
+                                                </Grid>
+                                            </Grid>
+                                        </Box>
+
+                                        {/* Gráficos */}
+                                        <Grid container spacing={3} sx={{ mt: 2 }}>
+                                            <Grid item xs={12} md={8}>
+                                                <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: 1 }}>
+                                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
+                                                        📈 Ingresos Mensuales (Pagos + Extraordinarios)
+                                                    </Typography>
+                                                    <Box sx={{ width: '100%', height: 350 }}>
+                                                        <ResponsiveContainer width="100%" height="100%">
+                                                            <BarChart
+                                                                data={(combinedEarnings || []).map(item => ({ 
+                                                                    ...item, 
+                                                                    label: moment({ year: item.year, month: item.month - 1 }).format('MMM YY'),
+                                                                    fullLabel: moment({ year: item.year, month: item.month - 1 }).format('MMMM YYYY')
+                                                                }))}
+                                                            >
+                                                                <CartesianGrid strokeDasharray="3 3" />
+                                                                <XAxis dataKey="label" angle={-45} textAnchor="end" height={80} />
+                                                                <YAxis tickFormatter={(value) => `Q${(value/1000).toFixed(0)}k`} />
+                                                                <RechartsTooltip 
+                                                                    formatter={(value) => [`Q ${Number(value).toLocaleString('es-GT', {minimumFractionDigits: 2})}`, 'Ingreso']}
+                                                                    labelFormatter={(label, payload) => payload && payload[0] ? payload[0].payload.fullLabel : label}
+                                                                />
+                                                                <Legend />
+                                                                <Bar dataKey="total" name="Ingreso Total" radius={[8, 8, 0, 0]}>
+                                                                    {(combinedEarnings || []).map((entry, index) => {
+                                                                        const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0'];
+                                                                        return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                                                                    })}
+                                                                </Bar>
+                                                            </BarChart>
+                                                        </ResponsiveContainer>
+                                                    </Box>
+                                                </Box>
+                                            </Grid>
+                                            <Grid item xs={12} md={4}>
+                                                <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: 1, height: '100%' }}>
+                                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
+                                                        🎯 Estado de Pagos
+                                                    </Typography>
+                                                    <Box sx={{ width: '100%', height: 300 }}>
+                                                        <ResponsiveContainer width="100%" height="100%">
+                                                            <PieChart>
+                                                                <Pie
+                                                                    data={[
+                                                                        { name: 'Pagadas', value: pagadoCount, fill: '#4caf50' },
+                                                                        { name: 'En Mora', value: moraCount, fill: '#f44336' },
+                                                                        { name: 'Pendientes', value: pendienteCount, fill: '#ff9800' },
+                                                                        { name: 'En Proceso', value: enProcesoCount, fill: '#2196f3' },
+                                                                        { name: 'Atrasadas', value: atrasadoCount, fill: '#ff5722' }
+                                                                    ].filter(item => item.value > 0)}
+                                                                    cx="50%"
+                                                                    cy="50%"
+                                                                    labelLine={false}
+                                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                                                    outerRadius={80}
+                                                                    dataKey="value"
+                                                                >
+                                                                </Pie>
+                                                                <RechartsTooltip formatter={(value, name) => [value + ' familias', name]} />
+                                                            </PieChart>
+                                                        </ResponsiveContainer>
+                                                    </Box>
                                                 </Box>
                                             </Grid>
                                         </Grid>
