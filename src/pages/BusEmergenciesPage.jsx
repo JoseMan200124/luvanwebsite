@@ -524,7 +524,7 @@ const BusEmergenciesPage = () => {
                                                     {emergency.colegio || emergency.corporacion || 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {emergency.piloto?.name || 'N/A'}
+                                                    {emergency.reporter?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     {emergency.latitud && emergency.longitud ? (
