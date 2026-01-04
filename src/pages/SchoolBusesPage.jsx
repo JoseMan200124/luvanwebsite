@@ -192,17 +192,10 @@ const SchoolBusesPage = () => {
                 return updated;
             });
         } else if (previousBusId && !newBusId) {
-            // Si se está quitando el bus (sin nuevo bus), limpiar asignaciones del anterior
-            setPilotAssignments(prev => {
-                const updated = { ...prev };
-                delete updated[previousBusId];
-                return updated;
-            });
-            setMonitorAssignments(prev => {
-                const updated = { ...prev };
-                delete updated[previousBusId];
-                return updated;
-            });
+            // FIX: Al quitar el bus (presionar X), NO limpiar piloto/monitora
+            // Las asignaciones de piloto/monitora permanecen en el estado
+            // La validación antes de guardar detectará esto y pedirá al usuario
+            // que asigne un bus o elimine las asignaciones manualmente
         }
         
         setRouteBusAssignments(prev => ({
@@ -228,6 +221,69 @@ const SchoolBusesPage = () => {
     const handleSaveAssignments = async () => {
         setSaving(true);
         try {
+            // VALIDACIÓN: Detectar rutas sin bus pero con piloto/monitora asignados
+            const validationErrors = [];
+            
+            // Recorrer todas las rutas configuradas
+            for (const routeNumber of schoolRouteNumbers) {
+                const assignedBusId = routeBusAssignments[routeNumber];
+                
+                // Si NO hay bus asignado a esta ruta
+                if (!assignedBusId) {
+                    // Verificar si hay piloto o monitora asociados a algún busId
+                    // que anteriormente estaba en esta ruta
+                    // Como el bug era que al quitar el bus NO se limpiaban piloto/monitora,
+                    // ahora pueden quedar "huérfanos" en el estado
+                    
+                    // Buscar en pilotAssignments y monitorAssignments
+                    // Necesitamos detectar si hay asignaciones que quedaron del bus anterior
+                    // Pero como ya no hay busId en routeBusAssignments[routeNumber],
+                    // no hay forma directa de saber qué piloto/monitora pertenecían a esta ruta
+                    
+                    // Enfoque alternativo: revisar si hay piloto/monitora en buses
+                    // que NO están asignados a ninguna ruta
+                    continue; // Por ahora, skip - necesitamos otro enfoque
+                }
+                
+                // Si hay bus asignado, está OK (puede o no tener piloto/monitora)
+            }
+            
+            // Enfoque correcto: detectar asignaciones de piloto/monitora en buses
+            // que NO están asignados a ninguna ruta
+            const assignedBusIds = new Set(Object.values(routeBusAssignments).filter(Boolean));
+            
+            // Buscar pilotos asignados a buses que no están en ninguna ruta
+            Object.entries(pilotAssignments).forEach(([busId, pilotId]) => {
+                if (pilotId && !assignedBusIds.has(parseInt(busId))) {
+                    const pilot = availablePilots.find(p => p.id === pilotId);
+                    const bus = buses.find(b => b.id === parseInt(busId));
+                    validationErrors.push(
+                        ``
+                    );
+                }
+            });
+            
+            // Buscar monitoras asignadas a buses que no están en ninguna ruta
+            Object.entries(monitorAssignments).forEach(([busId, monitorId]) => {
+                if (monitorId && !assignedBusIds.has(parseInt(busId))) {
+                    const monitor = availableMonitors.find(m => m.id === monitorId);
+                    const bus = buses.find(b => b.id === parseInt(busId));
+                    validationErrors.push(
+                        ``
+                    );
+                }
+            });
+            
+            if (validationErrors.length > 0) {
+                setSnackbar({ 
+                    open: true, 
+                    message: `No se puede guardar. ${validationErrors.join('. ')}. Por favor, elimine las asignaciones de piloto/monitora o asigne un bus a esta ruta.`, 
+                    severity: 'error' 
+                });
+                setSaving(false);
+                return;
+            }
+            
             // Obtener el estado actual de buses desde el servidor para comparar
             const currentBusesResp = await api.get('/buses/simple', {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -628,8 +684,37 @@ const SchoolBusesPage = () => {
                                     {schoolRouteNumbers.map((routeNumber) => {
                                         const assignedBusId = routeBusAssignments[routeNumber];
                                         const availableBusesForThisRoute = getAvailableBusesForRoute(routeNumber);
-                                        const availablePilotsForThisBus = assignedBusId ? getAvailablePilotsForBus(assignedBusId) : [];
-                                        const availableMonitorsForThisBus = assignedBusId ? getAvailableMonitorsForBus(assignedBusId) : [];
+                                        
+                                        // Buscar si hay asignaciones huérfanas (piloto/monitora sin bus)
+                                        // Esto puede pasar si el usuario quitó el bus pero dejó piloto/monitora
+                                        let orphanBusId = null;
+                                        if (!assignedBusId) {
+                                            // Buscar en pilotAssignments y monitorAssignments
+                                            // un busId que ya no esté asignado a ninguna ruta
+                                            const allAssignedBusIds = new Set(Object.values(routeBusAssignments).filter(Boolean));
+                                            
+                                            // Buscar en pilotAssignments
+                                            const orphanPilotEntry = Object.entries(pilotAssignments).find(([busId, pilotId]) => {
+                                                return pilotId && !allAssignedBusIds.has(parseInt(busId));
+                                            });
+                                            
+                                            // Buscar en monitorAssignments
+                                            const orphanMonitorEntry = Object.entries(monitorAssignments).find(([busId, monitorId]) => {
+                                                return monitorId && !allAssignedBusIds.has(parseInt(busId));
+                                            });
+                                            
+                                            // Si encontramos asignaciones huérfanas, usar ese busId
+                                            if (orphanPilotEntry) {
+                                                orphanBusId = parseInt(orphanPilotEntry[0]);
+                                            } else if (orphanMonitorEntry) {
+                                                orphanBusId = parseInt(orphanMonitorEntry[0]);
+                                            }
+                                        }
+                                        
+                                        // Usar el busId asignado o el busId huérfano para mostrar piloto/monitora
+                                        const effectiveBusId = assignedBusId || orphanBusId;
+                                        const availablePilotsForThisBus = effectiveBusId ? getAvailablePilotsForBus(effectiveBusId) : [];
+                                        const availableMonitorsForThisBus = effectiveBusId ? getAvailableMonitorsForBus(effectiveBusId) : [];
                                         
                                         return (
                                             <TableRow key={routeNumber}>
@@ -662,17 +747,19 @@ const SchoolBusesPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <Autocomplete
-                                                        disabled={!assignedBusId}
+                                                        disabled={!effectiveBusId}
                                                         options={availablePilotsForThisBus}
                                                         getOptionLabel={(option) => option ? (option.name || option.email) : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
-                                                        value={assignedBusId ? availablePilots.find(p => p.id === pilotAssignments[assignedBusId]) || null : null}
-                                                        onChange={(_, newValue) => assignedBusId && handlePilotAssignmentChange(assignedBusId, newValue ? newValue.id : null)}
+                                                        value={effectiveBusId ? availablePilots.find(p => p.id === pilotAssignments[effectiveBusId]) || null : null}
+                                                        onChange={(_, newValue) => effectiveBusId && handlePilotAssignmentChange(effectiveBusId, newValue ? newValue.id : null)}
                                                         renderInput={(params) => (
                                                             <TextField
                                                                 {...params}
                                                                 label="Seleccionar Piloto"
                                                                 variant="outlined"
+                                                                error={!assignedBusId && effectiveBusId && pilotAssignments[effectiveBusId]}
+                                                                helperText={!assignedBusId && effectiveBusId && pilotAssignments[effectiveBusId] ? 'Sin bus asignado' : ''}
                                                             />
                                                         )}
                                                         clearOnEscape
@@ -680,17 +767,19 @@ const SchoolBusesPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <Autocomplete
-                                                        disabled={!assignedBusId}
+                                                        disabled={!effectiveBusId}
                                                         options={availableMonitorsForThisBus}
                                                         getOptionLabel={(option) => option ? (option.name || option.email) : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
-                                                        value={assignedBusId ? availableMonitors.find(m => m.id === monitorAssignments[assignedBusId]) || null : null}
-                                                        onChange={(_, newValue) => assignedBusId && handleMonitorAssignmentChange(assignedBusId, newValue ? newValue.id : null)}
+                                                        value={effectiveBusId ? availableMonitors.find(m => m.id === monitorAssignments[effectiveBusId]) || null : null}
+                                                        onChange={(_, newValue) => effectiveBusId && handleMonitorAssignmentChange(effectiveBusId, newValue ? newValue.id : null)}
                                                         renderInput={(params) => (
                                                             <TextField
                                                                 {...params}
                                                                 label="Seleccionar Monitora"
                                                                 variant="outlined"
+                                                                error={!assignedBusId && effectiveBusId && monitorAssignments[effectiveBusId]}
+                                                                helperText={!assignedBusId && effectiveBusId && monitorAssignments[effectiveBusId] ? 'Sin bus asignado' : ''}
                                                             />
                                                         )}
                                                         clearOnEscape
