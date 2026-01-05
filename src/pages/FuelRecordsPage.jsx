@@ -20,6 +20,8 @@ import {
     MenuItem,
     FormControl,
     InputLabel,
+    Autocomplete,
+    TextField,
     Chip,
     IconButton,
     Tooltip,
@@ -64,6 +66,7 @@ const FuelRecordsPage = () => {
     const [selectedSchool, setSelectedSchool] = useState('');
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
+    const [selectedFuelType, setSelectedFuelType] = useState('');
     const [selectedFuelingReason, setSelectedFuelingReason] = useState('');
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
@@ -83,21 +86,18 @@ const FuelRecordsPage = () => {
 
     useEffect(() => {
         fetchSchools();
+        fetchBusesBySchool();
         fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    useEffect(() => {
-        if (selectedSchool) {
-            fetchBusesBySchool(selectedSchool);
-        }
-    }, [selectedSchool]);
+    // No dependemos del colegio para las placas; cargamos todos los buses al montar.
 
     useEffect(() => {
         fetchFuelRecords();
         fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedFuelingReason, startDate, endDate]);
+    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, startDate, endDate]);
 
     const fetchSchools = async () => {
         try {
@@ -112,7 +112,9 @@ const FuelRecordsPage = () => {
 
     const fetchBusesBySchool = async (schoolId) => {
         try {
-            const response = await api.get(`/buses/school/${schoolId}`);
+            // Si no se pasa schoolId, traemos todos los buses para permitir seleccionar placa independientemente.
+            const url = schoolId ? `/buses/school/${schoolId}` : '/buses';
+            const response = await api.get(url);
             const busesData = Array.isArray(response.data) ? response.data : (response.data?.buses || []);
             setBuses(busesData);
         } catch (error) {
@@ -120,6 +122,23 @@ const FuelRecordsPage = () => {
             setBuses([]);
         }
     };
+
+    // Opciones de placas: si hay colegio seleccionado, mostrar solo las placas asociadas a ese colegio.
+    const plateOptions = selectedSchool
+        ? [...new Set(
+            buses
+                .filter(b => String(b.schoolId) === String(selectedSchool) || String(b.school?.id) === String(selectedSchool))
+                .map(b => b.plate)
+                .filter(Boolean)
+        )].sort()
+        : [...new Set(buses.map(b => b.plate).filter(Boolean))].sort();
+
+    useEffect(() => {
+        if (selectedPlate && !plateOptions.includes(selectedPlate)) {
+            setSelectedPlate('');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedSchool, buses]);
 
     const fetchFuelRecords = async () => {
         setLoading(true);
@@ -133,6 +152,8 @@ const FuelRecordsPage = () => {
             if (selectedPlate) filters.plate = selectedPlate;
             if (selectedRoute) filters.routeNumber = selectedRoute;
             if (selectedFuelingReason) filters.fuelingReason = selectedFuelingReason;
+            if (selectedFuelType) filters.fuelType = selectedFuelType;
+            if (selectedFuelType) filters.fuelType = selectedFuelType;
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
 
@@ -330,14 +351,13 @@ const FuelRecordsPage = () => {
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={2}>
-                            <FormControl fullWidth>
+                        <Grid item xs="auto" sm="auto" md={"auto"}>
+                            <FormControl fullWidth sx={{ width: 250 }}>
                                 <InputLabel>Colegio</InputLabel>
                                 <Select
                                     value={selectedSchool}
                                     onChange={(e) => {
                                         setSelectedSchool(e.target.value);
-                                        setSelectedPlate('');
                                         setSelectedRoute('');
                                     }}
                                     label="Colegio"
@@ -351,35 +371,23 @@ const FuelRecordsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
-                            <FormControl fullWidth>
-                                <InputLabel>Placa</InputLabel>
-                                <Select
-                                    value={selectedPlate}
-                                    onChange={(e) => setSelectedPlate(e.target.value)}
-                                    label="Placa"
-                                    disabled={!selectedSchool}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {[...new Set(buses.map(b => b.plate))].map((plate) => (
-                                        <MenuItem key={plate} value={plate}>
-                                            {plate}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
-                            <FormControl fullWidth>
+
+                        <Grid item xs="auto" sm="auto" md="auto">
+                            <FormControl fullWidth sx={{ width: 120 }}>
                                 <InputLabel>Ruta</InputLabel>
                                 <Select
                                     value={selectedRoute}
-                                    onChange={(e) => setSelectedRoute(e.target.value)}
+                                    onChange={(e) => {
+                                        setSelectedRoute(e.target.value);
+                                        setSelectedPlate('');
+                                    }}
                                     label="Ruta"
                                     disabled={!selectedSchool}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
-                                    {[...new Set(buses.map(b => b.routeNumber).filter(r => r))].sort((a, b) => a - b).map((route) => (
+                                    {[...new Set(
+                                        (selectedSchool ? buses.filter(b => String(b.schoolId) === String(selectedSchool) || String(b.school?.id) === String(selectedSchool)) : []
+                                    ).map(b => b.routeNumber).filter(Boolean))].sort((a, b) => a - b).map((route) => (
                                         <MenuItem key={route} value={route}>
                                             {route}
                                         </MenuItem>
@@ -387,8 +395,23 @@ const FuelRecordsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <FormControl fullWidth>
+
+                        <Grid item xs="auto" sm="auto" md={"auto"}>
+                            <Autocomplete
+                                options={plateOptions}
+                                value={selectedPlate || null}
+                                onChange={(e, newValue) => setSelectedPlate(newValue || '')}
+                                getOptionLabel={(option) => option || ''}
+                                renderInput={(params) => (
+                                    <TextField {...params} label="Placa" variant="outlined" />
+                                )}
+                                fullWidth
+                                sx={{ width: 180 }}
+                            />
+                        </Grid>
+
+                        <Grid item xs="auto" sm="auto" md={"auto"}>
+                            <FormControl fullWidth sx={{ width: 225 }}>
                                 <InputLabel>Razón de Abastecimiento</InputLabel>
                                 <Select
                                     value={selectedFuelingReason}
@@ -404,26 +427,67 @@ const FuelRecordsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+
+                        <Grid item xs="auto" sm="auto" md={"auto"}>
+                            <FormControl fullWidth sx={{ width: 180 }}>
+                                <InputLabel>Tipo Combustible</InputLabel>
+                                <Select
+                                    value={selectedFuelType}
+                                    onChange={(e) => setSelectedFuelType(e.target.value)}
+                                    label="Tipo Combustible"
+                                >
+                                    <MenuItem value="">Todos</MenuItem>
+                                    {Object.entries(FUEL_TYPES).map(([key, label]) => (
+                                        <MenuItem key={key} value={key}>
+                                            {label}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+
+                        <Grid item xs="auto" sm="auto" md={"auto"}>
                             <DatePicker
                                 label="Fecha Inicio"
                                 value={startDate}
                                 onChange={(newValue) => setStartDate(newValue)}
+                                sx={{ width: 180 }}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+
+                        <Grid item xs="auto" sm="auto" md={"auto"}>
                             <DatePicker
                                 label="Fecha Fin"
                                 value={endDate}
                                 onChange={(newValue) => setEndDate(newValue)}
+                                sx={{ width: 180 }}
                             />
                         </Grid>
-                        <Grid item xs={12} display="flex" justifyContent="flex-end">
-                            <Tooltip title="Actualizar">
-                                <IconButton onClick={handleRefresh} color="primary">
-                                    <RefreshIcon />
-                                </IconButton>
-                            </Tooltip>
+
+                        <Grid item xs="auto" display="flex" justifyContent="flex-end" spacing={1}>
+                            <Box>
+                                <Tooltip title="Limpiar filtros">
+                                    <Button onClick={() => {
+                                        setSelectedSchool('');
+                                        setSelectedPlate('');
+                                        setSelectedRoute('');
+                                        setSelectedFuelingReason('');
+                                        setSelectedFuelType('');
+                                        setStartDate(null);
+                                        setEndDate(null);
+                                        setPage(0);
+                                        fetchFuelRecords();
+                                        fetchStatistics();
+                                    }} variant="outlined" sx={{ mr: 1 }}>
+                                        Limpiar
+                                    </Button>
+                                </Tooltip>
+                                <Tooltip title="Actualizar">
+                                    <IconButton onClick={handleRefresh} color="primary">
+                                        <RefreshIcon />
+                                    </IconButton>
+                                </Tooltip>
+                            </Box>
                         </Grid>
                     </Grid>
                 </Paper>
@@ -441,15 +505,15 @@ const FuelRecordsPage = () => {
                                     <TableHead>
                                         <TableRow>
                                             <TableCell>Fecha</TableCell>
-                                            <TableCell>Placa</TableCell>
+                                            <TableCell>Colegio</TableCell>
                                             <TableCell>Ruta</TableCell>
+                                            <TableCell>Placa</TableCell>
                                             <TableCell>Piloto</TableCell>
                                             <TableCell>Razón</TableCell>
                                             <TableCell>Tipo Combustible</TableCell>
                                             <TableCell align="right">Galones</TableCell>
                                             <TableCell align="right">Precio/Galón</TableCell>
                                             <TableCell align="right">Total</TableCell>
-                                            <TableCell>Colegio</TableCell>
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </TableHead>
@@ -460,10 +524,13 @@ const FuelRecordsPage = () => {
                                                     {moment(record.recordDate).format('DD/MM/YYYY HH:mm')}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {record.plate || 'N/A'}
+                                                    {record.school?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
                                                     {record.routeNumber || 'N/A'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {record.plate || 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
                                                     {record.pilot?.name || 'N/A'}
@@ -488,9 +555,6 @@ const FuelRecordsPage = () => {
                                                     <Typography variant="body2" fontWeight="bold">
                                                         {formatCurrency(record.totalAmount)}
                                                     </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {record.school?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     <Tooltip title="Ver detalles">
