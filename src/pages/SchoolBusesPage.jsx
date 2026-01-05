@@ -379,8 +379,14 @@ const SchoolBusesPage = () => {
                         successfulChanges.push(`Ruta ${routeNumber}: bus ${getBusPlate(desiredData.busId)} asignado`);
                     } catch (err) {
                         const busPlate = getBusPlate(desiredData.busId);
-                        const currentAssignment = getBusCurrentAssignment(desiredData.busId);
-                        errors.push(`Error al asignar bus ${busPlate} a ruta ${routeNumber}${currentAssignment}: ${err.response?.data?.message || err.message}`);
+                        // Si el backend envió un mensaje, usarlo directamente sin agregar información adicional
+                        const errorMsg = err.response?.data?.message;
+                        if (errorMsg) {
+                            errors.push(`Ruta ${routeNumber} - Bus ${busPlate}: ${errorMsg}`);
+                        } else {
+                            const currentAssignment = getBusCurrentAssignment(desiredData.busId);
+                            errors.push(`Error al asignar bus ${busPlate} a ruta ${routeNumber}${currentAssignment}: ${err.message}`);
+                        }
                     }
                     continue;
                 }
@@ -430,8 +436,14 @@ const SchoolBusesPage = () => {
                     } catch (err) {
                         // Si falla la asignación del nuevo bus, la ruta mantiene su asignación original
                         const busPlate = getBusPlate(desiredData.busId);
-                        const currentAssignment = getBusCurrentAssignment(desiredData.busId);
-                        errors.push(`Error al cambiar bus de ruta ${routeNumber} a ${busPlate}${currentAssignment}: ${err.response?.data?.message || err.message}`);
+                        // Si el backend envió un mensaje, usarlo directamente sin agregar información adicional
+                        const errorMsg = err.response?.data?.message;
+                        if (errorMsg) {
+                            errors.push(`Ruta ${routeNumber} - Bus ${busPlate}: ${errorMsg}`);
+                        } else {
+                            const currentAssignment = getBusCurrentAssignment(desiredData.busId);
+                            errors.push(`Error al cambiar bus de ruta ${routeNumber} a ${busPlate}${currentAssignment}: ${err.message}`);
+                        }
                     }
                     continue;
                 }
@@ -507,10 +519,8 @@ const SchoolBusesPage = () => {
             if (busesAssignedToOtherRoutes.has(bus.id)) {
                 return false;
             }
-            // Excluir buses asignados a otros colegios (en BD)
-            if (bus.schoolId && bus.schoolId !== parseInt(schoolId)) {
-                return false;
-            }
+            // No excluir buses asignados a otros colegios
+            // El backend validará y mostrará un error apropiado si el bus ya está asignado
             return true;
         });
     };
