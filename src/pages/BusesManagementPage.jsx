@@ -28,11 +28,16 @@ import {
     Link,
     Box,
     FormControlLabel,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
     Switch,
     useTheme,
     useMediaQuery,
     TableSortLabel
 } from '@mui/material';
+import { Autocomplete } from '@mui/material';
 import {
     Edit,
     Delete,
@@ -184,6 +189,9 @@ const BusesManagementPage = () => {
         severity: 'success'
     });
     const [searchQuery, setSearchQuery] = useState('');
+    const [clientFilter, setClientFilter] = useState('');
+    const [availabilityFilter, setAvailabilityFilter] = useState('all'); // all | assigned | unassigned
+    const [inWorkshopFilter, setInWorkshopFilter] = useState('all'); // all | in | out
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
@@ -208,7 +216,7 @@ const BusesManagementPage = () => {
     // Route history modal state
     const [routeHistoryOpen, setRouteHistoryOpen] = useState(false);
     const [routeHistoryRouteNumber, setRouteHistoryRouteNumber] = useState('');
-    const [routeHistorySchoolId, setRouteHistorySchoolId] = useState(null);
+    const [routeHistoryClientId, setRouteHistoryClientId] = useState(null);
 
     // =================== Efectos y funciones ===================
     const handleRequestSort = (property) => {
@@ -298,7 +306,7 @@ const BusesManagementPage = () => {
         // If called without a bus, open the general modal (no pre-filled route/school)
         if (!bus) {
             setRouteHistoryRouteNumber('');
-            setRouteHistorySchoolId(null);
+            setRouteHistoryClientId(null);
             setRouteHistoryOpen(true);
             return;
         }
@@ -306,14 +314,14 @@ const BusesManagementPage = () => {
         const routeNumber = bus?.routeNumber || bus?.route || '';
         const schoolIdFromBus = bus?.schoolId || (bus?.school && (bus.school.id || bus.school._id)) || null;
         setRouteHistoryRouteNumber(routeNumber);
-        setRouteHistorySchoolId(schoolIdFromBus);
+        setRouteHistoryClientId(schoolIdFromBus);
         setRouteHistoryOpen(true);
     };
 
     const handleCloseRouteHistory = () => {
         setRouteHistoryOpen(false);
         setRouteHistoryRouteNumber('');
-        setRouteHistorySchoolId(null);
+        setRouteHistoryClientId(null);
     };
 
     const handleDialogClose = () => {
@@ -494,11 +502,56 @@ const BusesManagementPage = () => {
         setSearchQuery(e.target.value);
     };
 
+    // client filter is handled via Autocomplete onChange (sets `clientFilter` directly)
+
+    const handleAvailabilityFilterChange = (e) => {
+        setAvailabilityFilter(e.target.value);
+        setPage(0);
+    };
+
+    const handleInWorkshopFilterChange = (e) => {
+        setInWorkshopFilter(e.target.value);
+        setPage(0);
+    };
+
+    // derive school/corporation options from buses
+    const clientOptions = (() => {
+        const map = new Map();
+        buses.forEach((b) => {
+            const s = b.school || b.corporation;
+            if (!s) return;
+            if (s.deleted) return; // skip deleted clients
+            if (s && (s.id || s._id || s.name)) {
+                const id = s.id || s._id || s.name;
+                if (!map.has(id)) map.set(id, { id, name: s.name || id });
+            }
+        });
+        return Array.from(map.values());
+    })();
+
     const filteredBuses = buses.filter((bus) => {
-        const inPlate = bus.plate.toLowerCase().includes(searchQuery.toLowerCase());
-        const inDesc =
-            bus.description && bus.description.toLowerCase().includes(searchQuery.toLowerCase());
-        return inPlate || inDesc;
+        const q = searchQuery.toLowerCase();
+        const inPlate = bus.plate && bus.plate.toLowerCase().includes(q);
+        const inDesc = bus.description && bus.description.toLowerCase().includes(q);
+        if (!(inPlate || inDesc)) return false;
+
+        // school filter (matches school or corporation id/name)
+        if (clientFilter) {
+            const s = bus.school || bus.corporation;
+            const sid = s ? (s.id || s._id || s.name) : '';
+            if (String(sid) !== String(clientFilter)) return false;
+        }
+
+        // availability: consider a bus 'assigned' if it has school/corporation or route
+        const assigned = Boolean(bus.school || bus.corporation || bus.routeNumber || bus.route || bus.route_num);
+        if (availabilityFilter === 'assigned' && !assigned) return false;
+        if (availabilityFilter === 'unassigned' && assigned) return false;
+
+        // inWorkshop filter
+        if (inWorkshopFilter === 'in' && !bus.inWorkshop) return false;
+        if (inWorkshopFilter === 'out' && bus.inWorkshop) return false;
+
+        return true;
     });
 
     // =================== Paginación ===================
@@ -618,17 +671,60 @@ const BusesManagementPage = () => {
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
                     marginBottom: '16px',
-                    gap: '8px'
+                    gap: '6px'
                 }}
             >
-                <TextField
-                    label="Buscar buses"
-                    variant="outlined"
-                    size="small"
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    style={{ width: '300px' }}
-                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <TextField
+                        label="Buscar buses"
+                        variant="outlined"
+                        size="small"
+                        value={searchQuery}
+                        onChange={handleSearchChange}
+                        sx={{ width: 200 }}
+                    />
+
+                    <Autocomplete
+                        size="small"
+                        options={clientOptions}
+                        getOptionLabel={(opt) => opt.name || ''}
+                        value={clientOptions.find((o) => String(o.id) === String(clientFilter)) || null}
+                        onChange={(e, newVal) => {
+                            setClientFilter(newVal ? newVal.id : '');
+                            setPage(0);
+                        }}
+                        sx={{ minWidth: 160, width: 220 }}
+                        renderInput={(params) => <TextField {...params} label="Cliente" />}
+                    />
+
+                    <FormControl size="small" sx={{ minWidth: 110 }}>
+                        <InputLabel id="availability-filter-label">Disponibilidad</InputLabel>
+                        <Select
+                            labelId="availability-filter-label"
+                            value={availabilityFilter}
+                            label="Disponibilidad"
+                            onChange={handleAvailabilityFilterChange}
+                        >
+                            <MenuItem value="all">Todos</MenuItem>
+                            <MenuItem value="assigned">Asignados</MenuItem>
+                            <MenuItem value="unassigned">Sin asignar</MenuItem>
+                        </Select>
+                    </FormControl>
+
+                    <FormControl size="small" sx={{ minWidth: 90 }}>
+                        <InputLabel id="inworkshop-filter-label">Estado</InputLabel>
+                        <Select
+                            labelId="inworkshop-filter-label"
+                            value={inWorkshopFilter}
+                            label="Taller"
+                            onChange={handleInWorkshopFilterChange}
+                        >
+                            <MenuItem value="all">Todos</MenuItem>
+                            <MenuItem value="in">En taller</MenuItem>
+                            <MenuItem value="out">Disponible</MenuItem>
+                        </Select>
+                    </FormControl>
+                </Box>
                 <div>
                     <Button
                         variant="outlined"
@@ -1152,7 +1248,7 @@ const BusesManagementPage = () => {
                 </Alert>
             </Snackbar>
             {/* Route history modal */}
-            <RouteHistoryModal open={routeHistoryOpen} onClose={handleCloseRouteHistory} routeNumber={routeHistoryRouteNumber} schoolId={routeHistorySchoolId} />
+            <RouteHistoryModal open={routeHistoryOpen} onClose={handleCloseRouteHistory} routeNumber={routeHistoryRouteNumber} clientId={routeHistoryClientId} />
         </BusesContainer>
     );
 };
