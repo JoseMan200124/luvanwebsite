@@ -569,6 +569,10 @@ const SchoolPaymentsPage = () => {
     const [payPenaltyBoleta, setPayPenaltyBoleta] = useState('');
     const [payPenaltyAccount, setPayPenaltyAccount] = useState('');
     const [payPenaltyDate, setPayPenaltyDate] = useState(moment().format('YYYY-MM-DD'));
+    
+    // Retroactive penalty calculation states
+    const [retroactivePenalty, setRetroactivePenalty] = useState(null);
+    const [isRetroactivePayment, setIsRetroactivePayment] = useState(false);
 
     // Exonerate/Discount Penalty dialog states
     const [openDiscountPenaltyDialog, setOpenDiscountPenaltyDialog] = useState(false);
@@ -1793,6 +1797,78 @@ const SchoolPaymentsPage = () => {
     // Derived values for the Register Payment dialog summary
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
     
+    // Función para calcular mora hasta una fecha específica (retroactiva)
+    const calculateRetroactivePenalty = useCallback((paymentDate) => {
+        if (!registerPaymentTarget?.penaltyStartDate || !paymentDate) {
+            return null;
+        }
+        
+        const penaltyStart = moment(registerPaymentTarget.penaltyStartDate).startOf('day');
+        const paymentMoment = moment(paymentDate).startOf('day');
+        const today = moment().startOf('day');
+        
+        // Si la fecha de pago es igual o después de hoy, no es retroactivo
+        if (paymentMoment.isSameOrAfter(today)) {
+            return null;
+        }
+        
+        // Si la fecha de pago es antes del inicio de mora, no hay mora
+        if (paymentMoment.isBefore(penaltyStart)) {
+            return {
+                isRetroactive: true,
+                daysUntilPayment: 0,
+                penaltyUntilPaymentDate: 0,
+                message: 'Esta fecha es anterior al inicio de la mora. No se aplicará mora.'
+            };
+        }
+        
+        // Calcular días desde inicio de mora hasta fecha de pago
+        const daysUntilPayment = paymentMoment.diff(penaltyStart, 'days') + 1;
+        
+        // Obtener datos de la escuela para el cálculo
+        const dailyPenalty = school?.dailyPenalty || allSchools.find(s => s.id === registerPaymentTarget.schoolId)?.dailyPenalty || 0;
+        const studentCount = (registerPaymentTarget?.User?.FamilyDetail?.Students || []).length || 1;
+        
+        // Calcular mora hasta la fecha del pago
+        const penaltyUntilPaymentDate = daysUntilPayment * parseFloat(dailyPenalty) * studentCount;
+        
+        return {
+            isRetroactive: true,
+            daysUntilPayment,
+            penaltyUntilPaymentDate,
+            dailyPenalty: parseFloat(dailyPenalty),
+            studentCount,
+            paymentDate: paymentMoment.format('DD [de] MMMM, YYYY'),
+            penaltyStartDate: penaltyStart.format('DD [de] MMMM, YYYY'),
+            currentPenaltyDue: Number(registerPaymentTarget.penaltyDue || 0),
+            message: `Pago retroactivo: La mora acumulada hasta el ${paymentMoment.format('DD/MM/YYYY')} era de Q${penaltyUntilPaymentDate.toFixed(2)}`
+        };
+    }, [registerPaymentTarget, school, allSchools]);
+    
+    // Calculate retroactive penalty when penalty payment date changes
+    useEffect(() => {
+        if (paymentTab === 1 && registerPaymentTarget?.penaltyStartDate) {
+            const retroCalc = calculateRetroactivePenalty(payPenaltyDate);
+            setRetroactivePenalty(retroCalc);
+            setIsRetroactivePayment(retroCalc?.isRetroactive || false);
+        } else {
+            setRetroactivePenalty(null);
+            setIsRetroactivePayment(false);
+        }
+    }, [payPenaltyDate, paymentTab, registerPaymentTarget?.penaltyStartDate, calculateRetroactivePenalty]);
+    
+    // Force re-render of retroactive penalty info when amounts change
+    // (the UI calculation block is reactive to these values)
+    useEffect(() => {
+        if (isRetroactivePayment && retroactivePenalty) {
+            // Just trigger a re-render, the UI will recalculate based on current values
+            const timer = setTimeout(() => {
+                // No action needed, just ensure UI updates
+            }, 0);
+            return () => clearTimeout(timer);
+        }
+    }, [payPenaltyAmount, discountPenaltyAmount, exonerateAmount, isExonerating, isRetroactivePayment, retroactivePenalty]);
+    
     // Valores del sistema V2
     // monthlyFee = tarifa base × cantidad de estudiantes (antes de descuentos)
     const dialogMonthlyFee = Number(registerPaymentTarget?.monthlyFee || 0);
@@ -2695,22 +2771,25 @@ const SchoolPaymentsPage = () => {
                                             </Typography>
                                             
                                             {/* Indicador de mora congelada */}
-                                            {registerPaymentTarget?.penaltyFrozenAt && (
+                                            {registerPaymentTarget?.penaltyFrozenAt ? (
                                                 <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3cd', borderRadius: 1, border: '1px solid #ffc107' }}>
                                                     <Typography variant="caption" sx={{ fontWeight: 600, color: '#856404', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                         ❄️ Mora Congelada
                                                     </Typography>
                                                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                                                         Congelada desde el {moment(registerPaymentTarget.penaltyFrozenAt).format('DD [de] MMMM, YYYY')}
+                                                        {registerPaymentTarget?.penaltyStartDate && (
+                                                            <> ({moment(registerPaymentTarget.penaltyFrozenAt).diff(moment(registerPaymentTarget.penaltyStartDate), 'days') + 1} días de mora)</>
+                                                        )}
                                                     </Typography>
                                                 </Box>
-                                            )}
-                                            
-                                            {registerPaymentTarget?.penaltyStartDate && (
-                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                                                    📅 Desde el {moment(registerPaymentTarget.penaltyStartDate).format('DD [de] MMMM, YYYY')}
-                                                    {' '}({moment(registerPaymentExtra?.paymentDate || moment().format('YYYY-MM-DD')).diff(moment(registerPaymentTarget.penaltyStartDate), 'days')} días de atraso)
-                                                </Typography>
+                                            ) : (
+                                                registerPaymentTarget?.penaltyStartDate && (
+                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                                        📅 Desde el {moment(registerPaymentTarget.penaltyStartDate).format('DD [de] MMMM, YYYY')}
+                                                        {' '}({moment(registerPaymentExtra?.paymentDate || moment().format('YYYY-MM-DD')).diff(moment(registerPaymentTarget.penaltyStartDate), 'days') + 1} días de atraso)
+                                                    </Typography>
+                                                )
                                             )}
                                             
                                             {/* Mora acumulada */}
@@ -2806,6 +2885,83 @@ const SchoolPaymentsPage = () => {
                                         onChange={(e) => setPayPenaltyDate(e.target.value)}
                                         sx={{ mb: 2 }}
                                     />
+                                    
+                                    {/* Alert for retroactive penalty calculation */}
+                                    {isRetroactivePayment && retroactivePenalty && (
+                                        <Box sx={{ mb: 2, p: 2, bgcolor: retroactivePenalty.daysUntilPayment === 0 ? '#e8f5e9' : '#fff3e0', borderRadius: 1, border: retroactivePenalty.daysUntilPayment === 0 ? '1px solid #4caf50' : '1px solid #ff9800' }}>
+                                            <Typography variant="caption" sx={{ fontWeight: 700, color: retroactivePenalty.daysUntilPayment === 0 ? '#2e7d32' : '#e65100', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                                                {retroactivePenalty.daysUntilPayment === 0 ? '✅' : '⏰'} PAGO RETROACTIVO DETECTADO
+                                            </Typography>
+                                            
+                                            {retroactivePenalty.daysUntilPayment > 0 ? (
+                                                <>
+                                                    <Typography variant="body2" sx={{ mb: 1, color: 'text.primary' }}>
+                                                        <strong>Fecha de pago:</strong> {retroactivePenalty.paymentDate}
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ mb: 1, color: 'text.primary' }}>
+                                                        <strong>Inicio de mora:</strong> {retroactivePenalty.penaltyStartDate}
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ mb: 1, color: 'text.primary' }}>
+                                                        <strong>Días de mora hasta esa fecha:</strong> {retroactivePenalty.daysUntilPayment} días
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ mb: 1, color: 'text.primary' }}>
+                                                        <strong>Cálculo:</strong> {retroactivePenalty.daysUntilPayment} días × Q{retroactivePenalty.dailyPenalty} × {retroactivePenalty.studentCount} estudiante{retroactivePenalty.studentCount > 1 ? 's' : ''}
+                                                    </Typography>
+                                                    <Box sx={{ mt: 2, p: 1.5, bgcolor: '#fff', borderRadius: 1, border: '2px solid #ff9800' }}>
+                                                        <Typography variant="body1" sx={{ fontWeight: 700, color: '#e65100' }}>
+                                                            💰 Mora hasta {moment(payPenaltyDate).format('DD/MM/YYYY')}: <span style={{ fontSize: '1.2em' }}>Q{retroactivePenalty.penaltyUntilPaymentDate.toFixed(2)}</span>
+                                                        </Typography>
+                                                    </Box>
+                                                    
+                                                    {/* Mostrar cálculo con pago y exoneración */}
+                                                    {(() => {
+                                                        const paymentAmount = Number(payPenaltyAmount || 0);
+                                                        const exonerationAmount = isExonerating 
+                                                            ? Number(exonerateAmount || 0) 
+                                                            : Number(discountPenaltyAmount || 0);
+                                                        const totalReduction = paymentAmount + exonerationAmount;
+                                                        
+                                                        if (paymentAmount > 0 || exonerationAmount > 0) {
+                                                            const willCoverFull = totalReduction >= retroactivePenalty.penaltyUntilPaymentDate;
+                                                            return (
+                                                                <Box sx={{ mt: 2, p: 1.5, bgcolor: willCoverFull ? '#e8f5e9' : '#fff3e0', borderRadius: 1, border: willCoverFull ? '2px solid #4caf50' : '1px solid #ff9800' }}>
+                                                                    <Typography variant="body2" sx={{ fontWeight: 600, color: willCoverFull ? '#2e7d32' : '#e65100', mb: 1 }}>
+                                                                        📊 Aplicación del Pago Retroactivo:
+                                                                    </Typography>
+                                                                    {paymentAmount > 0 && (
+                                                                        <Typography variant="body2" sx={{ color: 'text.primary' }}>
+                                                                            • Pago: Q{paymentAmount.toFixed(2)}
+                                                                        </Typography>
+                                                                    )}
+                                                                    {exonerationAmount > 0 && (
+                                                                        <Typography variant="body2" sx={{ color: 'text.primary' }}>
+                                                                            • Exoneración: Q{exonerationAmount.toFixed(2)}
+                                                                        </Typography>
+                                                                    )}
+                                                                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', mt: 0.5 }}>
+                                                                        • Total: Q{totalReduction.toFixed(2)}
+                                                                    </Typography>
+                                                                    <Typography variant="body2" sx={{ fontWeight: 700, color: willCoverFull ? '#2e7d32' : '#e65100', mt: 1.5 }}>
+                                                                        {willCoverFull ? (
+                                                                            <>✅ Cubre toda la mora hasta {moment(payPenaltyDate).format('DD/MM/YYYY')}</>
+                                                                        ) : (
+                                                                            <>⚠️ Pago parcial: Debe pagarse el monto completo</>
+                                                                        )}
+                                                                    </Typography>
+                                                                </Box>
+                                                             );
+                                                        }
+                                                        return null;
+                                                    })()}
+                                                </>
+                                            ) : (
+                                                <Typography variant="body2" sx={{ color: '#2e7d32' }}>
+                                                    {retroactivePenalty.message}
+                                                </Typography>
+                                            )}
+                                        </Box>
+                                    )}
+                                    
                                     <TextField
                                         label="Número de Boleta"
                                         fullWidth
