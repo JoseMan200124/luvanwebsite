@@ -189,7 +189,7 @@ const BusesManagementPage = () => {
         severity: 'success'
     });
     const [searchQuery, setSearchQuery] = useState('');
-    const [clientFilter, setClientFilter] = useState('');
+    const [clientFilter, setClientFilter] = useState(null); // {id, type}
     const [availabilityFilter, setAvailabilityFilter] = useState('all'); // all | assigned | unassigned
     const [inWorkshopFilter, setInWorkshopFilter] = useState('all'); // all | in | out
     const [page, setPage] = useState(0);
@@ -514,20 +514,40 @@ const BusesManagementPage = () => {
         setPage(0);
     };
 
-    // derive school/corporation options from buses
-    const clientOptions = (() => {
-        const map = new Map();
-        buses.forEach((b) => {
-            const s = b.school || b.corporation;
-            if (!s) return;
-            if (s.deleted) return; // skip deleted clients
-            if (s && (s.id || s._id || s.name)) {
-                const id = s.id || s._id || s.name;
-                if (!map.has(id)) map.set(id, { id, name: s.name || id });
+    // client options (schools + corporations) - loaded from API
+    const [clientOptions, setClientOptions] = useState([]);
+
+    useEffect(() => {
+        const loadClients = async () => {
+            try {
+                const [schoolsResp, corpsResp] = await Promise.all([
+                    api.get('/schools', { headers: { Authorization: `Bearer ${auth.token}` } }),
+                    api.get('/corporations', { headers: { Authorization: `Bearer ${auth.token}` } })
+                ]);
+
+                const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
+                const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
+
+                const combined = [];
+                const pushIfValid = (item, type) => {
+                    if (!item) return;
+                    if (item.deleted) return;
+                    const id = item.id || item._id || item.value || item.uuid || item.name;
+                    const name = item.name || item.nombre || item.label || String(id);
+                    combined.push({ id, name, _raw: item, type });
+                };
+
+                (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
+                (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
+
+                setClientOptions(combined);
+            } catch (err) {
+                console.error('Error loading clients for filters:', err);
             }
-        });
-        return Array.from(map.values());
-    })();
+        };
+
+        loadClients();
+    }, [auth.token]);
 
     const filteredBuses = buses.filter((bus) => {
         const q = searchQuery.toLowerCase();
@@ -535,11 +555,21 @@ const BusesManagementPage = () => {
         const inDesc = bus.description && bus.description.toLowerCase().includes(q);
         if (!(inPlate || inDesc)) return false;
 
-        // school filter (matches school or corporation id/name)
+        // Client filter (match both id and type)
         if (clientFilter) {
-            const s = bus.school || bus.corporation;
-            const sid = s ? (s.id || s._id || s.name) : '';
-            if (String(sid) !== String(clientFilter)) return false;
+            if (clientFilter.type === 'school') {
+                const s = bus.school;
+                if (!s) return false;
+                const sid = s.id || s._id;
+                if (String(sid) !== String(clientFilter.id)) return false;
+            } else if (clientFilter.type === 'corporation') {
+                const c = bus.corporation;
+                if (!c) return false;
+                const cid = c.id || c._id;
+                if (String(cid) !== String(clientFilter.id)) return false;
+            } else {
+                return false;
+            }
         }
 
         // availability: consider a bus 'assigned' if it has school/corporation or route
@@ -688,10 +718,16 @@ const BusesManagementPage = () => {
                         size="small"
                         options={clientOptions}
                         getOptionLabel={(opt) => opt.name || ''}
-                        value={clientOptions.find((o) => String(o.id) === String(clientFilter)) || null}
+                        value={clientFilter ? clientOptions.find((o) => 
+                            String(o.id) === String(clientFilter.id) && o.type === clientFilter.type
+                        ) || null : null}
                         onChange={(e, newVal) => {
-                            setClientFilter(newVal ? newVal.id : '');
+                            setClientFilter(newVal ? { id: newVal.id, type: newVal.type } : null);
                             setPage(0);
+                        }}
+                        isOptionEqualToValue={(option, value) => {
+                            if (!value) return false;
+                            return String(option.id) === String(value.id) && option.type === value.type;
                         }}
                         sx={{ minWidth: 160, width: 220 }}
                         renderInput={(params) => <TextField {...params} label="Cliente" />}

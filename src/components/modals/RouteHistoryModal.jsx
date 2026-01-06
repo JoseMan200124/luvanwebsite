@@ -44,7 +44,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
 
 
-const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
+const RouteHistoryModal = ({ open, onClose, routeNumber, clientId }) => {
     const { auth } = useContext(AuthContext);
     const [loading, setLoading] = useState(false);
     const [routes, setRoutes] = useState([]);
@@ -62,8 +62,8 @@ const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
     const [statusFilter, setStatusFilter] = useState(''); // '', 'inprogress', 'completed'
     const [startHour, setStartHour] = useState('');
     const [endHour, setEndHour] = useState('');
-    const [schools, setSchools] = useState([]);
-    const [selectedSchool, setSelectedSchool] = useState(null);
+    const [clients, setClients] = useState([]);
+    const [selectedClient, setSelectedClient] = useState(null);
     const [initialFetchDone, setInitialFetchDone] = useState(false);
     const [dateAnchorEl, setDateAnchorEl] = useState(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
@@ -72,15 +72,29 @@ const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
         setLoading(true);
         setError(null);
         try {
-            const selectedSchoolId = (selectedSchool && (selectedSchool.id || selectedSchool.value || selectedSchool._id)) || schoolId || null;
-            // Require a selected school (or prop schoolId) before fetching to avoid global queries
-            if (!selectedSchoolId) {
+            const selectedClientId = (selectedClient && (selectedClient.id || selectedClient.value || selectedClient._id)) || clientId || null;
+            const selectedClientType = selectedClient?.type || null;
+            
+            // Require a selected client (or prop clientId) before fetching to avoid global queries
+            if (!selectedClientId) {
                 setLoading(false);
-                setError('Seleccione un colegio antes de aplicar los filtros.');
+                setError('Seleccione un cliente antes de aplicar los filtros.');
                 return;
             }
+            
+            // Build params based on client type
+            const clientParam = {};
+            if (selectedClientType === 'school') {
+                clientParam.schoolId = selectedClientId;
+            } else if (selectedClientType === 'corporation') {
+                clientParam.corporationId = selectedClientId;
+            } else {
+                // Fallback: if type is unknown, use schoolId (backward compatibility)
+                clientParam.schoolId = selectedClientId;
+            }
+            
             const params = {
-                ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
+                ...clientParam,
                 routeNumber: routeNumber,
                 page,
                 pageSize,
@@ -115,19 +129,19 @@ const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
     useEffect(() => {
         if (!open) return;
     // Do not auto-apply filters on open; fetching must be triggered by the user pressing "APLICAR FILTROS"
-    }, [open, routeNumber, schoolId]);
+    }, [open, routeNumber, clientId]);
 
-    // When schools are loaded and a default school is selected, perform a single initial fetch
+    // When clients are loaded and a default client is selected, perform a single initial fetch
     useEffect(() => {
         if (!open) return;
         if (initialFetchDone) return;
-        if (!selectedSchool && !schoolId) return;
-        // Do one initial fetch for the default selected school
+        if (!selectedClient && !clientId) return;
+        // Do one initial fetch for the default selected client
         setInitialFetchDone(true);
         setPage(1);
         fetchRouteHistory({ page: 1 });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedSchool, open, schoolId, initialFetchDone]);
+    }, [selectedClient, open, clientId, initialFetchDone]);
 
     // Reset initialFetchDone when modal closes
     useEffect(() => {
@@ -142,24 +156,42 @@ const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
     // Cargar lista de colegios cuando se abre el modal
     useEffect(() => {
         if (!open) return;
-        const loadSchools = async () => {
+        const loadClients = async () => {
             try {
-                    const resp = await api.get('/schools', {
-                        headers: { Authorization: `Bearer ${auth.token}` }
-                    });
-                    // soportar diferentes shapes: { schools: [...] } o directamente array
-                    const list = resp.data?.schools || resp.data || [];
-                    setSchools(list);
-                    // si recibimos schoolId, seleccionar el objeto correspondiente
-                    const found = list.find(s => String(s.id) === String(schoolId) || String(s.value) === String(schoolId) || String(s._id) === String(schoolId));
-                    // Select the provided schoolId if present, otherwise default to the first school in the list
-                    setSelectedSchool(found || (list.length > 0 ? list[0] : null));
-                } catch (err) {
-                console.error('No se pudieron cargar los colegios:', err);
+                // Fetch schools and corporations in parallel
+                const [schoolsResp, corpsResp] = await Promise.all([
+                    api.get('/schools', { headers: { Authorization: `Bearer ${auth.token}` } }),
+                    api.get('/corporations', { headers: { Authorization: `Bearer ${auth.token}` } })
+                ]);
+
+                const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
+                const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
+
+                // Normalize and combine, excluding deleted entries
+                const combined = [];
+                const pushIfValid = (item, type) => {
+                    if (!item) return;
+                    if (item.deleted) return;
+                    const id = item.id || item._id || item.value || item.uuid || item.name;
+                    const name = item.name || item.nombre || item.label || String(id);
+                    combined.push({ id, name, _raw: item, type });
+                };
+
+                (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
+                (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
+
+                setClients(combined);
+
+                // If clientId is provided as a prop, try to find matching client
+                // Note: clientId alone can't distinguish school vs corporation, so we just pick first match by id
+                const found = clientId ? combined.find(s => String(s.id) === String(clientId)) : null;
+                setSelectedClient(found || (combined.length > 0 ? combined[0] : null));
+            } catch (err) {
+                console.error('No se pudieron cargar los clientes:', err);
             }
         };
-        loadSchools();
-    }, [open, auth.token, schoolId]);
+        loadClients();
+    }, [open, auth.token, clientId]);
 
     const formatTime = (dateTime) => {
         if (!dateTime) return 'N/A';
@@ -223,21 +255,25 @@ const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
                             {/* Primary inputs row */}
                             <Grid item xs={12} md={3}>
                                 <Autocomplete
-                                    size="small"
-                                    options={schools}
-                                    getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
-                                    value={selectedSchool}
-                                    onChange={(e, newVal) => setSelectedSchool(newVal)}
-                                    renderInput={(params) => (
-                                        <TextField {...params} label="Colegio" variant="outlined" InputProps={{ ...params.InputProps, startAdornment: (<InputAdornment position="start"><SchoolIcon fontSize="small" color="action"/></InputAdornment>) }} />
-                                    )}
-                                    renderOption={(props, option) => (
-                                        <li {...props} key={option.id || option.value || option._id}>
-                                            {option.name || option.nombre || option.label}
-                                        </li>
-                                    )}
-                                    clearOnEscape
-                                />
+                                        size="small"
+                                        options={clients}
+                                        getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
+                                        value={selectedClient}
+                                        onChange={(e, newVal) => setSelectedClient(newVal)}
+                                        isOptionEqualToValue={(option, value) => {
+                                            if (!value) return false;
+                                            return String(option.id) === String(value.id) && option.type === value.type;
+                                        }}
+                                        renderInput={(params) => (
+                                            <TextField {...params} label="Cliente" variant="outlined" InputProps={{ ...params.InputProps, startAdornment: (<InputAdornment position="start"><SchoolIcon fontSize="small" color="action"/></InputAdornment>) }} />
+                                        )}
+                                        renderOption={(props, option) => (
+                                            <li {...props} key={`${option.type}-${option.id || option.value || option._id}`}>
+                                                {option.name || option.nombre || option.label}
+                                            </li>
+                                        )}
+                                        clearOnEscape
+                                    />
                             </Grid>
                             <Grid item xs={12} md={3}>
                                 <TextField size="small" variant="outlined" label="Estado" select fullWidth InputLabelProps={{ shrink: true }} SelectProps={{ native: true }} value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)}>
@@ -299,8 +335,8 @@ const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
                                         <Button size="small" startIcon={<ExpandMoreIcon sx={{ transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms' }} />} onClick={()=>setShowAdvanced(s=>!s)}>MÁS FILTROS</Button>
                                     </Box>
                                     <Box sx={{ display:'flex', gap:1 }}>
-                                        <Button size="small" variant="outlined" color="inherit" startIcon={<ClearIcon />} onClick={() => { setStartDate(''); setEndDate(''); setPilotoFilter(''); setBusFilter(''); setSelectedSchool(null); setOnlyFailures(false); setStatusFilter(''); setStartHour(''); setEndHour(''); setPage(1); }}>LIMPIAR</Button>
-                                        <Button size="small" variant="contained" color="primary" startIcon={<SearchIcon />} onClick={() => { setPage(1); fetchRouteHistory({ startDate: startDate||undefined, endDate: endDate||undefined, pilotoName: pilotoFilter||undefined, busPlaca: busFilter||undefined, onlyFailures: onlyFailures?'1':undefined, status: statusFilter||undefined, startHour: startHour||undefined, endHour: endHour||undefined, schoolName: undefined, schoolId: (selectedSchool && (selectedSchool.id || selectedSchool.value || selectedSchool._id)) || schoolId, page: 1 }); }}>APLICAR FILTROS</Button>
+                                        <Button size="small" variant="outlined" color="inherit" startIcon={<ClearIcon />} onClick={() => { setStartDate(''); setEndDate(''); setPilotoFilter(''); setBusFilter(''); setSelectedClient(null); setOnlyFailures(false); setStatusFilter(''); setStartHour(''); setEndHour(''); setPage(1); }}>LIMPIAR</Button>
+                                        <Button size="small" variant="contained" color="primary" startIcon={<SearchIcon />} onClick={() => { setPage(1); fetchRouteHistory({ startDate: startDate||undefined, endDate: endDate||undefined, pilotoName: pilotoFilter||undefined, busPlaca: busFilter||undefined, onlyFailures: onlyFailures?'1':undefined, status: statusFilter||undefined, startHour: startHour||undefined, endHour: endHour||undefined, page: 1 }); }}>APLICAR FILTROS</Button>
                                     </Box>
                                 </Box>
                             </Grid>
@@ -411,7 +447,7 @@ const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
                                                 {/* Colegio */}
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                                                     <SchoolIcon color="action" fontSize="small" />
-                                                    <Typography variant="body2" color="textSecondary">Colegio:</Typography>
+                                                    <Typography variant="body2" color="textSecondary">Cliente:</Typography>
                                                     <Typography variant="body2" fontWeight="medium">{route.colegio || 'N/A'}</Typography>
                                                 </Box>
 
@@ -496,7 +532,19 @@ const RouteHistoryModal = ({ open, onClose, routeNumber, schoolId }) => {
                             onChange={(e, p) => {
                                 setPage(p);
                                 // trigger fetch for the newly selected page
-                                fetchRouteHistory({ startDate: startDate||undefined, endDate: endDate||undefined, pilotoName: pilotoFilter||undefined, busPlaca: busFilter||undefined, onlyFailures: onlyFailures?'1':undefined, status: statusFilter||undefined, startHour: startHour||undefined, endHour: endHour||undefined, schoolName: undefined, schoolId: (selectedSchool && (selectedSchool.id || selectedSchool.value || selectedSchool._id)) || schoolId, page: p });
+                                fetchRouteHistory({
+                                    startDate: startDate || undefined,
+                                    endDate: endDate || undefined,
+                                    pilotoName: pilotoFilter || undefined,
+                                    busPlaca: busFilter || undefined,
+                                    onlyFailures: onlyFailures ? '1' : undefined,
+                                    status: statusFilter || undefined,
+                                    startHour: startHour || undefined,
+                                    endHour: endHour || undefined,
+                                    schoolName: undefined,
+                                    schoolId: (selectedClient && (selectedClient.id || selectedClient.value || selectedClient._id)) || clientId,
+                                    page: p
+                                });
                             }}
                             color="primary"
                         />
