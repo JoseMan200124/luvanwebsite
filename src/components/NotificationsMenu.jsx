@@ -14,6 +14,7 @@ import {
     DialogContent,
     DialogActions,
     Button,
+    Chip,
 } from '@mui/material';
 import { Notifications, ClearAll, Close } from '@mui/icons-material';
 import styled from 'styled-components';
@@ -297,85 +298,98 @@ const NotificationsMenu = ({ authToken }) => {
                         </Typography>
                     </MenuItem>
                 ) : (
-                    notifications.map((notification, index) => (
-                        <div key={notification.id || index}>
-                            <MenuItem
-                                style={{
-                                    position: 'relative',
-                                    minHeight: '80px',
-                                    alignItems: 'flex-start',
-                                    paddingRight: 8,
-                                    ...getNotificationStyle(notification)
-                                }}
-                            >
-                                {/* Close (X) button */}
-                                <IconButton
-                                    size="small"
-                                    onClick={async (e) => {
-                                        e.stopPropagation();
-                                        try {
-                                            await markNotificationAsRead(notification.id);
-                                        } catch (err) {
-                                            // ignore
-                                        }
-                                        hideNotificationLocal(notification.id);
-                                    }}
-                                    style={{ position: 'absolute', right: 4, top: 4, zIndex: 5 }}
-                                >
-                                    <Close fontSize="small" />
-                                </IconButton>
-
-                                <div
-                                    onClick={() => handleNotificationClick(notification)}
+                    notifications.map((notification, index) => {
+                        const schoolName = notification.payment?.School?.name || null;
+                        return (
+                            <div key={notification.id || index}>
+                                <MenuItem
                                     style={{
-                                        display: 'flex',
-                                        flexDirection: 'column',
                                         position: 'relative',
-                                        width: '100%',
-                                        paddingRight: '28px',
-                                        paddingBottom: '28px',
-                                        cursor: 'pointer'
+                                        minHeight: '80px',
+                                        alignItems: 'flex-start',
+                                        paddingRight: 8,
+                                        paddingLeft: 16,
+                                        ...getNotificationStyle(notification)
                                     }}
                                 >
-                                    <Typography
-                                        variant="body1"
-                                        style={{
-                                            whiteSpace: 'pre-wrap',
-                                            overflowWrap: 'anywhere',
-                                            marginBottom: '4px',
-                                            fontWeight: 'bold',
+                                    {/* Close (X) button */}
+                                    <IconButton
+                                        size="small"
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try {
+                                                await markNotificationAsRead(notification.id);
+                                            } catch (err) {
+                                                // ignore
+                                            }
+                                            hideNotificationLocal(notification.id);
                                         }}
+                                        style={{ position: 'absolute', right: 4, top: 4, zIndex: 5 }}
                                     >
-                                        {notification.title}
-                                        {notification.status === 'unread' && ' (unread)'}
-                                    </Typography>
+                                        <Close fontSize="small" />
+                                    </IconButton>
 
-                                    <Typography
-                                        variant="body2"
+                                    <div
+                                        onClick={() => handleNotificationClick(notification)}
                                         style={{
-                                            whiteSpace: 'pre-wrap',
-                                            overflowWrap: 'anywhere',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            position: 'relative',
+                                            width: '100%',
+                                            paddingRight: '28px',
+                                            paddingBottom: '28px',
+                                            cursor: 'pointer'
                                         }}
                                     >
-                                        {notification.message}
-                                    </Typography>
+                                        {schoolName && (
+                                            <Chip
+                                                label={schoolName}
+                                                size="small"
+                                                color="primary"
+                                                variant="filled"
+                                                style={{ alignSelf: 'flex-start', marginBottom: 6 }}
+                                            />
+                                        )}
+                                        <Typography
+                                            variant="body1"
+                                            style={{
+                                                whiteSpace: 'pre-wrap',
+                                                overflowWrap: 'anywhere',
+                                                marginBottom: '4px',
+                                                fontWeight: 'bold',
+                                            }}
+                                        >
+                                            {notification.title}
+                                            {notification.status === 'unread' && ' (unread)'}
+                                        </Typography>
 
-                                    <Typography
-                                        variant="caption"
-                                        color="textSecondary"
-                                        style={{
-                                            position: 'absolute',
-                                            right: '8px',
-                                            bottom: '8px',
-                                        }}
-                                    >
-                                        {new Date(notification.createdAt).toLocaleString()}
-                                    </Typography>
-                                </div>
-                            </MenuItem>
-                            {index < notifications.length - 1 && <Divider />}
-                        </div>
-                    ))
+                                        <Typography
+                                            variant="body2"
+                                            style={{
+                                                whiteSpace: 'pre-wrap',
+                                                overflowWrap: 'anywhere',
+                                            }}
+                                        >
+                                            {notification.message}
+                                        </Typography>
+
+                                        <Typography
+                                            variant="caption"
+                                            color="textSecondary"
+                                            style={{
+                                                position: 'absolute',
+                                                right: '8px',
+                                                bottom: '8px',
+                                            }}
+                                        >
+                                            {new Date(notification.createdAt).toLocaleString()}
+                                        </Typography>
+                                    </div>
+                                </MenuItem>
+                                {index < notifications.length - 1 && <Divider />}
+                            </div>
+                        );
+                    })
                 )}
             </Menu>
 
