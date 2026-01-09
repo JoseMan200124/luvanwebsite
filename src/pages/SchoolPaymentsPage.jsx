@@ -286,8 +286,12 @@ const SchoolPaymentsPage = () => {
             setTotalInactiveCount(typeof res.data.totalInactiveCount === 'number' ? res.data.totalInactiveCount : inactivePayments.length);
             setPage(0);
         } catch (err) {
-            console.error('fetchAllPayments', err);
-            setSnackbar({ open: true, message: 'Error cargando pagos', severity: 'error' });
+            console.error('Error cargando pagos:', err);
+            if (err.response?.status === 403) {
+                setSnackbar({ open: true, message: `Sin permisos: ${err.response?.data?.message || 'No autorizado'}`, severity: 'error' });
+            } else {
+                setSnackbar({ open: true, message: 'Error cargando pagos', severity: 'error' });
+            }
         }
     };
 
@@ -795,9 +799,15 @@ const SchoolPaymentsPage = () => {
     }, [location.search, schoolId, schoolYear, handleOpenRegister]);
 
     // If navigation provided a payment object in location.state, open the register dialog immediately
+    // NOTE: The payment from notification may not have full data. handleOpenRegister will fetch it from the query params path instead.
     useEffect(() => {
         const navPayment = location.state && location.state.payment ? location.state.payment : null;
         if (navPayment) {
+            // Skip this effect if we also have openRegister query param - let the query param handler deal with it
+            const qs = new URLSearchParams(location.search);
+            const hasOpenRegisterParam = qs.get('openRegister') === 'true' || qs.get('openRegister') === '1';
+            if (hasOpenRegisterParam) return;
+            
             try {
                 // directly open with provided payment object
                 // avoid multiple opens when navigation state re-triggers
@@ -805,19 +815,6 @@ const SchoolPaymentsPage = () => {
                 if (!processedOpenRegisterRef.current.has(key)) {
                     processedOpenRegisterRef.current.add(key);
                     handleOpenRegister(navPayment);
-                }
-                // if the navigation also included a receipt id in query, preload it
-                const qs = new URLSearchParams(location.search);
-                const receiptIdFromQuery = qs.get('receiptId');
-                if (receiptIdFromQuery) {
-                    (async () => {
-                        try {
-                            const recRes = await api.get(`/parents/${navPayment.User?.id || navPayment.userId}/receipts`);
-                            const recs = recRes.data.receipts || [];
-                            const matched = recs.find(r => String(r.id) === String(receiptIdFromQuery));
-                            if (matched) setSelectedReceipt(matched);
-                        } catch (e) { /* ignore */ }
-                    })();
                 }
             } catch (e) {
                 // ignore
