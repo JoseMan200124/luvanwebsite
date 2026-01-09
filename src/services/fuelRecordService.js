@@ -93,6 +93,15 @@ export const createFuelRecord = async (data) => {
 };
 
 /**
+ * Crear un nuevo registro de combustible desde la plataforma web.
+ * Usa un endpoint separado para no afectar la lógica de la app móvil.
+ */
+export const createFuelRecordWeb = async (data) => {
+    const response = await api.post(`/fuel-records/web`, data);
+    return response.data;
+};
+
+/**
  * Actualizar un registro de combustible
  * @param {number} id - ID del registro
  * @param {Object} data - Datos actualizados

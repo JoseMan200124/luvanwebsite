@@ -44,6 +44,7 @@ import {
     getFuelRecords, 
     getFuelStatistics, 
     getFuelRecordById,
+    createFuelRecordWeb,
     FUELING_REASONS,
     FUEL_TYPES
 } from '../services/fuelRecordService';
@@ -62,8 +63,12 @@ const FuelRecordsPage = () => {
 
     // Filtros
     const [schools, setSchools] = useState([]);
+    const [corporations, setCorporations] = useState([]);
     const [buses, setBuses] = useState([]);
-    const [selectedSchool, setSelectedSchool] = useState('');
+    const [pilots, setPilots] = useState([]);
+    const [clientRouteNumbers, setClientRouteNumbers] = useState([]);
+    // selectedClient format: '' | 'school-<id>' | 'corp-<id>'
+    const [selectedClient, setSelectedClient] = useState(null);
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedFuelType, setSelectedFuelType] = useState('');
@@ -74,6 +79,23 @@ const FuelRecordsPage = () => {
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState(null);
+
+    // Crear registro
+    const [createOpen, setCreateOpen] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [createForm, setCreateForm] = useState({
+        fuelingReason: '',
+        fuelType: '',
+        client: '', // format: 'school-<id>' or 'corp-<id>'
+        busId: '',
+        pilotId: '',
+        routeNumber: '',
+        pricePerGallon: '',
+        gallonage: '',
+        recordDateDate: moment(),
+        recordDateTime: moment().format('hh:mm A'),
+        notes: ''
+    });
 
     // Estadísticas
     const [statistics, setStatistics] = useState({
@@ -86,10 +108,23 @@ const FuelRecordsPage = () => {
 
     useEffect(() => {
         fetchSchools();
+        fetchCorporations();
         fetchBusesBySchool();
+        fetchPilots();
         fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const fetchPilots = async () => {
+        try {
+            const response = await api.get('/users/pilots');
+            const pilotsData = Array.isArray(response.data?.users) ? response.data.users : (response.data || []);
+            setPilots(pilotsData);
+        } catch (error) {
+            console.error('Error al cargar pilotos:', error);
+            setPilots([]);
+        }
+    };
 
     // No dependemos del colegio para las placas; cargamos todos los buses al montar.
 
@@ -97,7 +132,7 @@ const FuelRecordsPage = () => {
         fetchFuelRecords();
         fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, startDate, endDate]);
+    }, [page, rowsPerPage, selectedClient, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, startDate, endDate]);
 
     const fetchSchools = async () => {
         try {
@@ -123,11 +158,45 @@ const FuelRecordsPage = () => {
         }
     };
 
-    // Opciones de placas: si hay colegio seleccionado, mostrar solo las placas asociadas a ese colegio.
-    const plateOptions = selectedSchool
+    const fetchCorporations = async () => {
+        try {
+            const response = await api.get('/corporations');
+            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
+            setCorporations(corporationsData);
+        } catch (error) {
+            console.error('Error al cargar corporaciones:', error);
+            setCorporations([]);
+        }
+    };
+
+    const fetchBusesByCorporation = async (corporationId) => {
+        try {
+            const url = corporationId ? `/buses/corporation/${corporationId}` : '/buses';
+            const response = await api.get(url);
+            const busesData = Array.isArray(response.data) ? response.data : (response.data?.buses || []);
+            setBuses(busesData);
+        } catch (error) {
+            console.error('Error al cargar buses:', error);
+            setBuses([]);
+        }
+    };
+
+    // Opciones de cliente (colegios + corporaciones) y placas
+    const clientOptions = [
+        ...schools.map(s => ({ label: `${s.name} (Colegio)`, value: `school-${s.id}`, type: 'school', id: s.id })),
+        ...corporations.map(c => ({ label: `${c.name} (Corporación)`, value: `corp-${c.id}`, type: 'corp', id: c.id })),
+    ];
+
+    const plateOptions = selectedClient
         ? [...new Set(
             buses
-                .filter(b => String(b.schoolId) === String(selectedSchool) || String(b.school?.id) === String(selectedSchool))
+                .filter(b => {
+                    if (!selectedClient) return false;
+                    const { type, id } = selectedClient;
+                    if (type === 'school') return String(b.schoolId) === String(id) || String(b.school?.id) === String(id);
+                    if (type === 'corp') return String(b.corporationId) === String(id) || String(b.corporation?.id) === String(id);
+                    return false;
+                })
                 .map(b => b.plate)
                 .filter(Boolean)
         )].sort()
@@ -138,7 +207,68 @@ const FuelRecordsPage = () => {
             setSelectedPlate('');
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedSchool, buses]);
+    }, [selectedClient, buses]);
+
+    useEffect(() => {
+        if (selectedClient) {
+            const { type, id } = selectedClient;
+            if (type === 'school') {
+                fetchBusesBySchool(id);
+            } else if (type === 'corp') {
+                fetchBusesByCorporation(id);
+            }
+        } else {
+            // load all buses
+            fetchBusesBySchool();
+        }
+        // fetch route numbers for filter area
+        fetchRouteNumbersForClient(selectedClient).catch(() => setClientRouteNumbers([]));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedClient]);
+
+    // keep routeNumbers in sync for the create modal when its client changes
+    useEffect(() => {
+        if (createForm.client) {
+            fetchRouteNumbersForClient(createForm.client).catch(() => setClientRouteNumbers([]));
+        } else {
+            // if no client in create modal, clear client-specific routeNumbers
+            setClientRouteNumbers([]);
+            // also clear any previously selected routeNumber in the create form
+            setCreateForm(prev => ({ ...prev, routeNumber: '' }));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [createForm.client]);
+
+    // Fetch route numbers (routeNumbers field) for a given client object { type, id }
+    const fetchRouteNumbersForClient = async (client) => {
+        if (!client) {
+            setClientRouteNumbers([]);
+            return [];
+        }
+        try {
+            const { type, id } = client;
+            if (type === 'school') {
+                const resp = await api.get(`/schools/${id}`);
+                const rn = resp.data?.school?.routeNumbers || [];
+                const arr = Array.isArray(rn) ? rn.map(x => String(x)) : [];
+                setClientRouteNumbers(arr);
+                return arr;
+            }
+            if (type === 'corp') {
+                const resp = await api.get(`/corporations/${id}`);
+                const rn = resp.data?.corporation?.routeNumbers || [];
+                const arr = Array.isArray(rn) ? rn.map(x => String(x)) : [];
+                setClientRouteNumbers(arr);
+                return arr;
+            }
+        } catch (error) {
+            console.error('Error al cargar routeNumbers del cliente:', error);
+            setClientRouteNumbers([]);
+            return [];
+        }
+        setClientRouteNumbers([]);
+        return [];
+    };
 
     const fetchFuelRecords = async () => {
         setLoading(true);
@@ -148,7 +278,11 @@ const FuelRecordsPage = () => {
                 limit: rowsPerPage,
             };
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
+            if (selectedClient) {
+                const { type, id } = selectedClient;
+                if (type === 'school') filters.schoolId = id;
+                if (type === 'corp') filters.corporationId = id;
+            }
             if (selectedPlate) filters.plate = selectedPlate;
             if (selectedRoute) filters.routeNumber = selectedRoute;
             if (selectedFuelingReason) filters.fuelingReason = selectedFuelingReason;
@@ -180,7 +314,11 @@ const FuelRecordsPage = () => {
         try {
             const filters = {};
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
+            if (selectedClient) {
+                    const { type, id } = selectedClient || {};
+                    if (type === 'school') filters.schoolId = id;
+                    if (type === 'corp') filters.corporationId = id;
+                }
             if (selectedPlate) filters.plate = selectedPlate;
             if (selectedRoute) filters.routeNumber = selectedRoute;
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
@@ -281,6 +419,97 @@ const FuelRecordsPage = () => {
         }).format(amount || 0);
     };
 
+    // Crear registro: handlers
+    const handleCloseCreate = () => {
+        setCreateOpen(false);
+        setCreating(false);
+        setCreateForm({
+            fuelingReason: '',
+            fuelType: '',
+            client: '',
+            busId: '',
+            pilotId: '',
+            routeNumber: '',
+            pricePerGallon: '',
+            gallonage: '',
+            recordDateDate: moment(),
+            recordDateTime: moment(),
+            notes: ''
+        });
+    };
+
+    const handleCreateChange = (field, value) => {
+        // If the client changes, clear previously selected routeNumber to avoid stale values
+        if (field === 'client') {
+            setCreateForm(prev => ({ ...prev, client: value, routeNumber: '' }));
+            return;
+        }
+        setCreateForm(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleCreateSubmit = async () => {
+        // Validar campos requeridos: fuelingReason, fuelType, client, busId, pricePerGallon, gallonage
+        const required = ['fuelingReason', 'fuelType', 'client', 'busId', 'pricePerGallon', 'gallonage'];
+        for (const key of required) {
+            if (createForm[key] === '' || createForm[key] === null || createForm[key] === undefined) {
+                window.alert('Por favor complete los campos requeridos.');
+                return;
+            }
+        }
+
+        // Combine selected date and time into a single ISO timestamp
+        let recordDateIso = null;
+        if (createForm.recordDateDate && createForm.recordDateTime) {
+            const datePart = moment(createForm.recordDateDate);
+            const timePart = moment(createForm.recordDateTime, 'hh:mm A');
+            if (timePart.isValid()) {
+                datePart.hour(timePart.hour());
+                datePart.minute(timePart.minute());
+                datePart.second(0);
+                recordDateIso = datePart.toISOString();
+            }
+        }
+
+        const payload = {
+            fuelingReason: createForm.fuelingReason,
+            fuelType: createForm.fuelType,
+            busId: Number(createForm.busId),
+            pilotId: createForm.pilotId ? Number(createForm.pilotId) : undefined,
+            routeNumber: createForm.routeNumber || undefined,
+            pricePerGallon: Number(createForm.pricePerGallon),
+            gallonage: Number(createForm.gallonage),
+            recordDate: recordDateIso || new Date().toISOString(),
+            notes: createForm.notes || undefined,
+        };
+
+        // Map client to schoolId or corporationId
+        if (createForm.client) {
+            const { type, id } = createForm.client || {};
+            if (type === 'school') payload.schoolId = Number(id);
+            if (type === 'corp') payload.corporationId = Number(id);
+        }
+
+        try {
+            setCreating(true);
+            const response = await createFuelRecordWeb(payload);
+            if (response && response.success) {
+                handleCloseCreate();
+                // Refresh list and stats
+                setPage(0);
+                fetchFuelRecords();
+                fetchStatistics();
+                window.alert('Registro creado exitosamente');
+            } else {
+                window.alert('No se pudo crear el registro.');
+            }
+        } catch (error) {
+            console.error('Error al crear registro:', error);
+            window.alert('Error al crear registro. Revise la consola.');
+        } finally {
+            setCreating(false);
+        }
+    };
+
     return (
         <LocalizationProvider dateAdapter={AdapterMoment}>
             <Container>
@@ -352,28 +581,20 @@ const FuelRecordsPage = () => {
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
                         <Grid item xs="auto" sm="auto" md={"auto"}>
-                            <FormControl fullWidth sx={{ width: 250 }}>
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={selectedSchool}
-                                    onChange={(e) => {
-                                        setSelectedSchool(e.target.value);
-                                        setSelectedRoute('');
-                                    }}
-                                    label="Colegio"
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {schools.map((school) => (
-                                        <MenuItem key={school.id} value={school.id}>
-                                            {school.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                                <Autocomplete
+                                    options={clientOptions}
+                                    value={selectedClient}
+                                    onChange={(e, newValue) => { setSelectedClient(newValue); setSelectedRoute(''); setSelectedPlate(''); }}
+                                    getOptionLabel={(option) => option?.label || ''}
+                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
+                                    sx={{ width: 250 }}
+                                    isOptionEqualToValue={(opt, val) => opt?.value === val?.value}
+                                    clearOnEscape
+                                />
                         </Grid>
 
-                        <Grid item xs="auto" sm="auto" md="auto">
-                            <FormControl fullWidth sx={{ width: 120 }}>
+                        <Grid item xs="auto" sm="auto" md={"auto"}>
+                                <FormControl fullWidth sx={{ width: 120 }}>
                                 <InputLabel>Ruta</InputLabel>
                                 <Select
                                     value={selectedRoute}
@@ -382,12 +603,10 @@ const FuelRecordsPage = () => {
                                         setSelectedPlate('');
                                     }}
                                     label="Ruta"
-                                    disabled={!selectedSchool}
+                                    disabled={!selectedClient}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
-                                    {[...new Set(
-                                        (selectedSchool ? buses.filter(b => String(b.schoolId) === String(selectedSchool) || String(b.school?.id) === String(selectedSchool)) : []
-                                    ).map(b => b.routeNumber).filter(Boolean))].sort((a, b) => a - b).map((route) => (
+                                    {((selectedClient ? clientRouteNumbers : [...new Set(buses.map(b => b.routeNumber).filter(Boolean))]).map(String)).sort((a,b) => a - b).map((route) => (
                                         <MenuItem key={route} value={route}>
                                             {route}
                                         </MenuItem>
@@ -468,7 +687,7 @@ const FuelRecordsPage = () => {
                             <Box>
                                 <Tooltip title="Limpiar filtros">
                                     <Button onClick={() => {
-                                        setSelectedSchool('');
+                                        setSelectedClient('');
                                         setSelectedPlate('');
                                         setSelectedRoute('');
                                         setSelectedFuelingReason('');
@@ -482,6 +701,9 @@ const FuelRecordsPage = () => {
                                         Limpiar
                                     </Button>
                                 </Tooltip>
+                                <Button onClick={() => setCreateOpen(true)} variant="contained" color="primary" sx={{ mr: 1 }}>
+                                    Nuevo Registro
+                                </Button>
                                 <Tooltip title="Actualizar">
                                     <IconButton onClick={handleRefresh} color="primary">
                                         <RefreshIcon />
@@ -505,7 +727,7 @@ const FuelRecordsPage = () => {
                                     <TableHead>
                                         <TableRow>
                                             <TableCell>Fecha</TableCell>
-                                            <TableCell>Colegio</TableCell>
+                                            <TableCell>Cliente</TableCell>
                                             <TableCell>Ruta</TableCell>
                                             <TableCell>Placa</TableCell>
                                             <TableCell>Piloto</TableCell>
@@ -524,7 +746,7 @@ const FuelRecordsPage = () => {
                                                     {moment(record.recordDate).format('DD/MM/YYYY HH:mm')}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {record.school?.name || 'N/A'}
+                                                    {record.school?.name || record.corporation?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
                                                     {record.routeNumber || 'N/A'}
@@ -595,6 +817,158 @@ const FuelRecordsPage = () => {
                     )}
                 </Paper>
 
+                {/* Modal de Crear Registro */}
+                <Dialog
+                    open={createOpen}
+                    onClose={handleCloseCreate}
+                    maxWidth="sm"
+                    fullWidth
+                >
+                    <DialogTitle>Crear Registro de Combustible</DialogTitle>
+                    <DialogContent dividers>
+                        <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                            <Grid item xs={12} sm={6}>
+                                <Autocomplete
+                                    options={clientOptions}
+                                    value={createForm.client}
+                                    onChange={(e, newValue) => handleCreateChange('client', newValue)}
+                                    getOptionLabel={(option) => option?.label || ''}
+                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
+                                    fullWidth
+                                    isOptionEqualToValue={(opt, val) => opt?.value === val?.value}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <Autocomplete
+                                    options={buses.map(b => ({ label: b.plate, id: b.id, routeNumber: b.routeNumber }))}
+                                    value={createForm.busId ? (buses.find(x => x.id === createForm.busId) ? { label: buses.find(x => x.id === createForm.busId).plate, id: createForm.busId } : null) : null}
+                                    onChange={(e, newValue) => {
+                                        handleCreateChange('busId', newValue ? newValue.id : '');
+                                    }}
+                                    getOptionLabel={(option) => option?.label || ''}
+                                    renderInput={(params) => <TextField {...params} label="Bus (Placa)" variant="outlined" />}
+                                    fullWidth
+                                    isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <Autocomplete
+                                    options={pilots.map(p => ({ label: p.name, id: p.id }))}
+                                    value={createForm.pilotId ? (pilots.find(x => x.id === createForm.pilotId) ? { label: pilots.find(x => x.id === createForm.pilotId).name, id: createForm.pilotId } : null) : null}
+                                    onChange={(e, newValue) => handleCreateChange('pilotId', newValue ? newValue.id : '')}
+                                    getOptionLabel={(option) => option?.label || ''}
+                                    renderInput={(params) => <TextField {...params} label="Piloto" variant="outlined" />}
+                                    fullWidth
+                                    isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <Autocomplete
+                                    options={(createForm.client ? (clientRouteNumbers.length ? clientRouteNumbers : []) : []).map(String).sort((a,b) => a - b)}
+                                    value={createForm.routeNumber || null}
+                                    onChange={(e, newValue) => handleCreateChange('routeNumber', newValue || '')}
+                                    getOptionLabel={(option) => String(option)}
+                                    renderInput={(params) => <TextField {...params} label="Número de Ruta" variant="outlined" />}
+                                    fullWidth
+                                    disabled={!createForm.client}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Razón de Abastecimiento</InputLabel>
+                                    <Select
+                                        value={createForm.fuelingReason}
+                                        label="Razón de Abastecimiento"
+                                        onChange={(e) => handleCreateChange('fuelingReason', e.target.value)}
+                                    >
+                                        <MenuItem value="">Seleccione</MenuItem>
+                                        {Object.entries(FUELING_REASONS).map(([key, label]) => (
+                                            <MenuItem key={key} value={key}>{label}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Tipo Combustible</InputLabel>
+                                    <Select
+                                        value={createForm.fuelType}
+                                        label="Tipo Combustible"
+                                        onChange={(e) => handleCreateChange('fuelType', e.target.value)}
+                                    >
+                                        <MenuItem value="">Seleccione</MenuItem>
+                                        {Object.entries(FUEL_TYPES).map(([key, label]) => (
+                                            <MenuItem key={key} value={key}>{label}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    label="Galones"
+                                    type="number"
+                                    fullWidth
+                                    value={createForm.gallonage}
+                                    onChange={(e) => handleCreateChange('gallonage', e.target.value)}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    label="Precio por Galón"
+                                    type="number"
+                                    fullWidth
+                                    value={createForm.pricePerGallon}
+                                    onChange={(e) => handleCreateChange('pricePerGallon', e.target.value)}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <DatePicker
+                                    label="Fecha"
+                                    value={createForm.recordDateDate}
+                                    onChange={(newValue) => handleCreateChange('recordDateDate', newValue)}
+                                    renderInput={(params) => <TextField fullWidth {...params} />}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    label="Hora (HH:mm)"
+                                    type="time"
+                                    value={createForm.recordDateTime}
+                                    onChange={(e) => handleCreateChange('recordDateTime', e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    fullWidth
+                                />
+                            </Grid>
+
+                            <Grid item xs={12}>
+                                <TextField
+                                    label="Notas (opcional)"
+                                    fullWidth
+                                    multiline
+                                    minRows={2}
+                                    value={createForm.notes}
+                                    onChange={(e) => handleCreateChange('notes', e.target.value)}
+                                />
+                            </Grid>
+                        </Grid>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCloseCreate} disabled={creating}>Cancelar</Button>
+                        <Button onClick={handleCreateSubmit} variant="contained" color="primary" disabled={creating}>
+                            {creating ? 'Creando...' : 'Crear'}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
                 {/* Modal de Detalles */}
                 <Dialog
                     open={detailsOpen}
@@ -640,10 +1014,10 @@ const FuelRecordsPage = () => {
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
                                     <Typography variant="subtitle2" color="textSecondary">
-                                        Colegio
+                                        Cliente
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {selectedRecord.school?.name || 'N/A'}
+                                        {selectedRecord.school?.name || selectedRecord.corporation?.name || 'N/A'}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
