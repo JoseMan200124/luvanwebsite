@@ -29,6 +29,30 @@ const NotificationIconButton = styled(IconButton)`
 `;
 
 const NotificationsMenu = ({ authToken }) => {
+    // Helper: ensure links to SchoolPaymentsPage use the requested schoolYear (used when opening from notifications)
+    const forceSchoolYearInLink = (rawLink, year = 2025) => {
+        if (!rawLink || typeof rawLink !== 'string') return rawLink;
+        try {
+            const base = window.location.origin;
+            const u = new URL(rawLink, base);
+            // Replace path segment /admin/escuelas/{YEAR}/ with target year
+            if (/^\/admin\/escuelas\/\d{4}\//.test(u.pathname)) {
+                u.pathname = u.pathname.replace(/^\/admin\/escuelas\/\d{4}\//, `/admin/escuelas/${year}/`);
+                return u.pathname + u.search;
+            }
+            // Fallback: set schoolYear query param
+            u.searchParams.set('schoolYear', String(year));
+            return u.pathname + u.search;
+        } catch (e) {
+            // Best-effort string replace
+            try {
+                return rawLink.replace(/(\/admin\/escuelas\/)\d{4}(\/)/, `$1${year}$2`);
+            } catch (_) {
+                return rawLink;
+            }
+        }
+    };
+
     const [notifications, setNotifications] = useState([]);
     const [anchorEl, setAnchorEl] = useState(null);
     const menuOpen = Boolean(anchorEl);
@@ -118,7 +142,8 @@ const NotificationsMenu = ({ authToken }) => {
             try {
                 setAnchorEl(null);
                 const stateObj = notification.payment ? { payment: notification.payment } : undefined;
-                navigate(notification.link, { state: stateObj });
+                const linkToOpen = forceSchoolYearInLink(notification.link, 2025);
+                navigate(linkToOpen, { state: stateObj });
             } catch (e) {
                 console.error('Error navigating to notification link', e);
             }
@@ -425,16 +450,17 @@ const NotificationsMenu = ({ authToken }) => {
                             // Build URL from notification.link if available, else construct
                             let link = notif && notif.link ? notif.link : (rec ? `/admin/escuelas/${new Date().getFullYear()}/pagos?openRegister=true&receiptId=${rec.id}&userId=${rec.userId}` : null);
                             // ensure openRegister explicit
-                            if (link) {
-                                const base = window.location.origin;
-                                const u = new URL(link, base);
-                                u.searchParams.set('openRegister', 'true');
-                                if (rec && rec.id) u.searchParams.set('receiptId', rec.id);
-                                if (rec && rec.userId) u.searchParams.set('userId', rec.userId);
-                                const state = notif && notif.payment ? { payment: notif.payment } : (rec ? { receiptId: rec.id } : undefined);
-                                setPreviewOpen(false);
-                                navigate(u.pathname + u.search, { state });
-                            }
+                                if (link) {
+                                    const base = window.location.origin;
+                                    const u = new URL(link, base);
+                                    u.searchParams.set('openRegister', 'true');
+                                    if (rec && rec.id) u.searchParams.set('receiptId', rec.id);
+                                    if (rec && rec.userId) u.searchParams.set('userId', rec.userId);
+                                    const state = notif && notif.payment ? { payment: notif.payment } : (rec ? { receiptId: rec.id } : undefined);
+                                    setPreviewOpen(false);
+                                    const finalPath = forceSchoolYearInLink(u.pathname + u.search, 2025);
+                                    navigate(finalPath, { state });
+                                }
                         } catch (e) {
                             console.error('Error navigating to register from preview', e);
                         }
