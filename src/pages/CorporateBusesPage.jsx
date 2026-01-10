@@ -55,6 +55,8 @@ const CorporateBusesPage = () => {
     const [routeBusAssignments, setRouteBusAssignments] = useState({});
     const [pilotAssignments, setPilotAssignments] = useState({});
     const [monitorAssignments, setMonitorAssignments] = useState({});
+    // Per-route pilot assignments for corporation routes when no bus is selected
+    const [routePilotAssignments, setRoutePilotAssignments] = useState({});
     const [availablePilots, setAvailablePilots] = useState([]);
     const [availableMonitors, setAvailableMonitors] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -152,25 +154,109 @@ const CorporateBusesPage = () => {
         setAvailableMonitors([]);
     }, []);
 
+    const fetchRouteAssignments = useCallback(async () => {
+        if (!corporationId) return;
+        try {
+            const response = await api.get(`/route-assignments?corporationId=${corporationId}`, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            const assignments = response.data.assignments || response.data || [];
+            const routePilots = {};
+            assignments.forEach(assignment => {
+                if (assignment.routeNumber && assignment.pilotId) {
+                    routePilots[assignment.routeNumber] = assignment.pilotId;
+                }
+            });
+            setRoutePilotAssignments(routePilots);
+        } catch (err) {
+            console.error('Error fetching route assignments:', err);
+        }
+    }, [auth.token, corporationId]);
+
     useEffect(() => {
         if (auth.token && corporationId) {
             setLoading(true);
-            Promise.all([fetchCorporationData(), fetchBuses(), fetchPilots(), fetchMonitors()])
+            Promise.all([fetchCorporationData(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()])
                 .finally(() => setLoading(false));
         }
-    }, [auth.token, corporationId, fetchCorporationData, fetchBuses, fetchPilots, fetchMonitors]);
+    }, [auth.token, corporationId, fetchCorporationData, fetchBuses, fetchPilots, fetchMonitors, fetchRouteAssignments]);
 
-    const handleAssignmentChange = (routeNumber, busId) => {
+    const handleAssignmentChange = (routeNumber, newBusId) => {
+        // Get the previous bus assigned to this route
+        const previousBusId = routeBusAssignments[routeNumber];
+        
+        // If there was a previous bus and a new bus, transfer pilot
+        if (previousBusId && newBusId && previousBusId !== newBusId) {
+            const previousPilotId = pilotAssignments[previousBusId];
+            
+            // Transfer pilot to the new bus
+            setPilotAssignments(prev => {
+                const updated = { ...prev };
+                // Assign the pilot from the previous bus to the new bus
+                if (previousPilotId) {
+                    updated[newBusId] = previousPilotId;
+                }
+                // Clear the previous bus (no longer assigned to this route)
+                delete updated[previousBusId];
+                return updated;
+            });
+        } else if (previousBusId && !newBusId) {
+            // When removing the bus, transfer pilot to route-level assignment
+            const previousPilotId = pilotAssignments[previousBusId];
+            
+            if (previousPilotId) {
+                // Transfer to route-level assignment
+                setRoutePilotAssignments(prev => ({
+                    ...prev,
+                    [routeNumber]: previousPilotId
+                }));
+                
+                // Clear the bus assignment
+                setPilotAssignments(prev => {
+                    const updated = { ...prev };
+                    delete updated[previousBusId];
+                    return updated;
+                });
+            }
+        }
+        
         setRouteBusAssignments(prev => ({
             ...prev,
-            [routeNumber]: busId || null
+            [routeNumber]: newBusId || null
         }));
+        
+        // If a per-route pilot was set and now a bus is selected, transfer it
+        if (newBusId) {
+            const currentRoutePilot = routePilotAssignments[routeNumber];
+            
+            if (currentRoutePilot) {
+                // Update pilot assignment for the new bus
+                setPilotAssignments(prev => ({
+                    ...prev,
+                    [newBusId]: currentRoutePilot
+                }));
+
+                // Clear route-level pilot assignment
+                setRoutePilotAssignments(prev => {
+                    const updated = { ...prev };
+                    delete updated[routeNumber];
+                    return updated;
+                });
+            }
+        }
     };
 
     const handlePilotAssignmentChange = (busId, pilotId) => {
         setPilotAssignments(prev => ({
             ...prev,
             [busId]: pilotId || null
+        }));
+    };
+
+    const handleRoutePilotChange = (routeNumber, pilotId) => {
+        setRoutePilotAssignments(prev => ({
+            ...prev,
+            [routeNumber]: pilotId || null
         }));
     };
 
@@ -184,47 +270,195 @@ const CorporateBusesPage = () => {
     const handleSaveAssignments = async () => {
         setSaving(true);
         try {
-            // First, clear all existing assignments for this corporation
-            const busesToClear = buses.filter(bus => 
-                bus.corporationId === parseInt(corporationId) && (bus.routeNumber || bus.pilotId || bus.monitoraId)
-            );
-            
-            for (const bus of busesToClear) {
-                await api.put(`/buses/${bus.id}`, {
-                    routeNumber: null,
-                    pilotId: null,
-                    monitoraId: null,
-                    corporationId: null
-                }, {
-                    headers: { Authorization: `Bearer ${auth.token}` }
-                });
-            }
+            const errors = [];
+            const successfulChanges = [];
 
-            // Then, assign the new route numbers, pilots and monitors
-            for (const [routeNumber, busId] of Object.entries(routeBusAssignments)) {
-                if (busId && routeNumber) {
-                    const updateData = {
-                        routeNumber: routeNumber,
-                        corporationId: parseInt(corporationId),
-                        schoolId: null // Ensure it's not assigned to a school
+            // Get current buses state from server
+            const currentBusesResponse = await api.get('/buses', {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            const currentBuses = currentBusesResponse.data;
+
+            // Create map of current assignments on the server
+            const serverAssignments = {};
+            currentBuses.forEach(bus => {
+                if (bus.corporationId === parseInt(corporationId) && bus.routeNumber) {
+                    serverAssignments[bus.routeNumber] = {
+                        busId: bus.id,
+                        pilotId: bus.pilotId
                     };
+                }
+            });
 
-                    // Add pilot explicitly (null if not assigned)
-                    // Monitoras don't apply to corporations, always set to null
-                    updateData.pilotId = pilotAssignments[busId] ? pilotAssignments[busId] : null;
-                    updateData.monitoraId = null;
+            // Create map of desired assignments (current UI state)
+            const desiredAssignments = {};
+            Object.entries(routeBusAssignments).forEach(([routeNumber, busId]) => {
+                if (busId) {
+                    desiredAssignments[routeNumber] = {
+                        busId: busId,
+                        pilotId: pilotAssignments[busId] || null
+                    };
+                }
+            });
 
-                    await api.put(`/buses/${busId}`, updateData, {
-                        headers: { Authorization: `Bearer ${auth.token}` }
-                    });
+            // Process each route for changes
+            for (const routeNumber of corporationRouteNumbers) {
+                const serverData = serverAssignments[routeNumber];
+                const desiredData = desiredAssignments[routeNumber];
+
+                // Case 1: Route had a bus and now has none (only clear)
+                if (serverData && !desiredData) {
+                    try {
+                        await api.put(`/buses/${serverData.busId}`, {
+                            routeNumber: null,
+                            corporationId: null,
+                            pilotId: null,
+                            monitoraId: null
+                        }, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                        successfulChanges.push(`Ruta ${routeNumber}: bus ${getBusInfo(serverData.busId)} desasignado`);
+                    } catch (err) {
+                        const busInfo = getBusInfo(serverData.busId);
+                        errors.push(`Error al desasignar bus ${busInfo} de ruta ${routeNumber}: ${err.response?.data?.message || err.message}`);
+                    }
+                    continue;
+                }
+
+                // Case 2: Route had no bus and now has one (only assign)
+                if (!serverData && desiredData) {
+                    try {
+                        await api.put(`/buses/${desiredData.busId}`, {
+                            routeNumber: routeNumber,
+                            corporationId: parseInt(corporationId),
+                            pilotId: desiredData.pilotId,
+                            monitoraId: null, // Corporations don't use monitoras
+                            schoolId: null // Ensure it's not assigned to a school
+                        }, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                        successfulChanges.push(`Ruta ${routeNumber}: bus ${getBusInfo(desiredData.busId)} asignado`);
+                    } catch (err) {
+                        const busInfo = getBusInfo(desiredData.busId);
+                        const errorMsg = err.response?.data?.message;
+                        if (errorMsg) {
+                            errors.push(`Ruta ${routeNumber} - Bus ${busInfo}: ${errorMsg}`);
+                        } else {
+                            errors.push(`Error al asignar bus ${busInfo} a ruta ${routeNumber}: ${err.message}`);
+                        }
+                    }
+                    continue;
+                }
+
+                // Case 3: Route has same bus but pilot changed (only update)
+                if (serverData && desiredData && serverData.busId === desiredData.busId) {
+                    const needsUpdate = serverData.pilotId !== desiredData.pilotId;
+                    if (needsUpdate) {
+                        try {
+                            await api.put(`/buses/${desiredData.busId}`, {
+                                routeNumber: routeNumber,
+                                corporationId: parseInt(corporationId),
+                                pilotId: desiredData.pilotId,
+                                monitoraId: null
+                            }, {
+                                headers: { Authorization: `Bearer ${auth.token}` }
+                            });
+                            successfulChanges.push(`Ruta ${routeNumber}: actualizado piloto`);
+                        } catch (err) {
+                            const busInfo = getBusInfo(desiredData.busId);
+                            errors.push(`Error al actualizar bus ${busInfo} en ruta ${routeNumber}: ${err.response?.data?.message || err.message}`);
+                        }
+                    }
+                    continue;
+                }
+
+                // Case 4: Route changed bus (assign the new one)
+                if (serverData && desiredData && serverData.busId !== desiredData.busId) {
+                    // Assign the new bus to this route
+                    // Backend will automatically free the previous bus via automatic replacement
+                    try {
+                        await api.put(`/buses/${desiredData.busId}`, {
+                            routeNumber: routeNumber,
+                            corporationId: parseInt(corporationId),
+                            pilotId: desiredData.pilotId,
+                            monitoraId: null,
+                            schoolId: null
+                        }, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                        
+                        // NOTE: We don't manually clear the previous bus
+                        // Backend does it automatically when assigning the new bus
+                        // This avoids conflicts in bus exchange scenarios
+                        
+                        successfulChanges.push(`Ruta ${routeNumber}: cambiado de bus ${getBusInfo(serverData.busId)} a ${getBusInfo(desiredData.busId)}`);
+                    } catch (err) {
+                        // If new bus assignment fails, route keeps its original assignment
+                        const busInfo = getBusInfo(desiredData.busId);
+                        const errorMsg = err.response?.data?.message;
+                        if (errorMsg) {
+                            errors.push(`Ruta ${routeNumber} - Bus ${busInfo}: ${errorMsg}`);
+                        } else {
+                            errors.push(`Error al cambiar bus de ruta ${routeNumber} a ${busInfo}: ${err.message}`);
+                        }
+                    }
+                    continue;
                 }
             }
 
-            setSnackbar({ open: true, message: 'Asignaciones guardadas exitosamente', severity: 'success' });
-            fetchBuses(); // Refresh data
+            // Persist per-route pilot assignments (no bus) as RouteAssignments
+            for (const routeNumber of corporationRouteNumbers) {
+                const hasBus = !!routeBusAssignments[routeNumber];
+                const rp = routePilotAssignments[routeNumber] || null;
+                if (!hasBus && rp) {
+                    try {
+                        await api.post('/route-assignments', {
+                            corporationId: parseInt(corporationId),
+                            routeNumber: routeNumber,
+                            pilotId: rp
+                        }, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                        successfulChanges.push(`Ruta ${routeNumber}: asignación por ruta guardada`);
+                    } catch (err) {
+                        console.error('Error saving corporation route assignment:', err);
+                        errors.push(`Error al guardar asignación de ruta ${routeNumber}: ${err.response?.data?.message || err.message}`);
+                    }
+                } else if (!hasBus && !rp) {
+                    // Delete route assignment if no bus and no pilot
+                    try {
+                        await api.delete(`/route-assignments?corporationId=${corporationId}&routeNumber=${routeNumber}`, {
+                            headers: { Authorization: `Bearer ${auth.token}` }
+                        });
+                    } catch (err) {
+                        // Ignore 404 errors (no assignment to delete)
+                        if (err.response?.status !== 404) {
+                            console.error('Error deleting route assignment:', err);
+                        }
+                    }
+                }
+            }
+
+            // Show results
+            if (errors.length > 0) {
+                setSnackbar({ 
+                    open: true, 
+                    message: `Errores: ${errors.join('; ')}`, 
+                    severity: 'error' 
+                });
+            } else if (successfulChanges.length === 0) {
+                setSnackbar({ open: true, message: 'No hay cambios que guardar', severity: 'info' });
+            } else {
+                setSnackbar({ open: true, message: 'Asignaciones guardadas exitosamente', severity: 'success' });
+            }
+
+            // Only refresh if there were successful changes
+            if (successfulChanges.length > 0) {
+                fetchBuses(); // Refresh data only on success
+            }
         } catch (err) {
             console.error('Error saving assignments:', err);
-            setSnackbar({ open: true, message: 'Error al guardar asignaciones', severity: 'error' });
+            setSnackbar({ open: true, message: `Error al guardar asignaciones: ${err.response?.data?.message || err.message}`, severity: 'error' });
         } finally {
             setSaving(false);
         }
@@ -234,13 +468,14 @@ const CorporateBusesPage = () => {
         setRouteBusAssignments({});
         setPilotAssignments({});
         setMonitorAssignments({});
+        setRoutePilotAssignments({});
     };
 
     const handleRefresh = async () => {
         if (!corporationId) return;
         setLoading(true);
         try {
-            await Promise.all([fetchCorporationData(), fetchBuses(), fetchPilots(), fetchMonitors()]);
+            await Promise.all([fetchCorporationData(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()]);
             setSnackbar({ open: true, message: 'Datos actualizados', severity: 'success' });
         } catch (err) {
             console.error('Error refreshing data:', err);
@@ -255,22 +490,26 @@ const CorporateBusesPage = () => {
     };
 
     const getAvailableBuses = (currentRouteNumber) => {
+        // Obtener IDs de buses ya asignados a otras rutas de esta corporación en el estado actual
+        const busesAssignedToOtherRoutes = new Set();
+        Object.entries(routeBusAssignments).forEach(([routeNum, busId]) => {
+            if (routeNum !== currentRouteNumber && busId) {
+                busesAssignedToOtherRoutes.add(busId);
+            }
+        });
+
         return buses.filter(bus => {
-            // Bus is assigned to current route of this corporation
-            const isAssignedToCurrentRoute = bus.routeNumber === currentRouteNumber && 
-                bus.corporationId === parseInt(corporationId);
-            
-            // Bus is completely unassigned (no school, no corporation)
-            const isUnassigned = !bus.schoolId && !bus.corporationId;
-            
-            // Bus is assigned to another route of this same corporation (not available)
-            const isAssignedToOtherRouteInThisCorporation = bus.routeNumber && 
-                bus.routeNumber !== currentRouteNumber && 
-                bus.corporationId === parseInt(corporationId);
-            
-            // Available if: assigned to current route OR completely unassigned
-            // Not available if: assigned to another route in this corporation, or assigned to a school or other corporation
-            return isAssignedToCurrentRoute || (isUnassigned && !isAssignedToOtherRouteInThisCorporation);
+            // Si el bus está asignado a la ruta actual, siempre mostrarlo
+            if (routeBusAssignments[currentRouteNumber] === bus.id) {
+                return true;
+            }
+            // Excluir buses ya asignados a otras rutas de esta corporación en el estado actual
+            if (busesAssignedToOtherRoutes.has(bus.id)) {
+                return false;
+            }
+            // No excluir buses asignados a otros colegios/corporaciones
+            // El backend validará y mostrará un error apropiado si el bus ya está asignado
+            return true;
         });
     };
 
@@ -397,21 +636,38 @@ const CorporateBusesPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <Autocomplete
-                                                        disabled={!assignedBusId}
-                                                        options={availablePilots.slice().sort((a,b)=>{
-                                                            const an = (a.name || a.email || '').toLowerCase();
-                                                            const bn = (b.name || b.email || '').toLowerCase();
-                                                            return an < bn ? -1 : an > bn ? 1 : 0;
-                                                        })}
+                                                        disabled={false}
+                                                        options={assignedBusId
+                                                            ? availablePilots.slice().sort((a,b)=>{
+                                                                const an = (a.name || a.email || '').toLowerCase();
+                                                                const bn = (b.name || b.email || '').toLowerCase();
+                                                                return an < bn ? -1 : an > bn ? 1 : 0;
+                                                            })
+                                                            : availablePilots.filter(pilot => {
+                                                                const assignedPilots = new Set(Object.values(pilotAssignments).filter(Boolean));
+                                                                const routeAssignedPilots = new Set(Object.values(routePilotAssignments).filter(Boolean));
+                                                                return !assignedPilots.has(pilot.id) && !routeAssignedPilots.has(pilot.id);
+                                                            }).sort((a,b)=>{
+                                                                const an = (a.name || a.email || '').toLowerCase();
+                                                                const bn = (b.name || b.email || '').toLowerCase();
+                                                                return an < bn ? -1 : an > bn ? 1 : 0;
+                                                            })}
                                                         getOptionLabel={(option) => option ? (option.name || option.email) : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
-                                                        value={assignedBusId ? availablePilots.find(p => p.id === pilotAssignments[assignedBusId]) || null : null}
-                                                        onChange={(_, newValue) => assignedBusId && handlePilotAssignmentChange(assignedBusId, newValue ? newValue.id : null)}
+                                                        value={assignedBusId ? availablePilots.find(p => p.id === pilotAssignments[assignedBusId]) || null : (routePilotAssignments[routeNumber] ? availablePilots.find(p => p.id === routePilotAssignments[routeNumber]) || null : null)}
+                                                        onChange={(_, newValue) => {
+                                                            if (assignedBusId) {
+                                                                handlePilotAssignmentChange(assignedBusId, newValue ? newValue.id : null);
+                                                            } else {
+                                                                handleRoutePilotChange(routeNumber, newValue ? newValue.id : null);
+                                                            }
+                                                        }}
                                                         renderInput={(params) => (
                                                             <TextField
                                                                 {...params}
                                                                 label="Seleccionar Piloto"
                                                                 variant="outlined"
+                                                                helperText={!assignedBusId && routePilotAssignments[routeNumber] ? 'Asignación por ruta (sin bus)' : ''}
                                                             />
                                                         )}
                                                         clearOnEscape
@@ -434,7 +690,7 @@ const CorporateBusesPage = () => {
                                                     />
                                                 </TableCell>
                                                 <TableCell>
-                                                    {assignedBusId ? (
+                                                    {(assignedBusId || routePilotAssignments[routeNumber]) ? (
                                                         <Chip 
                                                             label="Asignado" 
                                                             color="success" 
@@ -468,7 +724,7 @@ const CorporateBusesPage = () => {
                                 • Solo se muestran buses que no están asignados a ningún colegio ni corporación
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
-                                • Los pilotos solo se pueden asignar si hay un bus asignado
+                                • Los pilotos se pueden asignar también sin un bus; se guardarán como asignaciones de ruta
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
                                 • Solo se muestran pilotos que pertenecen a esta corporación
