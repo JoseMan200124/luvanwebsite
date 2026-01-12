@@ -27,6 +27,7 @@ import MechanicRequestsPage from './pages/MechanicRequestsPage';
 import RouteTimeLogsPage from './pages/RouteTimeLogsPage';
 import FuelRecordsPage from './pages/FuelRecordsPage';
 import CorporationsPage from './pages/CorporationsPage';
+import AssignmentHistoryPage from './pages/AssignmentHistoryPage';
 
 export const modules = [
     {
@@ -201,6 +202,13 @@ export const modules = [
                 path: 'registro-actividades',
                 component: ActivityLogPage,
                 roles: ['Gestor', 'Administrador', 'Supervisor'],
+            },
+            {
+                key: 'historial-asignaciones',
+                name: 'Historial de Asignaciones',
+                path: 'historial-asignaciones',
+                component: AssignmentHistoryPage,
+                roles: ['Administrador', 'Gestor'],
             },
         ],
     },
