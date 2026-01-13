@@ -103,7 +103,8 @@ const CorporateBusesPage = () => {
             const resp = await api.get('/buses/simple', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            const allBuses = resp.data.buses || resp.data || [];
+            const respData = resp.data;
+            const allBuses = Array.isArray(respData) ? respData : (Array.isArray(respData?.buses) ? respData.buses : []);
             setBuses(allBuses);
 
             // Build map of current assignments (routeNumber -> busId)
@@ -277,7 +278,8 @@ const CorporateBusesPage = () => {
             const currentBusesResponse = await api.get('/buses', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            const currentBuses = currentBusesResponse.data;
+            const currentRespData = currentBusesResponse.data;
+            const currentBuses = Array.isArray(currentRespData) ? currentRespData : (Array.isArray(currentRespData?.buses) ? currentRespData.buses : []);
 
             // Create map of current assignments on the server
             const serverAssignments = {};

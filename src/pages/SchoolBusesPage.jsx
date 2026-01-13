@@ -96,7 +96,8 @@ const SchoolBusesPage = () => {
             const resp = await api.get('/buses/simple', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            const allBuses = resp.data.buses || resp.data || [];
+            const respData = resp.data;
+            const allBuses = Array.isArray(respData) ? respData : (Array.isArray(respData?.buses) ? respData.buses : []);
             setBuses(allBuses);
 
             // Construir mapa de asignaciones actuales (routeNumber -> busId)
@@ -329,7 +330,8 @@ const SchoolBusesPage = () => {
             const currentBusesResp = await api.get('/buses/simple', {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            const currentBuses = currentBusesResp.data.buses || currentBusesResp.data || [];
+            const currentRespData = currentBusesResp.data;
+            const currentBuses = Array.isArray(currentRespData) ? currentRespData : (Array.isArray(currentRespData?.buses) ? currentRespData.buses : []);
             
             // Helper para obtener info del bus por ID
             const getBusPlate = (busId) => {
