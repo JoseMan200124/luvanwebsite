@@ -338,7 +338,7 @@ const BulkScheduleUpdatePage = () => {
                                 <strong>Formato requerido:</strong> El archivo Excel debe contener las columnas:
                                 "Apellido Familia", "Estudiante X - Nombre", "Estudiante X - Grado", 
                                 "Estudiante X - [Día] - Hora [Franja]", "Estudiante X - [Día] - Ruta [Franja]", 
-                                "Estudiante X - [Día] - Parada [Franja]"
+                                "Estudiante X - [Día] - Nota Parada [Franja]"
                                 <br />
                                 Donde X = 1-4, Día = Lunes-Viernes, Franja = AM/MD/PM/EX
                             </Typography>

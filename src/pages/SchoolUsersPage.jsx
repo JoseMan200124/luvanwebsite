@@ -59,6 +59,7 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
+import BulkScheduleModal from '../components/modals/BulkScheduleModal';
 
 // Opciones de roles disponibles en esta vista: Padre solamente
 const roleOptions = [
@@ -105,6 +106,7 @@ const SchoolUsersPage = () => {
     // Nuevos estados para funcionalidades
     
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
+    const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
     const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
     const [openActivateConfirm, setOpenActivateConfirm] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
@@ -450,16 +452,16 @@ const SchoolUsersPage = () => {
                     headers.push(`Estudiante ${i} - Grado`);
                     headers.push(`Estudiante ${i} - Hora AM`);
                     headers.push(`Estudiante ${i} - Ruta AM`);
-                    headers.push(`Estudiante ${i} - Parada AM`);
+                    headers.push(`Estudiante ${i} - Nota Parada AM`);
                     headers.push(`Estudiante ${i} - Hora MD`);
                     headers.push(`Estudiante ${i} - Ruta MD`);
-                    headers.push(`Estudiante ${i} - Parada MD`);
+                    headers.push(`Estudiante ${i} - Nota Parada MD`);
                     headers.push(`Estudiante ${i} - Hora PM`);
                     headers.push(`Estudiante ${i} - Ruta PM`);
-                    headers.push(`Estudiante ${i} - Parada PM`);
+                    headers.push(`Estudiante ${i} - Nota Parada PM`);
                     headers.push(`Estudiante ${i} - Hora EX`);
                     headers.push(`Estudiante ${i} - Ruta EX`);
-                    headers.push(`Estudiante ${i} - Parada EX`);
+                    headers.push(`Estudiante ${i} - Nota Parada EX`);
                 }
                 headers.push(...contactCols);
 
@@ -1766,6 +1768,17 @@ const SchoolUsersPage = () => {
                         </Grid>
                         <Grid item xs={12} md={2}>
                             <Button
+                                variant="outlined"
+                                color="primary"
+                                startIcon={<FileUpload />}
+                                fullWidth
+                                onClick={() => setOpenBulkScheduleDialog(true)}
+                            >
+                                Carga Horarios
+                            </Button>
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                            <Button
                                 variant="contained"
                                 color="primary"
                                 startIcon={<Add />}
@@ -2053,6 +2066,9 @@ const SchoolUsersPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Modal: Carga masiva de horarios */}
+            <BulkScheduleModal open={openBulkScheduleDialog} onClose={() => setOpenBulkScheduleDialog(false)} schoolId={currentSchool?.id || schoolId} />
 
             {/* Diálogo de confirmación para eliminación de usuario */}
             <Dialog open={openDeleteConfirm} onClose={handleCancelDelete} maxWidth="xs" fullWidth>
