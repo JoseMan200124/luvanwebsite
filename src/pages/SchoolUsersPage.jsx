@@ -50,7 +50,9 @@ import {
     Mail,
     Add,
     FileUpload,
-    GetApp
+    GetApp,
+    ToggleOn,
+    ToggleOff
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
@@ -109,8 +111,10 @@ const SchoolUsersPage = () => {
     const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
     const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
     const [openActivateConfirm, setOpenActivateConfirm] = useState(false);
+    const [openSuspendConfirm, setOpenSuspendConfirm] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [activateLoading, setActivateLoading] = useState(false);
+    const [suspendLoading, setSuspendLoading] = useState(false);
     const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
     const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
@@ -1141,6 +1145,55 @@ const SchoolUsersPage = () => {
         setOpenActivateConfirm(true);
     };
 
+    const handleSuspendClick = (user) => {
+        if (!user) return;
+        setSelectedUser(user);
+        setOpenSuspendConfirm(true);
+    };
+
+    const handleCancelSuspend = () => {
+        setSelectedUser(null);
+        setOpenSuspendConfirm(false);
+    };
+
+    const handleConfirmSuspend = async () => {
+        if (!selectedUser || !selectedUser.id) return;
+        try {
+            setSuspendLoading(true);
+
+            // Determine school and schoolYear to locate the payment
+            const sId = stateSchool?.id || schoolId;
+            const sYear = schoolYear || stateSchoolYear;
+            if (!sId || !sYear) {
+                setSnackbar({ open: true, message: 'Falta identificar colegio/año escolar para buscar el pago', severity: 'error' });
+                return;
+            }
+
+            // Load payments for this school/year and find the one for this user
+            const res = await api.get('/payments', { params: { schoolId: sId, schoolYear: sYear, page: 1, limit: 200 } });
+            const payments = res.data.payments || res.data || [];
+            const payment = payments.find(p => (p.User && p.User.id) === selectedUser.id || p.userId === selectedUser.id);
+
+            if (!payment || !payment.id) {
+                setSnackbar({ open: true, message: 'No se encontró un pago asociado para esta familia', severity: 'error' });
+                return;
+            }
+
+            await api.post(`/payments/v2/${payment.id}/suspend`);
+            setSnackbar({ open: true, message: 'Familia suspendida', severity: 'success' });
+            setOpenSuspendConfirm(false);
+            setSelectedUser(null);
+            // Refresh users list (suspend endpoint also updates user state)
+            fetchUsers();
+        } catch (err) {
+            console.error('Error suspending family from users page:', err);
+            const message = err?.response?.data?.message || 'Error suspendiendo la familia';
+            setSnackbar({ open: true, message, severity: 'error' });
+        } finally {
+            setSuspendLoading(false);
+        }
+    };
+
     const handleCancelActivate = () => {
         setSelectedUser(null);
         setOpenActivateConfirm(false);
@@ -1150,6 +1203,30 @@ const SchoolUsersPage = () => {
         if (!selectedUser || !selectedUser.id) return;
         try {
             setActivateLoading(true);
+            // Prefer using payments v2 activate endpoint when possible (keeps payment and user status in sync)
+            const sId = stateSchool?.id || schoolId;
+            const sYear = schoolYear || stateSchoolYear;
+
+            if (sId && sYear) {
+                try {
+                    const res = await api.get('/payments', { params: { schoolId: sId, schoolYear: sYear, page: 1, limit: 200 } });
+                    const payments = res.data.payments || res.data || [];
+                    const payment = payments.find(p => (p.User && p.User.id) === selectedUser.id || p.userId === selectedUser.id);
+                    if (payment && payment.id) {
+                        await api.post(`/payments/v2/${payment.id}/activate`);
+                        setSnackbar({ open: true, message: 'Familia activada', severity: 'success' });
+                        setOpenActivateConfirm(false);
+                        setSelectedUser(null);
+                        fetchUsers();
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('No se pudo activar vía payments v2, fallback a usuario:', err?.response?.data || err.message);
+                    // continue to fallback
+                }
+            }
+
+            // Fallback: activar usuario directamente
             await api.patch(`/users/${selectedUser.id}/state`, { state: 1 });
             setSnackbar({ open: true, message: 'Usuario activado correctamente', severity: 'success' });
             setOpenActivateConfirm(false);
@@ -1966,9 +2043,7 @@ const SchoolUsersPage = () => {
                                                         <IconButton size="small" onClick={() => handleEditClick(user)}>
                                                             <Edit fontSize="small" />
                                                         </IconButton>
-                                                        <IconButton size="small" onClick={() => handleDeleteClick(user)}>
-                                                            <Delete fontSize="small" />
-                                                        </IconButton>
+
                                                         {Number(user.roleId) === 3 && (
                                                             <>
                                                                 <IconButton size="small" onClick={() => handleAssignBuses(user)}>
@@ -1979,6 +2054,23 @@ const SchoolUsersPage = () => {
                                                                 </IconButton>
                                                             </>
                                                         )}
+
+                                                        {(() => {
+                                                            const isInactive = user && (user.state === 0 || user.state === '0' || user.state === false);
+                                                            return isInactive ? (
+                                                                <IconButton size="small" title="Activar familia" onClick={() => handleActivateClick(user)}>
+                                                                    <ToggleOff fontSize="small" />
+                                                                </IconButton>
+                                                            ) : (
+                                                                <IconButton size="small" title="Suspender familia" onClick={() => handleSuspendClick(user)}>
+                                                                    <ToggleOn fontSize="small" />
+                                                                </IconButton>
+                                                            );
+                                                        })()}
+
+                                                        <IconButton size="small" onClick={() => handleDeleteClick(user)}>
+                                                            <Delete fontSize="small" />
+                                                        </IconButton>
                                                     </Box>
                                                 </TableCell>
                                             </TableRow>
@@ -2086,18 +2178,34 @@ const SchoolUsersPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Diálogo de confirmación para activar usuario */}
+            {/* Diálogo de confirmación para activar familia */}
             <Dialog open={openActivateConfirm} onClose={handleCancelActivate} maxWidth="xs" fullWidth>
-                <DialogTitle>Activar Usuario</DialogTitle>
+                <DialogTitle>Activar Familia</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        ¿Deseas activar al usuario <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>?
+                        ¿Deseas activar a la familia <strong>{selectedUser?.FamilyDetail?.familyLastName || selectedUser?.familyLastName || selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>?
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCancelActivate}>Cancelar</Button>
                     <Button variant="contained" color="success" onClick={handleConfirmActivate} disabled={activateLoading}>
                         {activateLoading ? 'Activando...' : 'Activar'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Diálogo de confirmación para suspender familia (usa la misma lógica que el modal de pagos) */}
+            <Dialog open={openSuspendConfirm} onClose={handleCancelSuspend} maxWidth="xs" fullWidth>
+                <DialogTitle>Suspender Familia</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        ¿Deseas suspender a la familia <strong>{selectedUser?.FamilyDetail?.familyLastName || selectedUser?.familyLastName || selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancelSuspend}>Cancelar</Button>
+                    <Button variant="contained" color="error" onClick={handleConfirmSuspend} disabled={suspendLoading}>
+                        {suspendLoading ? 'Suspendiendo...' : 'Suspender'}
                     </Button>
                 </DialogActions>
             </Dialog>
