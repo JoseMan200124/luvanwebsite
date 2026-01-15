@@ -1170,9 +1170,10 @@ const SchoolUsersPage = () => {
             }
 
             // Load payments for this school/year and find the one for this user
-            const res = await api.get('/payments', { params: { schoolId: sId, schoolYear: sYear, page: 1, limit: 200 } });
+            const res = await api.get('/payments', { params: { schoolId: sId, schoolYear: sYear, userId: selectedUser.id } });
             const payments = res.data.payments || res.data || [];
-            const payment = payments.find(p => (p.User && p.User.id) === selectedUser.id || p.userId === selectedUser.id);
+            // Coercionar a número antes de comparar ids para evitar falsos negativos por diferencia de tipo
+            const payment = payments.find(p => Number(p.User?.id) === Number(selectedUser.id) || Number(p.userId) === Number(selectedUser.id));
 
             if (!payment || !payment.id) {
                 setSnackbar({ open: true, message: 'No se encontró un pago asociado para esta familia', severity: 'error' });
