@@ -16,7 +16,7 @@ import AuxiliaresManagementPage from './pages/AuxiliaresManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import BusesManagementPage from './pages/BusesManagementPage';
-import ActivityLogPage from './pages/ActivityLogPage';
+// ✅ REMOVIDO: import ActivityLogPage from './pages/ActivityLogPage';
 import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
 import AttendanceManagementPage from './pages/AttendanceManagementPage';
@@ -196,13 +196,6 @@ export const modules = [
         name: 'Seguridad y Auditoría',
         icon: Security,
         submodules: [
-            {
-                key: 'registro-actividades',
-                name: 'Registro de Actividades',
-                path: 'registro-actividades',
-                component: ActivityLogPage,
-                roles: ['Gestor', 'Administrador', 'Supervisor'],
-            },
             {
                 key: 'historial-asignaciones',
                 name: 'Historial de Asignaciones',
