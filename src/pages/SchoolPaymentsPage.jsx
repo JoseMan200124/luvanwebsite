@@ -117,6 +117,10 @@ const SchoolPaymentsPage = () => {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [autoDebitFilter, setAutoDebitFilter] = useState('');
+    const [showDeleted, setShowDeleted] = useState(false);
+    useEffect(() => {
+        if (statusFilter) setShowDeleted(false);
+    }, [statusFilter]);
     // client-side pagination state (we fetch all data once and paginate locally)
     const [page, setPage] = useState(0); // UI page (0-based)
     const [rowsPerPage, setRowsPerPage] = useState(25);
@@ -146,6 +150,7 @@ const SchoolPaymentsPage = () => {
     const enProcesoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'EN_PROCESO')?.count || 0;
     const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
     const inactivoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'INACTIVO')?.count || 0;
+    const eliminadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ELIMINADO')?.count || 0;
     const currentMonthEarnings = combinedEarnings.find(item =>
         item.year === moment().year() && item.month === (moment().month() + 1)
     )?.total || 0;
@@ -290,7 +295,7 @@ const SchoolPaymentsPage = () => {
             if (err.response?.status === 403) {
                 setSnackbar({ open: true, message: `Sin permisos: ${err.response?.data?.message || 'No autorizado'}`, severity: 'error' });
             } else {
-                setSnackbar({ open: true, message: 'Error cargando pagos', severity: 'error' });
+            setSnackbar({ open: true, message: 'Error cargando pagos', severity: 'error' });
             }
         }
     };
@@ -401,14 +406,19 @@ const SchoolPaymentsPage = () => {
             const arr = (paymentsAll || []).filter(p => {
                 // Determinar si el usuario está inactivo (state = 0)
                 const isUserInactive = Number(p.User?.state) === 0;
-                
+                const isDeleted = !!p.User?.FamilyDetail?.deleted;
+
                 if (st) {
                     if (st === 'INACTIVO') {
                         // Filtrar solo usuarios inactivos
                         if (!isUserInactive) return false;
+                    } else if (st === 'ELIMINADO') {
+                        // Filtrar solo eliminados
+                        if (!isDeleted) return false;
                     } else {
                         // Para otros estados, excluir usuarios inactivos y filtrar por finalStatus
                         if (isUserInactive) return false;
+                        if (isDeleted && !showDeleted) return false;
                         const s = (p.finalStatus || p.status || '').toUpperCase();
                         
                         // V2: PAGADO incluye CONFIRMADO y ADELANTADO
@@ -418,6 +428,14 @@ const SchoolPaymentsPage = () => {
                             if (s !== st) return false;
                         }
                     }
+                } else {
+                    // No se seleccionó estado: aplicar reglas por defecto
+                    if (isDeleted && !showDeleted) return false;
+                    if (isUserInactive) return false;
+
+                    const s = (p.finalStatus || p.status || '').toUpperCase();
+                    const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA'];
+                    if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO'))) return false;
                 }
                 if (qq) {
                     const familyLast = (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toLowerCase();
@@ -438,7 +456,7 @@ const SchoolPaymentsPage = () => {
             console.error('filtering error', e);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, statusFilter, paymentsAll, autoDebitFilter]);
+    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted]);
 
     const handleBack = () => {
         navigate(`/admin/escuelas/${schoolYear || ''}/${schoolId}`, { state: { school, schoolYear } });
@@ -2147,32 +2165,32 @@ const SchoolPaymentsPage = () => {
                                                 <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: 1 }}>
                                                     <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
                                                         📈 Ingresos Mensuales (Pagos + Extraordinarios)
-                                                    </Typography>
+                                                </Typography>
                                                     <Box sx={{ width: '100%', height: 350 }}>
-                                                        <ResponsiveContainer width="100%" height="100%">
-                                                            <BarChart
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <BarChart
                                                                 data={(combinedEarnings || []).map(item => ({ 
                                                                     ...item, 
                                                                     label: moment({ year: item.year, month: item.month - 1 }).format('MMM YY'),
                                                                     fullLabel: moment({ year: item.year, month: item.month - 1 }).format('MMMM YYYY')
                                                                 }))}
-                                                            >
-                                                                <CartesianGrid strokeDasharray="3 3" />
+                                                        >
+                                                            <CartesianGrid strokeDasharray="3 3" />
                                                                 <XAxis dataKey="label" angle={-45} textAnchor="end" height={80} />
                                                                 <YAxis tickFormatter={(value) => `Q${(value/1000).toFixed(0)}k`} />
                                                                 <RechartsTooltip 
                                                                     formatter={(value) => [`Q ${Number(value).toLocaleString('es-GT', {minimumFractionDigits: 2})}`, 'Ingreso']}
                                                                     labelFormatter={(label, payload) => payload && payload[0] ? payload[0].payload.fullLabel : label}
                                                                 />
-                                                                <Legend />
+                                                            <Legend />
                                                                 <Bar dataKey="total" name="Ingreso Total" radius={[8, 8, 0, 0]}>
                                                                     {(combinedEarnings || []).map((entry, index) => {
                                                                         const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0'];
-                                                                        return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
-                                                                    })}
-                                                                </Bar>
-                                                            </BarChart>
-                                                        </ResponsiveContainer>
+                                                                return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                                                            })}
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
                                                     </Box>
                                                 </Box>
                                             </Grid>
@@ -2261,6 +2279,7 @@ const SchoolPaymentsPage = () => {
                         <Chip label={`Pendientes: ${totalPendingCount}`} color="warning" />
                         <Chip label={`En Mora: ${totalMoraCount}`} color="error" />
                         <Chip label={`Inactivos: ${totalInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
+                        <Chip label={`Eliminados: ${eliminadoCount}`} sx={{ backgroundColor: '#000000', color: 'white' }} />
                         <Box sx={{ flex: 1 }} />
                     </ChipsRow>
                 </Grid>
@@ -2268,7 +2287,7 @@ const SchoolPaymentsPage = () => {
                 <Grid item xs={12}>
                     <Paper sx={{ p: 2 }}>
                         <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
-                            <PaymentFilters search={search} onSearchChange={setSearch} status={statusFilter} onStatusChange={setStatusFilter} autoDebit={autoDebitFilter} onAutoDebitChange={setAutoDebitFilter} />
+                            <PaymentFilters search={search} onSearchChange={setSearch} status={statusFilter} onStatusChange={setStatusFilter} autoDebit={autoDebitFilter} onAutoDebitChange={setAutoDebitFilter} showDeleted={showDeleted} onShowDeletedChange={setShowDeleted} />
                             <Box sx={{ flex: 1 }} />
                             <Button startIcon={<DownloadIcon />} size="small" onClick={() => setOpenExportStatusDialog(true)} sx={{ textTransform: 'none', mr: 1 }}>
                                 Descargar Historial
@@ -2782,10 +2801,10 @@ const SchoolPaymentsPage = () => {
                                                 </Box>
                                             ) : (
                                                 registerPaymentTarget?.penaltyStartDate && (
-                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                                                        📅 Desde el {moment(registerPaymentTarget.penaltyStartDate).format('DD [de] MMMM, YYYY')}
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                                    📅 Desde el {moment(registerPaymentTarget.penaltyStartDate).format('DD [de] MMMM, YYYY')}
                                                         {' '}({moment(registerPaymentExtra?.paymentDate || moment().format('YYYY-MM-DD')).diff(moment(registerPaymentTarget.penaltyStartDate), 'days') + 1} días de atraso)
-                                                    </Typography>
+                                                </Typography>
                                                 )
                                             )}
                                             

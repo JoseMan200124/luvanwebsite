@@ -1264,7 +1264,7 @@ const SchoolUsersPage = () => {
         try {
             setBulkLoading(true);
             // This view requires a permanent (hard) deletion for users.
-            await api.delete(`/users/${selectedUser.id}/hard`);
+            await api.delete(`/users/${selectedUser.id}`);
             setSnackbar({ open: true, message: 'Usuario eliminado permanentemente', severity: 'success' });
             setOpenDeleteConfirm(false);
             setSelectedUser(null);

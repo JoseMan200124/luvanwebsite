@@ -15,6 +15,7 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
     const discount = Number(family.specialFee || family.discount || 0).toFixed(2);
     const requiresInvoice = !!family.requiresInvoice || !!p.requiresInvoice || false;
     const status = (p.finalStatus || '').toUpperCase();
+    const isDeleted = status === 'ELIMINADO' || !!family.deleted;
     
     // V2: Mapeo de colores para estados
     let statusColor = 'orange'; // PENDIENTE por defecto
@@ -26,6 +27,8 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
         statusColor = '#ff9800'; // Amarillo/naranja (parcial)
     } else if (status === 'INACTIVO') {
         statusColor = '#9e9e9e'; // Gris
+    } else if (status === 'ELIMINADO') {
+        statusColor = '#000000'; // Negro para familias eliminadas
     }
 
     return (
@@ -50,8 +53,20 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
             </TableCell>
             <TableCell align="center">
                 <Box sx={{ display: 'inline-flex', gap: 0.5 }}>
-                    <IconButton title="Registrar Pago" onClick={() => onRegisterClick && onRegisterClick(p)}><PaymentIcon /></IconButton>
-                    <IconButton title="Notas" onClick={() => (onNotesClick ? onNotesClick(p) : (onReceiptClick && onReceiptClick(p)))}><NoteAltIcon /></IconButton>
+                    <IconButton
+                        title={isDeleted ? 'Acción no disponible (familia eliminada)' : 'Registrar Pago'}
+                        onClick={() => { if (!isDeleted && onRegisterClick) onRegisterClick(p); }}
+                        disabled={isDeleted}
+                    >
+                        <PaymentIcon />
+                    </IconButton>
+                    <IconButton
+                        title={isDeleted ? 'Acción no disponible (familia eliminada)' : 'Notas'}
+                        onClick={() => { if (!isDeleted) { if (onNotesClick) onNotesClick(p); else if (onReceiptClick) onReceiptClick(p); } }}
+                        disabled={isDeleted}
+                    >
+                        <NoteAltIcon />
+                    </IconButton>
                     <IconButton title="Descargar Reporte PDF" onClick={() => (onDownloadHistory ? onDownloadHistory(p) : (onEmailClick && onEmailClick(p)))}><DownloadIcon /></IconButton>
                     <IconButton title="Gestionar Pagos" onClick={() => onManageClick && onManageClick(p)}><ManageAccountsIcon /></IconButton>
                 </Box>

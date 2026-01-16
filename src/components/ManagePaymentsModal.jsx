@@ -50,6 +50,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [localPayment, setLocalPayment] = useState(payment);
     useEffect(() => setLocalPayment(payment), [payment]);
     const family = localPayment?.User?.FamilyDetail || payment?.User?.FamilyDetail || {};
+    const finalStatus = ((localPayment || payment)?.finalStatus || '').toString().toUpperCase();
+    const isDeleted = finalStatus === 'ELIMINADO' || !!family.deleted;
     const [autoDebit, setAutoDebit] = useState(!!family.autoDebit || false);
     const [requiresInvoice, setRequiresInvoice] = useState(!!family.requiresInvoice || false);
     const [discount, setDiscount] = useState(family.specialFee || family.discount || 0);
@@ -234,8 +236,14 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     };
 
     const handleAction = (name, payload = {}) => {
-        // If this action modifies payment history on the server, invalidate client's cached pages for this user
+        // Prevent mutating actions for deleted families
         const mutating = ['exoneratePenalty', 'addTransaction', 'updateReceiptNumber', 'updatePayment', 'toggleRequiresInvoice', 'toggleAutoDebit', 'toggleFreezePenalty', 'suspend', 'activate'];
+        if (isDeleted && mutating.includes(name)) {
+            // silently ignore or optionally show a client-side message
+            return;
+        }
+
+        // If this action modifies payment history on the server, invalidate client's cached pages for this user
         try {
             const paymentId = payment?.id;
             if (paymentId && mutating.includes(name)) {
@@ -290,6 +298,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     };
 
     const handleToggleInvoiceRow = (row) => {
+        if (isDeleted) return;
         const newVal = !row.requiresInvoice;
         // Optimistically update UI
         setHistories((prev) => prev.map(h => (h.id === row.id ? { ...h, requiresInvoice: newVal } : h)));
@@ -343,6 +352,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     };
 
     const handleSaveDiscount = () => {
+        if (isDeleted) return;
         // Invalidate cached histories for this user (discount may affect snapshots)
         try {
             const paymentId = (localPayment || payment)?.id;
@@ -373,7 +383,13 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="h6"><strong>{family.familyLastName || '-'}</strong></Typography>
                                 {/** status badge */}
-                                {(() => {
+                                {isDeleted ? (
+                                    <Box component="span" sx={{ ml: 1 }}>
+                                        <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, bgcolor: '#000000', color: 'white', fontSize: 12 }}>
+                                            ELIMINADO
+                                        </Box>
+                                    </Box>
+                                ) : (() => {
                                     // Check payment status (ACTIVO, PENDIENTE, etc.) - not INACTIVO means active
                                     const paymentStatus = (localPayment || payment)?.status;
                                     const isActive = paymentStatus && paymentStatus !== 'INACTIVO';
@@ -406,8 +422,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 <Box sx={{ ml: 'auto' }}>
                                     <Typography variant="caption" color="text.secondary">Descuento (Q)</Typography>
                                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                        <TextField label="" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: 100 }} />
-                                        <Button variant="outlined" size="small" onClick={handleSaveDiscount}>GUARDAR</Button>
+                                        <TextField label="" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: 100 }} disabled={isDeleted} />
+                                        <Button variant="outlined" size="small" onClick={handleSaveDiscount} disabled={isDeleted}>GUARDAR</Button>
                                     </Box>
                                 </Box>
                             </Box>
@@ -415,21 +431,22 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </Grid>
                     <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'flex-end' }}>
-                            <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); onAction('toggleAutoDebit', { payment, value: e.target.checked }); }} />} label="Débito Automático" />
-                            <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); onAction('toggleRequiresInvoice', { payment, value: e.target.checked }); }} />} label="Factura" />
+                            <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); if (!isDeleted) onAction('toggleAutoDebit', { payment, value: e.target.checked }); }} disabled={isDeleted} />} label="Débito Automático" />
+                            <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); if (!isDeleted) onAction('toggleRequiresInvoice', { payment, value: e.target.checked }); }} disabled={isDeleted} />} label="Factura" />
                         </Box>
                         {/* Download button removed per request */}
                     </Grid>
                 </Grid>
 
                 <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
-                    <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => handleAction('receipts')}>Boletas</Button>
+                    <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) handleAction('receipts'); }} disabled={isDeleted}>Boletas</Button>
                     {/* Freeze/Unfreeze penalty button - disponible para todos los pagos */}
                     <Button 
                         variant="outlined" 
                         color={localPayment?.penaltyFrozenAt ? "success" : "primary"}
                         startIcon={localPayment?.penaltyFrozenAt ? <PlayArrowIcon /> : <PauseIcon />}
                         onClick={async () => {
+                            if (isDeleted) return;
                             if (localPayment?.penaltyFrozenAt) {
                                 handleAction('unfreezePenalty');
                             } else {
@@ -446,13 +463,14 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 }
                             }
                         }}
+                        disabled={isDeleted}
                     >
                         {localPayment?.penaltyFrozenAt ? 'Reanudar Mora' : 'Congelar Mora'}
                     </Button>
                     {/* Suspend/Activate: toggle based on payment status */}
-                    <Button variant="outlined" startIcon={(localPayment || payment)?.status !== 'INACTIVO' ? <BlockIcon /> : <CheckCircleIcon />} onClick={() => handleAction((localPayment || payment)?.status !== 'INACTIVO' ? 'suspend' : 'activate')}>{(localPayment || payment)?.status !== 'INACTIVO' ? 'Suspender' : 'Activar'}</Button>
+                    <Button variant="outlined" startIcon={(localPayment || payment)?.status !== 'INACTIVO' ? <BlockIcon /> : <CheckCircleIcon />} onClick={() => { if (!isDeleted) handleAction((localPayment || payment)?.status !== 'INACTIVO' ? 'suspend' : 'activate'); }} disabled={isDeleted}>{(localPayment || payment)?.status !== 'INACTIVO' ? 'Suspender' : 'Activar'}</Button>
                     {/* Delete/Revert payment */}
-                    <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => setOpenDeleteDialog(true)}>Revertir pago</Button>
+                    <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) setOpenDeleteDialog(true); }} disabled={isDeleted}>Revertir pago</Button>
                 </Box>
 
                 {/* Exonerate Dialog */}

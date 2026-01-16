@@ -1,9 +1,9 @@
 // src/components/PaymentFilters.jsx
 import React from 'react';
-import { Box, TextField, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Box, TextField, FormControl, InputLabel, Select, MenuItem, FormControlLabel, Switch } from '@mui/material';
 import { Search } from '@mui/icons-material';
 
-const PaymentFilters = ({ search, onSearchChange, status, onStatusChange, autoDebit, onAutoDebitChange }) => {
+const PaymentFilters = ({ search, onSearchChange, status, onStatusChange, autoDebit, onAutoDebitChange, showDeleted = false, onShowDeletedChange = () => {} }) => {
     return (
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <TextField size="small" variant="outlined" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Buscar apellido" InputProps={{ startAdornment: <Search /> }} />
@@ -15,6 +15,7 @@ const PaymentFilters = ({ search, onSearchChange, status, onStatusChange, autoDe
                     <MenuItem value="PENDIENTE">Pago Pendiente</MenuItem>
                     <MenuItem value="MORA">Mora</MenuItem>
                     <MenuItem value="INACTIVO">Inactivo</MenuItem>
+                    <MenuItem value="ELIMINADO">Eliminado</MenuItem>
                 </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: 140 }}>
@@ -25,6 +26,11 @@ const PaymentFilters = ({ search, onSearchChange, status, onStatusChange, autoDe
                     <MenuItem value="no">No</MenuItem>
                 </Select>
             </FormControl>
+            <FormControlLabel
+                control={<Switch size="small" checked={showDeleted} onChange={(e) => onShowDeletedChange(e.target.checked)} disabled={!!status} />}
+                label="Mostrar eliminadas"
+                disabled={!!status}
+            />
         </Box>
     );
 };
