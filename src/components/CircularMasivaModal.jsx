@@ -74,6 +74,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     const [file, setFile] = useState(null);
 
     const [sending, setSending] = useState(false);
+    const [sendPush, setSendPush] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     // IDs para evitar race conditions (respuestas viejas pisan estado nuevo)
@@ -85,10 +86,25 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
         return schools.find(s => String(s.id) === String(selectedSchool)) || null;
     }, [selectedSchool, schools]);
 
+    // Normalizar routeNumbers que pueden venir como array, string JSON o CSV
+    const parseRouteNumbers = (rn) => {
+        if (!rn) return [];
+        if (Array.isArray(rn)) return rn.map(r => r != null ? String(r) : '').filter(Boolean);
+        if (typeof rn === 'string' && rn.trim()) {
+            try {
+                const parsed = JSON.parse(rn);
+                if (Array.isArray(parsed)) return parsed.map(r => r != null ? String(r) : '').filter(Boolean);
+                return String(rn).split(',').map(s => s.trim()).filter(Boolean);
+            } catch (e) {
+                return String(rn).split(',').map(s => s.trim()).filter(Boolean);
+            }
+        }
+        return [];
+    };
+
     const availableRoutes = useMemo(() => {
         if (!currentSchool) return [];
-        const rn = Array.isArray(currentSchool.routeNumbers) ? currentSchool.routeNumbers : [];
-        return rn.map(r => String(r)).filter(Boolean);
+        return parseRouteNumbers(currentSchool.routeNumbers);
     }, [currentSchool]);
 
     // key estable para detectar cambios reales de availableRoutes
@@ -310,6 +326,8 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                 formData.append('routeNumbers', JSON.stringify(selectedRoutes));
                 formData.append('scheduleCode', selectedSchedule);
             }
+
+            if (sendPush) formData.append('sendPush', true);
 
             if (file) formData.append('file', file);
 
@@ -626,6 +644,18 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                             <input type="file" hidden onChange={handleFileChange} />
                         </Button>
                         {file && <Box sx={{ mt: 1 }}>{file.name}</Box>}
+                    </Box>
+
+                    <Box sx={{ mt: 1 }}>
+                        <FormControl component="fieldset" variant="standard">
+                            <Stack direction="row" spacing={1} alignItems="center">
+                                <Checkbox checked={sendPush} onChange={(e) => setSendPush(e.target.checked)} disabled={selectedSchool === 'all'} />
+                                <Typography variant="body2">Enviar notificación push además del correo</Typography>
+                            </Stack>
+                            <FormHelperText>
+                                Activa para enviar una notificación push a los mismos destinatarios de la circular (requiere colegio seleccionado).
+                            </FormHelperText>
+                        </FormControl>
                     </Box>
                 </DialogContent>
 
