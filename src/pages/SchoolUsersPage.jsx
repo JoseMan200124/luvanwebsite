@@ -1161,19 +1161,9 @@ const SchoolUsersPage = () => {
         try {
             setSuspendLoading(true);
 
-            // Determine school and schoolYear to locate the payment
-            const sId = stateSchool?.id || schoolId;
-            const sYear = schoolYear || stateSchoolYear;
-            if (!sId || !sYear) {
-                setSnackbar({ open: true, message: 'Falta identificar colegio/año escolar para buscar el pago', severity: 'error' });
-                return;
-            }
-
-            // Load payments for this school/year and find the one for this user
-            const res = await api.get('/payments', { params: { schoolId: sId, schoolYear: sYear, userId: selectedUser.id } });
-            const payments = res.data.payments || res.data || [];
-            // Coercionar a número antes de comparar ids para evitar falsos negativos por diferencia de tipo
-            const payment = payments.find(p => Number(p.User?.id) === Number(selectedUser.id) || Number(p.userId) === Number(selectedUser.id));
+            // Obtener payment directamente por userId (no requiere schoolId/schoolYear)
+            const res = await api.get(`/payments/by-user/${selectedUser.id}`);
+            const payment = res.data.payment || res.data || null;
 
             if (!payment || !payment.id) {
                 setSnackbar({ open: true, message: 'No se encontró un pago asociado para esta familia', severity: 'error' });
