@@ -24,6 +24,7 @@ import StudentIncidentsPage from './pages/StudentIncidentsPage';
 import BusIncidentsPage from './pages/BusIncidentsPage';
 import BusEmergenciesPage from './pages/BusEmergenciesPage';
 import MechanicRequestsPage from './pages/MechanicRequestsPage';
+import RequestsPage from './pages/RequestsPage';
 import RouteTimeLogsPage from './pages/RouteTimeLogsPage';
 import FuelRecordsPage from './pages/FuelRecordsPage';
 import CorporationsPage from './pages/CorporationsPage';
@@ -41,6 +42,13 @@ export const modules = [
                 path: 'usuarios',
                 component: RolesManagementPage,
                 roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'solicitudes-usuarios',
+                name: 'Solicitudes Usuarios',
+                path: 'solicitudes-usuarios',
+                component: RequestsPage,
+                roles: ['Administrador', 'Gestor', 'Supervisor', 'Auxiliar'],
             },
         ],
     },
