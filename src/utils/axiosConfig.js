@@ -66,41 +66,62 @@ api.interceptors.response.use(
     response => response,
     async (error) => {
         const originalRequest = error.config;
-        if (error.response && error.response.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-            if (isRefreshing) {
-                return new Promise(function(resolve, reject) {
-                    failedQueue.push({ resolve, reject });
-                }).then(token => {
-                    originalRequest.headers['Authorization'] = 'Bearer ' + token;
-                    return api(originalRequest);
-                }).catch(err => Promise.reject(err));
-            }
-
-            isRefreshing = true;
-            const refreshToken = localStorage.getItem('refreshToken');
-            if (!refreshToken) {
-                isRefreshing = false;
-                return Promise.reject(error);
-            }
-
-            try {
-                const res = await axios.post(`${api.defaults.baseURL.replace('/api', '')}/api/auth/refresh`, { refreshToken });
-                const { token, refreshToken: newRefresh } = res.data;
-                localStorage.setItem('token', token);
-                if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
-                api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                processQueue(null, token);
-                isRefreshing = false;
-                originalRequest.headers['Authorization'] = `Bearer ${token}`;
-                return api(originalRequest);
-            } catch (err) {
-                processQueue(err, null);
-                isRefreshing = false;
-                // If refresh failed, remove tokens and let app handle logout
+        
+        // Detectar si es un error 401 por sesión invalidada (sessionVersion)
+        if (error.response && error.response.status === 401) {
+            const errorMessage = error.response.data?.message || '';
+            
+            // Si el mensaje indica sesión inválida por sessionVersion, no intentar refresh
+            if (errorMessage.includes('Sesión inválida') || 
+                errorMessage.includes('Session inválida') ||
+                errorMessage.includes('inicia sesión nuevamente')) {
+                // Limpiar tokens y redirigir a login
                 localStorage.removeItem('token');
                 localStorage.removeItem('refreshToken');
-                return Promise.reject(err);
+                // Disparar evento de logout para que el AuthProvider lo maneje
+                window.dispatchEvent(new CustomEvent('sessionInvalidated', { 
+                    detail: { message: errorMessage } 
+                }));
+                return Promise.reject(error);
+            }
+            
+            // Intentar refresh solo para otros tipos de errores 401
+            if (!originalRequest._retry) {
+                originalRequest._retry = true;
+                if (isRefreshing) {
+                    return new Promise(function(resolve, reject) {
+                        failedQueue.push({ resolve, reject });
+                    }).then(token => {
+                        originalRequest.headers['Authorization'] = 'Bearer ' + token;
+                        return api(originalRequest);
+                    }).catch(err => Promise.reject(err));
+                }
+
+                isRefreshing = true;
+                const refreshToken = localStorage.getItem('refreshToken');
+                if (!refreshToken) {
+                    isRefreshing = false;
+                    return Promise.reject(error);
+                }
+
+                try {
+                    const res = await axios.post(`${api.defaults.baseURL.replace('/api', '')}/api/auth/refresh`, { refreshToken });
+                    const { token, refreshToken: newRefresh } = res.data;
+                    localStorage.setItem('token', token);
+                    if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
+                    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                    processQueue(null, token);
+                    isRefreshing = false;
+                    originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                    return api(originalRequest);
+                } catch (err) {
+                    processQueue(err, null);
+                    isRefreshing = false;
+                    // If refresh failed, remove tokens and let app handle logout
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('refreshToken');
+                    return Promise.reject(err);
+                }
             }
         }
         return Promise.reject(error);

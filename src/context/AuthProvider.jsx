@@ -78,8 +78,19 @@ const AuthProvider = ({ children }) => {
             if (e.key === 'refreshToken' && e.newValue == null) { logout(); }
         };
         window.addEventListener('storage', onStorage);
+        
+        // Escuchar evento de sesión invalidada desde axiosConfig
+        const onSessionInvalidated = (event) => {
+            console.log('[AuthProvider] Sesión invalidada:', event.detail?.message);
+            logout();
+        };
+        window.addEventListener('sessionInvalidated', onSessionInvalidated);
 
-        return () => { events.forEach(evt => { window.removeEventListener(evt, resetTimer, true); window.removeEventListener(evt, silentRefreshIfNeeded, true); }); window.removeEventListener('storage', onStorage); };
+        return () => { 
+            events.forEach(evt => { window.removeEventListener(evt, resetTimer, true); window.removeEventListener(evt, silentRefreshIfNeeded, true); }); 
+            window.removeEventListener('storage', onStorage);
+            window.removeEventListener('sessionInvalidated', onSessionInvalidated);
+        };
     }, [resetTimer, silentRefreshIfNeeded, logout]);
 
     // On mount, restore token if valid
