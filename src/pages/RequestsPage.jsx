@@ -267,6 +267,7 @@ const RequestsPage = () => {
     const STATUS_LABELS_ES = {
         pending: 'Pendiente',
         in_review: 'En revisión',
+        cancelled: 'Cancelada',
         approved: 'Aprobada',
         rejected: 'Rechazada',
         completed: 'Completada'
@@ -275,6 +276,7 @@ const RequestsPage = () => {
     const STATUS_BG = {
         pending: '#FB8C00',
         in_review: '#42A5F5',
+        cancelled: '#9C27B0',
         approved: '#4CAF50',
         completed: '#388E3C',
         rejected: '#E53935'
@@ -478,8 +480,18 @@ const RequestsPage = () => {
                                         <TableCell>{getStatusChip(r.status)}</TableCell>
                                     <TableCell align="right">
                                         <Tooltip title="Ver detalle"><IconButton size="small" onClick={() => handleViewDetail(r)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
-                                        <Tooltip title="Cambiar estado"><IconButton size="small" color="primary" onClick={() => handleOpenStatusModal(r)}><EditIcon fontSize="small" /></IconButton></Tooltip>
-                                        <Tooltip title="Eliminar"><IconButton size="small" color="error" onClick={() => handleOpenDeleteModal(r)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+                                        <Tooltip title={r.status === 'cancelled' ? 'No editable (cancelada)' : 'Cambiar estado'}>
+                                            <span>
+                                                <IconButton size="small" color="primary" onClick={() => handleOpenStatusModal(r)} disabled={r.status === 'cancelled'}>
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </span>
+                                        </Tooltip>
+                                        <Tooltip title={r.status === 'cancelled' ? 'Eliminar':'Eliminar'}>
+                                            <IconButton size="small" color="error" onClick={() => handleOpenDeleteModal(r)}>
+                                                <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -583,11 +595,11 @@ const RequestsPage = () => {
             {/* Delete confirm */}
             <Dialog open={deleteModalOpen} onClose={() => setDeleteModalOpen(false)}>
                 <DialogTitle>Eliminar solicitud</DialogTitle>
-                <DialogContent>¿Deseas eliminar esta solicitud?</DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleteModalOpen(false)}>Cancelar</Button>
-                    <Button color="error" variant="contained" onClick={handleConfirmDelete}>Eliminar</Button>
-                </DialogActions>
+                    <DialogContent>¿Deseas eliminar permanentemente esta solicitud?</DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setDeleteModalOpen(false)}>Cerrar</Button>
+                        <Button color="error" variant="contained" onClick={handleConfirmDelete}>Eliminar</Button>
+                    </DialogActions>
             </Dialog>
 
             {/* Status change */}

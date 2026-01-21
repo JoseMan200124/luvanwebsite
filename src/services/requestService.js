@@ -37,6 +37,11 @@ export const deleteRequest = async (id) => {
     return res.data;
 };
 
+export const cancelRequest = async (id) => {
+    const res = await api.post(`${API_URL}/${id}/cancel`);
+    return res.data;
+};
+
 export const getRequestStatistics = async (params = {}) => {
     const res = await api.get(`${API_URL}/statistics`, { params });
     return res.data;

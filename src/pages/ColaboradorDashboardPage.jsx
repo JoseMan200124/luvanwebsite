@@ -17,7 +17,22 @@ import {
   Container,
   Avatar,
   Paper,
-  useTheme
+  useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  Tooltip
 } from '@mui/material';
 import { styled } from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
@@ -65,7 +80,77 @@ const ColaboradorDashboardPage = () => {
   const [schedules, setSchedules] = useState([]);
   const [openEditDialog, setOpenEditDialog] = useState(false);
 
+  // Requests (mis solicitudes)
+  const [requests, setRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [openNewRequestDialog, setOpenNewRequestDialog] = useState(false);
+  const [newRequestType, setNewRequestType] = useState('service_cancellation');
+  const [newReason, setNewReason] = useState('');
+  const [newAdditionalNotes, setNewAdditionalNotes] = useState('');
+  const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newPriority, setNewPriority] = useState('medium');
+  const [openRequestDetail, setOpenRequestDetail] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [openRequestsModal, setOpenRequestsModal] = useState(false);
+  const [openCancelConfirm, setOpenCancelConfirm] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+
   const [selectedDay, setSelectedDay] = useState('all');
+
+  const getRequestTypeLabel = (type) => {
+    const labels = {
+      service_cancellation: 'Baja del Servicio',
+      schedule_change: 'Cambio de Horario',
+      route_change: 'Cambio de Ruta',
+      payment_adjustment: 'Ajuste de Pago',
+      contract_modification: 'Modificación de Contrato',
+      student_transfer: 'Transferencia de Estudiante',
+      bus_change: 'Cambio de Bus',
+      temporary_suspension: 'Suspensión Temporal',
+      complaint: 'Queja/Reclamo',
+      suggestion: 'Sugerencia',
+      other: 'Otro'
+    };
+    return labels[type] || type;
+  };
+
+  const getRequestStatusLabel = (status) => {
+    const labels = {
+      pending: 'Pendiente',
+      in_review: 'En Revisión',
+      cancelled: 'Cancelada',
+      approved: 'Aprobada',
+      rejected: 'Rechazada',
+      completed: 'Completada'
+    };
+    return labels[status] || status;
+  };
+
+  const getPriorityLabel = (p) => {
+    return p === 'low' ? 'Baja' : p === 'medium' ? 'Media' : p === 'high' ? 'Alta' : 'Urgente';
+  };
+
+  const formatDate = (d) => {
+    if (!d) return 'N/A';
+    try {
+      return new Date(d).toLocaleString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return String(d);
+    }
+  };
+
+  const getRequestStatusColor = (status) => {
+    const colors = {
+      pending: '#FFA500',
+      in_review: '#2196F3',
+      cancelled: '#9C27B0',
+      approved: '#4CAF50',
+      rejected: '#F44336',
+      completed: '#9E9E9E'
+    };
+    return colors[status] || '#9E9E9E';
+  };
 
   const loadAll = async () => {
     setLoading(true);
@@ -108,8 +193,26 @@ const ColaboradorDashboardPage = () => {
 
   useEffect(() => {
     loadAll();
+    loadRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.user?.id]);
+
+  const loadRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const userId = auth?.user?.id;
+      if (!userId) throw new Error('Usuario no autenticado');
+      const res = await api.get('/requests/my-requests');
+      const data = res?.data?.requests ?? res?.data ?? [];
+      setRequests(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('[ColaboradorDashboard] loadRequests error:', err);
+      setRequests([]);
+      setSnackbar({ open:true, sev:'error', msg: 'No se pudieron cargar tus solicitudes.' });
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
   // Format time strings to 12-hour (e.g., 07:30 -> 7:30 AM). If input looks already formatted, return as-is.
   const formatTime12 = (timeStr) => {
@@ -256,12 +359,17 @@ const ColaboradorDashboardPage = () => {
                   </Grid>
 
                   <Grid item xs={12} sx={{ mt: 2, textAlign: 'center' }}>
-                    <Button variant="contained" color="primary" size="small" onClick={() => setOpenEditDialog(true)}>Editar mis datos</Button>
+                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                      <Button variant="contained" color="primary" size="small" onClick={() => setOpenEditDialog(true)}>Editar mis datos</Button>
+                      <Button variant="outlined" size="small" onClick={async () => { await loadRequests(); setOpenRequestsModal(true); }}>Mis Solicitudes</Button>
+                    </Box>
                   </Grid>
                 </Grid>
               </CardContent>
             </Paper>
           </Grid>
+          
+          {/* Mis Solicitudes ahora en modal (abrir desde botón en la izquierda) */}
 
           <Grid item xs={12} md={8}>
             <SectionCard elevation={2}>
@@ -320,6 +428,187 @@ const ColaboradorDashboardPage = () => {
         initialData={colaboradorInfo || {}}
         onSaved={() => { setOpenEditDialog(false); loadAll(); setSnackbar({ open:true, sev:'success', msg: 'Datos actualizados correctamente.' }); }}
       />
+
+      {/* Dialog: Mis Solicitudes (lista + acciones) */}
+      <Dialog open={openRequestsModal} onClose={() => setOpenRequestsModal(false)} fullWidth maxWidth="md">
+        <DialogTitle>Mis Solicitudes</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="subtitle1">Tus solicitudes recientes</Typography>
+            <Box>
+              <Button variant="outlined" size="small" sx={{ mr: 1 }} onClick={() => loadRequests()}>Actualizar</Button>
+              <Button variant="contained" size="small" onClick={() => setOpenNewRequestDialog(true)}>Nueva Solicitud</Button>
+            </Box>
+          </Box>
+
+          {loadingRequests ? (
+            <LoaderBox><CircularProgress size={28} /></LoaderBox>
+          ) : (
+            <List>
+              {requests.length === 0 ? (
+                <ListItem><ListItemText primary="No tienes solicitudes" secondary="Crea una nueva para comenzar" /></ListItem>
+              ) : (
+                requests.map((r) => (
+                  <ListItem key={r.id} button onClick={async () => {
+                    try {
+                      const res = await api.get(`/requests/${r.id}`);
+                      setSelectedRequest(res.data);
+                      setOpenRequestDetail(true);
+                    } catch (err) {
+                      console.error('Error fetching request detail', err);
+                    }
+                  }}>
+                    <ListItemText
+                      primary={r.title}
+                      secondary={`${getRequestTypeLabel(r.requestType)} — ${formatDate(r.createdAt)}`}
+                    />
+                    <ListItemSecondaryAction>
+                      <Tooltip title={getRequestStatusLabel(r.status)}>
+                        <Chip
+                          label={getRequestStatusLabel(r.status)}
+                          size="small"
+                          sx={{ backgroundColor: getRequestStatusColor(r.status), color: '#fff', fontWeight: 700 }}
+                        />
+                      </Tooltip>
+                      <Button size="small" onClick={async (e) => {
+                        e.stopPropagation();
+                        try { const res = await api.get(`/requests/${r.id}`); setSelectedRequest(res.data); setOpenRequestDetail(true); } catch (err) { console.error(err); }
+                      }} sx={{ ml: 1 }}>Ver detalles</Button>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))
+              )}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenRequestsModal(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog: Nueva Solicitud */}
+      <Dialog open={openNewRequestDialog} onClose={() => setOpenNewRequestDialog(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Nueva Solicitud</DialogTitle>
+        <DialogContent>
+          <FormControl fullWidth sx={{ mt: 1, mb: 2 }}>
+            <InputLabel id="req-type-label">Tipo de solicitud</InputLabel>
+            <Select labelId="req-type-label" value={newRequestType} label="Tipo de solicitud" onChange={(e) => setNewRequestType(e.target.value)}>
+              <MenuItem value="service_cancellation">Baja del Servicio</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Solo formulario de Baja del Servicio */}
+          <TextField label="Motivo de la baja" fullWidth multiline minRows={3} value={newReason} onChange={(e) => setNewReason(e.target.value)} sx={{ mb: 2 }} />
+          <TextField label="Notas adicionales (opcional)" fullWidth multiline minRows={2} value={newAdditionalNotes} onChange={(e) => setNewAdditionalNotes(e.target.value)} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenNewRequestDialog(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={async () => {
+            try {
+              if (!newReason.trim()) { setSnackbar({ open:true, sev:'error', msg:'El motivo es requerido.' }); return; }
+              await api.post('/requests/service-cancellation', { reason: newReason.trim(), additionalNotes: newAdditionalNotes.trim() || undefined });
+
+              setOpenNewRequestDialog(false);
+              setNewReason(''); setNewAdditionalNotes('');
+              setSnackbar({ open:true, sev:'success', msg:'Solicitud de baja enviada correctamente.' });
+              loadRequests();
+              setOpenRequestsModal(true);
+            } catch (err) {
+              console.error('Error creating request', err);
+              const msg = err?.response?.data?.message || 'No se pudo crear la solicitud.';
+              setSnackbar({ open:true, sev:'error', msg });
+            }
+          }}>Enviar solicitud</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog: Detalle de Solicitud */}
+      <Dialog open={openRequestDetail} onClose={() => { setOpenRequestDetail(false); setSelectedRequest(null); }} fullWidth maxWidth="sm">
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              <Typography variant="h6">{selectedRequest?.title || 'Solicitud'}</Typography>
+              <Typography variant="caption" color="text.secondary">{getRequestTypeLabel(selectedRequest?.requestType)} • {formatDate(selectedRequest?.createdAt)}</Typography>
+            </Box>
+            <Chip label={getRequestStatusLabel(selectedRequest?.status)} sx={{ backgroundColor: getRequestStatusColor(selectedRequest?.status), color: '#fff', fontWeight: 700 }} />
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedRequest ? (
+            <Box sx={{ mt: 1 }}>
+              <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Información General</Typography>
+                <Grid container spacing={1}>
+                  <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Tipo:</strong> {getRequestTypeLabel(selectedRequest.requestType)}</Typography></Grid>
+                  <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Fecha:</strong> {formatDate(selectedRequest.createdAt)}</Typography></Grid>
+                  {selectedRequest.priority && <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Prioridad:</strong> {getPriorityLabel(selectedRequest.priority)}</Typography></Grid>}
+                  {selectedRequest.relatedEntityType && <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Relacionado a:</strong> {selectedRequest.relatedEntityType}</Typography></Grid>}
+                </Grid>
+              </Paper>
+
+              {selectedRequest.description && (
+                <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Descripción</Typography>
+                  <Typography variant="body2">{selectedRequest.description}</Typography>
+                </Paper>
+              )}
+
+              {selectedRequest.reason && (
+                <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Motivo</Typography>
+                  <Typography variant="body2">{selectedRequest.reason}</Typography>
+                </Paper>
+              )}
+
+              {(selectedRequest.reviewedAt || selectedRequest.reviewNotes || selectedRequest.reviewer) && (
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Información de Revisión</Typography>
+                  {selectedRequest.reviewer && <Typography variant="body2"><strong>Revisado por:</strong> {selectedRequest.reviewer?.name || selectedRequest.reviewer?.email}</Typography>}
+                  {selectedRequest.reviewedAt && <Typography variant="body2"><strong>Fecha de revisión:</strong> {formatDate(selectedRequest.reviewedAt)}</Typography>}
+                  {selectedRequest.reviewNotes && <Typography variant="body2" sx={{ mt: 1 }}><strong>Notas del revisor:</strong> {selectedRequest.reviewNotes}</Typography>}
+                </Paper>
+              )}
+            </Box>
+          ) : (
+            <LoaderBox><CircularProgress size={28} /></LoaderBox>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setOpenRequestDetail(false); setSelectedRequest(null); }}>Cerrar</Button>
+          {selectedRequest && selectedRequest.status === 'pending' && (
+            <>
+              <Button color="error" variant="contained" onClick={() => setOpenCancelConfirm(true)}>Cancelar solicitud</Button>
+
+              <Dialog open={openCancelConfirm} onClose={() => setOpenCancelConfirm(false)}>
+                <DialogTitle>Confirmar cancelación</DialogTitle>
+                <DialogContent>
+                  <Typography>¿Estás seguro que quieres cancelar la solicitud "{selectedRequest?.title}"?</Typography>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setOpenCancelConfirm(false)}>Volver</Button>
+                  <Button color="error" variant="contained" onClick={async () => {
+                    if (!selectedRequest) return;
+                    try {
+                      setCanceling(true);
+                      await api.post(`/requests/${selectedRequest.id}/cancel`);
+                      setOpenCancelConfirm(false);
+                      setOpenRequestDetail(false);
+                      setSelectedRequest(null);
+                      setSnackbar({ open:true, sev:'success', msg:'Solicitud cancelada.' });
+                      await loadRequests();
+                    } catch (err) {
+                      console.error('Error cancelling request', err);
+                      setSnackbar({ open:true, sev:'error', msg: err?.response?.data?.message || 'No se pudo cancelar la solicitud.' });
+                    } finally {
+                      setCanceling(false);
+                    }
+                  }} disabled={canceling}>{canceling ? 'Cancelando...' : 'Confirmar'}</Button>
+                </DialogActions>
+              </Dialog>
+            </>
+          )}
+        </DialogActions>
+      </Dialog>
     </>
   );
 };
