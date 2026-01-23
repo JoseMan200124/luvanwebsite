@@ -2792,19 +2792,25 @@ const SchoolPaymentsPage = () => {
                                                     <Typography variant="caption" sx={{ fontWeight: 600, color: '#856404', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                         ❄️ Mora Congelada
                                                     </Typography>
-                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                                        Congelada desde el {moment(registerPaymentTarget.penaltyFrozenAt).format('DD [de] MMMM, YYYY')}
-                                                        {registerPaymentTarget?.penaltyStartDate && (
-                                                            <> ({moment(registerPaymentTarget.penaltyFrozenAt).diff(moment(registerPaymentTarget.penaltyStartDate), 'days') + 1} días de mora)</>
-                                                        )}
-                                                    </Typography>
+                                                    {registerPaymentTarget?.penaltyFrozenUntil ? (
+                                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                                            Congelada hasta el {moment(registerPaymentTarget.penaltyFrozenUntil).format('DD [de] MMMM, YYYY')} — limpieza del período {moment(registerPaymentTarget.penaltyFrozenUntil).format('MMMM YYYY')}{registerPaymentTarget?.penaltyFrozenAt ? ` aplicada el ${moment(registerPaymentTarget.penaltyFrozenAt).format('DD [de] MMMM, YYYY')}` : ''}
+                                                        </Typography>
+                                                    ) : (
+                                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                                            Congelada desde el {moment(registerPaymentTarget.penaltyFrozenAt).format('DD [de] MMMM, YYYY')}
+                                                            {registerPaymentTarget?.penaltyStartDate && (
+                                                                <> ({moment(registerPaymentTarget.penaltyFrozenAt).diff(moment(registerPaymentTarget.penaltyStartDate), 'days') + 1} días de mora)</>
+                                                            )}
+                                                        </Typography>
+                                                    )}
                                                 </Box>
                                             ) : (
                                                 registerPaymentTarget?.penaltyStartDate && (
-                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                                                    📅 Desde el {moment(registerPaymentTarget.penaltyStartDate).format('DD [de] MMMM, YYYY')}
+                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                                        📅 Desde el {moment(registerPaymentTarget.penaltyStartDate).format('DD [de] MMMM, YYYY')}
                                                         {' '}({moment(registerPaymentExtra?.paymentDate || moment().format('YYYY-MM-DD')).diff(moment(registerPaymentTarget.penaltyStartDate), 'days') + 1} días de atraso)
-                                                </Typography>
+                                                    </Typography>
                                                 )
                                             )}
                                             

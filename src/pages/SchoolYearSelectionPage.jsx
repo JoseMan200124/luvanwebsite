@@ -45,7 +45,8 @@ import {
     Delete, 
     Visibility,
     Add,
-    ExpandMore
+    ExpandMore,
+    DeleteSweep as DeleteSweepIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
@@ -167,6 +168,21 @@ const SchoolYearSelectionPage = () => {
     // School year bounds for the UI edit dialog
     const [schoolYearStart, setSchoolYearStart] = useState('');
     const [schoolYearEnd, setSchoolYearEnd] = useState('');
+    
+    // Estados para limpieza de mora
+    const [clearPeriod, setClearPeriod] = useState('CURRENT');
+    const [customClearPeriod, setCustomClearPeriod] = useState('');
+    const [clearReason, setClearReason] = useState('');
+    const [clearingPenalty, setClearingPenalty] = useState(false);
+    // Quick modal para limpieza (período actual fijo)
+    const [openQuickClear, setOpenQuickClear] = useState(false);
+    const [quickClearReason, setQuickClearReason] = useState('');
+    const [quickClearing, setQuickClearing] = useState(false);
+    // Nombre legible del período actual (ej: Enero 2026)
+    const monthNamesEs = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const currentMonthIndex = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const currentPeriodDisplay = `${monthNamesEs[currentMonthIndex]} ${currentYear}`;
     
     // Estado para controlar qué acordeones están expandidos
     const [expandedPanels, setExpandedPanels] = useState({
@@ -832,6 +848,78 @@ const SchoolYearSelectionPage = () => {
         }
     };
 
+    // Función para limpiar mora
+    const handleClearPenalty = async () => {
+        if (!selectedSchool) return;
+        
+        if (!clearReason.trim()) {
+            setSnackbar({
+                open: true,
+                message: 'Debe ingresar un motivo para la limpieza de mora',
+                severity: 'warning'
+            });
+            return;
+        }
+        
+        // Determinar período a limpiar
+        let periodToClean = clearPeriod;
+        if (clearPeriod === 'CUSTOM') {
+            if (!customClearPeriod) {
+                setSnackbar({
+                    open: true,
+                    message: 'Debe seleccionar un período personalizado',
+                    severity: 'warning'
+                });
+                return;
+            }
+            periodToClean = customClearPeriod;
+        } else if (clearPeriod === 'CURRENT') {
+            // Usar período actual (formato YYYY-MM)
+            const now = new Date();
+            periodToClean = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+        
+        const confirmMessage = clearPeriod === 'ALL'
+            ? `¿Está seguro de limpiar TODA la mora acumulada del colegio "${selectedSchool.name}"?\n\nMotivo: ${clearReason}`
+            : `¿Está seguro de limpiar la mora del período ${periodToClean} del colegio "${selectedSchool.name}"?\n\nMotivo: ${clearReason}`;
+        
+        if (!window.confirm(confirmMessage)) {
+            return;
+        }
+        
+        setClearingPenalty(true);
+        
+        try {
+            const response = await api.post('/payments/penalties/clear', {
+                schoolId: selectedSchool.id,
+                schoolYear: selectedSchoolYear,
+                period: periodToClean,
+                reason: clearReason
+            });
+            
+            setSnackbar({
+                open: true,
+                message: response.data.message || 'Mora limpiada exitosamente',
+                severity: 'success'
+            });
+            
+            // Limpiar campos
+            setClearPeriod('CURRENT');
+            setCustomClearPeriod('');
+            setClearReason('');
+            
+        } catch (err) {
+            console.error('Error al limpiar mora:', err);
+            setSnackbar({
+                open: true,
+                message: err.response?.data?.error || 'Error al limpiar la mora',
+                severity: 'error'
+            });
+        } finally {
+            setClearingPenalty(false);
+        }
+    };
+
     return (
         <PageContainer>
             <HeaderCard>
@@ -1249,6 +1337,27 @@ const SchoolYearSelectionPage = () => {
                         </StyledAccordionSummary>
                         <AccordionDetails>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <Box sx={{ display: 'flex', gap: 2 }}>
+                                    <TextField
+                                        label="Inicio Ciclo Escolar"
+                                        type="date"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={schoolYearStart || ''}
+                                        onChange={(e) => setSchoolYearStart(e.target.value)}
+                                        InputLabelProps={{ shrink: true }}
+                                    />
+                                    <TextField
+                                        label="Fin Ciclo Escolar"
+                                        type="date"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={schoolYearEnd || ''}
+                                        onChange={(e) => setSchoolYearEnd(e.target.value)}
+                                        InputLabelProps={{ shrink: true }}
+                                    />
+                                </Box>
+
                                 <TextField
                                     name="transportFeeComplete"
                                     label="Cuota de Transporte Completa (Q)"
@@ -1302,11 +1411,11 @@ const SchoolYearSelectionPage = () => {
                                         name="dailyPenalty"
                                         label="Mora diaria (Q)"
                                         type="number"
-                                        fullWidth
                                         variant="outlined"
                                         value={selectedSchool ? selectedSchool.dailyPenalty : 0}
                                         onChange={handleInputChange}
                                         inputProps={{ min: '0', step: '0.01' }}
+                                        sx={{ width: 140 }}
                                     />
                                     <FormControlLabel
                                         control={
@@ -1317,30 +1426,77 @@ const SchoolYearSelectionPage = () => {
                                         }
                                         label="Mora pausada"
                                     />
-                                </Box>
-                                <Box sx={{ display: 'flex', gap: 2 }}>
-                                    <TextField
-                                        label="Inicio Ciclo Escolar"
-                                        type="date"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={schoolYearStart || ''}
-                                        onChange={(e) => setSchoolYearStart(e.target.value)}
-                                        InputLabelProps={{ shrink: true }}
-                                    />
-                                    <TextField
-                                        label="Fin Ciclo Escolar"
-                                        type="date"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={schoolYearEnd || ''}
-                                        onChange={(e) => setSchoolYearEnd(e.target.value)}
-                                        InputLabelProps={{ shrink: true }}
-                                    />
+                                    <Button
+                                        variant="contained"
+                                        color="warning"
+                                        startIcon={<DeleteSweepIcon />}
+                                        onClick={() => setOpenQuickClear(true)}
+                                        disabled={!selectedSchool}
+                                    >
+                                        LIMPIEZA DE MORA
+                                    </Button>
                                 </Box>
                             </Box>
                         </AccordionDetails>
                     </StyledAccordion>
+
+                    {/* Dialog: Limpieza rápida (período actual, motivo solamente) */}
+                    <Dialog open={openQuickClear} onClose={() => setOpenQuickClear(false)} maxWidth="sm" fullWidth>
+                        <DialogTitle>Limpiar Mora — Período Actual ({currentPeriodDisplay})</DialogTitle>
+                        <DialogContent>
+                            <DialogContentText sx={{ mb: 2 }}>
+                                ⚠️ Esta acción limpiará la mora de todas las familias del colegio para el período actual ({currentPeriodDisplay}).
+                                Por favor, proporciona un motivo para el registro de esta limpieza:
+                            </DialogContentText>
+                            <TextField
+                                label="Período"
+                                type="text"
+                                fullWidth
+                                value={currentPeriodDisplay}
+                                InputProps={{ readOnly: true }}
+                                sx={{ mb: 2 }}
+                            />
+                            <TextField
+                                label="Motivo"
+                                type="text"
+                                fullWidth
+                                multiline
+                                minRows={2}
+                                value={quickClearReason}
+                                onChange={(e) => setQuickClearReason(e.target.value)}
+                            />
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setOpenQuickClear(false)}>Cancelar</Button>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                disabled={!quickClearReason || !selectedSchool || quickClearing}
+                                onClick={async () => {
+                                    try {
+                                        setQuickClearing(true);
+                                        const period = `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+                                        await api.post('/payments/penalties/clear', {
+                                            schoolId: selectedSchool.id,
+                                            schoolYear: selectedSchoolYear,
+                                            period,
+                                            reason: quickClearReason
+                                        });
+                                        setQuickClearing(false);
+                                        setOpenQuickClear(false);
+                                        setSnackbar({ open: true, message: 'Limpieza de mora realizada correctamente', severity: 'success' });
+                                        fetchSchoolsByYear();
+                                    } catch (err) {
+                                        console.error(err);
+                                        setQuickClearing(false);
+                                        setSnackbar({ open: true, message: 'Error al realizar limpieza de mora', severity: 'error' });
+                                    }
+                                }}
+                            >
+                                Limpiar
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
 
                     {/* Sección: Horarios */}
                     <StyledAccordion 
