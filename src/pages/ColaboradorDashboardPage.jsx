@@ -343,6 +343,9 @@ const ColaboradorDashboardPage = () => {
                     ) || '—'}</Typography>
                   </Grid>
                   <Grid item xs={12}>
+                    <Typography variant="body2"><strong>Número de empleado:</strong> {safeStr(colaboradorInfo?.colaboradorDetail?.employeeNumber) || '—'}</Typography>
+                  </Grid>
+                  <Grid item xs={12}>
                     <Typography variant="body2"><strong>Horario:</strong> {safeStr(scheduleText) || '—'}</Typography>
                   </Grid>
                   <Grid item xs={12}>

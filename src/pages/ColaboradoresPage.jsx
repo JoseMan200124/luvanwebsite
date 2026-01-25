@@ -177,6 +177,7 @@ const ColaboradoresPage = () => {
         serviceAddress: '',
         zoneOrSector: '',
         routeType: 'Completa',
+        employeeNumber: '',
         emergencyContact: '',
         emergencyRelationship: '',
         emergencyPhone: '',
@@ -457,6 +458,7 @@ const ColaboradoresPage = () => {
             email: colaborador.email || '',
             password: '',
             phoneNumber: colaborador.phoneNumber || '',
+            employeeNumber: colaborador.ColaboradorDetail?.employeeNumber || '',
             serviceAddress: colaborador.ColaboradorDetail?.serviceAddress || '',
             zoneOrSector: colaborador.ColaboradorDetail?.zoneOrSector || '',
             routeType: colaborador.ColaboradorDetail?.routeType || 'Completa',
@@ -570,6 +572,7 @@ const ColaboradoresPage = () => {
                 colaboradorDetail: {
                     firstName: colaboradorForm.firstName || null,
                     lastName: colaboradorForm.lastName || null,
+                    employeeNumber: colaboradorForm.employeeNumber || null,
                     serviceAddress: colaboradorForm.serviceAddress,
                     zoneOrSector: colaboradorForm.zoneOrSector,
                     routeType: colaboradorForm.routeType,
@@ -620,6 +623,7 @@ const ColaboradoresPage = () => {
                 colaboradorDetail: {
                     firstName: colaboradorForm.firstName,
                     lastName: colaboradorForm.lastName,
+                    employeeNumber: colaboradorForm.employeeNumber,
                     serviceAddress: colaboradorForm.serviceAddress,
                     zoneOrSector: colaboradorForm.zoneOrSector,
                     routeType: colaboradorForm.routeType,
@@ -785,6 +789,9 @@ const ColaboradoresPage = () => {
             };
             worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
             
+            // Añadir hoja 'Horarios' antes de generar el archivo
+            addSchedulesSheet(workbook);
+
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const url = window.URL.createObjectURL(blob);
@@ -900,6 +907,119 @@ const ColaboradoresPage = () => {
                 severity: 'error'
             });
         }
+    };
+
+    // Función para descargar plantilla de carga masiva (incluye campos extra de la corporación)
+    const handleDownloadTemplate = async () => {
+        try {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Plantilla Colaboradores');
+
+            const standardColumns = [
+                { header: 'Nombres', key: 'firstName', width: 25 },
+                { header: 'Apellidos', key: 'lastName', width: 25 },
+                { header: 'Nombre de Usuario', key: 'username', width: 25 },
+                { header: 'Email', key: 'email', width: 30 },
+                { header: 'Contraseña', key: 'password', width: 20 },
+                { header: 'Teléfono', key: 'phoneNumber', width: 15 },
+                { header: 'Número Empleado', key: 'employeeNumber', width: 20 },
+                { header: 'Horario (nombre)', key: 'selectedSchedule', width: 17 },
+                { header: 'Dirección Servicio', key: 'serviceAddress', width: 40 },
+                { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
+                { header: 'Tipo Ruta', key: 'routeType', width: 15 },
+                { header: 'Contacto Emergencia', key: 'emergencyContact', width: 25 },
+                { header: 'Parentesco Emergencia', key: 'emergencyRelationship', width: 30 },
+                { header: 'Teléfono Emergencia', key: 'emergencyPhone', width: 20 }
+            ];
+
+            const extraFields = Array.isArray(currentCorporation?.extraEnrollmentFields) ? currentCorporation.extraEnrollmentFields : [];
+            const extraColumns = extraFields.map((f, idx) => {
+                const fieldName = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
+                return { header: fieldName, key: fieldName, width: 25 };
+            });
+
+            worksheet.columns = [...standardColumns, ...extraColumns];
+
+            // Fila de ejemplo (mapear a los campos del formulario)
+            const example = {};
+            worksheet.columns.forEach(col => {
+                switch (col.key) {
+                    case 'firstName': example[col.key] = 'Juan'; break;
+                    case 'lastName': example[col.key] = 'Pérez'; break;
+                    case 'username': example[col.key] = 'juan.perez'; break;
+                    case 'email': example[col.key] = 'colaboradorprueba@ejemplo.com'; break;
+                    case 'password': example[col.key] = 'Password123'; break;
+                    case 'phoneNumber': example[col.key] = '50241234567'; break;
+                    case 'employeeNumber': example[col.key] = 'EMP001'; break;
+                    case 'serviceAddress': example[col.key] = 'Calle Falsa 123, Zona 1'; break;
+                    case 'zoneOrSector': example[col.key] = 'Zona 1'; break;
+                    case 'routeType': example[col.key] = 'Completa'; break;
+                    case 'selectedSchedule': example[col.key] = ''; break;
+                    case 'emergencyContact': example[col.key] = 'María López'; break;
+                    case 'emergencyRelationship': example[col.key] = 'Madre'; break;
+                    case 'emergencyPhone': example[col.key] = '50241239876'; break;
+                    default: example[col.key] = '';
+                }
+            });
+            // Añadir valores de ejemplo para campos extras si existen
+            extraFields.forEach((f, idx) => {
+                const fname = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
+                example[fname] = f.default !== undefined ? f.default : '';
+            });
+            worksheet.addRow(example);
+
+            // Estilos header
+            worksheet.getRow(1).font = { bold: true };
+            worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+            worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+            // Añadir hoja 'Horarios' con schedules de la corporación
+            addSchedulesSheet(workbook);
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const corpName = currentCorporation?.name || 'Corporativo';
+            a.download = `Plantilla_Colaboradores_${corpName}_${moment().format('YYYYMMDD')}.xlsx`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: 'Plantilla descargada', severity: 'success' });
+        } catch (err) {
+            console.error('Error descargando plantilla:', err);
+            setSnackbar({ open: true, message: 'Error al descargar plantilla', severity: 'error' });
+        }
+    };
+
+    // Agregar hoja con lista de horarios de la corporación
+    // (se coloca después para que siempre exista incluso si no hay horarios)
+    const addSchedulesSheet = (workbook) => {
+        const schedules = Array.isArray(currentCorporation?.schedules) ? currentCorporation.schedules : [];
+        const sheet = workbook.addWorksheet('Horarios');
+        sheet.columns = [
+            { header: 'Nombre', key: 'name', width: 30 },
+            { header: 'Hora Entrada', key: 'entryTime', width: 15 },
+            { header: 'Hora Salida', key: 'exitTime', width: 15 }
+        ];
+
+        if (schedules.length === 0) {
+            sheet.addRow({ name: 'No hay horarios definidos', entryTime: '', exitTime: '' });
+        } else {
+            schedules.forEach((s) => {
+                const entryRaw = s.entryTime || s.entry || s.startTime || s.entry_time || '';
+                const exitRaw = s.exitTime || s.exit || s.endTime || s.exit_time || '';
+                const entryFmt = entryRaw ? formatTime12Hour(entryRaw) : '';
+                const exitFmt = exitRaw ? formatTime12Hour(exitRaw) : '';
+                sheet.addRow({
+                    name: s.name || '',
+                    entryTime: entryFmt,
+                    exitTime: exitFmt
+                });
+            });
+        }
+        sheet.getRow(1).font = { bold: true };
     };
 
     // Función para manejar carga masiva
@@ -1327,6 +1447,14 @@ const ColaboradoresPage = () => {
                                         label="Teléfono"
                                         value={colaboradorForm.phoneNumber}
                                         onChange={(e) => handleFormChange('phoneNumber', e.target.value)}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} sm={6}>
+                                    <TextField
+                                        fullWidth
+                                        label="Número de empleado"
+                                        value={colaboradorForm.employeeNumber}
+                                        onChange={(e) => handleFormChange('employeeNumber', e.target.value)}
                                     />
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
@@ -1940,19 +2068,44 @@ const ColaboradoresPage = () => {
                 <DialogContent>
                     <Box sx={{ mt: 2 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Seleccione un archivo Excel (.xlsx) con los datos de los colaboradores.
-                            El archivo debe contener las siguientes columnas: Nombre, Email, Contraseña, Teléfono.
+                            Sube un archivo Excel con las columnas necesarias. Usa la plantilla oficial.<br/>
+                            <br/>
+                            La lista de Horarios se encuentra en la hoja "Horarios" de la plantilla.<br/>
+                            <br/>
+                            El límite de archivo es 5 MB.
                         </Typography>
-                        <input
-                            type="file"
-                            accept=".xlsx,.xls"
-                            onChange={(e) => setBulkFile(e.target.files[0])}
-                            style={{ width: '100%' }}
-                        />
+
+                        <Button
+                            variant="outlined"
+                            sx={{ mr: 2 }}
+                            color="success"
+                            onClick={handleDownloadTemplate}
+                        >
+                            Descargar Plantilla
+                        </Button>
+                        <Button variant="outlined" component="label" startIcon={<FileUpload />}>
+                            Seleccionar Archivo
+                            <input
+                                type="file"
+                                hidden
+                                onChange={(e) => setBulkFile(e.target.files[0])}
+                                accept=".xlsx,.xls"
+                            />
+                        </Button>
+
                         {bulkFile && (
                             <Typography variant="body2" sx={{ mt: 1 }}>
                                 Archivo seleccionado: {bulkFile.name}
                             </Typography>
+                        )}
+                        
+                        {bulkLoading && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+                                <CircularProgress size={24} />
+                                <Typography variant="body2" sx={{ ml: 2 }}>
+                                    Procesando archivo...
+                                </Typography>
+                            </Box>
                         )}
                     </Box>
                 </DialogContent>

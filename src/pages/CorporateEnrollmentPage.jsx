@@ -41,6 +41,7 @@ const CorporateEnrollmentPage = () => {
     const [lastName, setLastName] = useState('');
     const [firstName, setFirstName] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
+    const [employeeNumber, setEmployeeNumber] = useState('');
     const [serviceAddress, setServiceAddress] = useState('');
     const [zoneOrSector, setZoneOrSector] = useState('');
     const [routeType, setRouteType] = useState('Completa');
@@ -72,6 +73,7 @@ const CorporateEnrollmentPage = () => {
             corporationId,
             lastName,
             firstName,
+            employeeNumber,
             phoneNumber,
             serviceAddress,
             zoneOrSector,
@@ -113,6 +115,7 @@ const CorporateEnrollmentPage = () => {
             setLastName('');
             setFirstName('');
             setPhoneNumber('');
+            setEmployeeNumber('');
             setServiceAddress('');
             setZoneOrSector('');
             setRouteType('Completa');
@@ -308,6 +311,15 @@ const CorporateEnrollmentPage = () => {
                             onChange={(e) => setPhoneNumber(e.target.value)}
                             required
                             placeholder="Ej: 55555555"
+                        />
+
+                        <TextField
+                            label="Número de empleado"
+                            fullWidth
+                            margin="normal"
+                            value={employeeNumber}
+                            onChange={(e) => setEmployeeNumber(e.target.value)}
+                            placeholder="Opcional"
                         />
 
                         <TextField

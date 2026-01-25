@@ -61,6 +61,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     const [accountUsername, setAccountUsername] = useState('');
     const [accountPassword, setAccountPassword] = useState('');
     const [changePassword, setChangePassword] = useState(false);
+    const [employeeNumber, setEmployeeNumber] = useState('');
 
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
@@ -98,6 +99,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
         
         setAccountUsername(initialData?.accountFullName || '');
         setAccountEmail( initialData?.email || '');
+        setEmployeeNumber(initialData?.colaboradorDetail?.employeeNumber || '');
 
         // fetch corporation data to load schedules and extraFields
         if (initialData?.corporation?.id || initialData?.corporationId) {
@@ -228,6 +230,8 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
                             <TextField label="Apellidos" fullWidth margin="normal" value={lastName} onChange={(e) => setLastName(e.target.value)} />
                         </Box>
 
+                        <TextField label="Número de empleado" fullWidth margin="normal" value={employeeNumber} disabled />
+
                         <TextField label="Teléfono" fullWidth margin="normal" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="50241234567" />
 
                         <TextField label="Dirección de Servicio" fullWidth margin="normal" value={serviceAddress} onChange={(e) => setServiceAddress(e.target.value)} required placeholder="Ej: Calle Principal 123, Zona 10" />
@@ -303,7 +307,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
                         <Divider sx={{ my: 2 }} />
 
                         <Typography variant="h6" sx={{ mb: 1 }}>Datos de la Cuenta</Typography>
-                        <TextField label="Nombre de usuario" fullWidth margin="normal" value={accountUsername} onChange={(e) => setAccountUsername(e.target.value)} required />
+                        <TextField label="Nombre de usuario" fullWidth margin="normal" value={accountUsername} onChange={(e) => setAccountUsername(e.target.value)} required disabled />
                         <TextField label="Correo electrónico (ingresa tu correo personal)" type="email" fullWidth margin="normal" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} required />
 
                         <FormControlLabel control={<Checkbox checked={changePassword} onChange={(e) => setChangePassword(e.target.checked)} />} label="¿Cambiar contraseña?" />
