@@ -11,6 +11,7 @@ import {
     TableHead,
     TableRow,
     TablePagination,
+    TableSortLabel,
     CircularProgress,
     Box,
     Grid,
@@ -60,6 +61,9 @@ const FuelRecordsPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [totalCount, setTotalCount] = useState(0);
+    // Ordenamiento
+    const [orderBy, setOrderBy] = useState('recordDate');
+    const [order, setOrder] = useState('desc');
 
     // Filtros
     const [schools, setSchools] = useState([]);
@@ -132,7 +136,7 @@ const FuelRecordsPage = () => {
         fetchFuelRecords();
         fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedClient, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, startDate, endDate]);
+    }, [page, rowsPerPage, selectedClient, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, startDate, endDate, orderBy, order]);
 
     const fetchSchools = async () => {
         try {
@@ -291,6 +295,14 @@ const FuelRecordsPage = () => {
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
 
+            // Ordenamiento
+            if (orderBy) filters.orderBy = orderBy;
+            if (order) filters.order = order;
+
+            // DEBUG: log filters being sent to backend
+            // eslint-disable-next-line no-console
+            console.debug('[FuelRecordsPage] fetchFuelRecords filters:', filters);
+
             const response = await getFuelRecords(filters);
             
             // El backend retorna: { success: true, data: [...], pagination: { total, page, limit, totalPages } }
@@ -308,6 +320,13 @@ const FuelRecordsPage = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleRequestSort = (field) => {
+        const isAsc = orderBy === field && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(field);
+        setPage(0);
     };
 
     const fetchStatistics = async () => {
@@ -726,16 +745,96 @@ const FuelRecordsPage = () => {
                                 <Table>
                                     <TableHead>
                                         <TableRow>
-                                            <TableCell>Fecha</TableCell>
-                                            <TableCell>Cliente</TableCell>
-                                            <TableCell>Ruta</TableCell>
-                                            <TableCell>Placa</TableCell>
-                                            <TableCell>Piloto</TableCell>
-                                            <TableCell>Razón</TableCell>
-                                            <TableCell>Tipo Combustible</TableCell>
-                                            <TableCell align="right">Galones</TableCell>
-                                            <TableCell align="right">Precio/Galón</TableCell>
-                                            <TableCell align="right">Total</TableCell>
+                                            <TableCell sortDirection={orderBy === 'recordDate' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'recordDate'}
+                                                    direction={orderBy === 'recordDate' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('recordDate')}
+                                                >
+                                                    Fecha
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'client' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'client'}
+                                                    direction={orderBy === 'client' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('client')}
+                                                >
+                                                    Cliente
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'routeNumber' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'routeNumber'}
+                                                    direction={orderBy === 'routeNumber' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('routeNumber')}
+                                                >
+                                                    Ruta
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'plate' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'plate'}
+                                                    direction={orderBy === 'plate' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('plate')}
+                                                >
+                                                    Placa
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'pilotName' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'pilotName'}
+                                                    direction={orderBy === 'pilotName' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('pilotName')}
+                                                >
+                                                    Piloto
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'fuelingReason' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'fuelingReason'}
+                                                    direction={orderBy === 'fuelingReason' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('fuelingReason')}
+                                                >
+                                                    Razón
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell sortDirection={orderBy === 'fuelType' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'fuelType'}
+                                                    direction={orderBy === 'fuelType' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('fuelType')}
+                                                >
+                                                    Tipo Combustible
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell align="right" sortDirection={orderBy === 'gallonage' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'gallonage'}
+                                                    direction={orderBy === 'gallonage' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('gallonage')}
+                                                >
+                                                    Galones
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell align="right" sortDirection={orderBy === 'pricePerGallon' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'pricePerGallon'}
+                                                    direction={orderBy === 'pricePerGallon' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('pricePerGallon')}
+                                                >
+                                                    Precio/Galón
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell align="right" sortDirection={orderBy === 'totalAmount' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'totalAmount'}
+                                                    direction={orderBy === 'totalAmount' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('totalAmount')}
+                                                >
+                                                    Total
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </TableHead>
