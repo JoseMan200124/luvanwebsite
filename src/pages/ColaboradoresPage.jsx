@@ -59,6 +59,7 @@ import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import ColaboradorScheduleModal from '../components/modals/ColaboradorScheduleModal';
+import BulkScheduleColaboradoresModal from '../components/modals/BulkScheduleColaboradoresModal';
 import ExcelJS from 'exceljs';
 import moment from 'moment-timezone';
 
@@ -148,6 +149,7 @@ const ColaboradoresPage = () => {
     const [openToggleStateDialog, setOpenToggleStateDialog] = useState(false);
     const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
+    const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
     const [openCircularDialog, setOpenCircularDialog] = useState(false);
     
     // Estados para carga masiva
@@ -1763,6 +1765,17 @@ const ColaboradoresPage = () => {
                             <Button
                                 variant="contained"
                                 color="primary"
+                                startIcon={<FileUpload />}
+                                fullWidth
+                                onClick={() => setOpenBulkScheduleDialog(true)}
+                            >
+                                Cargar Horarios
+                            </Button>
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                            <Button
+                                variant="contained"
+                                color="primary"
                                 startIcon={<Add />}
                                 fullWidth
                                 onClick={handleOpenCreateDialog}
@@ -2125,6 +2138,12 @@ const ColaboradoresPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <BulkScheduleColaboradoresModal
+                open={openBulkScheduleDialog}
+                onClose={() => setOpenBulkScheduleDialog(false)}
+                corporationId={corporationId}
+            />
 
             {/* Diálogo de Enviar Circular */}
             <Dialog open={openCircularDialog} onClose={() => setOpenCircularDialog(false)} maxWidth="md" fullWidth>
