@@ -183,11 +183,13 @@ const SchoolUsersPage = () => {
         try {
             setRouteReportLoading(true);
 
-            // Obtener padres
+            // Obtener padres (usar state si contiene datos para este colegio)
             let parents = [];
-            if (Array.isArray(users) && users.length > 0 && String(users[0].school) === String(schoolIdToUse)) {
-                parents = users.slice();
-            } else {
+            if (Array.isArray(users) && users.length > 0) {
+                const matched = users.filter(u => String(u.school) === String(schoolIdToUse));
+                if (matched.length > 0) parents = matched.slice();
+            }
+            if (parents.length === 0) {
                 const resp = await api.get('/users/parents', { params: { schoolId: schoolIdToUse } });
                 parents = resp.data.users || [];
             }
@@ -632,9 +634,11 @@ const SchoolUsersPage = () => {
 
             // Obtener padres (usar state si aplica)
             let parents = [];
-            if (Array.isArray(users) && users.length > 0 && String(users[0].school) === String(schoolIdToUse)) {
-                parents = users.slice();
-            } else {
+            if (Array.isArray(users) && users.length > 0) {
+                const matched = users.filter(u => String(u.school) === String(schoolIdToUse));
+                if (matched.length > 0) parents = matched.slice();
+            }
+            if (parents.length === 0) {
                 const resp = await api.get('/users/parents', { params: { schoolId: schoolIdToUse } });
                 parents = resp.data.users || [];
             }
@@ -895,6 +899,37 @@ const SchoolUsersPage = () => {
         }
     };
 
+    // Helpers to normalize and count students reliably
+    const getStudentsArray = (user) => {
+        try {
+            const fd = user?.FamilyDetail || user?.familyDetail || {};
+            let students = fd?.Students ?? fd?.students ?? [];
+            if (!Array.isArray(students)) {
+                try {
+                    students = JSON.parse(students || '[]');
+                } catch (e) {
+                    students = [];
+                }
+            }
+            if (!Array.isArray(students)) students = [];
+            // Filter out falsy entries
+            return students.filter(s => s && (typeof s === 'object' || String(s).trim() !== ''));
+        } catch (e) {
+            return [];
+        }
+    };
+
+    const getStudentsCount = (user) => {
+        if (!user) return 0;
+        const arr = getStudentsArray(user);
+        if (Array.isArray(arr) && arr.length > 0) return arr.length;
+        if (typeof user.studentsCount === 'number') return user.studentsCount;
+        if (user.studentsCount && !isNaN(Number(user.studentsCount))) return Number(user.studentsCount);
+        return 0;
+    };
+
+    const countStudents = (list) => (Array.isArray(list) ? list.reduce((acc, u) => acc + getStudentsCount(u), 0) : 0);
+
     // Cargar datos adicionales
     const fetchContracts = useCallback(async () => {
         try {
@@ -933,8 +968,21 @@ const SchoolUsersPage = () => {
             });
 
             const usersData = response.data.users || [];
-            setUsers(usersData);
-            setFilteredUsers(usersData);
+            // Normalize users: ensure FamilyDetail and Students array exist and compute studentsCount
+            const normalized = (usersData || []).map(u => {
+                const fdRaw = u.FamilyDetail || u.familyDetail || {};
+                let students = fdRaw?.Students ?? fdRaw?.students ?? [];
+                if (!Array.isArray(students)) {
+                    try { students = JSON.parse(students || '[]'); } catch (e) { students = []; }
+                }
+                if (!Array.isArray(students)) students = [];
+                students = students.filter(s => s && (typeof s === 'object' || String(s).trim() !== ''));
+                const fdClean = { ...fdRaw, Students: students };
+                const studentsCount = students.length || (u.studentsCount ? Number(u.studentsCount) : 0);
+                return { ...u, FamilyDetail: fdClean, studentsCount };
+            });
+            setUsers(normalized);
+            setFilteredUsers(normalized);
         } catch (err) {
             console.error('Error fetching users:', err);
             setSnackbar({ 
@@ -1663,8 +1711,8 @@ const SchoolUsersPage = () => {
                     vb = (roleOptions.find(r => r.id === b.roleId)?.name) || '';
                     break;
                 case 'students':
-                    va = String(a.studentsCount || a.FamilyDetail?.Students?.length || 0);
-                    vb = String(b.studentsCount || b.FamilyDetail?.Students?.length || 0);
+                    va = String(getStudentsCount(a));
+                    vb = String(getStudentsCount(b));
                     break;
                 default:
                     va = '';
@@ -1729,16 +1777,12 @@ const SchoolUsersPage = () => {
                                 />
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                     <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                        {filteredUsers.length} familias encontradas
+                                        {users.length} familias encontradas
                                     </Typography>
                                     <Typography variant="body1" sx={{ opacity: 0.9 }}>
                                         {(() => {
-                                            // calcular total de alumnos sumando FamilyDetail.Students.length cuando exista
                                             try {
-                                                const total = (filteredUsers || []).reduce((acc, u) => {
-                                                    const cnt = Array.isArray(u.FamilyDetail?.Students) ? u.FamilyDetail.Students.length : (u.studentsCount || 0);
-                                                    return acc + (Number.isFinite(Number(cnt)) ? Number(cnt) : 0);
-                                                }, 0);
+                                                const total = countStudents(users);
                                                 return `${total} alumnos`;
                                             } catch (e) {
                                                 return `0 alumnos`;
@@ -1986,7 +2030,7 @@ const SchoolUsersPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <Chip
-                                                        label={user.studentsCount || user.FamilyDetail?.Students?.length || 0}
+                                                        label={getStudentsCount(user)}
                                                         variant="outlined"
                                                         size="small"
                                                     />
