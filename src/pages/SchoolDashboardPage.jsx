@@ -175,8 +175,8 @@ const SchoolDashboardPage = () => {
                 completa: summary.completa || 0,
                 mediaAM: summary.mediaAM || 0,
                 mediaPM: summary.mediaPM || 0,
-                // incluir inactivos en el total
-                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0) + (inactiveCount || 0),
+                // total activos: solo familias activas por tipo de ruta (excluye inactivos)
+                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0),
                 // support varios nombres que la API podría retornar para inactivos
                 inactive: inactiveCount,
                 inactivos: inactiveCount,
@@ -215,8 +215,8 @@ const SchoolDashboardPage = () => {
                 mediaAM: summary.mediaAM || 0,
                 mediaPM: summary.mediaPM || 0,
                 inactive: inactiveStudents,
-                // incluir inactivos en el total
-                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0) + (inactiveStudents || 0)
+                // total activos: solo estudiantes activos por tipo de ruta (excluye inactivos)
+                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0)
             });
         } catch (err) {
             console.error('Error fetching student summary:', err);
@@ -666,7 +666,7 @@ const SchoolDashboardPage = () => {
                                                     {userSummary.total}
                                                 </Typography>
                                                 <Typography variant="body2" color="textSecondary">
-                                                    Total
+                                                    Activos
                                                 </Typography>
                                             </Box>
 
@@ -747,7 +747,7 @@ const SchoolDashboardPage = () => {
                                                     {studentSummary.total}
                                                 </Typography>
                                                 <Typography variant="body2" color="textSecondary">
-                                                    Total
+                                                    Activos
                                                 </Typography>
                                             </Box>
 
