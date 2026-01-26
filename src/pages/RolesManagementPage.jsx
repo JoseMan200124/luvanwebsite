@@ -33,6 +33,7 @@ import {
     Tooltip,
     IconButton
 } from '@mui/material';
+import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
 import { Snackbar, Alert } from '@mui/material';
 import {
@@ -51,21 +52,21 @@ import api from '../utils/axiosConfig';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import * as XLSX from 'xlsx';
 
-/* ================== Responsive Table & Mobile Cards =================== */
-// Contenedor principal de la página
-const RolesContainer = styled.div`
-    padding: 16px;
-`;
-
-// Opciones de roles disponibles en el sistema (sin incluir Padre)
-const roleOptions = [
-    { id: 1, name: 'Administrador' },
-    { id: 2, name: 'Gestor' },
+// Fallback static role list (used as initial value, backend will provide authoritative list)
+const roleOptionsStatic = [
+    { id: 1, name: 'Gestor' },
+    { id: 2, name: 'Administrador' },
     { id: 4, name: 'Monitora' },
     { id: 5, name: 'Piloto' },
     { id: 6, name: 'Supervisor' },
     { id: 7, name: 'Auxiliar' }
 ];
+
+/* ================== Responsive Table & Mobile Cards =================== */
+// Contenedor principal de la página
+const RolesContainer = styled.div`
+    padding: 16px;
+`;
 
 const ResponsiveTableHead = styled(TableHead)`
     @media (max-width: 600px) {
@@ -108,8 +109,6 @@ const MobileLabel = styled(Typography)`
 const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
-
-// (helpers de tiempo y periodo eliminados porque ya no se usan en esta página)
 
 // Helper para saber si un usuario es "nuevo"
 function isUserNew(user) {
@@ -280,11 +279,12 @@ const RolesManagementPage = () => {
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
     const [corporations, setCorporations] = useState([]);
+    const [roleOptions, setRoleOptions] = useState(roleOptionsStatic);
     // Buses no longer needed for route report generation (slots carry routeNumber)
     const [contracts, setContracts] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
-    const [duplicateFilter, setDuplicateFilter] = useState('all');
+    
 
     const [familyDetail, setFamilyDetail] = useState({
         familyLastName: '',
@@ -314,6 +314,7 @@ const RolesManagementPage = () => {
         severity: 'success'
     });
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchInput, setSearchInput] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
@@ -345,19 +346,28 @@ const RolesManagementPage = () => {
     const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
     const [selectedUserForManualSend, setSelectedUserForManualSend] = useState(null);
 
-    // Dialogs para descargar usuarios (nuevos / todos)
-    const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+    // Dialog para descargar usuarios
     const [downloadAllDialogOpen, setDownloadAllDialogOpen] = useState(false);
-    const [selectedSchoolForDownload, setSelectedSchoolForDownload] = useState('');
+    const [downloadCategory, setDownloadCategory] = useState(''); // 'Colegios' | 'Corporaciones' | 'Sin afiliación'
+    const [selectedClientForDownload, setSelectedClientForDownload] = useState(null); // object from schools or corporations
 
     // (Reporte de rutas removido de la página)
 
     // Filtros
-    const [newUsersFilter, setNewUsersFilter] = useState('all');
-    const [updatedFilter, setUpdatedFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('');
-    const [schoolFilter, setSchoolFilter] = useState('');
-    const [corporationFilter, setCorporationFilter] = useState('');
+    const [clientFilter, setClientFilter] = useState(null); // { type: 'Colegio'|'Corporación', id, name }
+
+    // Roles allowed to be created from the "Añadir Usuario" dialog
+    const allowedRolesForCreate = ['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar'];
+    // Roles that should NOT be assigned a school or corporation
+    const rolesWithoutSchoolOrCorp = ['administrador', 'supervisor', 'auxiliar'];
+
+    const roleDisablesSchoolOrCorp = (roleId) => {
+        if (!roleId) return false;
+        const r = roleOptions.find(ro => Number(ro.id) === Number(roleId));
+        if (!r || !r.name) return false;
+        return rolesWithoutSchoolOrCorp.includes(String(r.name).toLowerCase());
+    };
 
     // Orden
     const [order, setOrder] = useState('asc');
@@ -373,7 +383,7 @@ const RolesManagementPage = () => {
         fetchUsers();
         fetchSchools();
         fetchCorporations();
-    // fetchBuses removed: not needed for route report
+        fetchRoles();
         fetchContracts();
         fetchAllPilots();
         fetchAllMonitoras();
@@ -381,7 +391,7 @@ const RolesManagementPage = () => {
 
     useEffect(() => {
         setPage(0);
-    }, [updatedFilter, duplicateFilter]);
+    }, [roleFilter, clientFilter, searchQuery]);
 
     const fetchAllPilots = async () => {
         try {
@@ -400,6 +410,24 @@ const RolesManagementPage = () => {
         } catch (error) {
             console.error('[fetchAllMonitoras] Error:', error);
             setAllMonitoras([]);
+        }
+    };
+
+    const fetchRoles = async () => {
+        try {
+            const resp = await api.get('/roles');
+            // API may return { roles: [...] } or an array directly
+            const data = resp.data && resp.data.roles ? resp.data.roles : resp.data;
+            // Normalize to objects with id and name
+            if (Array.isArray(data)) {
+                const normalized = data.map(r => ({ id: Number(r.id ?? r.roleId ?? r.value ?? r.key), name: r.name ?? r.label ?? String(r) }));
+                setRoleOptions(normalized);
+            } else {
+                setRoleOptions([]);
+            }
+        } catch (error) {
+            console.error('[fetchRoles] Error:', error);
+            setRoleOptions([]);
         }
     };
 
@@ -673,7 +701,12 @@ const RolesManagementPage = () => {
 
     const handleRoleIdChange = (e) => {
         const newRoleId = Number(e.target.value);
-        setSelectedUser(prev => ({ ...prev, roleId: newRoleId }));
+        // If the selected role should not have school/corporation, clear them when changing
+        if (roleDisablesSchoolOrCorp(newRoleId)) {
+            setSelectedUser(prev => ({ ...prev, roleId: newRoleId, school: '', corporationId: '' }));
+        } else {
+            setSelectedUser(prev => ({ ...prev, roleId: newRoleId }));
+        }
     };
 
     const handleFamilyDetailChange = (e) => {
@@ -793,8 +826,20 @@ const RolesManagementPage = () => {
 
 
     const handleSearchChange = (e) => {
-        setSearchQuery(e.target.value);
+        setSearchInput(e.target.value);
     };
+
+    const handleApplySearch = () => {
+        setSearchQuery(searchInput);
+    };
+
+    // Client options for combined Autocomplete (Todos and Sin afiliación first)
+    const clientOptions = [
+        { type: 'Todos', id: 'all', label: 'Todos' },
+        { type: 'Sin afiliación', id: 'none', label: 'Sin afiliación' },
+        ...schools.map(s => ({ type: 'Colegio', id: s.id, label: s.name })),
+        ...corporations.map(c => ({ type: 'Corporación', id: c.id, label: c.name }))
+    ];
 
     // --- MODIFICACIÓN: Se actualiza el filtrado para considerar además el apellido de la familia ---
     const filteredUsers = users.filter((u) => {
@@ -806,27 +851,44 @@ const RolesManagementPage = () => {
             (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             ((u.FamilyDetail?.familyLastName || '').toLowerCase().includes(searchQuery.toLowerCase()));
         if (!matchesSearch) return false;
-        if (newUsersFilter === 'new') {
-            if (!isUserNew(u)) return false;
-        } else if (newUsersFilter === 'old') {
-            if (isUserNew(u)) return false;
-        }
-        if (updatedFilter === 'updated') {
-            if (!u.FamilyDetail?.hasUpdatedData) return false;
-        } else if (updatedFilter === 'notUpdated') {
-            if (u.FamilyDetail?.hasUpdatedData) return false;
-        }
         if (roleFilter) {
             if (Number(u.roleId) !== Number(roleFilter)) return false;
         }
-        if (schoolFilter) {
-            if (Number(u.school) !== Number(schoolFilter)) return false;
+        if (clientFilter) {
+            const cType = clientFilter.type;
+            // 'Todos' means no filtering
+            if (cType === 'Todos') {
+                // do nothing
+            } else if (cType === 'Sin afiliación') {
+                const hasSchool = !!(u.school) || (Array.isArray(u.attachedAuxiliarSchools) && u.attachedAuxiliarSchools.length > 0) || (Array.isArray(u.attachedSupervisorSchools) && u.attachedSupervisorSchools.length > 0);
+                const hasCorp = !!(u.corporationId || u.corporation) || (Array.isArray(u.attachedSupervisorCorporations) && u.attachedSupervisorCorporations.length > 0) || (Array.isArray(u.attachedAuxiliarCorporations) && u.attachedAuxiliarCorporations.length > 0);
+                if (hasSchool || hasCorp) return false;
+            } else {
+                const cId = Number(clientFilter.id);
+                if (cType === 'Colegio') {
+                    if (Number(u.school) === cId) {
+                        // ok
+                    } else if (Array.isArray(u.attachedSupervisorSchools) && u.attachedSupervisorSchools.map(Number).includes(cId)) {
+                        // ok
+                    } else if (Array.isArray(u.attachedAuxiliarSchools) && u.attachedAuxiliarSchools.map(Number).includes(cId)) {
+                        // ok
+                    } else {
+                        return false;
+                    }
+                } else if (cType === 'Corporación') {
+                    if (Number(u.corporationId) === cId) {
+                        // ok
+                    } else if (Array.isArray(u.attachedSupervisorCorporations) && u.attachedSupervisorCorporations.map(Number).includes(cId)) {
+                        // ok
+                    } else if (Array.isArray(u.attachedAuxiliarCorporations) && u.attachedAuxiliarCorporations.map(Number).includes(cId)) {
+                        // ok
+                    } else {
+                        return false;
+                    }
+                }
+            }
         }
-        if (corporationFilter) {
-            if (Number(u.corporationId) !== Number(corporationFilter)) return false;
-        }
-        if (duplicateFilter === 'duplicated' && !isFamilyLastNameDuplicated(u, users)) return false;
-        if (duplicateFilter === 'notDuplicated' && isFamilyLastNameDuplicated(u, users)) return false;
+        
 
         return true;
     });
@@ -887,144 +949,11 @@ const RolesManagementPage = () => {
         const seconds = String(currentDate.getSeconds()).padStart(2, '0');
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
+        
 
-    const handleDownloadNewUsers = (schoolId) => {
-        if (!schoolId) {
-            setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
-            return;
-        }
-    let newUsers = users.filter(u => isUserNew(u) && String(u.school) === String(schoolId));
-    // Excluir usuarios con rol 'Padre' (roleId === 3)
-    newUsers = newUsers.filter(u => Number(u.roleId) !== 3);
-        const headers = [
-            "Nombre",
-            "Apellido Familia",
-            "Correo electrónico",
-            "Contraseña",
-            "Rol",
-            "Colegio",
-            "Placa de Bus",
-            "Nombre de la Madre",
-            "Celular de la Madre",
-            "Correo de la Madre",
-            "Nombre del Padre",
-            "Celular del Padre",
-            "Correo del Padre",
-            "Razón social",
-            "NIT",
-            "Dirección Principal",
-            "Dirección Alterna",
-            "Descuenta especial",
-            "Alumno 1",
-            "Alumno 2",
-            "Alumno 3",
-            "Alumno 4",
-            "Tipo ruta",
-            "Pilotos a Cargo"
-        ];
-        const data = [];
-        data.push(headers);
-        newUsers.forEach((u) => {
-            const roleName = u.Role ? u.Role.name : "";
-            const schoolName = u.School ? u.School.name : "";
-            const fd = u.FamilyDetail || {};
-            const motherName = fd.motherName || "";
-            const motherCell = fd.motherCellphone || "";
-            const motherEmail = fd.motherEmail || "";
-            const fatherName = fd.fatherName || "";
-            const fatherCell = fd.fatherCellphone || "";
-            const fatherEmail = fd.fatherEmail || "";
-            const razonSocial = fd.razonSocial || "";
-            const nit = fd.nit || "";
-            const mainAddr = fd.mainAddress || "";
-            const altAddr = fd.alternativeAddress || "";
-            const specialFee = fd.specialFee || 0;
-            const routeType = fd.routeType || "";
-            let alumno1 = "";
-            let alumno2 = "";
-            let alumno3 = "";
-            let alumno4 = "";
-            if (fd.Students && fd.Students.length) {
-                if (fd.Students[0]) alumno1 = fd.Students[0].fullName;
-                if (fd.Students[1]) alumno2 = fd.Students[1].fullName;
-                if (fd.Students[2]) alumno3 = fd.Students[2].fullName;
-                if (fd.Students[3]) alumno4 = fd.Students[3].fullName;
-            }
-            let pilotosACargoStr = "";
-            if (roleName.toLowerCase() === "supervisor" && u.supervisorPilots) {
-                const emails = u.supervisorPilots.map(sp => {
-                    const pilot = allPilots.find(ap => ap.id === sp.pilotId);
-                    return pilot ? pilot.email : "";
-                });
-                pilotosACargoStr = emails.join(";");
-            }
-            const row = [
-                u.name || "",
-                fd.familyLastName || "",
-                u.email || "",
-                "",
-                roleName,
-                schoolName,
-                "",
-                motherName,
-                motherCell,
-                motherEmail,
-                fatherName,
-                fatherCell,
-                fatherEmail,
-                razonSocial,
-                nit,
-                mainAddr,
-                altAddr,
-                String(specialFee),
-                alumno1,
-                alumno2,
-                alumno3,
-                alumno4,
-                routeType,
-                pilotosACargoStr
-            ];
-            data.push(row);
-        });
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(data);
+        
 
-        // Auto-ajustar ancho de columnas basado en los headers y contenido
-        const colWidths = headers.map((header, headerIndex) => {
-            // Calcular el ancho mínimo basado en el header y el contenido
-            let maxWidth = header.length;
-
-            // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
-            data.slice(1).forEach(row => {
-                if (row[headerIndex] !== undefined) {
-                    const cellLength = String(row[headerIndex] || "").length;
-                    if (cellLength > maxWidth) {
-                        maxWidth = cellLength;
-                    }
-                }
-            });
-
-            // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
-            return { wch: Math.min(Math.max(maxWidth, 10), 50) };
-        });
-
-        ws['!cols'] = colWidths;
-
-        XLSX.utils.book_append_sheet(wb, ws, "UsuariosNuevos");
-        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([wbout], { type: "application/octet-stream" });
-        const fileName = `usuarios_nuevos_${getFormattedDateTime()}.xlsx`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
-
-    const handleDownloadAllUsers = async (schoolId) => {
+    const handleDownloadAllUsers = async (category, clientObj) => {
         try {
             let allUsers = [];
             let page = 0;
@@ -1032,84 +961,81 @@ const RolesManagementPage = () => {
             let total = 0;
             let fetched = 0;
 
-            // Primera petición para saber el total
-            const firstResp = await api.get('/users/non-parents', { params: { page, limit } });
-            allUsers = firstResp.data.users || [];
-            total = firstResp.data.total || allUsers.length;
+            // Decide params: when category is Colegio/Corporación ask backend to filter so attached supervisors/auxiliares are included
+            const baseParams = { page: 0, limit };
+            if (category === 'Colegios') {
+                const schoolId = clientObj ? clientObj.id : null;
+                if (!schoolId) {
+                    setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+                    return;
+                }
+                baseParams.schoolId = schoolId;
+            } else if (category === 'Corporaciones') {
+                const corpId = clientObj ? clientObj.id : null;
+                if (!corpId) {
+                    setSnackbar({ open: true, message: 'Por favor selecciona una corporación para descargar.', severity: 'warning' });
+                    return;
+                }
+                baseParams.corporationId = corpId;
+            }
+
+            // Primera petición para saber el total (pedimos al backend según params)
+            let resp = await api.get('/users/non-parents', { params: baseParams });
+            allUsers = resp.data.users || [];
+            total = resp.data.total || allUsers.length;
             fetched = allUsers.length;
 
-            // Si hay más, sigue pidiendo en lotes
+            // Si hay más, sigue pidiendo en lotes conservando los mismos filtros
             while (fetched < total) {
                 page += 1;
-                const resp = await api.get('/users/non-parents', { params: { page, limit } });
-                const usersBatch = resp.data.users || [];
+                const params = { ...baseParams, page };
+                const batchResp = await api.get('/users/non-parents', { params });
+                const usersBatch = batchResp.data.users || [];
                 allUsers = allUsers.concat(usersBatch);
                 fetched += usersBatch.length;
                 if (usersBatch.length === 0) break;
             }
 
-            // Filtrar por colegio seleccionado
-            if (!schoolId) {
-                setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+            // Filtrar según categoría seleccionada
+            if (!category) {
+                setSnackbar({ open: true, message: 'Por favor selecciona una opción para descargar.', severity: 'warning' });
                 return;
             }
-            allUsers = allUsers.filter(u => String(u.school) === String(schoolId));
+
+            if (category === 'Colegios') {
+                const schoolId = clientObj ? clientObj.id : null;
+                if (!schoolId) {
+                    setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+                    return;
+                }
+                allUsers = allUsers.filter(u => String(u.school) === String(schoolId));
+            } else if (category === 'Corporaciones') {
+                const corpId = clientObj ? clientObj.id : null;
+                if (!corpId) {
+                    setSnackbar({ open: true, message: 'Por favor selecciona una corporación para descargar.', severity: 'warning' });
+                    return;
+                }
+                allUsers = allUsers.filter(u => String(u.corporationId || u.corporation?.id || '') === String(corpId));
+            } else if (category === 'Sin afiliación') {
+                allUsers = allUsers.filter(u => !(u.school || u.corporationId || u.corporation));
+            }
             // Excluir usuarios con rol 'Padre' (roleId === 3)
             allUsers = allUsers.filter(u => Number(u.roleId) !== 3);
 
-            // Generar Excel
+            // Generar Excel (solo columnas solicitadas)
             const headers = [
-                "Nombre",
-                "Apellido Familia",
-                "Correo electrónico",
-                "Rol",
-                "Colegio",
-                "Placa de Bus",
-                "Nombre de la Madre",
-                "Celular de la Madre",
-                "Correo de la Madre",
-                "Nombre del Padre",
-                "Celular del Padre",
-                "Correo del Padre",
-                "Razón social",
-                "NIT",
-                "Dirección Principal",
-                "Dirección Alterna",
-                "Descuento especial",
-                "Alumno 1",
-                "Alumno 2",
-                "Alumno 3",
-                "Alumno 4",
-                "Tipo ruta",
-                "Pilotos a Cargo"
+                'Colegio',
+                'Rol',
+                'Nombre',
+                'Correo electrónico',
+                'Pilotos a Cargo',
+                'Monitoras a Cargo'
             ];
             const data = [headers];
             allUsers.forEach((u) => {
                 const roleName = u.Role ? u.Role.name : "";
                 const schoolName = u.School ? u.School.name : "";
-                const fd = u.FamilyDetail || {};
-                const motherName = fd.motherName || "";
-                const motherCell = fd.motherCellphone || "";
-                const motherEmail = fd.motherEmail || "";
-                const fatherName = fd.fatherName || "";
-                const fatherCell = fd.fatherCellphone || "";
-                const fatherEmail = fd.fatherEmail || "";
-                const razonSocial = fd.razonSocial || "";
-                const nit = fd.nit || "";
-                const mainAddr = fd.mainAddress || "";
-                const altAddr = fd.alternativeAddress || "";
-                const specialFee = fd.specialFee || 0;
-                const routeType = fd.routeType || "";
-                let alumno1 = "";
-                let alumno2 = "";
-                let alumno3 = "";
-                let alumno4 = "";
-                if (fd.Students && fd.Students.length) {
-                    if (fd.Students[0]) alumno1 = fd.Students[0].fullName;
-                    if (fd.Students[1]) alumno2 = fd.Students[1].fullName;
-                    if (fd.Students[2]) alumno3 = fd.Students[2].fullName;
-                    if (fd.Students[3]) alumno4 = fd.Students[3].fullName;
-                }
+
                 let pilotosACargoStr = "";
                 if (roleName.toLowerCase() === "supervisor" && u.supervisorPilots) {
                     const emails = u.supervisorPilots.map(sp => {
@@ -1118,57 +1044,56 @@ const RolesManagementPage = () => {
                     });
                     pilotosACargoStr = emails.join(";");
                 }
+
+                let monitorasACargoStr = "";
+                if (roleName.toLowerCase() === "auxiliar") {
+                    const possibleRelations = u.auxiliarMonitora || u.auxiliarMonitoras || u.auxiliarMonitoraRelations || u.auxiliarMonitoraIds || [];
+                    let ids = [];
+                    if (Array.isArray(possibleRelations) && possibleRelations.length > 0) {
+                        ids = possibleRelations.map(x => {
+                            if (!x) return null;
+                            if (typeof x === 'number') return x;
+                            if (typeof x === 'object') return x.monitoraId ?? x.monitora?.id ?? x.id ?? null;
+                            return null;
+                        }).filter(Boolean);
+                    }
+                    if (ids.length > 0) {
+                        const emails = ids.map(id => {
+                            const m = allMonitoras.find(am => am.id === id || am.monitoraId === id);
+                            return m ? (m.email || m.name || '') : '';
+                        }).filter(Boolean);
+                        monitorasACargoStr = emails.join(';');
+                    } else {
+                        const monitorasSame = allMonitoras.filter(am => (u.school && String(am.school) === String(u.school)) || (u.corporationId && String(am.corporationId || am.corporation?.id) === String(u.corporationId)));
+                        monitorasACargoStr = monitorasSame.map(m => m.email || m.name || '').filter(Boolean).join(';');
+                    }
+                }
+
                 const row = [
-                    u.name || "",
-                    fd.familyLastName || "",
-                    u.email || "",
-                    roleName,
-                    schoolName,
-                    "",
-                    motherName,
-                    motherCell,
-                    motherEmail,
-                    fatherName,
-                    fatherCell,
-                    fatherEmail,
-                    razonSocial,
-                    nit,
-                    mainAddr,
-                    altAddr,
-                    String(specialFee),
-                    alumno1,
-                    alumno2,
-                    alumno3,
-                    alumno4,
-                    routeType,
-                    pilotosACargoStr
+                    schoolName || '',
+                    roleName || '',
+                    u.name || '',
+                    u.email || '',
+                    pilotosACargoStr,
+                    monitorasACargoStr
                 ];
                 data.push(row);
             });
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(data);
 
-            // Auto-ajustar ancho de columnas basado en los headers y contenido
+            // Auto-ajustar ancho de columnas
             const colWidths = headers.map((header, headerIndex) => {
-                // Calcular el ancho mínimo basado en el header y el contenido
                 let maxWidth = header.length;
-
-                // Revisar el contenido de cada fila para encontrar el texto más largo en cada columna
                 data.slice(1).forEach(row => {
                     if (row[headerIndex] !== undefined) {
                         const cellLength = String(row[headerIndex] || "").length;
-                        if (cellLength > maxWidth) {
-                            maxWidth = cellLength;
-                        }
+                        if (cellLength > maxWidth) maxWidth = cellLength;
                     }
                 });
-
-                // Limitar el ancho máximo a 50 caracteres para evitar columnas demasiado anchas
                 return { wch: Math.min(Math.max(maxWidth, 10), 50) };
             });
-
             ws['!cols'] = colWidths;
-
             XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
             const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
             const blob = new Blob([wbout], { type: "application/octet-stream" });
@@ -1193,11 +1118,7 @@ const RolesManagementPage = () => {
     const handleDownloadUserTemplate = () => {
         // 1. Prepara listas de referencia
         const colegios = schools.map(s => [s.id, s.name]);
-        const tiposRuta = [
-            ["Completa"],
-            ["Media AM"],
-            ["Media PM"]
-        ];
+        const corporaciones = corporations.map(c => [c.id, c.name]);
         const pilotos = allPilots.map(p => [p.id, p.name]);
         const monitoras = allMonitoras.map(m => [m.id, m.name]);
 
@@ -1209,13 +1130,15 @@ const RolesManagementPage = () => {
                     "Nombre Completo",
                     "Correo electrónico",
                     "Contraseña",
-                    "Colegio (ID)"
+                    "Colegio (ID)",
+                    "Corporación (ID)"
                 ],
                 example: [
                     "GestorEjemplo",
                     "gestor@email.com",
                     "contraseña123",
-                    colegios[0]?.[0] || ""
+                    colegios[0]?.[0] || "",
+                    ""
                 ]
             },
             {
@@ -1231,74 +1154,22 @@ const RolesManagementPage = () => {
                     "contraseña123"
                 ]
             },
-            {
-                name: "Padre",
-                headers: [
-                    "Nombre Completo",
-                    "Correo electrónico",
-                    "Contraseña",
-                    "Colegio (ID)",
-                    "Nombre de la Madre",
-                    "Celular de la Madre",
-                    "Correo de la Madre",
-                    "Nombre del Padre",
-                    "Celular del Padre",
-                    "Correo del Padre",
-                    "Razón social",
-                    "NIT",
-                    "Dirección Principal",
-                    "Dirección Alterna",
-                    "Descuento especial (monto)",
-                    "Tipo ruta",
-                    "Alumno 1",
-                    "Grado Alumno 1",
-                    "Alumno 2",
-                    "Grado Alumno 2",
-                    "Alumno 3",
-                    "Grado Alumno 3",
-                    "Alumno 4",
-                    "Grado Alumno 4",
-                ],
-                example: [
-                    "PadreEjemplo",
-                    "padre@email.com",
-                    "contraseña123",
-                    colegios[0]?.[0] || "",
-                    "María López",
-                    "55512345",
-                    "maria@email.com",
-                    "Carlos Pérez",
-                    "55567890",
-                    "carlos@email.com",
-                    "Razón Social Ejemplo",
-                    "1234567-8",
-                    "Calle Principal 123",
-                    "Avenida Secundaria 456",
-                    "0",
-                    tiposRuta[0][0],
-                    "Alumno Ejemplo 1",
-                    "Primero Básico",
-                    "Alumno Ejemplo 2",
-                    "Segundo",
-                    "Alumno Ejemplo 3",
-                    "Tercero",
-                    "Alumno Ejemplo 4",
-                    "Cuarto",
-                ]
-            },
+            
             {
                 name: "Monitora",
                 headers: [
                     "Nombre Completo",
                     "Correo electrónico",
                     "Contraseña",
-                    "Colegio (ID)"
+                    "Colegio (ID)",
+                    "Corporación (ID)"
                 ],
                 example: [
                     "MonitoraEjemplo",
                     "moni@email.com",
                     "contraseña123",
-                    colegios[0]?.[0] || ""
+                    colegios[0]?.[0] || "",
+                    ""
                 ]
             },
             {
@@ -1307,13 +1178,15 @@ const RolesManagementPage = () => {
                     "Nombre Completo",
                     "Correo electrónico",
                     "Contraseña",
-                    "Colegio (ID)"
+                    "Colegio (ID)",
+                    "Corporación (ID)"
                 ],
                 example: [
                     "PilotoEjemplo",
                     "piloto@email.com",
                     "contraseña123",
-                    colegios[0]?.[0] || ""
+                    colegios[0]?.[0] || "",
+                    ""
                 ]
             },
             {
@@ -1322,15 +1195,15 @@ const RolesManagementPage = () => {
                     "Nombre Completo",
                     "Correo electrónico",
                     "Contraseña",
-                    "Colegio (ID)",
-                    "Pilotos a Cargo (IDs separados por ;)"
+                    "Colegios a Cargo (IDs separados por ;)",
+                    "Corporaciones a Cargo (IDs separados por ;)"
                 ],
                 example: [
                     "SupervisorEjemplo",
                     "supervisor@email.com",
                     "contraseña123",
                     colegios[0]?.[0] || "",
-                    [pilotos[0]?.[0], pilotos[1]?.[0]].filter(Boolean).join(";")
+                    corporaciones[0]?.[0] || ""
                 ]
             },
             {
@@ -1339,15 +1212,15 @@ const RolesManagementPage = () => {
                     "Nombre Completo",
                     "Correo electrónico",
                     "Contraseña",
-                    "Colegio (ID)",
-                    "Monitoras a Cargo (IDs separados por ;)"
+                    "Colegios a Cargo (IDs separados por ;)",
+                    "Corporaciones a Cargo (IDs separados por ;)"
                 ],
                 example: [
                     "AuxiliarEjemplo",
                     "auxiliar@email.com",
                     "contraseña123",
                     colegios[0]?.[0] || "",
-                    [monitoras[0]?.[0], monitoras[1]?.[0]].filter(Boolean).join(";")
+                    corporaciones[0]?.[0] || ""
                 ]
             }
         ];
@@ -1356,26 +1229,20 @@ const RolesManagementPage = () => {
         // Encuentra el máximo de filas para cada bloque para alinear verticalmente
         const maxRows = Math.max(
             colegios.length,
-            tiposRuta.length,
-            pilotos.length,
-            monitoras.length
+            corporaciones.length
         );
 
         const wsListasData = [
             [
                 "Colegios (ID)", "Colegios (Nombre)", "", // columna en blanco
-                "Tipo de Ruta", "", // columna en blanco
-                "Pilotos (ID)", "Pilotos (Nombre)", "",
-                "Monitoras (ID)", "Monitoras (Nombre)"
+                "Corporaciones (ID)", "Corporaciones (Nombre)"
             ]
         ];
 
         for (let i = 0; i < maxRows; i++) {
             wsListasData.push([
                 colegios[i]?.[0] ?? "", colegios[i]?.[1] ?? "", "",
-                tiposRuta[i]?.[0] ?? "", "",
-                pilotos[i]?.[0] ?? "", pilotos[i]?.[1] ?? "", "",
-                monitoras[i]?.[0] ?? "", monitoras[i]?.[1] ?? ""
+                corporaciones[i]?.[0] ?? "", corporaciones[i]?.[1] ?? ""
             ]);
         }
 
@@ -1386,13 +1253,8 @@ const RolesManagementPage = () => {
             { wch: Math.max("Colegios (ID)".length + 2, 15) },
             { wch: Math.max("Colegios (Nombre)".length + 2, 20) },
             { wch: 2 },
-            { wch: Math.max("Tipo de Ruta".length + 2, 15) },
-            { wch: 2 },
-            { wch: Math.max("Pilotos (ID)".length + 2, 15) },
-            { wch: Math.max("Pilotos (Nombre)".length + 2, 20) },
-            { wch: 2 },
-            { wch: Math.max("Monitoras (ID)".length + 2, 15) },
-            { wch: Math.max("Monitoras (Nombre)".length + 2, 20) }
+            { wch: Math.max("Corporaciones (ID)".length + 2, 15) },
+            { wch: Math.max("Corporaciones (Nombre)".length + 2, 20) }
         ];
 
         // 4. Generar el archivo
@@ -1431,52 +1293,20 @@ const RolesManagementPage = () => {
                     gap: 2
                 }}
             >
-                <TextField
-                    label="Buscar usuarios"
-                    variant="outlined"
-                    size="small"
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    sx={{ width: '100%', maxWidth: '300px' }}
-                />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <TextField
+                        label="Buscar usuarios"
+                        variant="outlined"
+                        size="small"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleApplySearch(); }}
+                        sx={{ width: '100%', maxWidth: '300px' }}
+                    />
+                    <Button variant="contained" size="small" onClick={() => handleApplySearch()}>Buscar</Button>
+                </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    <FormControl size="small" sx={{ width: 150 }}>
-                        <InputLabel>Filtro Nuevo</InputLabel>
-                        <Select
-                            label="Filtro Nuevo"
-                            value={newUsersFilter}
-                            onChange={(e) => setNewUsersFilter(e.target.value)}
-                        >
-                            <MenuItem value="all">Todos</MenuItem>
-                            <MenuItem value="new">Nuevos</MenuItem>
-                            <MenuItem value="old">No nuevos</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <FormControl size="small" sx={{ width: 150 }}>
-                        <InputLabel>Actualizado</InputLabel>
-                        <Select
-                            label="Actualizado"
-                            value={updatedFilter}
-                            onChange={(e) => setUpdatedFilter(e.target.value)}
-                        >
-                            <MenuItem value="all">Todos</MenuItem>
-                            <MenuItem value="updated">Actualizados</MenuItem>
-                            <MenuItem value="notUpdated">No actualizados</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    <FormControl size="small" sx={{ width: 150 }}>
-                        <InputLabel>Duplicado</InputLabel>
-                        <Select
-                            label="Duplicado"
-                            value={duplicateFilter}
-                            onChange={(e) => setDuplicateFilter(e.target.value)}
-                        >
-                            <MenuItem value="all">Todos</MenuItem>
-                            <MenuItem value="duplicated">Duplicados</MenuItem>
-                            <MenuItem value="notDuplicated">No duplicados</MenuItem>
-                        </Select>
-                    </FormControl>
+                    
 
                     <FormControl size="small" sx={{ width: 150 }}>
                         <InputLabel>Rol</InputLabel>
@@ -1488,47 +1318,37 @@ const RolesManagementPage = () => {
                             <MenuItem value="">
                                 <em>Todos</em>
                             </MenuItem>
-                            {roleOptions.map(r => (
-                                <MenuItem key={r.id} value={r.id}>
-                                    {r.name}
-                                </MenuItem>
-                            ))}
+                            {roleOptions
+                                .filter(r => {
+                                    const n = String(r.name || '').toLowerCase();
+                                    return n !== 'padre' && n !== 'colaborador';
+                                })
+                                .map(r => (
+                                    <MenuItem key={r.id} value={r.id}>
+                                        {r.name}
+                                    </MenuItem>
+                                ))}
                         </Select>
                     </FormControl>
-                    <FormControl size="small" sx={{ width: 150 }}>
-                        <InputLabel>Colegio</InputLabel>
-                        <Select
-                            label="Colegio"
-                            value={schoolFilter}
-                            onChange={(e) => setSchoolFilter(e.target.value)}
-                        >
-                            <MenuItem value="">
-                                <em>Todos</em>
-                            </MenuItem>
-                            {schools.map(sch => (
-                                <MenuItem key={sch.id} value={sch.id}>
-                                    {sch.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <FormControl size="small" sx={{ width: 150 }}>
-                        <InputLabel>Corporación</InputLabel>
-                        <Select
-                            label="Corporación"
-                            value={corporationFilter}
-                            onChange={(e) => setCorporationFilter(e.target.value)}
-                        >
-                            <MenuItem value="">
-                                <em>Todos</em>
-                            </MenuItem>
-                            {corporations.map(corp => (
-                                <MenuItem key={corp.id} value={corp.id}>
-                                    {corp.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
+                    <Autocomplete
+                        size="small"
+                        sx={{ width: 320 }}
+                        options={clientOptions}
+                        groupBy={(option) => {
+                            if (!option) return '';
+                            if (option.type === 'Todos' || option.type === 'Sin afiliación') return 'Opciones';
+                            if (option.type === 'Colegio') return 'Colegios';
+                            if (option.type === 'Corporación') return 'Corporaciones';
+                            return '';
+                        }}
+                        getOptionLabel={(option) => option.label}
+                        value={clientFilter}
+                        onChange={(e, newVal) => {
+                            setClientFilter(newVal || null);
+                        }}
+                        renderInput={(params) => <TextField {...params} label="Cliente (Todos/Colegios/Corporaciones)" />}
+                        clearOnEscape
+                    />
                     <Button
                         variant="contained"
                         color="info"
@@ -1553,15 +1373,7 @@ const RolesManagementPage = () => {
                     >
                         Enviar Circular Masiva
                     </Button>
-                    <Button
-                        variant="outlined"
-                        color="primary"
-                        startIcon={<FileDownload />}
-                        onClick={() => setDownloadDialogOpen(true)}
-                        sx={{ ml: 1 }}
-                    >
-                        Descargar Nuevos
-                    </Button>
+                    
                     <Button
                         variant="outlined"
                         color="primary"
@@ -1922,7 +1734,10 @@ const RolesManagementPage = () => {
                                     <MenuItem value="">
                                         <em>Seleccione un rol</em>
                                     </MenuItem>
-                                    {roleOptions.map((r) => (
+                                    {(selectedUser?.id
+                                        ? roleOptions
+                                        : roleOptions.filter(r => allowedRolesForCreate.includes(String(r.name).toLowerCase()))
+                                    ).map((r) => (
                                         <MenuItem key={r.id} value={r.id}>
                                             {r.name}
                                         </MenuItem>
@@ -1930,65 +1745,67 @@ const RolesManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} md={6}>
-                            <FormControl variant="outlined" fullWidth>
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    name="school"
-                                    value={selectedUser?.school || ''}
-                                    onChange={async (e) => {
-                                        const newSchoolId = e.target.value;
-                                        setSelectedUser(prev => ({ 
-                                            ...prev, 
-                                            school: newSchoolId,
-                                            corporationId: newSchoolId ? '' : prev.corporationId
-                                        }));
-                                        if (Number(selectedUser?.roleId) === 3 && newSchoolId) {
-                                            await fetchSchoolGrades(newSchoolId);
-                                        }
-                                    }}
-                                    label="Colegio"
-                                    disabled={!!(selectedUser?.corporationId)}
-                                >
-                                    <MenuItem value="">
-                                        <em>Ninguno</em>
-                                    </MenuItem>
-                                    {schools.map((sch) => (
-                                        <MenuItem key={sch.id} value={sch.id}>
-                                            {sch.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <FormControl variant="outlined" fullWidth>
-                                <InputLabel>Corporación</InputLabel>
-                                <Select
-                                    name="corporationId"
-                                    value={selectedUser?.corporationId || ''}
-                                    onChange={(e) => {
-                                        const newCorporationId = e.target.value;
-                                        setSelectedUser(prev => ({ 
-                                            ...prev, 
-                                            corporationId: newCorporationId,
-                                            school: newCorporationId ? '' : prev.school
-                                        }));
-                                    }}
-                                    label="Corporación"
-                                    disabled={!!(selectedUser?.school)}
-                                >
-                                    <MenuItem value="">
-                                        <em>Ninguna</em>
-                                    </MenuItem>
-                                    {corporations.map((corp) => (
-                                        <MenuItem key={corp.id} value={corp.id}>
-                                            {corp.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
+                        {!roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
+                            <>
+                                <Grid item xs={12} md={6}>
+                                    <FormControl variant="outlined" fullWidth>
+                                        <InputLabel>Colegio</InputLabel>
+                                        <Select
+                                            name="school"
+                                            value={selectedUser?.school || ''}
+                                            onChange={async (e) => {
+                                                const newSchoolId = e.target.value;
+                                                setSelectedUser(prev => ({ 
+                                                    ...prev, 
+                                                    school: newSchoolId,
+                                                    corporationId: newSchoolId ? '' : prev.corporationId
+                                                }));
+                                                if (Number(selectedUser?.roleId) === 3 && newSchoolId) {
+                                                    await fetchSchoolGrades(newSchoolId);
+                                                }
+                                            }}
+                                            label="Colegio"
+                                        >
+                                            <MenuItem value="">
+                                                <em>Ninguno</em>
+                                            </MenuItem>
+                                            {schools.map((sch) => (
+                                                <MenuItem key={sch.id} value={sch.id}>
+                                                    {sch.name}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                    <FormControl variant="outlined" fullWidth>
+                                        <InputLabel>Corporación</InputLabel>
+                                        <Select
+                                            name="corporationId"
+                                            value={selectedUser?.corporationId || ''}
+                                            onChange={(e) => {
+                                                const newCorporationId = e.target.value;
+                                                setSelectedUser(prev => ({ 
+                                                    ...prev, 
+                                                    corporationId: newCorporationId,
+                                                    school: newCorporationId ? '' : prev.school
+                                                }));
+                                            }}
+                                            label="Corporación"
+                                        >
+                                            <MenuItem value="">
+                                                <em>Ninguna</em>
+                                            </MenuItem>
+                                            {corporations.map((corp) => (
+                                                <MenuItem key={corp.id} value={corp.id}>
+                                                    {corp.name}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                            </>
+                        )}
                         {Number(selectedUser?.roleId) === 3 && (
                             <>
                                 {/* Se ha removido el select de contrato en el diálogo de edición */}
@@ -2483,55 +2300,71 @@ const RolesManagementPage = () => {
 
             {/* Reporte de rutas eliminado */}
 
-            {/* Diálogo para descargar usuarios nuevos */}
-            <Dialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Descargar Usuarios Nuevos</DialogTitle>
-                <DialogContent>
-                    <FormControl fullWidth>
-                        <InputLabel>Colegio</InputLabel>
-                        <Select
-                            value={selectedSchoolForDownload}
-                            label="Colegio"
-                            onChange={(e) => setSelectedSchoolForDownload(e.target.value)}
-                        >
-                            <MenuItem value="">
-                                <em>Selecciona un colegio</em>
-                            </MenuItem>
-                            {schools.map(s => (
-                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDownloadDialogOpen(false)}>Cancelar</Button>
-                    <Button onClick={() => { handleDownloadNewUsers(selectedSchoolForDownload); setDownloadDialogOpen(false); }} variant="contained">Descargar</Button>
-                </DialogActions>
-            </Dialog>
+            
 
             {/* Diálogo para descargar todos los usuarios */}
             <Dialog open={downloadAllDialogOpen} onClose={() => setDownloadAllDialogOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Descargar Todos los Usuarios</DialogTitle>
                 <DialogContent>
-                    <FormControl fullWidth>
-                        <InputLabel>Colegio</InputLabel>
+                    <FormControl fullWidth sx={{ mt: 1 }}>
+                        <InputLabel>Filtrar por</InputLabel>
                         <Select
-                            value={selectedSchoolForDownload}
-                            label="Colegio"
-                            onChange={(e) => setSelectedSchoolForDownload(e.target.value)}
+                            value={downloadCategory}
+                            label="Filtrar por"
+                            onChange={(e) => { setDownloadCategory(e.target.value); setSelectedClientForDownload(null); }}
                         >
-                            <MenuItem value="">
-                                <em>Selecciona un colegio</em>
+                            <MenuItem value=""> 
+                                <em>Selecciona...</em>
                             </MenuItem>
-                            {schools.map(s => (
-                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                            ))}
+                            <MenuItem value="Colegios">Colegios</MenuItem>
+                            <MenuItem value="Corporaciones">Corporaciones</MenuItem>
+                            <MenuItem value="Sin afiliación">Sin afiliación</MenuItem>
                         </Select>
                     </FormControl>
+
+                    {downloadCategory === 'Colegios' && (
+                        <Box sx={{ mt: 2 }}>
+                            <Autocomplete
+                                options={schools}
+                                getOptionLabel={(opt) => opt?.name || ''}
+                                value={selectedClientForDownload}
+                                onChange={(e, v) => setSelectedClientForDownload(v)}
+                                renderInput={(params) => <TextField {...params} label="Selecciona Colegio" />}
+                                fullWidth
+                            />
+                        </Box>
+                    )}
+
+                    {downloadCategory === 'Corporaciones' && (
+                        <Box sx={{ mt: 2 }}>
+                            <Autocomplete
+                                options={corporations}
+                                getOptionLabel={(opt) => opt?.name || ''}
+                                value={selectedClientForDownload}
+                                onChange={(e, v) => setSelectedClientForDownload(v)}
+                                renderInput={(params) => <TextField {...params} label="Selecciona Corporación" />}
+                                fullWidth
+                            />
+                        </Box>
+                    )}
+
+                    {downloadCategory === 'Sin afiliación' && (
+                        <Box sx={{ mt: 2 }}>
+                            <DialogContentText>Se descargarán usuarios que no pertenecen a ningún colegio ni corporación.</DialogContentText>
+                        </Box>
+                    )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDownloadAllDialogOpen(false)}>Cancelar</Button>
-                    <Button onClick={() => { handleDownloadAllUsers(selectedSchoolForDownload); setDownloadAllDialogOpen(false); }} variant="contained">Descargar</Button>
+                    <Button
+                        onClick={() => {
+                            handleDownloadAllUsers(downloadCategory, selectedClientForDownload);
+                            setDownloadAllDialogOpen(false);
+                        }}
+                        variant="contained"
+                    >
+                        Descargar
+                    </Button>
                 </DialogActions>
             </Dialog>
 
