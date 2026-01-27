@@ -1374,6 +1374,13 @@ const SchoolUsersPage = () => {
 
             const roleIdNum = Number(selectedUser.roleId);
 
+            // Validation: when creating a new Parent (roleId 3), require at least one student
+            const currentStudentsCount = currentStudentsNorm.length;
+            if (!selectedUser.id && roleIdNum === 3 && currentStudentsCount === 0) {
+                setSnackbar({ open: true, message: 'Debe agregar al menos un estudiante para crear una familia', severity: 'warning' });
+                return;
+            }
+
             // Arma el payload del usuario
             let payload = {
                 id: selectedUser.id,
@@ -1897,7 +1904,7 @@ const SchoolUsersPage = () => {
                                 fullWidth
                                 onClick={handleAddUser}
                             >
-                                Añadir Usuario
+                                Añadir Familia
                             </Button>
                         </Grid>
                         <Grid item xs={12} md={2}>
@@ -2362,7 +2369,7 @@ const SchoolUsersPage = () => {
             <Dialog open={openEditDialog} onClose={() => {
                 setOpenEditDialog(false);
             }} maxWidth="md" fullWidth>
-                <DialogTitle>{selectedUser?.id ? 'Editar Usuario' : 'Añadir Usuario'}</DialogTitle>
+                <DialogTitle>{selectedUser?.id ? 'Editar Familia' : 'Añadir Familia'}</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
                         {selectedUser?.id
@@ -2805,6 +2812,7 @@ const SchoolUsersPage = () => {
                         variant="contained" 
                         color="primary"
                         onClick={handleSaveUser}
+                        disabled={!selectedUser?.id && Number(selectedUser?.roleId) === 3 && (!(Array.isArray(familyDetail.students)) || familyDetail.students.length === 0)}
                     >
                         {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
                     </Button>
