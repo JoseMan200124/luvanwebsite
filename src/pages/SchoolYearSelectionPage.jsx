@@ -54,6 +54,8 @@ import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import SubmissionPreview from './SubmissionPreview';
+import ExcelJS from 'exceljs';
+import moment from 'moment';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -987,18 +989,82 @@ const SchoolYearSelectionPage = () => {
                 <DialogTitle>Carga Masiva de Colegios</DialogTitle>
                 <DialogContent>
                     <Typography variant="body1" sx={{ mb: 1 }}>
-                        Sube un archivo Excel/CSV con las columnas necesarias.
+                        Subir un archivo Excel utilizando la plantilla.
                         <br />
-                        Para <em>Horarios</em> puedes escribir algo como: <br />
-                        <code>Lunes=08:00,09:00;Martes=07:00,09:30</code> <br />
-                        Para <em>Grados</em>: <br />
-                        <code>Kinder,Primero,Segundo</code>
+                        <br />
+                        Para los horarios, escribir tiempos en formato <code>HH:MM</code> (ej. <code>13:00</code>). <br /> <br />
+                        Las fechas de Inicio Ciclo / Fin Ciclo deben ir en formato <code>dd-mm-aaaa</code> (ej. <code>01-03-2025</code>).
                     </Typography>
                     <Button
                         variant="outlined"
                         color="success"
-                        href="/plantillas/plantilla_colegios.xlsx"
-                        download
+                        onClick={async () => {
+                            try {
+                                const workbook = new ExcelJS.Workbook();
+                                const worksheet = workbook.addWorksheet('Plantilla Colegios');
+                                worksheet.columns = [
+                                    { header: 'Nombre', key: 'name', width: 30 },
+                                    { header: 'Dirección', key: 'address', width: 40 },
+                                    { header: 'Ciudad', key: 'city', width: 20 },
+                                    { header: 'Persona de Contacto', key: 'contactPerson', width: 25 },
+                                    { header: 'Correo de Contacto', key: 'contactEmail', width: 30 },
+                                    { header: 'Teléfono de Contacto', key: 'contactPhone', width: 20 },
+                                    { header: 'Enlace Whatsapp', key: 'whatsapp', width: 20 },
+                                    { header: 'Horario AM', key: 'scheduleAM', width: 14, style: { numFmt: '@' } },
+                                    { header: 'Horario MD', key: 'scheduleMD', width: 14, style: { numFmt: '@' } },
+                                    { header: 'Horario PM', key: 'schedulePM', width: 14, style: { numFmt: '@' } },
+                                    { header: 'Horario EX', key: 'scheduleEX', width: 14, style: { numFmt: '@' } },
+                                    { header: 'Grados', key: 'grades', width: 30 },
+                                    { header: 'Tarifa Completa', key: 'transportFeeComplete', width: 18, style: { numFmt: '0.00' } },
+                                    { header: 'Tarifa Media', key: 'transportFeeHalf', width: 18, style: { numFmt: '0.00' } },
+                                    { header: 'Dia de Pago', key: 'duePaymentDay', width: 12, style: { numFmt: '0' } },
+                                    { header: 'Banco', key: 'bankName', width: 20 },
+                                    { header: 'Cuenta Bancaria', key: 'bankAccount', width: 25 },
+                                    { header: 'Numeros Ruta', key: 'routeNumbers', width: 25, style: { numFmt: '@' } },
+                                    { header: 'Penalidad Diaria', key: 'dailyPenalty', width: 16, style: { numFmt: '0.00' } },
+                                    { header: 'Inicio Ciclo', key: 'schoolYearStart', width: 14, style: { numFmt: '@' } },
+                                    { header: 'Fin Ciclo', key: 'schoolYearEnd', width: 14, style: { numFmt: '@' } }
+                                ];
+
+                                // Example row to guide users
+                                worksheet.addRow({
+                                    name: 'Colegio Ejemplo',
+                                    address: 'Calle 123',
+                                    city: 'Ciudad',
+                                    contactPerson: 'Nombre',
+                                    contactEmail: 'contacto@colegio.com',
+                                    contactPhone: '12345678',
+                                    whatsapp: '',
+                                    scheduleAM: '07:00',
+                                    scheduleMD: '12:00',
+                                    schedulePM: '13:00',
+                                    scheduleEX: '15:00',
+                                    grades: 'Kinder,1ero,2do',
+                                    transportFeeComplete: 0.00,
+                                    transportFeeHalf: 0.00,
+                                    duePaymentDay: 1,
+                                    bankName: '',
+                                    bankAccount: '',
+                                    routeNumbers: '12,15',
+                                    dailyPenalty: 10.00,
+                                    schoolYearStart: '01-03-2025',
+                                    schoolYearEnd: '28-02-2026'
+                                });
+
+                                worksheet.getRow(1).font = { bold: true };
+
+                                const buffer = await workbook.xlsx.writeBuffer();
+                                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `Plantilla_Colegios_${moment().format('YYYYMMDD')}.xlsx`;
+                                a.click();
+                                window.URL.revokeObjectURL(url);
+                            } catch (err) {
+                                console.error('Error generando plantilla:', err);
+                            }
+                        }}
                         sx={{ mr: 2 }}
                     >
                         Descargar Plantilla
