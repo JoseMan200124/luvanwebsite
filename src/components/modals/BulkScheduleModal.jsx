@@ -5,6 +5,7 @@ import api from '../../utils/axiosConfig';
 
 export default function BulkScheduleModal({ open, onClose, schoolId }) {
   const [families, setFamilies] = useState([]);
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -15,20 +16,21 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
   const DAYS = ['Lunes','Martes','Miercoles','Jueves','Viernes'];
   const FRANJAS = ['AM','MD','PM','EX'];
 
-  useEffect(() => {
+    useEffect(() => {
     if (!open) return;
     if (!schoolId) return;
     setLoading(true);
     let cancelled = false;
     const load = async () => {
       try {
-        const resp = await api.get(`/bulk-schedule/families/${schoolId}`);
+        const resp = await api.get(`/bulk-schedule/families/${schoolId}${includeInactive ? '?includeInactive=true' : ''}`);
         if (cancelled) return;
         const raw = resp.data.families || [];
         const normalized = raw.map(f => ({
           id: f.id,
           familyLastName: f.familyLastName || f.family_name || f.name || '',
-          students: Array.isArray(f.students) ? f.students : (Array.isArray(f.Students) ? f.Students : (Array.isArray(f.children) ? f.children : []))
+          students: Array.isArray(f.students) ? f.students : (Array.isArray(f.Students) ? f.Students : (Array.isArray(f.children) ? f.children : [])),
+          deleted: !!f.deleted
         }));
         setFamilies(normalized);
         setSelected(new Set(normalized.map(f => f.id)));
@@ -37,14 +39,15 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
         console.error('bulk-schedule/families error', err && err.response ? err.response.status : err);
         // Fallback: try existing parents endpoint which lists families by school
         try {
-          const alt = await api.get(`/parents/school/${schoolId}`);
+          const alt = await api.get(`/parents/school/${schoolId}${includeInactive ? '?includeInactive=true' : ''}`);
           if (cancelled) return;
           // parent endpoint returns { families: [...] } or { data: { families } }
           const altFamilies = alt.data.families || alt.data?.families || alt.data?.data || alt.data || [];
           const normalized = (altFamilies || []).map(f => ({
             id: f.id,
             familyLastName: f.familyLastName || f.family_name || f.name || '',
-            students: Array.isArray(f.students) ? f.students : (Array.isArray(f.Students) ? f.Students : (Array.isArray(f.Children) ? f.Children : []))
+            students: Array.isArray(f.students) ? f.students : (Array.isArray(f.Students) ? f.Students : (Array.isArray(f.Children) ? f.Children : [])),
+            deleted: !!f.deleted
           }));
           setFamilies(normalized);
           setSelected(new Set(normalized.map(f => f.id)));
@@ -59,7 +62,7 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
     };
     load();
     return () => { cancelled = true; };
-  }, [open, schoolId]);
+  }, [open, schoolId, includeInactive]);
 
   const toggleFamily = (id) => {
     setSelected(s => {
@@ -249,6 +252,11 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
         <Typography variant="body2" sx={{ mb: 2 }}>
           Selecciona las familias a incluir en la plantilla. Cada fila corresponde a una familia y hasta 4 estudiantes.
         </Typography>
+        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} /> Incluir familias inactivas
+          </label>
+        </Box>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
         ) : (
@@ -265,7 +273,7 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
               return (
                 <Box key={f.id} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <Checkbox checked={selected.has(f.id)} onChange={() => toggleFamily(f.id)} />
-                  <Typography>{f.familyLastName} ({count} hijos)</Typography>
+                  <Typography sx={{ color: f.deleted ? 'text.disabled' : 'inherit' }}>{f.familyLastName} {f.deleted ? '(Inactiva)' : ''} ({count} hijos)</Typography>
                 </Box>
               );
             })}

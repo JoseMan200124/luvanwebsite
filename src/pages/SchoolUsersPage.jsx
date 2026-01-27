@@ -1476,8 +1476,8 @@ const SchoolUsersPage = () => {
 
         const headers = [
             "Apellido Familia",
-            "Nombre Completo",
-            "Correo electrónico",
+            "Nombre Completo (Usuario)",
+            "Correo electrónico (Usuario)",
             "Contraseña",
             "Nombre de la Madre",
             "Celular de la Madre",
@@ -1507,8 +1507,8 @@ const SchoolUsersPage = () => {
 
         const example = [
             "López Ruiz",
-            "PadreEjemplo",
-            "padre@email.com",
+            "UsuarioEjemplo",
+            "usuario@ejemplo.com",
             "contraseña123",
             "María López",
             "55512345",
@@ -2146,12 +2146,12 @@ const SchoolUsersPage = () => {
             </Card>
 
             <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Usuarios</DialogTitle>
+                <DialogTitle>Carga Masiva de Familias</DialogTitle>
                 <DialogContent>
                     <Typography variant="body1" sx={{ mb: 1 }}>
-                        Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial.<br />
+                        Sube un archivo Excel. Usa la plantilla oficial.<br />
                         <br />
-                        Las listas de Colegios y Tipo de Ruta están en la hoja "Listas" de la plantilla.<br />
+                        La lista de Grados se encuentra en la hoja "Listas" de la plantilla.<br />
                         <br />
                         El límite de archivo es 5 MB.
                     </Typography>
