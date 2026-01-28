@@ -304,7 +304,7 @@ const SchoolPaymentsPage = () => {
     const fetchPaymentsAnalysis = async (schId) => {
         if (!schId) return;
         try {
-            const res = await api.get('/payments/analysis', { params: { schoolId: schId, schoolYear } });
+            const res = await api.get('/payments/analysis', { params: { schoolId: schId, schoolYear, excludeInactive: true } });
             // expected shape: { statusDistribution: [...], monthlyEarnings: [...] }
             const data = res.data || null;
             setAnalysisData(data);
