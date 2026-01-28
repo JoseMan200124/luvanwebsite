@@ -854,12 +854,13 @@ const SchoolUsersPage = () => {
     // Funciones auxiliares para determinar el estado de los usuarios
     const isUserNew = (user) => {
         if (!user.FamilyDetail) return false;
-        if (user.FamilyDetail.source !== 'enrollment') return false;
+        // Consider a family new only when `isNew` is explicitly true and
+        // the account was created within the last 21 days.
         if (user.FamilyDetail.isNew === false) return false;
         const createdAt = new Date(user.createdAt);
         const now = new Date();
         const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
-        return diffDays <= 14;
+        return user.FamilyDetail.isNew === true && diffDays <= 21;
     };
 
     const isFamilyLastNameDuplicated = (user, allUsers) => {

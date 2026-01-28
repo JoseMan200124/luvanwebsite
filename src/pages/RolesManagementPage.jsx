@@ -113,12 +113,12 @@ const MobileValue = styled(Typography)`
 // Helper para saber si un usuario es "nuevo"
 function isUserNew(user) {
     if (!user.FamilyDetail) return false;
-    if (user.FamilyDetail.source !== 'enrollment') return false;
+    // Only consider families explicitly marked `isNew` and within 21 days
     if (user.FamilyDetail.isNew === false) return false;
     const createdAt = new Date(user.createdAt);
     const now = new Date();
     const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
-    return diffDays <= 14;
+    return user.FamilyDetail.isNew === true && diffDays <= 21;
 }
 
 // Helper para saber si el apellido de familia está duplicado
