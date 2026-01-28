@@ -218,6 +218,7 @@ const SchoolUsersPage = () => {
             // Encabezados básicos (Apellido Familia primero)
             const baseHeaders = [
                 { header: 'Apellido Familia', key: 'apellidoFamilia' },
+                { header: 'Estado Familia', key: 'estadoFamilia' },
                 { header: 'Nombre', key: 'nombre' },
                 { header: 'Email', key: 'email' },
                 { header: 'Nombre Madre', key: 'madreNombre' },
@@ -278,6 +279,11 @@ const SchoolUsersPage = () => {
                 const fd = u.FamilyDetail || {};
                 const row = [];
                 row.push(fd.familyLastName || '');
+                // Mostrar sólo Activo/Inactivo en la columna solicitada
+                const statusText = (typeof getUserStatus === 'function')
+                    ? (getUserStatus(u) === 'Inactivo' ? 'Inactivo' : 'Activo')
+                    : (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo');
+                row.push(statusText);
                 row.push(u.name || '');
                 row.push(u.email || '');
                 row.push(fd.motherName || '');
@@ -655,9 +661,10 @@ const SchoolUsersPage = () => {
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Padres');
 
-            // Encabezados básicos
+            // Encabezados básicos (añadimos columna Estado Familia)
             const baseHeaders = [
                 { header: 'Apellido Familia', key: 'apellidoFamilia' },
+                { header: 'Estado Familia', key: 'estadoFamilia' },
                 { header: 'Nombre', key: 'nombre' },
                 { header: 'Email', key: 'email' },
                 { header: 'Nombre Madre', key: 'madreNombre' },
@@ -728,6 +735,11 @@ const SchoolUsersPage = () => {
                 const fd = u.FamilyDetail || {};
                 const row = [];
                 row.push(fd.familyLastName || '');
+                // Columna Estado Familia: sólo mostramos Activo/Inactivo aquí
+                const statusText = (typeof getUserStatus === 'function')
+                    ? (getUserStatus(u) === 'Inactivo' ? 'Inactivo' : 'Activo')
+                    : (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo');
+                row.push(statusText);
                 row.push(u.name || '');
                 row.push(u.email || '');
                 row.push(fd.motherName || '');
