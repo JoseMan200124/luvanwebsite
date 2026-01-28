@@ -307,7 +307,18 @@ const SchoolPaymentsPage = () => {
             const res = await api.get('/payments/analysis', { params: { schoolId: schId, schoolYear, excludeInactive: true } });
             // expected shape: { statusDistribution: [...], monthlyEarnings: [...] }
             const data = res.data || null;
-            setAnalysisData(data);
+            // Exclude families marked as deleted from the "Distribución de Familias".
+            // If the backend included an ELIMINADO bucket, remove it and adjust totalPayments accordingly.
+            const originalDist = Array.isArray(data?.statusDistribution) ? data.statusDistribution : [];
+            const eliminatedEntry = originalDist.find(s => (s.finalStatus || '').toUpperCase() === 'ELIMINADO');
+            const eliminatedCount = eliminatedEntry?.count || 0;
+            const filteredDist = originalDist.filter(s => (s.finalStatus || '').toUpperCase() !== 'ELIMINADO');
+            const sanitized = {
+                ...data,
+                statusDistribution: filteredDist,
+                totalPayments: Math.max(0, (data?.totalPayments || 0) - eliminatedCount)
+            };
+            setAnalysisData(sanitized);
             setCombinedEarnings(Array.isArray(data?.monthlyEarnings) ? data.monthlyEarnings : []);
     } catch (e) {
             // fallback: derive from current payments (best-effort)
@@ -2141,6 +2152,10 @@ const SchoolPaymentsPage = () => {
                                                     <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>{familiasActivas}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={2}>
+                                                    <Typography variant="body2" color="text.secondary"><strong>Inactivas</strong></Typography>
+                                                    <Typography variant="h6" sx={{ color: '#9e9e9e', fontWeight: 600 }}>{inactivoCount}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={2}>
                                                     <Typography variant="body2" color="text.secondary"><strong>Pagadas</strong></Typography>
                                                     <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>{pagadoCount}</Typography>
                                                 </Grid>
@@ -2152,10 +2167,7 @@ const SchoolPaymentsPage = () => {
                                                     <Typography variant="body2" color="text.secondary"><strong>Pendientes</strong></Typography>
                                                     <Typography variant="h6" sx={{ color: '#ff9800', fontWeight: 600 }}>{pendienteCount}</Typography>
                                                 </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2" color="text.secondary"><strong>Inactivas</strong></Typography>
-                                                    <Typography variant="h6" sx={{ color: '#9e9e9e', fontWeight: 600 }}>{inactivoCount}</Typography>
-                                                </Grid>
+                                                
                                             </Grid>
                                         </Box>
 
