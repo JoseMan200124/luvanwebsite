@@ -514,6 +514,12 @@ const RolesManagementPage = () => {
             password: '',
             corporationId: user.corporationId || ''
         });
+        // Populate monitoraFullName from nested MonitoraDetail if present (tolerant to different casing/keys)
+        if (parsedRoleId === 4) {
+            const md = user.monitoraDetail || user.MonitoraDetail || null;
+            const mdFullName = md && md.fullName ? md.fullName : '';
+            setSelectedUser(prev => ({ ...prev, monitoraFullName: mdFullName }));
+        }
         if (parsedRoleId === 3 && user.FamilyDetail) {
             setFamilyDetail({
                 familyLastName: user.FamilyDetail.familyLastName || '',
@@ -803,6 +809,15 @@ const RolesManagementPage = () => {
             if (roleIdNum === 7) {
                 payload.auxiliarSchools = (selectedAuxiliarSchools || []).map(s => Number(s));
                 payload.auxiliarCorporations = (selectedAuxiliarCorporations || []).map(c => Number(c));
+            }
+
+            // Monitora: include monitoraDetail with fullName and phoneNumber
+            if (roleIdNum === 4) {
+                payload.monitoraDetail = {
+                    fullName: selectedUser?.monitoraFullName || selectedUser?.name || '',
+                    phoneNumber: selectedUser?.phoneNumber || ''
+                };
+                if (selectedUser?.school) payload.monitoraDetail.schoolId = Number(selectedUser.school);
             }
 
             // Crear o actualizar (no envíes id en POST)
@@ -1745,6 +1760,32 @@ const RolesManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
+                        {Number(selectedUser?.roleId) === 4 && (
+                            <>
+                                <Grid item xs={12} md={6}>
+                                    <TextField
+                                        name="monitoraFullName"
+                                        label="Nombre Completo (Monitora)"
+                                        type="text"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={selectedUser?.monitoraFullName || ''}
+                                        onChange={handleUserChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                    <TextField
+                                        name="phoneNumber"
+                                        label="Número de Teléfono"
+                                        type="text"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={selectedUser?.phoneNumber || ''}
+                                        onChange={handleUserChange}
+                                    />
+                                </Grid>
+                            </>
+                        )}
                         {!roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
                             <>
                                 <Grid item xs={12} md={6}>
