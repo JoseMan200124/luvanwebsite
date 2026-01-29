@@ -2140,22 +2140,41 @@ const SchoolUsersPage = () => {
 
                                                         {Number(user.roleId) === 3 && (
                                                             <>
-                                                                <IconButton
-                                                                    size="small"
-                                                                    onClick={() => handleAssignBuses(user)}
-                                                                    sx={{
-                                                                        color: (() => {
-                                                                            const s = getBusAssignStatus(user);
-                                                                            return s === 'all' ? 'success.main' : (s === 'some' ? 'warning.main' : 'text.disabled');
-                                                                        })()
-                                                                    }}
-                                                                    title={(() => {
-                                                                        const s = getBusAssignStatus(user);
-                                                                        return s === 'all' ? 'Todos los estudiantes tienen asignación' : (s === 'some' ? 'Algunos estudiantes sin asignación' : 'Ningún estudiante tiene asignación');
-                                                                    })()}
-                                                                >
-                                                                    <DirectionsBus fontSize="small" />
-                                                                </IconButton>
+                                                                {(() => {
+                                                                    const s = getBusAssignStatus(user);
+                                                                    const title = s === 'all' ? 'Todos los estudiantes tienen asignación' : (s === 'some' ? 'Algunos estudiantes sin asignación' : 'Ningún estudiante tiene asignación');
+                                                                    if (s === 'none') {
+                                                                        return (
+                                                                            <IconButton size="small" onClick={() => handleAssignBuses(user)} title={title}>
+                                                                                <DirectionsBus fontSize="small" />
+                                                                            </IconButton>
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        <IconButton
+                                                                            size="small"
+                                                                            onClick={() => handleAssignBuses(user)}
+                                                                            sx={(theme) => {
+                                                                                if (s === 'all') return {
+                                                                                    bgcolor: theme.palette.success.main,
+                                                                                    color: theme.palette.common.white,
+                                                                                    borderRadius: 1,
+                                                                                    '&:hover': { bgcolor: theme.palette.success.dark }
+                                                                                };
+                                                                                // s === 'some'
+                                                                                return {
+                                                                                    bgcolor: theme.palette.warning.main,
+                                                                                    color: theme.palette.common.white,
+                                                                                    borderRadius: 1,
+                                                                                    '&:hover': { bgcolor: theme.palette.warning.dark }
+                                                                                };
+                                                                            }}
+                                                                            title={title}
+                                                                        >
+                                                                            <DirectionsBus fontSize="small" />
+                                                                        </IconButton>
+                                                                    );
+                                                                })()}
                                                                 <IconButton size="small" onClick={() => handleSendContract(user)}>
                                                                     <Mail fontSize="small" />
                                                                 </IconButton>
@@ -2165,17 +2184,17 @@ const SchoolUsersPage = () => {
                                                         {(() => {
                                                             const isInactive = user && (user.state === 0 || user.state === '0' || user.state === false);
                                                             return isInactive ? (
-                                                                <IconButton size="small" title="Activar familia" onClick={() => handleActivateClick(user)}>
+                                                                <IconButton size="small" title="Activar familia" onClick={() => handleActivateClick(user)} color={Number(user.state) === 1 ? 'warning' : 'success'}>
                                                                     <ToggleOff fontSize="small" />
                                                                 </IconButton>
                                                             ) : (
-                                                                <IconButton size="small" title="Suspender familia" onClick={() => handleSuspendClick(user)}>
+                                                                <IconButton size="small" title="Suspender familia" onClick={() => handleSuspendClick(user)} color={Number(user.state) === 1 ? 'warning' : 'success'}>
                                                                     <ToggleOn fontSize="small" />
                                                                 </IconButton>
                                                             );
                                                         })()}
 
-                                                        <IconButton size="small" onClick={() => handleDeleteClick(user)}>
+                                                        <IconButton size="small" onClick={() => handleDeleteClick(user)} color="error">
                                                             <Delete fontSize="small" />
                                                         </IconButton>
                                                     </Box>

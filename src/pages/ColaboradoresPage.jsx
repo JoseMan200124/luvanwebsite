@@ -253,6 +253,30 @@ const ColaboradoresPage = () => {
         }
     };
 
+    // Determine assignment status for a collaborator's schedule slots
+    // Binary behavior: either has assignments ('all') or none ('none').
+    const getCollaboratorAssignStatus = (col) => {
+        try {
+            const slots = col?.scheduleSlots || col?.ScheduleSlots || col?.schedule || [];
+            let arr = slots;
+            if (!Array.isArray(arr)) {
+                try { arr = JSON.parse(arr || '[]'); } catch (e) { arr = []; }
+            }
+            if (!Array.isArray(arr) || arr.length === 0) return 'none';
+
+            const assignedCount = arr.filter(s => {
+                if (!s) return false;
+                const hasRoute = s.route || s.routeId || s.routeNumber || s.route_num;
+                const hasStop = s.stop || s.stopId || s.stopName || s.parada || s.paradaId;
+                return Boolean(hasRoute) || Boolean(hasStop);
+            }).length;
+
+            return assignedCount > 0 ? 'all' : 'none';
+        } catch (e) {
+            return 'none';
+        }
+    };
+
     const fetchCorporationData = useCallback(async () => {
         if (!corporationId || corporationData) return;
         
@@ -362,7 +386,12 @@ const ColaboradoresPage = () => {
         
         // Filtro por estado (usando getColaboradorStatus)
         if (statusFilter) {
-            filtered = filtered.filter(col => getColaboradorStatus(col) === statusFilter);
+            if (statusFilter === 'Sin asignaciones') {
+                // Only show collaborators with NO assignments
+                filtered = filtered.filter(col => getCollaboratorAssignStatus(col) === 'none');
+            } else {
+                filtered = filtered.filter(col => getColaboradorStatus(col) === statusFilter);
+            }
         }
         
         setFilteredColaboradores(filtered);
@@ -1728,6 +1757,7 @@ const ColaboradoresPage = () => {
                                     <MenuItem value="Nuevo">Nuevo</MenuItem>
                                     <MenuItem value="Duplicado">Duplicado</MenuItem>
                                     <MenuItem value="Actualizado">Actualizado</MenuItem>
+                                    <MenuItem value="Sin asignaciones">Sin asignaciones</MenuItem>
                                     <MenuItem value="Activo">Activo</MenuItem>
                                     <MenuItem value="Inactivo">Inactivo</MenuItem>
                                 </Select>
@@ -1961,6 +1991,36 @@ const ColaboradoresPage = () => {
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                                                        <IconButton size="small" onClick={() => handleOpenEditDialog(colaborador)} title="Editar">
+                                                            <Edit fontSize="small" />
+                                                        </IconButton>
+                                                        {(() => {
+                                                            const s = getCollaboratorAssignStatus(colaborador);
+                                                            const title = s === 'all' ? 'Tiene asignaciones' : 'Sin asignaciones';
+                                                            if (s === 'none') {
+                                                                return (
+                                                                    <IconButton size="small" onClick={() => handleOpenScheduleDialog(colaborador)} title={title}>
+                                                                        <DirectionsBus fontSize="small" />
+                                                                    </IconButton>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={() => handleOpenScheduleDialog(colaborador)}
+                                                                    title={title}
+                                                                    sx={(theme) => ({
+                                                                        bgcolor: theme.palette.success.main,
+                                                                        color: theme.palette.common.white,
+                                                                        borderRadius: 1,
+                                                                        '&:hover': { bgcolor: theme.palette.success.dark }
+                                                                    })}
+                                                                >
+                                                                    <DirectionsBus fontSize="small" />
+                                                                </IconButton>
+                                                            );
+                                                        })()}
+                                                        
                                                         <IconButton 
                                                             size="small" 
                                                             onClick={() => handleOpenToggleStateDialog(colaborador)}
@@ -1969,14 +2029,8 @@ const ColaboradoresPage = () => {
                                                         >
                                                             {Number(colaborador.state) === 1 ? <ToggleOn fontSize="small" /> : <ToggleOff fontSize="small" />}
                                                         </IconButton>
-                                                        <IconButton size="small" onClick={() => handleOpenEditDialog(colaborador)} title="Editar">
-                                                            <Edit fontSize="small" />
-                                                        </IconButton>
                                                         <IconButton size="small" onClick={() => handleOpenDeleteDialog(colaborador)} title="Eliminar" color="error">
                                                             <Delete fontSize="small" />
-                                                        </IconButton>
-                                                        <IconButton size="small" onClick={() => handleOpenScheduleDialog(colaborador)} title="Horarios">
-                                                            <DirectionsBus fontSize="small" />
                                                         </IconButton>
                                                     </Box>
                                                 </TableCell>
