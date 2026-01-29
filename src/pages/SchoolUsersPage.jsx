@@ -941,6 +941,41 @@ const SchoolUsersPage = () => {
         return 0;
     };
 
+    // Determine bus assignment state for a family's students:
+    // - 'all'   : all students have at least one schedule/slot assigned
+    // - 'some'  : at least one student has an assignment, at least one doesn't
+    // - 'none'  : no students have assignments (or no students)
+    const getBusAssignStatus = (user) => {
+        try {
+            const fd = user?.FamilyDetail || user?.familyDetail || {};
+            // If the family itself has schedule slots, consider everyone assigned
+            const familySlots = fd?.ScheduleSlots || fd?.scheduleSlots;
+            if (Array.isArray(familySlots) && familySlots.length > 0) return 'all';
+
+            const students = getStudentsArray(user);
+            const total = Array.isArray(students) ? students.length : 0;
+            if (total === 0) return 'none';
+
+            const assigned = students.filter(s => {
+                // try several common property names
+                let slots = s?.ScheduleSlots || s?.scheduleSlots || s?.ScheduleSlot || s?.scheduleSlot || s?.slots;
+                if (!slots && typeof s === 'string') {
+                    try { slots = JSON.parse(s); } catch (e) { slots = null; }
+                }
+                if (typeof slots === 'string') {
+                    try { slots = JSON.parse(slots); } catch (e) { slots = null; }
+                }
+                return Array.isArray(slots) && slots.length > 0;
+            }).length;
+
+            if (assigned === 0) return 'none';
+            if (assigned === total) return 'all';
+            return 'some';
+        } catch (e) {
+            return 'none';
+        }
+    };
+
     const countStudents = (list) => (Array.isArray(list) ? list.reduce((acc, u) => acc + getStudentsCount(u), 0) : 0);
 
     // Cargar datos adicionales
@@ -1073,6 +1108,9 @@ const SchoolUsersPage = () => {
                 filtered = filtered.filter(user => !(user && (user.state === 0 || user.state === '0' || user.state === false)));
             } else if (statusFilter === 'Inactivo') {
                 filtered = filtered.filter(user => (user && (user.state === 0 || user.state === '0' || user.state === false)));
+            } else if (statusFilter === 'Sin asignaciones') {
+                // Show families that do NOT have all their students assigned (partial or none)
+                filtered = filtered.filter(user => getBusAssignStatus(user) !== 'all');
             } else {
                 filtered = filtered.filter(user => {
                     const status = getUserStatus(user);
@@ -1866,6 +1904,7 @@ const SchoolUsersPage = () => {
                                     <MenuItem value="Actualizado">Actualizado</MenuItem>
                                     <MenuItem value="Activo">Activo</MenuItem>
                                     <MenuItem value="Inactivo">Inactivo</MenuItem>
+                                    <MenuItem value="Sin asignaciones">Sin asignaciones</MenuItem>
                                 </Select>
                             </FormControl>
                         </Grid>
@@ -2101,7 +2140,20 @@ const SchoolUsersPage = () => {
 
                                                         {Number(user.roleId) === 3 && (
                                                             <>
-                                                                <IconButton size="small" onClick={() => handleAssignBuses(user)}>
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={() => handleAssignBuses(user)}
+                                                                    sx={{
+                                                                        color: (() => {
+                                                                            const s = getBusAssignStatus(user);
+                                                                            return s === 'all' ? 'success.main' : (s === 'some' ? 'warning.main' : 'text.disabled');
+                                                                        })()
+                                                                    }}
+                                                                    title={(() => {
+                                                                        const s = getBusAssignStatus(user);
+                                                                        return s === 'all' ? 'Todos los estudiantes tienen asignación' : (s === 'some' ? 'Algunos estudiantes sin asignación' : 'Ningún estudiante tiene asignación');
+                                                                    })()}
+                                                                >
                                                                     <DirectionsBus fontSize="small" />
                                                                 </IconButton>
                                                                 <IconButton size="small" onClick={() => handleSendContract(user)}>
