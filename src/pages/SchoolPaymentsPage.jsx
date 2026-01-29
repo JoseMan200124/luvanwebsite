@@ -1674,7 +1674,12 @@ const SchoolPaymentsPage = () => {
                 // Determinar si el usuario está inactivo (state = 0)
                 const userState = p.User?.state ?? 1;
                 const isUserInactive = Number(userState) === 0;
-                
+                // Determinar si la familia/usuario está marcado como eliminado (deleted)
+                const isDeleted = !!p.User?.FamilyDetail?.deleted;
+
+                // Siempre ignorar registros marcados como deleted
+                if (isDeleted) return false;
+
                 if (estadoNorm === 'INACTIVO') {
                     // Filtrar solo usuarios inactivos
                     return isUserInactive;
