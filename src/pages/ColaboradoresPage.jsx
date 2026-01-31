@@ -151,6 +151,9 @@ const ColaboradoresPage = () => {
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
     const [openCircularDialog, setOpenCircularDialog] = useState(false);
+    // Dialogo unificado para descargas (Nuevos / Todos)
+    const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
+    const [downloadChoice, setDownloadChoice] = useState('new'); // 'new' | 'all'
     
     // Estados para carga masiva
     const [bulkFile, setBulkFile] = useState(null);
@@ -764,14 +767,10 @@ const ColaboradoresPage = () => {
     // Función para descargar colaboradores NUEVOS
     const handleDownloadNewColaboradores = async () => {
         try {
-            const newColaboradores = colaboradores.filter(col => isColaboradorNew(col));
-            
+            const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'new' } });
+            const newColaboradores = resp.data.colaboradores || [];
             if (newColaboradores.length === 0) {
-                setSnackbar({
-                    open: true,
-                    message: 'No hay colaboradores nuevos para descargar',
-                    severity: 'warning'
-                });
+                setSnackbar({ open: true, message: 'No hay colaboradores nuevos para descargar', severity: 'warning' });
                 return;
             }
             
@@ -786,6 +785,7 @@ const ColaboradoresPage = () => {
                 { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
                 { header: 'Tipo Ruta', key: 'routeType', width: 15 },
                 { header: 'Horario', key: 'schedule', width: 30 },
+                { header: 'Estado', key: 'status', width: 15 },
                 { header: 'Fecha Creación', key: 'createdAt', width: 20 }
             ];
             
@@ -807,6 +807,7 @@ const ColaboradoresPage = () => {
                     zoneOrSector: detail.zoneOrSector || '',
                     routeType: detail.routeType || '',
                     schedule: scheduleName,
+                    status: Number(col.state) === 1 ? 'Activo' : 'Inactivo',
                     createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
                 });
             });
@@ -850,15 +851,12 @@ const ColaboradoresPage = () => {
     // Función para descargar TODOS los colaboradores
     const handleDownloadAllColaboradores = async () => {
         try {
-            if (colaboradores.length === 0) {
-                setSnackbar({
-                    open: true,
-                    message: 'No hay colaboradores para descargar',
-                    severity: 'warning'
-                });
+            const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'all' } });
+            const allCols = resp.data.colaboradores || [];
+            if (allCols.length === 0) {
+                setSnackbar({ open: true, message: 'No hay colaboradores para descargar', severity: 'warning' });
                 return;
             }
-            
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet('Todos los Colaboradores');
             
@@ -879,7 +877,7 @@ const ColaboradoresPage = () => {
                 { header: 'Última Actualización', key: 'updatedAt', width: 20 }
             ];
             
-            colaboradores.forEach(col => {
+            allCols.forEach(col => {
                 const detail = col.ColaboradorDetail || {};
                 const scheduleIndex = detail.selectedSchedule;
                 let scheduleName = 'Sin horario';
@@ -901,7 +899,7 @@ const ColaboradoresPage = () => {
                     emergencyPhone: detail.emergencyPhone || '',
                     schedule: scheduleName,
                     stops: col.ScheduleSlots?.length || 0,
-                    status: getColaboradorStatus(col),
+                    status: col.status || 'Activo',
                     createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
                     updatedAt: col.updatedAt ? moment(col.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
                 });
@@ -937,6 +935,138 @@ const ColaboradoresPage = () => {
                 message: 'Error al descargar colaboradores',
                 severity: 'error'
             });
+        }
+    };
+
+    // Descargar colaboradores activos
+    const handleDownloadActiveColaboradores = async () => {
+        try {
+            const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'active' } });
+            const activeList = resp.data.colaboradores || [];
+            if (activeList.length === 0) {
+                setSnackbar({ open: true, message: 'No hay colaboradores activos para descargar', severity: 'info' });
+                return;
+            }
+
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Colaboradores Activos');
+            worksheet.columns = [
+                { header: 'Nombre', key: 'name', width: 30 },
+                { header: 'Email', key: 'email', width: 30 },
+                { header: 'Teléfono', key: 'phone', width: 15 },
+                { header: 'Dirección Servicio', key: 'serviceAddress', width: 40 },
+                { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
+                { header: 'Tipo Ruta', key: 'routeType', width: 15 },
+                { header: 'Horario', key: 'schedule', width: 30 },
+                { header: 'Estado', key: 'status', width: 15 },
+                { header: 'Fecha Creación', key: 'createdAt', width: 20 }
+            ];
+
+            activeList.forEach(col => {
+                const detail = col.ColaboradorDetail || {};
+                const scheduleIndex = detail.selectedSchedule;
+                let scheduleName = 'Sin horario';
+                if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
+                    const sched = corporationData.schedules[scheduleIndex];
+                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                }
+                worksheet.addRow({
+                    name: col.name || '',
+                    email: col.email || '',
+                    phone: col.phoneNumber || '',
+                    serviceAddress: detail.serviceAddress || '',
+                    zoneOrSector: detail.zoneOrSector || '',
+                    routeType: detail.routeType || '',
+                    schedule: scheduleName,
+                    status: col.status || 'Activo',
+                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                });
+            });
+
+            worksheet.getRow(1).font = { bold: true };
+            worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+            worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            addSchedulesSheet(workbook);
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Colaboradores_Activos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: 'Archivo descargado exitosamente', severity: 'success' });
+        } catch (err) {
+            console.error('Error downloading active colaboradores:', err);
+            setSnackbar({ open: true, message: 'Error al descargar colaboradores activos', severity: 'error' });
+        }
+    };
+
+    // Descargar colaboradores inactivos
+    const handleDownloadInactiveColaboradores = async () => {
+        try {
+            const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'inactive' } });
+            const inactiveList = resp.data.colaboradores || [];
+            if (inactiveList.length === 0) {
+                setSnackbar({ open: true, message: 'No hay colaboradores inactivos para descargar', severity: 'info' });
+                return;
+            }
+
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Colaboradores Inactivos');
+            worksheet.columns = [
+                { header: 'Nombre', key: 'name', width: 30 },
+                { header: 'Email', key: 'email', width: 30 },
+                { header: 'Teléfono', key: 'phone', width: 15 },
+                { header: 'Dirección Servicio', key: 'serviceAddress', width: 40 },
+                { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
+                { header: 'Tipo Ruta', key: 'routeType', width: 15 },
+                { header: 'Horario', key: 'schedule', width: 30 },
+                { header: 'Estado', key: 'status', width: 15 },
+                { header: 'Fecha Creación', key: 'createdAt', width: 20 }
+            ];
+
+            inactiveList.forEach(col => {
+                const detail = col.ColaboradorDetail || {};
+                const scheduleIndex = detail.selectedSchedule;
+                let scheduleName = 'Sin horario';
+                if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
+                    const sched = corporationData.schedules[scheduleIndex];
+                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                }
+                worksheet.addRow({
+                    name: col.name || '',
+                    email: col.email || '',
+                    phone: col.phoneNumber || '',
+                    serviceAddress: detail.serviceAddress || '',
+                    zoneOrSector: detail.zoneOrSector || '',
+                    routeType: detail.routeType || '',
+                    schedule: scheduleName,
+                    status: col.status || 'Inactivo',
+                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                });
+            });
+
+            worksheet.getRow(1).font = { bold: true };
+            worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+            worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            addSchedulesSheet(workbook);
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Colaboradores_Inactivos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: 'Archivo descargado exitosamente', severity: 'success' });
+        } catch (err) {
+            console.error('Error downloading inactive colaboradores:', err);
+            setSnackbar({ open: true, message: 'Error al descargar colaboradores inactivos', severity: 'error' });
         }
     };
 
@@ -1151,8 +1281,12 @@ const ColaboradoresPage = () => {
 
         setStopReportLoading(true);
         try {
-            // Filtrar colaboradores que tienen ScheduleSlots asignados
-            const colaboradoresWithRoutes = colaboradores.filter(col => 
+            // Usar endpoint del backend que filtra por activos
+            const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'active' } });
+            const activeColaboradores = resp.data.colaboradores || [];
+
+            // Filtrar colaboradores activos que tienen ScheduleSlots asignados
+            const colaboradoresWithRoutes = activeColaboradores.filter(col => 
                 Array.isArray(col.ScheduleSlots) && col.ScheduleSlots.length > 0
             );
 
@@ -1174,9 +1308,10 @@ const ColaboradoresPage = () => {
                 { key: 'sunday', label: 'Domingo' }
             ];
 
-            // Headers simples: datos básicos + entrada/salida + contacto
+            // Headers simples: datos básicos + estado + entrada/salida + contacto
             const headers = [
                 'Nombre',
+                'Estado',
                 'Email',
                 'Teléfono',
                 'Tipo Ruta',
@@ -1270,8 +1405,12 @@ const ColaboradoresPage = () => {
                     const salidaSlot = daySlotsFiltered.find(s => s.stopType === 'salida') || null;
 
                     // Construir fila de datos
+                    const statusCell = (typeof getColaboradorStatus === 'function')
+                        ? (getColaboradorStatus(col) === 'Inactivo' ? 'Inactivo' : 'Activo')
+                        : (col && (col.state === 0 || col.state === '0' || col.state === false) ? 'Inactivo' : 'Activo');
                     const row = [
                         col.name || '',
+                        statusCell,
                         col.email || '',
                         col.phoneNumber || '',
                         detail.routeType || '',
@@ -1831,34 +1970,52 @@ const ColaboradoresPage = () => {
                                 color="success"
                                 startIcon={<GetApp />}
                                 fullWidth
-                                onClick={handleDownloadNewColaboradores}
+                                onClick={() => setOpenDownloadDialog(true)}
                             >
-                                Descargar Nuevos
+                                Descargar
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="success"
-                                startIcon={<GetApp />}
-                                fullWidth
-                                onClick={handleDownloadAllColaboradores}
-                            >
-                                Descargar Todos
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="info"
-                                startIcon={stopReportLoading ? <CircularProgress size={20} color="inherit" /> : <DirectionsBus />}
-                                fullWidth
-                                onClick={handleDownloadRouteReport}
-                                disabled={stopReportLoading}
-                            >
-                                {stopReportLoading ? 'Generando...' : 'Reporte Paradas'}
-                            </Button>
-                        </Grid>
+
+                        <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
+                            <DialogTitle>Descargar Colaboradores</DialogTitle>
+                            <DialogContent>
+                                <DialogContentText>Selecciona qué deseas descargar:</DialogContentText>
+                                <FormControl fullWidth sx={{ mt: 2 }}>
+                                    <InputLabel id="colab-download-select-label">Opción</InputLabel>
+                                    <Select
+                                        labelId="colab-download-select-label"
+                                        value={downloadChoice}
+                                        label="Opción"
+                                        onChange={(e) => setDownloadChoice(e.target.value)}
+                                    >
+                                        <MenuItem value="all">Todos</MenuItem>
+                                        <MenuItem value="new">Nuevos</MenuItem>
+                                        <MenuItem value="active">Activos</MenuItem>
+                                        <MenuItem value="inactive">Inactivos</MenuItem>
+                                        <MenuItem value="report">Reporte de Paradas</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </DialogContent>
+                            <DialogActions>
+                                <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<GetApp />}
+                                    onClick={() => {
+                                        if (downloadChoice === 'new') handleDownloadNewColaboradores();
+                                        else if (downloadChoice === 'all') handleDownloadAllColaboradores();
+                                        else if (downloadChoice === 'active') handleDownloadActiveColaboradores();
+                                        else if (downloadChoice === 'inactive') handleDownloadInactiveColaboradores();
+                                        else if (downloadChoice === 'report') handleDownloadRouteReport();
+                                        setOpenDownloadDialog(false);
+                                    }}
+                                >
+                                    Descargar
+                                </Button>
+                            </DialogActions>
+                        </Dialog>
+                        
                     </Grid>
                 </CardContent>
             </Card>

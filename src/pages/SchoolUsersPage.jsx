@@ -124,6 +124,9 @@ const SchoolUsersPage = () => {
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
     const [downloadMode, setDownloadMode] = useState('');
+    // Dialogo unificado para descargas (Nuevos / Todos / Reporte)
+    const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
+    const [downloadChoice, setDownloadChoice] = useState('new'); // 'new' | 'all' | 'report'
     const [scheduleModalStudents, setScheduleModalStudents] = useState([]);
     const [routeReportLoading, setRouteReportLoading] = useState(false);
     // Actions menu state removed: actions shown inline per row
@@ -183,19 +186,9 @@ const SchoolUsersPage = () => {
         try {
             setRouteReportLoading(true);
 
-            // Obtener padres (usar state si contiene datos para este colegio)
-            let parents = [];
-            if (Array.isArray(users) && users.length > 0) {
-                const matched = users.filter(u => String(u.school) === String(schoolIdToUse));
-                if (matched.length > 0) parents = matched.slice();
-            }
-            if (parents.length === 0) {
-                const resp = await api.get('/users/parents', { params: { schoolId: schoolIdToUse } });
-                parents = resp.data.users || [];
-            }
-
-            // Filtrar sólo los nuevos según isUserNew
-            const newParents = parents.filter(u => isUserNew(u));
+            // Request backend for filtered parents for download
+            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'new' } });
+            const newParents = resp.data.users || [];
 
             // Si no hay nuevos, avisar
             if (!newParents || newParents.length === 0) {
@@ -279,10 +272,8 @@ const SchoolUsersPage = () => {
                 const fd = u.FamilyDetail || {};
                 const row = [];
                 row.push(fd.familyLastName || '');
-                // Mostrar sólo Activo/Inactivo en la columna solicitada
-                const statusText = (typeof getUserStatus === 'function')
-                    ? (getUserStatus(u) === 'Inactivo' ? 'Inactivo' : 'Activo')
-                    : (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo');
+                // Backend ya envía status forzado a Activo/Inactivo para mode=new
+                const statusText = u.state === 0 ? 'Inactivo' : 'Activo';
                 row.push(statusText);
                 row.push(u.name || '');
                 row.push(u.email || '');
@@ -353,31 +344,12 @@ const SchoolUsersPage = () => {
 
         setRouteReportLoading(true);
         try {
-            // Fetch all users in pages like the original implementation
-            let allUsers = [];
-            let p = 0;
-            const limit = 500;
-            let total = 0;
-            let fetched = 0;
+            // Usar endpoint del backend que filtra por activos
+            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'active' } });
+            const activeParents = resp.data.users || [];
 
-            const firstResp = await api.get('/users', { params: { page: p, limit } });
-            allUsers = firstResp.data.users || [];
-            total = firstResp.data.total || allUsers.length;
-            fetched = allUsers.length;
-
-            while (fetched < total) {
-                p += 1;
-                const resp = await api.get('/users', { params: { page: p, limit } });
-                const usersBatch = resp.data.users || [];
-                allUsers = allUsers.concat(usersBatch);
-                fetched += usersBatch.length;
-                if (usersBatch.length === 0) break;
-            }
-
-            const parentsWithRoutes = allUsers.filter(u =>
-                u.Role && (u.Role.name === 'Padre' || (u.Role.name || '').toString().toLowerCase() === 'padre') &&
+            const parentsWithRoutes = activeParents.filter(u =>
                 u.FamilyDetail &&
-                u.school && parseInt(u.school) === parseInt(schoolIdToUse) &&
                 (
                     (Array.isArray(u.FamilyDetail.ScheduleSlots) && u.FamilyDetail.ScheduleSlots.length > 0) ||
                     (Array.isArray(u.FamilyDetail.Students) && u.FamilyDetail.Students.some(s => Array.isArray(s.ScheduleSlots) && s.ScheduleSlots.length > 0))
@@ -638,16 +610,9 @@ const SchoolUsersPage = () => {
         try {
             setRouteReportLoading(true);
 
-            // Obtener padres (usar state si aplica)
-            let parents = [];
-            if (Array.isArray(users) && users.length > 0) {
-                const matched = users.filter(u => String(u.school) === String(schoolIdToUse));
-                if (matched.length > 0) parents = matched.slice();
-            }
-            if (parents.length === 0) {
-                const resp = await api.get('/users/parents', { params: { schoolId: schoolIdToUse } });
-                parents = resp.data.users || [];
-            }
+            // Request backend for all parents for this school
+            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'all' } });
+            const parents = resp.data.users || [];
 
             // Determinar máximo de hijos entre las familias
             let maxStudents = 0;
@@ -735,10 +700,8 @@ const SchoolUsersPage = () => {
                 const fd = u.FamilyDetail || {};
                 const row = [];
                 row.push(fd.familyLastName || '');
-                // Columna Estado Familia: sólo mostramos Activo/Inactivo aquí
-                const statusText = (typeof getUserStatus === 'function')
-                    ? (getUserStatus(u) === 'Inactivo' ? 'Inactivo' : 'Activo')
-                    : (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo');
+                // Backend ya envía status, usar directamente o fallback a state
+                const statusText = u.status || (u.state === 0 ? 'Inactivo' : 'Activo');
                 row.push(statusText);
                 row.push(u.name || '');
                 row.push(u.email || '');
@@ -793,6 +756,238 @@ const SchoolUsersPage = () => {
         } catch (error) {
             console.error('[handleDownloadAllParents] Error:', error);
             setSnackbar({ open: true, message: 'Error al generar el archivo de padres', severity: 'error' });
+        } finally {
+            setRouteReportLoading(false);
+        }
+    };
+
+    // (Status computed by backend in download endpoints)
+
+    // Descargar padres activos
+    const handleDownloadActiveParents = async (schoolIdParam) => {
+        const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
+        if (!schoolIdToUse) {
+            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            return;
+        }
+
+        try {
+            setRouteReportLoading(true);
+
+            // Request backend for filtered parents for download
+            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'active' } });
+            const filtered = resp.data.users || [];
+            if (filtered.length === 0) {
+                setSnackbar({ open: true, message: 'No hay padres activos para descargar.', severity: 'info' });
+                return;
+            }
+
+            // Reuse handleDownloadAllParents logic but with filtered list: build workbook
+            const maxStudents = filtered.reduce((acc, u) => Math.max(acc, Array.isArray(u.FamilyDetail?.Students) ? u.FamilyDetail.Students.length : 0), 0);
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Padres Activos');
+            const baseHeaders = [
+                { header: 'Apellido Familia', key: 'apellidoFamilia' },
+                { header: 'Estado Familia', key: 'estadoFamilia' },
+                { header: 'Nombre', key: 'nombre' },
+                { header: 'Email', key: 'email' },
+                { header: 'Nombre Madre', key: 'madreNombre' },
+                { header: 'Celular Madre', key: 'madreCelular' },
+                { header: 'Email Madre', key: 'madreEmail' },
+                { header: 'Nombre Padre', key: 'padreNombre' },
+                { header: 'Celular Padre', key: 'padreCelular' },
+                { header: 'Email Padre', key: 'padreEmail' },
+                { header: 'Dirección Principal', key: 'direccionPrincipal' },
+                { header: 'Dirección Alterna', key: 'direccionAlterna' },
+                { header: 'Zona/Sector', key: 'zonaSector' },
+                { header: 'Tipo Ruta', key: 'tipoRuta' },
+                { header: 'Contacto Emergencia', key: 'emergenciaContacto' },
+                { header: 'Parentesco Emergencia', key: 'emergenciaParentesco' },
+                { header: 'Teléfono Emergencia', key: 'emergenciaTelefono' }
+            ];
+            const studentCols = [];
+            for (let i = 1; i <= maxStudents; i++) {
+                studentCols.push({ header: `Estudiante ${i} - Nombre`, key: `est_${i}_nombre` });
+                studentCols.push({ header: `Estudiante ${i} - Grado`, key: `est_${i}_grado` });
+            }
+            const finalColumns = baseHeaders.concat(studentCols);
+            sheet.columns = finalColumns.map(col => ({ header: col.header, key: col.key, width: Math.min(Math.max(col.header.length + 6, 12), 40) }));
+            sheet.getRow(1).eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            });
+
+            filtered.forEach((u, idx) => {
+                const fd = u.FamilyDetail || {};
+                const row = [];
+                row.push(fd.familyLastName || '');
+                const statusText = u.status || (typeof getUserStatus === 'function' ? getUserStatus(u) : (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo'));
+                row.push(statusText);
+                row.push(u.name || '');
+                row.push(u.email || '');
+                row.push(fd.motherName || '');
+                row.push(fd.motherCellphone || '');
+                row.push(fd.motherEmail || '');
+                row.push(fd.fatherName || '');
+                row.push(fd.fatherCellphone || '');
+                row.push(fd.fatherEmail || '');
+                row.push(fd.mainAddress || '');
+                row.push(fd.alternativeAddress || '');
+                row.push(fd.zoneOrSector || '');
+                row.push(fd.routeType || '');
+                row.push(fd.emergencyContact || '');
+                row.push(fd.emergencyRelationship || '');
+                row.push(fd.emergencyPhone || '');
+                for (let i = 0; i < maxStudents; i++) {
+                    const student = Array.isArray(fd.Students) && fd.Students[i] ? fd.Students[i] : null;
+                    row.push(student ? (student.fullName || '') : '');
+                    row.push(student ? (student.grade || '') : '');
+                }
+                const added = sheet.addRow(row);
+                const isEven = (idx + 1) % 2 === 0;
+                added.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                    cell.alignment = { vertical: 'middle' };
+                    const headerText = (sheet.getRow(1).getCell(colNumber).value || '').toString().toLowerCase();
+                    if (headerText.includes('celular') || headerText.includes('tipo ruta') || headerText.includes('grado')) {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    }
+                });
+            });
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const selectedSchool = schools.find(s => s.id === parseInt(schoolIdToUse));
+            const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
+            const fileName = `padres_activos_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: `Archivo con padres activos de ${schoolName} descargado.`, severity: 'success' });
+        } catch (error) {
+            console.error('[handleDownloadActiveParents] Error:', error);
+            setSnackbar({ open: true, message: 'Error al generar el archivo de padres activos', severity: 'error' });
+        } finally {
+            setRouteReportLoading(false);
+        }
+    };
+
+    // Descargar padres inactivos
+    const handleDownloadInactiveParents = async (schoolIdParam) => {
+        const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
+        if (!schoolIdToUse) {
+            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            return;
+        }
+
+        try {
+            setRouteReportLoading(true);
+            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'inactive' } });
+            const filtered = resp.data.users || [];
+            if (filtered.length === 0) {
+                setSnackbar({ open: true, message: 'No hay padres inactivos para descargar.', severity: 'info' });
+                return;
+            }
+
+            // Reuse same building logic as all parents
+            const maxStudents = filtered.reduce((acc, u) => Math.max(acc, Array.isArray(u.FamilyDetail?.Students) ? u.FamilyDetail.Students.length : 0), 0);
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Padres Inactivos');
+            const baseHeaders = [
+                { header: 'Apellido Familia', key: 'apellidoFamilia' },
+                { header: 'Estado Familia', key: 'estadoFamilia' },
+                { header: 'Nombre', key: 'nombre' },
+                { header: 'Email', key: 'email' },
+                { header: 'Nombre Madre', key: 'madreNombre' },
+                { header: 'Celular Madre', key: 'madreCelular' },
+                { header: 'Email Madre', key: 'madreEmail' },
+                { header: 'Nombre Padre', key: 'padreNombre' },
+                { header: 'Celular Padre', key: 'padreCelular' },
+                { header: 'Email Padre', key: 'padreEmail' },
+                { header: 'Dirección Principal', key: 'direccionPrincipal' },
+                { header: 'Dirección Alterna', key: 'direccionAlterna' },
+                { header: 'Zona/Sector', key: 'zonaSector' },
+                { header: 'Tipo Ruta', key: 'tipoRuta' },
+                { header: 'Contacto Emergencia', key: 'emergenciaContacto' },
+                { header: 'Parentesco Emergencia', key: 'emergenciaParentesco' },
+                { header: 'Teléfono Emergencia', key: 'emergenciaTelefono' }
+            ];
+            const studentCols = [];
+            for (let i = 1; i <= maxStudents; i++) {
+                studentCols.push({ header: `Estudiante ${i} - Nombre`, key: `est_${i}_nombre` });
+                studentCols.push({ header: `Estudiante ${i} - Grado`, key: `est_${i}_grado` });
+            }
+            const finalColumns = baseHeaders.concat(studentCols);
+            sheet.columns = finalColumns.map(col => ({ header: col.header, key: col.key, width: Math.min(Math.max(col.header.length + 6, 12), 40) }));
+            sheet.getRow(1).eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            });
+
+            filtered.forEach((u, idx) => {
+                const fd = u.FamilyDetail || {};
+                const row = [];
+                row.push(fd.familyLastName || '');
+                const statusText = u.status || (typeof getUserStatus === 'function' ? getUserStatus(u) : (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo'));
+                row.push(statusText);
+                row.push(u.name || '');
+                row.push(u.email || '');
+                row.push(fd.motherName || '');
+                row.push(fd.motherCellphone || '');
+                row.push(fd.motherEmail || '');
+                row.push(fd.fatherName || '');
+                row.push(fd.fatherCellphone || '');
+                row.push(fd.fatherEmail || '');
+                row.push(fd.mainAddress || '');
+                row.push(fd.alternativeAddress || '');
+                row.push(fd.zoneOrSector || '');
+                row.push(fd.routeType || '');
+                row.push(fd.emergencyContact || '');
+                row.push(fd.emergencyRelationship || '');
+                row.push(fd.emergencyPhone || '');
+                for (let i = 0; i < maxStudents; i++) {
+                    const student = Array.isArray(fd.Students) && fd.Students[i] ? fd.Students[i] : null;
+                    row.push(student ? (student.fullName || '') : '');
+                    row.push(student ? (student.grade || '') : '');
+                }
+                const added = sheet.addRow(row);
+                const isEven = (idx + 1) % 2 === 0;
+                added.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                    cell.alignment = { vertical: 'middle' };
+                    const headerText = (sheet.getRow(1).getCell(colNumber).value || '').toString().toLowerCase();
+                    if (headerText.includes('celular') || headerText.includes('tipo ruta') || headerText.includes('grado')) {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    }
+                });
+            });
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const selectedSchool = schools.find(s => s.id === parseInt(schoolIdToUse));
+            const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
+            const fileName = `padres_inactivos_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: `Archivo con padres inactivos de ${schoolName} descargado.`, severity: 'success' });
+        } catch (error) {
+            console.error('[handleDownloadInactiveParents] Error:', error);
+            setSnackbar({ open: true, message: 'Error al generar el archivo de padres inactivos', severity: 'error' });
         } finally {
             setRouteReportLoading(false);
         }
@@ -1976,42 +2171,48 @@ const SchoolUsersPage = () => {
                                 color="success"
                                 startIcon={<GetApp />}
                                 fullWidth
-                                onClick={() => {
-                                    setDownloadMode('new');
-                                    setOpenSchoolSelectDialog(true);
-                                }}
+                                onClick={() => setOpenDownloadDialog(true)}
                             >
-                                Descargar Nuevos
+                                Descargar
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="success"
-                                startIcon={<GetApp />}
-                                fullWidth
-                                onClick={() => {
-                                    setDownloadMode('all');
-                                    setOpenSchoolSelectDialog(true);
-                                }}
-                            >
-                                Descargar Todos
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="info"
-                                startIcon={<GetApp />}
-                                fullWidth
-                                onClick={() => {
-                                    setDownloadMode('report');
-                                    setOpenSchoolSelectDialog(true);
-                                }}
-                            >
-                                Reporte de Rutas
-                            </Button>
-                        </Grid>
+
+                        <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
+                            <DialogTitle>Descargar Usuarios</DialogTitle>
+                            <DialogContent>
+                                <DialogContentText>Selecciona qué deseas descargar:</DialogContentText>
+                                <FormControl fullWidth sx={{ mt: 2 }}>
+                                    <InputLabel id="parents-download-select-label">Opción</InputLabel>
+                                    <Select
+                                        labelId="parents-download-select-label"
+                                        value={downloadChoice}
+                                        label="Opción"
+                                        onChange={(e) => setDownloadChoice(e.target.value)}
+                                    >
+                                        <MenuItem value="all">Todos</MenuItem>
+                                        <MenuItem value="new">Nuevos</MenuItem>
+                                        <MenuItem value="active">Activos</MenuItem>
+                                        <MenuItem value="inactive">Inactivos</MenuItem>
+                                        <MenuItem value="report">Reporte de Paradas</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </DialogContent>
+                            <DialogActions>
+                                <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<GetApp />}
+                                    onClick={() => {
+                                        setDownloadMode(downloadChoice);
+                                        setOpenDownloadDialog(false);
+                                        setOpenSchoolSelectDialog(true);
+                                    }}
+                                >
+                                    Continuar
+                                </Button>
+                            </DialogActions>
+                        </Dialog>
                     </Grid>
                 </CardContent>
             </Card>
@@ -2362,6 +2563,12 @@ const SchoolUsersPage = () => {
                             if (downloadMode === 'report') {
                                 // Generar reporte de rutas para el colegio actual
                                 await handleDownloadRouteReport(currentSchool?.id || schoolId);
+                            } else if (downloadMode === 'active') {
+                                await handleDownloadActiveParents(currentSchool?.id || schoolId);
+                                setOpenSchoolSelectDialog(false);
+                            } else if (downloadMode === 'inactive') {
+                                await handleDownloadInactiveParents(currentSchool?.id || schoolId);
+                                setOpenSchoolSelectDialog(false);
                             } else if (downloadMode === 'new') {
                                         // Descargar usuarios nuevos del colegio actual
                                         await handleDownloadNewParents(currentSchool?.id || schoolId);
