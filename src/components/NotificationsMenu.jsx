@@ -71,9 +71,24 @@ const NotificationsMenu = ({ authToken }) => {
             const fetched = Array.isArray(response.data.notifications)
                 ? response.data.notifications
                 : [];
-            // Only keep notifications that are not marked as 'read' so that
-            // notifications removed/marked-as-read don't reappear after a page reload.
-            const visible = fetched.filter((n) => !n.status || n.status !== 'read');
+
+            // Normalize targetingCriteria if it's returned as a string and
+            // add a small debug log for notifications missing client info.
+            const normalized = fetched.map((n) => {
+                const copy = { ...n };
+                try {
+                    if (copy.targetingCriteria && typeof copy.targetingCriteria === 'string') {
+                        copy.targetingCriteria = JSON.parse(copy.targetingCriteria);
+                    }
+                } catch (e) {
+                    console.warn('Failed parsing targetingCriteria for notification', copy.id, e);
+                }
+
+                return copy;
+            });
+
+            // Only keep notifications that are not marked as 'read'
+            const visible = normalized.filter((n) => !n.status || n.status !== 'read');
             setNotifications(visible);
         } catch (err) {
             console.error('Error fetching notifications:', err);
@@ -212,7 +227,16 @@ const NotificationsMenu = ({ authToken }) => {
         const socket = getSocket();
         if (socket) {
             socket.on('new_notification', (newNoti) => {
-                setNotifications((prev) => [newNoti, ...prev]);
+                const copy = { ...newNoti };
+                try {
+                    if (copy.targetingCriteria && typeof copy.targetingCriteria === 'string') {
+                        copy.targetingCriteria = JSON.parse(copy.targetingCriteria);
+                    }
+                } catch (e) {
+                    console.warn('Failed parsing targetingCriteria from socket new_notification', copy.id, e);
+                }
+
+                setNotifications((prev) => [copy, ...prev]);
             });
         }
         return () => {
@@ -324,7 +348,7 @@ const NotificationsMenu = ({ authToken }) => {
                     </MenuItem>
                 ) : (
                     notifications.map((notification, index) => {
-                        const schoolName = notification.payment?.School?.name || null;
+                        const clientName = notification.targetingCriteria?.client?.name || null;
                         return (
                             <div key={notification.id || index}>
                                 <MenuItem
@@ -366,9 +390,9 @@ const NotificationsMenu = ({ authToken }) => {
                                             cursor: 'pointer'
                                         }}
                                     >
-                                        {schoolName && (
+                                        {clientName && (
                                             <Chip
-                                                label={schoolName}
+                                                label={clientName}
                                                 size="small"
                                                 color="primary"
                                                 variant="filled"
