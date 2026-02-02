@@ -25,7 +25,10 @@ import { getSocket } from '../services/socketService';
 
 // Botón estilizado (twin.macro + styled-components)
 const NotificationIconButton = styled(IconButton)`
-    ${tw`text-white`}
+    ${tw`text-gray-700`}
+    &:hover {
+        ${tw`text-gray-900`}
+    }
 `;
 
 const NotificationsMenu = ({ authToken }) => {
@@ -58,22 +61,50 @@ const NotificationsMenu = ({ authToken }) => {
     const menuOpen = Boolean(anchorEl);
     const menuRef = useRef();
     const navigate = useNavigate();
+    
+    // Lazy loading state
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [totalNotifications, setTotalNotifications] = useState(0);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const scrollContainerRef = useRef(null);
+    const NOTIFICATIONS_PER_PAGE = 10;
 
     // ==============================
-    // 1) Cargar todas las notificaciones
+    // 1) Obtener conteo de notificaciones no leídas (optimizado)
     // ==============================
-    const fetchAllNotifications = useCallback(async () => {
+    const fetchUnreadCount = useCallback(async () => {
         try {
-            // Ajusta esta URL/query param si tu backend es diferente
-            const response = await api.get('/notifications?allStatuses=true', {
+            const response = await api.get('/notifications/unread-count', {
                 headers: { Authorization: `Bearer ${authToken}` },
             });
+            setUnreadCount(response.data.unreadCount || 0);
+        } catch (err) {
+            console.error('Error fetching unread count:', err);
+            setUnreadCount(0);
+        }
+    }, [authToken]);
+
+    // ==============================
+    // 2) Cargar notificaciones con paginación
+    // ==============================
+    const fetchNotifications = useCallback(async (pageNum = 0, append = false) => {
+        if (loading) return;
+        
+        try {
+            setLoading(true);
+            const offset = pageNum * NOTIFICATIONS_PER_PAGE;
+            const response = await api.get(`/notifications?limit=${NOTIFICATIONS_PER_PAGE}&offset=${offset}`, {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            
             const fetched = Array.isArray(response.data.notifications)
                 ? response.data.notifications
                 : [];
+            const total = response.data.total || 0;
 
-            // Normalize targetingCriteria if it's returned as a string and
-            // add a small debug log for notifications missing client info.
+            // Normalize targetingCriteria if it's returned as a string
             const normalized = fetched.map((n) => {
                 const copy = { ...n };
                 try {
@@ -83,21 +114,31 @@ const NotificationsMenu = ({ authToken }) => {
                 } catch (e) {
                     console.warn('Failed parsing targetingCriteria for notification', copy.id, e);
                 }
-
                 return copy;
             });
 
-            // Only keep notifications that are not marked as 'read'
-            const visible = normalized.filter((n) => !n.status || n.status !== 'read');
-            setNotifications(visible);
+            setTotalNotifications(total);
+            
+            if (append) {
+                setNotifications(prev => [...prev, ...normalized]);
+            } else {
+                setNotifications(normalized);
+            }
+            
+            // Check if there are more notifications to load
+            setHasMore(offset + normalized.length < total);
         } catch (err) {
             console.error('Error fetching notifications:', err);
-            setNotifications([]);
+            if (!append) {
+                setNotifications([]);
+            }
+        } finally {
+            setLoading(false);
         }
-    }, [authToken]);
+    }, [authToken, loading]);
 
     // ==============================
-    // 2) Marcar una notificación como leída
+    // 3) Marcar una notificación como leída
     // ==============================
     const markNotificationAsRead = async (notificationId) => {
         try {
@@ -112,6 +153,8 @@ const NotificationsMenu = ({ authToken }) => {
                         : n
                 )
             );
+            // Actualizar contador
+            await fetchUnreadCount();
         } catch (err) {
             console.error('Error marking notification as read:', err);
         }
@@ -170,7 +213,28 @@ const NotificationsMenu = ({ authToken }) => {
     const [previewNotification, setPreviewNotification] = useState(null); // { notification, receipt }
 
     // ==============================
-    // 3) Marcar TODAS como leídas
+    // 4) Scroll infinito - cargar más notificaciones
+    // ==============================
+    const handleScroll = useCallback(() => {
+        if (!scrollContainerRef.current || loading || !hasMore) return;
+        
+        const container = scrollContainerRef.current;
+        const scrollTop = container.scrollTop;
+        const scrollHeight = container.scrollHeight;
+        const clientHeight = container.clientHeight;
+        
+        // Si el usuario ha scrolleado cerca del final (80%), cargar más
+        if (scrollHeight - scrollTop - clientHeight < 100) {
+            setPage(prev => {
+                const nextPage = prev + 1;
+                fetchNotifications(nextPage, true);
+                return nextPage;
+            });
+        }
+    }, [loading, hasMore, fetchNotifications]);
+
+    // ==============================
+    // 5) Marcar TODAS como leídas
     // ==============================
     const markAllNotificationsAsRead = async () => {
         try {
@@ -180,48 +244,47 @@ const NotificationsMenu = ({ authToken }) => {
                 // Las marcamos como read una por una
                 await markNotificationAsRead(notif.id);
             }
+            // Actualizar contador
+            await fetchUnreadCount();
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
         }
     };
 
     // ==============================
-    // 4) Al abrir el menú => recargar y marcar leídas
+    // 6) Al abrir el menú => recargar notificaciones desde el inicio
     // ==============================
     const handleMenuOpen = async (event) => {
         setAnchorEl(event.currentTarget);
-        // Volvemos a pedir la lista más reciente
-        await fetchAllNotifications();
-        // Do NOT auto-mark all as read on open. The user can explicitly remove (X) or
-        // use the ClearAll button if they want to mark all as read.
+        // Reset pagination and fetch first page
+        setPage(0);
+        setNotifications([]);
+        await fetchNotifications(0, false);
     };
 
     // ==============================
-    // 5) Cerrar el menú
+    // 7) Cerrar el menú
     // ==============================
     const handleMenuClose = () => {
         setAnchorEl(null);
     };
 
     // ==============================
-    // 6) "Limpiar" => marcar todas read
-    // (ahora es redundante porque ya se marcan al abrir,
-    //  pero lo dejamos si quieres un botón extra)
+    // 8) "Limpiar" => marcar todas read
     // ==============================
     const handleClearNotifications = async () => {
-        // Keep behavior: explicit 'clear' button will mark all as read
         await markAllNotificationsAsRead();
         handleMenuClose();
     };
 
     // ==============================
-    // 7) Efecto para cargar y escuchar socket
+    // 9) Efecto para cargar contador y escuchar socket
     // ==============================
     useEffect(() => {
         if (!authToken) return;
 
-        // Cargar notificaciones
-        fetchAllNotifications();
+        // Cargar conteo inicial
+        fetchUnreadCount();
 
         // Escuchar socket
         const socket = getSocket();
@@ -236,19 +299,19 @@ const NotificationsMenu = ({ authToken }) => {
                     console.warn('Failed parsing targetingCriteria from socket new_notification', copy.id, e);
                 }
 
-                setNotifications((prev) => [copy, ...prev]);
+                // Agregar al inicio si el menú está abierto
+                if (menuOpen) {
+                    setNotifications((prev) => [copy, ...prev]);
+                    setTotalNotifications(prev => prev + 1);
+                }
+                // Actualizar contador
+                fetchUnreadCount();
             });
         }
         return () => {
             if (socket) socket.off('new_notification');
         };
-    }, [authToken, fetchAllNotifications]);
-
-
-    // ==============================
-    // 8) Contador => unread
-    // ==============================
-    const unreadCount = notifications.filter((n) => n.status === 'unread').length;
+    }, [authToken, fetchUnreadCount, menuOpen]);
 
     const getNotificationStyle = (notification) => {
         // Estilo base para todas las notificaciones
@@ -325,7 +388,11 @@ const NotificationsMenu = ({ authToken }) => {
                 anchorEl={anchorEl}
                 open={menuOpen}
                 onClose={handleMenuClose}
-                PaperProps={{ style: { width: 350 } }}
+                PaperProps={{ 
+                    style: { width: 350, maxHeight: 500 },
+                    ref: scrollContainerRef,
+                    onScroll: handleScroll
+                }}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 getContentAnchorEl={null}
@@ -340,14 +407,21 @@ const NotificationsMenu = ({ authToken }) => {
                 </div>
                 <Divider />
 
-                {notifications.length === 0 ? (
+                {loading && notifications.length === 0 ? (
+                    <MenuItem onClick={handleMenuClose}>
+                        <Typography variant="body1" color="textSecondary">
+                            Cargando...
+                        </Typography>
+                    </MenuItem>
+                ) : notifications.length === 0 ? (
                     <MenuItem onClick={handleMenuClose}>
                         <Typography variant="body1" color="textSecondary">
                             No hay notificaciones.
                         </Typography>
                     </MenuItem>
                 ) : (
-                    notifications.map((notification, index) => {
+                    <>
+                    {notifications.map((notification, index) => {
                         const clientName = notification.targetingCriteria?.client?.name || null;
                         return (
                             <div key={notification.id || index}>
@@ -409,7 +483,6 @@ const NotificationsMenu = ({ authToken }) => {
                                             }}
                                         >
                                             {notification.title}
-                                            {notification.status === 'unread' && ' (unread)'}
                                         </Typography>
 
                                         <Typography
@@ -438,7 +511,29 @@ const NotificationsMenu = ({ authToken }) => {
                                 {index < notifications.length - 1 && <Divider />}
                             </div>
                         );
-                    })
+                    })}
+                    {loading && (
+                        <MenuItem disabled>
+                            <Typography variant="body2" color="textSecondary" style={{ textAlign: 'center', width: '100%' }}>
+                                Cargando más...
+                            </Typography>
+                        </MenuItem>
+                    )}
+                    {!loading && hasMore && (
+                        <MenuItem disabled>
+                            <Typography variant="caption" color="textSecondary" style={{ textAlign: 'center', width: '100%' }}>
+                                Scroll para cargar más ({notifications.length} de {totalNotifications})
+                            </Typography>
+                        </MenuItem>
+                    )}
+                    {!loading && !hasMore && notifications.length > 0 && (
+                        <MenuItem disabled>
+                            <Typography variant="caption" color="textSecondary" style={{ textAlign: 'center', width: '100%' }}>
+                                {notifications.length} de {totalNotifications} notificaciones
+                            </Typography>
+                        </MenuItem>
+                    )}
+                    </>
                 )}
             </Menu>
 
