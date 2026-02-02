@@ -59,6 +59,7 @@ const RouteTimeLogsPage = () => {
     // Filtros
     const [schools, setSchools] = useState([]);
     const [buses, setBuses] = useState([]);
+    const [schoolRoutes, setSchoolRoutes] = useState([]);
     const [selectedSchool, setSelectedSchool] = useState('');
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
@@ -83,6 +84,10 @@ const RouteTimeLogsPage = () => {
     useEffect(() => {
         if (selectedSchool) {
             fetchBusesBySchool(selectedSchool);
+            fetchRouteNumbersBySchool(selectedSchool);
+        } else {
+            setBuses([]);
+            setSchoolRoutes([]);
         }
     }, [selectedSchool]);
 
@@ -110,6 +115,17 @@ const RouteTimeLogsPage = () => {
         } catch (error) {
             console.error('Error al cargar buses:', error);
             setBuses([]);
+        }
+    };
+
+    const fetchRouteNumbersBySchool = async (schoolId) => {
+        try {
+            const response = await api.get(`/routes/school/${schoolId}/numbers`);
+            const numbers = Array.isArray(response.data?.routeNumbers) ? response.data.routeNumbers : (response.data?.routeNumbers || []);
+            setSchoolRoutes(numbers);
+        } catch (error) {
+            console.error('Error al cargar números de ruta:', error);
+            setSchoolRoutes([]);
         }
     };
 
@@ -358,7 +374,12 @@ const RouteTimeLogsPage = () => {
                                     disabled={!selectedSchool}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
-                                    {[...new Set(buses.map(b => b.routeNumber).filter(r => r))].sort((a, b) => a - b).map((route) => (
+                                    {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
+                                        const na = Number(a);
+                                        const nb = Number(b);
+                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+                                        return String(a).localeCompare(String(b));
+                                    }).map((route) => (
                                         <MenuItem key={route} value={route}>
                                             {route}
                                         </MenuItem>
