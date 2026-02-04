@@ -172,24 +172,15 @@ const NotificationsMenu = ({ authToken }) => {
         // For 'Nueva Boleta de Pago', show the receipt preview inside the menu (no navigation).
         if (notification && notification.type === 'boleta-pago') {
             setAnchorEl(null);
-            // open preview: try to fetch receipts for the user (using payment.User.id or payment.userId)
+            // Fetch detailed preview on demand (receipt + payment)
             try {
-                const userId = notification.payment?.User?.id || notification.payment?.userId || null;
-                if (!userId) {
-                    // no userId available in payload: show a minimal preview with message
-                    setPreviewNotification({ notification, receipt: null });
-                    setPreviewOpen(true);
-                    return;
-                }
-                const res = await api.get(`/parents/${userId}/receipts`, { headers: { Authorization: `Bearer ${authToken}` } });
-                const recs = res.data.receipts || [];
-                // prefer matching receipt by id when available
-                const matched = notification.paymentReceiptId ? recs.find(r => String(r.id) === String(notification.paymentReceiptId)) : recs[0];
-                setPreviewNotification({ notification, receipt: matched || null });
+                const res = await api.get(`/notifications/${notification.id}/preview`, { headers: { Authorization: `Bearer ${authToken}` } });
+                const preview = res.data && res.data.preview ? res.data.preview : { notification, receipt: null };
+                setPreviewNotification(preview);
                 setPreviewOpen(true);
             } catch (e) {
-                console.error('Error loading receipt for preview', e);
-                setPreviewNotification({ notification, receipt: null });
+                const previewData = { notification, receipt: null };
+                setPreviewNotification(previewData);
                 setPreviewOpen(true);
             }
             return;
@@ -389,7 +380,7 @@ const NotificationsMenu = ({ authToken }) => {
                 open={menuOpen}
                 onClose={handleMenuClose}
                 PaperProps={{ 
-                    style: { width: 350, maxHeight: 500 },
+                    style: { width: 350, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' },
                     ref: scrollContainerRef,
                     onScroll: handleScroll
                 }}
@@ -419,9 +410,8 @@ const NotificationsMenu = ({ authToken }) => {
                             No hay notificaciones.
                         </Typography>
                     </MenuItem>
-                ) : (
-                    <>
-                    {notifications.map((notification, index) => {
+                ) : [
+                    ...notifications.map((notification, index) => {
                         const clientName = notification.targetingCriteria?.client?.name || null;
                         return (
                             <div key={notification.id || index}>
@@ -511,30 +501,29 @@ const NotificationsMenu = ({ authToken }) => {
                                 {index < notifications.length - 1 && <Divider />}
                             </div>
                         );
-                    })}
-                    {loading && (
-                        <MenuItem disabled>
+                    }),
+                    ...(loading ? [
+                        <MenuItem key="loading-more" disabled>
                             <Typography variant="body2" color="textSecondary" style={{ textAlign: 'center', width: '100%' }}>
                                 Cargando más...
                             </Typography>
                         </MenuItem>
-                    )}
-                    {!loading && hasMore && (
-                        <MenuItem disabled>
+                    ] : []),
+                    ...(!loading && hasMore ? [
+                        <MenuItem key="scroll-more" disabled>
                             <Typography variant="caption" color="textSecondary" style={{ textAlign: 'center', width: '100%' }}>
                                 Scroll para cargar más ({notifications.length} de {totalNotifications})
                             </Typography>
                         </MenuItem>
-                    )}
-                    {!loading && !hasMore && notifications.length > 0 && (
-                        <MenuItem disabled>
+                    ] : []),
+                    ...(!loading && !hasMore && notifications.length > 0 ? [
+                        <MenuItem key="total-count" disabled>
                             <Typography variant="caption" color="textSecondary" style={{ textAlign: 'center', width: '100%' }}>
                                 {notifications.length} de {totalNotifications} notificaciones
                             </Typography>
                         </MenuItem>
-                    )}
-                    </>
-                )}
+                    ] : [])
+                ]}
             </Menu>
 
             {/* Receipt preview dialog (local) */}
@@ -564,18 +553,23 @@ const NotificationsMenu = ({ authToken }) => {
                     <Button variant="contained" onClick={async () => {
                         // when user chooses to register a payment, navigate to page with openRegister=true
                         try {
-                            const notif = previewNotification && previewNotification.notification;
-                            const rec = previewNotification && previewNotification.receipt;
+                            const rec = previewNotification.receipt;
+                            
+                            
                             // Build URL from notification.link if available, else construct
-                            let link = notif && notif.link ? notif.link : (rec ? `/admin/escuelas/${new Date().getFullYear()}/pagos?openRegister=true&receiptId=${rec.id}&userId=${rec.userId}` : null);
+                            let link = previewNotification.link;
+                            
                             // ensure openRegister explicit
                             if (link) {
                                 const base = window.location.origin;
+                                
                                 const u = new URL(link, base);
                                 u.searchParams.set('openRegister', 'true');
-                                if (rec && rec.id) u.searchParams.set('receiptId', rec.id);
-                                if (rec && rec.userId) u.searchParams.set('userId', rec.userId);
-                                const state = notif && notif.payment ? { payment: notif.payment } : (rec ? { receiptId: rec.id } : undefined);
+                                if (previewNotification.receipt.id) u.searchParams.set('receiptId', previewNotification.receipt.id);
+                                if (previewNotification.receipt.userId) u.searchParams.set('userId', previewNotification.receipt.userId);
+                                
+                                const state = previewNotification.paymentReceiptId;
+                                
                                 setPreviewOpen(false);
                                 const finalPath = forceSchoolYearInLink(u.pathname + u.search, 2025);
                                 navigate(finalPath, { state });
