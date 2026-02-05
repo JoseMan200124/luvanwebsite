@@ -18,6 +18,7 @@ import {
     Pagination,
     CircularProgress,
     Box,
+    MenuItem,
     DialogActions,
     useTheme,
     useMediaQuery,
@@ -36,6 +37,7 @@ import {
     CalendarToday,
     Add as AddIcon
 } from '@mui/icons-material';
+import { Switch, FormControlLabel } from '@mui/material';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 
 import SimpleEditor from './SimpleEditor';
@@ -130,6 +132,13 @@ const SchoolContractsPage = () => {
     const [filledContractsSearch, setFilledContractsSearch] = useState('');
     const [filledContractsSearchInput, setFilledContractsSearchInput] = useState(''); // Para el input del usuario
 
+    // Nuevo: switch para mostrar solo familias no firmadas por contrato
+    const [onlyUnfilled, setOnlyUnfilled] = useState(false);
+    const MIN_LOADING_MS = 600; // ms mínimo para mostrar el loader y mejorar percepción
+    const [unfilledFamilies, setUnfilledFamilies] = useState([]);
+    const [unfilledLoading, setUnfilledLoading] = useState(false);
+    const [selectedContractUuid, setSelectedContractUuid] = useState(null);
+
     // Diálogo de confirmación para eliminar contrato llenado
     const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
     const [filledContractToDelete, setFilledContractToDelete] = useState(null);
@@ -151,6 +160,10 @@ const SchoolContractsPage = () => {
                     params: { schoolId: schoolId }
                 });
                 setContracts(response.data);
+                // seleccionar por defecto el primer contrato si existe
+                if (Array.isArray(response.data) && response.data.length > 0) {
+                    setSelectedContractUuid(response.data[0].uuid);
+                }
             } catch (error) {
                 console.error('Error al obtener los contratos:', error);
                 setSnackbar({
@@ -189,7 +202,49 @@ const SchoolContractsPage = () => {
     // useEffect para cargar contratos firmados (paginados)
     // ---------------------------
     useEffect(() => {
-        const fetchFilledContracts = async () => {
+        const fetchItems = async () => {
+            // Si está activo el switch, consumir endpoint de familias no firmadas
+            if (onlyUnfilled) {
+                const start = Date.now();
+                setUnfilledLoading(true);
+                try {
+                    if (!selectedContractUuid) {
+                        setUnfilledFamilies([]);
+                        // No remote call; ensure minimal perception time
+                        const elapsed = Date.now() - start;
+                        const wait = Math.max(0, MIN_LOADING_MS - elapsed);
+                        setTimeout(() => setUnfilledLoading(false), wait);
+                        return;
+                    }
+
+                    const params = {
+                        page: filledContractsPage,
+                        limit: filledContractsLimit,
+                        schoolId: schoolId,
+                        contractUuid: selectedContractUuid
+                    };
+                    if (filledContractsSearch) params.search = filledContractsSearch;
+
+                    const response = await api.get('/contracts/unfilled', { params });
+                    setUnfilledFamilies(response.data.data || []);
+                    setFilledContractsTotalPages(response.data.meta.totalPages);
+                    const totalCount = response.data.meta?.total ?? 0;
+                    setFilledContractsTotalCount(totalCount);
+                } catch (error) {
+                    console.error('Error al obtener familias no firmadas:', error);
+                    const serverMsg = error?.response?.data?.message || error?.message || 'Error desconocido';
+                    const status = error?.response?.status;
+                    setSnackbar({ open: true, message: `Error ${status || ''}: ${serverMsg}`, severity: 'error' });
+                } finally {
+                    const elapsed = Date.now() - start;
+                    const wait = Math.max(0, MIN_LOADING_MS - elapsed);
+                    setTimeout(() => setUnfilledLoading(false), wait);
+                }
+                return;
+            }
+
+            // Comportamiento original: listar contratos llenados
+            const start = Date.now();
             setFilledContractsLoading(true);
             try {
                 const params = {
@@ -197,12 +252,9 @@ const SchoolContractsPage = () => {
                     limit: filledContractsLimit,
                     schoolId: schoolId
                 };
-                
-                // Agregar search solo si hay búsqueda activa
-                if (filledContractsSearch) {
-                    params.search = filledContractsSearch;
-                }
-                
+                if (filledContractsSearch) params.search = filledContractsSearch;
+                    if (selectedContractUuid) params.contractUuid = selectedContractUuid;
+
                 const response = await api.get('/contracts/filled', { params });
                 setFilledContracts(response.data.data);
                 setFilledContractsTotalPages(response.data.meta.totalPages);
@@ -210,17 +262,17 @@ const SchoolContractsPage = () => {
                 setFilledContractsTotalCount(totalCount);
             } catch (error) {
                 console.error('Error al obtener los contratos firmados:', error);
-                setSnackbar({
-                    open: true,
-                    message: 'Error al obtener los contratos firmados.',
-                    severity: 'error'
-                });
+                const serverMsg = error?.response?.data?.message || error?.message || 'Error desconocido';
+                const status = error?.response?.status;
+                setSnackbar({ open: true, message: `Error ${status || ''}: ${serverMsg}`, severity: 'error' });
             } finally {
-                setFilledContractsLoading(false);
+                const elapsed = Date.now() - start;
+                const wait = Math.max(0, MIN_LOADING_MS - elapsed);
+                setTimeout(() => setFilledContractsLoading(false), wait);
             }
         };
-        fetchFilledContracts();
-    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch]);
+        fetchItems();
+    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid]);
 
     // ---------------------------
     // Función para subir archivo Word y convertirlo a HTML (igual que ContractsManagementPage)
@@ -736,19 +788,19 @@ const SchoolContractsPage = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <SchoolIcon sx={{ fontSize: 40 }} />
                         <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Contratos - {schoolData?.name || 'Cargando...'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Chip 
-                                    icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${schoolYear || stateSchoolYear}`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                                <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {filledContractsTotalCount} contratos firmados
-                                </Typography>
-                            </Box>
+                                        <Typography variant="h4" component="h1" gutterBottom>
+                                            Contratos - {schoolData?.name || 'Cargando...'}
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                            <Chip 
+                                                icon={<CalendarToday />}
+                                                label={`Ciclo Escolar ${schoolYear || stateSchoolYear}`}
+                                                sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
+                                            />
+                                            <Typography variant="body1" sx={{ opacity: 0.9, fontWeight: 700 }}>
+                                                {filledContractsTotalCount} {onlyUnfilled ? 'familias sin firmar contrato' : 'contratos firmados'}
+                                            </Typography>
+                                        </Box>
                         </Box>
                     </Box>
                 </CardContent>
@@ -840,14 +892,39 @@ const SchoolContractsPage = () => {
                             </ListItem>
                         ))}
                     </List>
-                )}
+                )}  
 
                 <Divider style={{ margin: '40px 0' }} />
-                <Typography variant="h5" gutterBottom>
-                    Contratos Firmados
+                <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+                    {onlyUnfilled ? 'Familias sin firmar contrato' : 'Contratos Firmados'}
                 </Typography>
 
-                <Box display="flex" gap={2} justifyContent="flex-end" mb={2} flexWrap="wrap">
+                <Box display="flex" gap={2} justifyContent="flex-end" mt={2} mb={2} flexWrap="wrap">
+                    <TextField
+                        select
+                        label="Contrato"
+                        size="small"
+                        value={selectedContractUuid || ''}
+                        onChange={(e) => setSelectedContractUuid(e.target.value)}
+                        style={{ minWidth: 220 }}
+                    >
+                        {contracts.map((c) => (
+                            <MenuItem key={c.uuid} value={c.uuid}>
+                                {c.title}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={onlyUnfilled}
+                                onChange={(e) => { setOnlyUnfilled(e.target.checked); setFilledContractsPage(1); }}
+                                color="primary"
+                            />
+                        }
+                        label="Mostrar familias sin firmar contrato"
+                    />
+                    {/* spinner inline removido: el loader se mostrará únicamente en el área de datos */}
                     <TextField
                         label="Buscar por apellido de familia"
                         variant="outlined"
@@ -881,65 +958,115 @@ const SchoolContractsPage = () => {
                     )}
                 </Box>
 
-                {filledContractsLoading ? (
-                    <div style={{ textAlign: 'center', marginTop: '20px' }}>
-                        <CircularProgress />
-                    </div>
-                ) : isMobile ? (
-                    <Box>
-                        {filledContracts.length === 0 ? (
-                            <Typography variant="body1">
-                                {filledContractsSearch 
-                                    ? 'No se encontraron contratos firmados con ese criterio de búsqueda.'
-                                    : 'No se encontraron contratos firmados.'
-                                }
-                            </Typography>
-                        ) : (
-                            <>
-                                {filledContracts.map((filledContract) => (
-                                    <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={true} />
-                                ))}
-                            </>
-                        )}
-                        {filledContractsTotalPages > 1 && (
-                            <Box display="flex" justifyContent="center" mt={2}>
-                                <Pagination
-                                    count={filledContractsTotalPages}
-                                    page={filledContractsPage}
-                                    onChange={(event, value) => setFilledContractsPage(value)}
-                                    color="primary"
-                                />
+                <Box style={{ minHeight: '120px' }}>
+                    {/* Mostrar únicamente el spinner durante la carga de la vista seleccionada */}
+                    { (onlyUnfilled ? unfilledLoading : filledContractsLoading) ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '120px' }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : (
+                        // Cuando no hay carga, renderizar la vista seleccionada
+                        isMobile ? (
+                            <Box>
+                                {onlyUnfilled ? (
+                                    unfilledFamilies.length === 0 ? (
+                                        <Typography variant="body1">No se encontraron familias sin firmar contrato.</Typography>
+                                    ) : (
+                                        <>
+                                            {unfilledFamilies.map((f) => (
+                                                <MobileFilledContractCard key={f.familyDetailId}>
+                                                    <Typography variant="h6">{f.familyLastName || 'Sin Apellido'}</Typography>
+                                                    <Typography variant="body2" color="textSecondary">Padre: {f.userName || ''} &nbsp; {f.userEmail ? `(${f.userEmail})` : ''}</Typography>
+                                                    {/* Dirección removida por requerimiento informativo */}
+                                                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                                        <Typography variant="caption" color="textSecondary">(Información únicamente)</Typography>
+                                                    </Box>
+                                                </MobileFilledContractCard>
+                                            ))}
+                                        </>
+                                    )
+                                ) : (
+                                    filledContracts.length === 0 ? (
+                                        <Typography variant="body1">
+                                            {filledContractsSearch 
+                                                ? 'No se encontraron contratos firmados con ese criterio de búsqueda.'
+                                                : 'No se encontraron contratos firmados.'
+                                            }
+                                        </Typography>
+                                    ) : (
+                                        <>
+                                            {filledContracts.map((filledContract) => (
+                                                <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={true} />
+                                            ))}
+                                        </>
+                                    )
+                                )}
+
+                                {filledContractsTotalPages > 1 && (
+                                    <Box display="flex" justifyContent="center" mt={2}>
+                                        <Pagination
+                                            count={filledContractsTotalPages}
+                                            page={filledContractsPage}
+                                            onChange={(event, value) => setFilledContractsPage(value)}
+                                            color="primary"
+                                        />
+                                    </Box>
+                                )}
                             </Box>
-                        )}
-                    </Box>
-                ) : (
-                    <List>
-                        {filledContracts.length === 0 ? (
-                            <Typography variant="body1">
-                                {filledContractsSearch 
-                                    ? 'No se encontraron contratos firmados con ese criterio de búsqueda.'
-                                    : 'No se encontraron contratos firmados.'
-                                }
-                            </Typography>
                         ) : (
-                            <>
-                                {filledContracts.map((filledContract) => (
-                                    <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={false} />
-                                ))}
-                            </>
-                        )}
-                        {filledContractsTotalPages > 1 && (
-                            <Box display="flex" justifyContent="center" mt={2}>
-                                <Pagination
-                                    count={filledContractsTotalPages}
-                                    page={filledContractsPage}
-                                    onChange={(event, value) => setFilledContractsPage(value)}
-                                    color="primary"
-                                />
-                            </Box>
-                        )}
-                    </List>
-                )}
+                            <List>
+                                {onlyUnfilled ? (
+                                    unfilledFamilies.length === 0 ? (
+                                        <Typography variant="body1">No se encontraron familias sin firmar contrato.</Typography>
+                                    ) : (
+                                        <>
+                                            {unfilledFamilies.map((f) => (
+                                                <ListItem key={f.familyDetailId} divider>
+                                                    <ListItemText
+                                                        primary={f.familyLastName || 'Sin Apellido'}
+                                                        secondary={
+                                                            <>
+                                                                <Typography variant="body2" color="textSecondary">Padre: {f.userName || ''} {f.userEmail ? `(${f.userEmail})` : ''}</Typography>
+                                                                {/* Dirección removida por requerimiento informativo */}
+                                                            </>
+                                                        }
+                                                    />
+                                                    <Typography variant="caption" color="textSecondary">(Información únicamente)</Typography>
+                                                </ListItem>
+                                            ))}
+                                        </>
+                                    )
+                                ) : (
+                                    filledContracts.length === 0 ? (
+                                        <Typography variant="body1">
+                                            {filledContractsSearch 
+                                                ? 'No se encontraron contratos firmados con ese criterio de búsqueda.'
+                                                : 'No se encontraron contratos firmados.'
+                                            }
+                                        </Typography>
+                                    ) : (
+                                        <>
+                                            {filledContracts.map((filledContract) => (
+                                                <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={false} />
+                                            ))}
+                                        </>
+                                    )
+                                )}
+
+                                {filledContractsTotalPages > 1 && (
+                                    <Box display="flex" justifyContent="center" mt={2}>
+                                        <Pagination
+                                            count={filledContractsTotalPages}
+                                            page={filledContractsPage}
+                                            onChange={(event, value) => setFilledContractsPage(value)}
+                                            color="primary"
+                                        />
+                                    </Box>
+                                )}
+                            </List>
+                        )
+                    )}
+                </Box>
 
                 {/* Diálogo Crear/Editar Contrato */}
                 <Dialog open={openEditor} onClose={handleCloseEditor} maxWidth="lg" fullWidth>
