@@ -691,18 +691,15 @@ const SchoolContractsPage = () => {
             ''
         );
 
-        if (isMobileView) {
+            if (isMobileView) {
             return (
                 <MobileFilledContractCard key={filledContract.id}>
-                    <Typography variant="h6">{filledContract.title}</Typography>
+                    <Typography variant="h6">Familia: {familyLastName}</Typography>
                     <Typography variant="body2" color="textSecondary">
                         Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
                     </Typography>
                     <Typography variant="body2" color="textSecondary">
-                        Contrato Original: {filledContract.contract?.title}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Familia: {familyLastName}
+                        Usuario: {filledContract.parent?.name || filledContract.filledData?.parentName || ''} { (filledContract.parent?.email || filledContract.filledData?.parentEmail) ? `(${filledContract.parent?.email || filledContract.filledData?.parentEmail})` : '' }
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
                         <Button
@@ -732,17 +729,14 @@ const SchoolContractsPage = () => {
         return (
             <ListItem key={filledContract.id} divider>
                 <ListItemText
-                    primary={filledContract.title}
+                    primary={`Familia: ${familyLastName}`}
                     secondary={
                         <>
                             <Typography variant="body2" color="textSecondary">
                                 Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
-                                Contrato Original: {filledContract.contract?.title}
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                                Familia: {familyLastName}
+                                Usuario: {filledContract.parent?.name || filledContract.filledData?.parentName || ''} { (filledContract.parent?.email || filledContract.filledData?.parentEmail) ? `(${filledContract.parent?.email || filledContract.filledData?.parentEmail})` : '' }
                             </Typography>
                         </>
                     }
@@ -975,9 +969,8 @@ const SchoolContractsPage = () => {
                                         <>
                                             {unfilledFamilies.map((f) => (
                                                 <MobileFilledContractCard key={f.familyDetailId}>
-                                                    <Typography variant="h6">{f.familyLastName || 'Sin Apellido'}</Typography>
-                                                    <Typography variant="body2" color="textSecondary">Padre: {f.userName || ''} &nbsp; {f.userEmail ? `(${f.userEmail})` : ''}</Typography>
-                                                    {/* Dirección removida por requerimiento informativo */}
+                                                    <Typography variant="h6">Familia: {f.familyLastName || 'Sin Apellido'}</Typography>
+                                                    <Typography variant="body2" color="textSecondary">Usuario: {f.userName || ''} &nbsp; {f.userEmail ? `(${f.userEmail})` : ''}</Typography>
                                                     <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                                                         <Typography variant="caption" color="textSecondary">(Información únicamente)</Typography>
                                                     </Box>
@@ -1023,11 +1016,10 @@ const SchoolContractsPage = () => {
                                             {unfilledFamilies.map((f) => (
                                                 <ListItem key={f.familyDetailId} divider>
                                                     <ListItemText
-                                                        primary={f.familyLastName || 'Sin Apellido'}
+                                                        primary={`Familia: ${f.familyLastName || 'Sin Apellido'}`}
                                                         secondary={
                                                             <>
-                                                                <Typography variant="body2" color="textSecondary">Padre: {f.userName || ''} {f.userEmail ? `(${f.userEmail})` : ''}</Typography>
-                                                                {/* Dirección removida por requerimiento informativo */}
+                                                                <Typography variant="body2" color="textSecondary">Usuario: {f.userName || ''} {f.userEmail ? `(${f.userEmail})` : ''}</Typography>
                                                             </>
                                                         }
                                                     />
