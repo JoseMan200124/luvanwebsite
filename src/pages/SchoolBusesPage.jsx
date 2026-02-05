@@ -643,14 +643,24 @@ const SchoolBusesPage = () => {
             }
         });
 
+        // también excluir pilotos ya asignados a rutas (asignaciones de rutas sin bus)
+        const routeAssignedPilots = new Set(Object.values(routePilotAssignments).filter(Boolean).map(id => Number(id)));
+
         return availablePilots
             .filter(pilot => {
                 // Si el piloto está asignado al bus actual, siempre mostrarlo
-                if (pilotAssignments[currentBusId] === pilot.id) {
+                if (Number(pilotAssignments[currentBusId]) === pilot.id) 
                     return true;
-                }
+
                 // Excluir pilotos ya asignados a otros buses
-                return !pilotsAssignedToOtherBuses.has(pilot.id);
+                if (pilotsAssignedToOtherBuses.has(pilot.id)) 
+                    return false;
+
+                // Excluir pilotos ya asignados a una ruta sin bus
+                if (routeAssignedPilots.has(pilot.id)) 
+                    return false;
+
+                return true;
             })
             .sort((a, b) => {
                 const an = (a.name || a.email || '').toLowerCase();
@@ -670,14 +680,25 @@ const SchoolBusesPage = () => {
             }
         });
 
+        // tambien excluir monitoras ya asignadas a rutas (asignaciones de rutas sin bus)
+        const routeAssignedMonitors = new Set(Object.values(routeMonitorAssignments).filter(Boolean).map(id => Number(id)));
+
         return availableMonitors
             .filter(monitor => {
+                
                 // Si la monitora está asignada al bus actual, siempre mostrarla
-                if (monitorAssignments[currentBusId] === monitor.id) {
+                if (Number(monitorAssignments[currentBusId]) === monitor.id) 
                     return true;
-                }
+
                 // Excluir monitoras ya asignadas a otros buses
-                return !monitorsAssignedToOtherBuses.has(monitor.id);
+                if (monitorsAssignedToOtherBuses.has(monitor.id)) 
+                    return false;
+
+                // Excluir monitoras ya asignadas a una ruta sin bus
+                if (routeAssignedMonitors.has(monitor.id)) 
+                    return false;
+
+                return true;
             })
             .sort((a, b) => {
                 const an = (a.name || a.email || '').toLowerCase();
