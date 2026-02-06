@@ -317,6 +317,7 @@ const RolesManagementPage = () => {
     const [searchInput, setSearchInput] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [totalUsers, setTotalUsers] = useState(0);
     const [loading, setLoading] = useState(false);
 
     const [allPilots, setAllPilots] = useState([]);
@@ -434,15 +435,30 @@ const RolesManagementPage = () => {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            // fetch all non-parent users from backend
-            const response = await api.get('/users/non-parents');
-            setUsers(response.data.users || []);
+            const params = {
+                page,
+                limit: rowsPerPage
+            };
+            if (searchQuery) params.search = searchQuery;
+            if (roleFilter) params.roleId = roleFilter;
+            if (clientFilter && clientFilter.type === 'Colegio') params.schoolId = clientFilter.id;
+            if (clientFilter && clientFilter.type === 'Corporación') params.corporationId = clientFilter.id;
+
+            const response = await api.get('/users/non-parents', { params });
+            const data = response.data || {};
+            setUsers(data.users || []);
+            setTotalUsers(Number(data.count || 0));
         } catch (err) {
             console.error('[fetchUsers] Error:', err);
             setSnackbar({ open: true, message: 'Error al obtener usuarios', severity: 'error' });
         }
         setLoading(false);
     };
+
+    // Fetch when pagination or filters change
+    useEffect(() => {
+        fetchUsers();
+    }, [page, rowsPerPage, roleFilter, clientFilter, searchQuery]);
 
     const fetchSchools = async () => {
         try {
@@ -840,9 +856,9 @@ const RolesManagementPage = () => {
     };
 
 
-    const handleSearchChange = (e) => {
-        setSearchInput(e.target.value);
-    };
+    //const handleSearchChange = (e) => {
+        //setSearchInput(e.target.value);
+    //};
 
     const handleApplySearch = () => {
         setSearchQuery(searchInput);
@@ -858,9 +874,6 @@ const RolesManagementPage = () => {
 
     // --- MODIFICACIÓN: Se actualiza el filtrado para considerar además el apellido de la familia ---
     const filteredUsers = users.filter((u) => {
-        // Ocultar todos los usuarios con rol "Padre" (roleId 3)
-        if (Number(u.roleId) === 3) return false;
-        
         const matchesSearch =
             (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -910,7 +923,9 @@ const RolesManagementPage = () => {
     // --- FIN MODIFICACIÓN ---
 
     const sortedUsers = stableSort(filteredUsers, getComparator(order, orderBy));
-    const displayedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+    // Server provides pagination; `users` already contains the current page.
+    // Keep sorting client-side for the current page only.
+    const displayedUsers = sortedUsers;
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -1134,8 +1149,8 @@ const RolesManagementPage = () => {
         // 1. Prepara listas de referencia
         const colegios = schools.map(s => [s.id, s.name]);
         const corporaciones = corporations.map(c => [c.id, c.name]);
-        const pilotos = allPilots.map(p => [p.id, p.name]);
-        const monitoras = allMonitoras.map(m => [m.id, m.name]);
+        //const pilotos = allPilots.map(p => [p.id, p.name]);
+        //const monitoras = allMonitoras.map(m => [m.id, m.name]);
 
         // 2. Definir los headers por rol
         const sheets = [
@@ -1491,7 +1506,7 @@ const RolesManagementPage = () => {
                             ))}
                             <TablePagination
                                 component="div"
-                                count={sortedUsers.length}
+                                count={totalUsers}
                                 page={page}
                                 onPageChange={handleChangePage}
                                 rowsPerPage={rowsPerPage}
@@ -1648,7 +1663,7 @@ const RolesManagementPage = () => {
                                                 </ResponsiveTableCell>
                                             </TableRow>
                                         ))}
-                                        {filteredUsers.length === 0 && (
+                                        {users.length === 0 && (
                                             <TableRow>
                                                 <ResponsiveTableCell colSpan={6} align="center">
                                                     No se encontraron usuarios.
@@ -1660,7 +1675,7 @@ const RolesManagementPage = () => {
                             </TableContainer>
                             <TablePagination
                                 component="div"
-                                count={sortedUsers.length}
+                                count={totalUsers}
                                 page={page}
                                 onPageChange={handleChangePage}
                                 rowsPerPage={rowsPerPage}
