@@ -530,11 +530,12 @@ const RolesManagementPage = () => {
             password: '',
             corporationId: user.corporationId || ''
         });
-        // Populate monitoraFullName from nested MonitoraDetail if present (tolerant to different casing/keys)
+        // Populate monitoraFullName and phoneNumber from nested MonitoraDetail if present
         if (parsedRoleId === 4) {
             const md = user.monitoraDetail || user.MonitoraDetail || null;
-            const mdFullName = md && md.fullName ? md.fullName : '';
-            setSelectedUser(prev => ({ ...prev, monitoraFullName: mdFullName }));
+            const mdFullName = md && (md.fullName || md.full_name) ? (md.fullName || md.full_name) : '';
+            const mdPhone = md && (md.phoneNumber || md.phone || md.phone_number) ? (md.phoneNumber || md.phone || md.phone_number) : '';
+            setSelectedUser(prev => ({ ...prev, monitoraFullName: mdFullName, phoneNumber: mdPhone }));
         }
         if (parsedRoleId === 3 && user.FamilyDetail) {
             setFamilyDetail({
