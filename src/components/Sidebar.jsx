@@ -84,7 +84,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     const { auth, logout } = useContext(AuthContext);
     const navigate = useNavigate();
 
-    const [hoveredItem, setHoveredItem] = useState(null);
+    const [hoveredItem, setHoveredItem] = useState(null); // { idx, popY }
     const hoverTimer = useRef(null);
 
     const handleMenuClick = idx => {
@@ -118,16 +118,28 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     const canSeeRolesPermisos = isAdminOrGestor;
 
     // Calcula la posición vertical del pop-up
-    const getPopoutPosition = idx => HEADER_OFFSET + idx * ITEM_HEIGHT;
+    const getPopoutPosition = (element) => {
+        if (!element) return HEADER_OFFSET;
+        const rect = element.getBoundingClientRect();
+        // position relative to viewport top; popY should be rect.top
+        return Math.max(8, Math.floor(rect.top));
+    };
 
-    const handleItemMouseEnter = (idx, hasSubs) => {
+    // Use the real DOM element position so the popout aligns correctly
+    const handleItemMouseEnter = (event, idx, hasSubs) => {
         if (!isOpen && hasSubs) {
             clearTimeout(hoverTimer.current);
-            setHoveredItem(idx);
+            try {
+                const el = event.currentTarget;
+                const popY = getPopoutPosition(el);
+                setHoveredItem({ idx, popY });
+            } catch (e) {
+                setHoveredItem({ idx, popY: HEADER_OFFSET + idx * ITEM_HEIGHT });
+            }
         }
     };
 
-    const handleItemMouseLeave = (idx, hasSubs) => {
+    const handleItemMouseLeave = (hasSubs) => {
         if (!isOpen && hasSubs) {
             hoverTimer.current = setTimeout(() => setHoveredItem(null), 200);
         }
@@ -206,8 +218,8 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                             return (
                                 <React.Fragment key={module.key}>
                                     <MenuItem
-                                        onMouseEnter={() => handleItemMouseEnter(idx, hasSubs)}
-                                        onMouseLeave={() => handleItemMouseLeave(idx, hasSubs)}
+                                        onMouseEnter={(e) => handleItemMouseEnter(e, idx, hasSubs)}
+                                        onMouseLeave={() => handleItemMouseLeave(hasSubs)}
                                         onClick={() => handleMenuClick(idx)}
                                     >
                                         <div tw="flex items-center">
@@ -234,9 +246,9 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                     )}
 
                                     {/* Pop-up lateral cuando el sidebar está colapsado */}
-                                    {!isOpen && hasSubs && hoveredItem === idx && (
+                                    {!isOpen && hasSubs && hoveredItem?.idx === idx && (
                                         <SubMenuPopout
-                                            popY={getPopoutPosition(idx)}
+                                            popY={hoveredItem?.popY}
                                             onMouseEnter={handlePopoutMouseEnter}
                                             onMouseLeave={handlePopoutMouseLeave}
                                         >

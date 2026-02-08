@@ -48,6 +48,7 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 import RouteStudentsModal from '../components/modals/RouteStudentsModal';
 import { generateRouteOccupancyPDF } from '../utils/pdfExport';
+import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -816,134 +817,144 @@ const SchoolDashboardPage = () => {
                         </Grid>
 
                         {/* Sub-sección 2: Botón de usuarios */}
-                        <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Gestión de Familias
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar todas las familias registradas en este colegio
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<Group />}
-                                        onClick={handleViewUsers}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Familias
-                                    </Button>
-                                </CardContent>
-                            </SummaryCard>
-                        </Grid>
+                        <PermissionGuard permission="colegios-familias">
+                            <Grid item xs={12}>
+                                <SummaryCard>
+                                    <CardContent sx={{ textAlign: 'center' }}>
+                                        <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                        <Typography variant="h6" gutterBottom>
+                                            Gestión de Familias
+                                        </Typography>
+                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                            Ver y gestionar todas las familias registradas en este colegio
+                                        </Typography>
+                                        <Button
+                                            variant="contained"
+                                            color="primary"
+                                            size="large"
+                                            startIcon={<Group />}
+                                            onClick={handleViewUsers}
+                                            fullWidth
+                                            sx={{ borderRadius: 2 }}
+                                        >
+                                            Ver Familias
+                                        </Button>
+                                    </CardContent>
+                                </SummaryCard>
+                            </Grid>
+                        </PermissionGuard>
 
                         {/* Sub-sección 3: Botón de pagos */}
-                        <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <PaymentIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Gestión de Pagos
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Accede al panel de pagos y cobros específico de este colegio
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<PaymentIcon />}
-                                        onClick={handleViewPayments}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Pagos
-                                    </Button>
-                                </CardContent>
-                            </SummaryCard>
-                        </Grid>
+                        <PermissionGuard permission="colegios-pagos">
+                            <Grid item xs={12}>
+                                <SummaryCard>
+                                    <CardContent sx={{ textAlign: 'center' }}>
+                                        <PaymentIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                        <Typography variant="h6" gutterBottom>
+                                            Gestión de Pagos
+                                        </Typography>
+                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                            Accede al panel de pagos y cobros específico de este colegio
+                                        </Typography>
+                                        <Button
+                                            variant="contained"
+                                            color="primary"
+                                            size="large"
+                                            startIcon={<PaymentIcon />}
+                                            onClick={handleViewPayments}
+                                            fullWidth
+                                            sx={{ borderRadius: 2 }}
+                                        >
+                                            Ver Pagos
+                                        </Button>
+                                    </CardContent>
+                                </SummaryCard>
+                            </Grid>
+                        </PermissionGuard>
 
                         {/* Sub-sección 4: Botón de buses */}
-                        <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <DirectionsBus sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Gestión de Buses
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar los buses asignados a este colegio
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<DirectionsBus />}
-                                        onClick={handleViewBuses}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Buses
-                                    </Button>
-                                </CardContent>
-                            </SummaryCard>
-                        </Grid>
-                        
+                        <PermissionGuard permission="colegios-gestion-buses">
+                            <Grid item xs={12}>
+                                <SummaryCard>
+                                    <CardContent sx={{ textAlign: 'center' }}>
+                                        <DirectionsBus sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                        <Typography variant="h6" gutterBottom>
+                                            Gestión de Buses
+                                        </Typography>
+                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                            Ver y gestionar los buses asignados a este colegio
+                                        </Typography>
+                                        <Button
+                                            variant="contained"
+                                            color="primary"
+                                            size="large"
+                                            startIcon={<DirectionsBus />}
+                                            onClick={handleViewBuses}
+                                            fullWidth
+                                            sx={{ borderRadius: 2 }}
+                                        >
+                                            Ver Buses
+                                        </Button>
+                                    </CardContent>
+                                </SummaryCard>
+                            </Grid>
+                        </PermissionGuard>
+
                         {/* Sub-sección 5: Botón de contratos */}
-                        <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Gestión de Contratos
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar los contratos específicos de este colegio
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<ContractIcon />}
-                                        onClick={handleViewContracts}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Contratos
-                                    </Button>
-                                </CardContent>
-                            </SummaryCard>
-                        </Grid>
+                        <PermissionGuard permission="colegios-contratos">
+                            <Grid item xs={12}>
+                                <SummaryCard>
+                                    <CardContent sx={{ textAlign: 'center' }}>
+                                        <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                        <Typography variant="h6" gutterBottom>
+                                            Gestión de Contratos
+                                        </Typography>
+                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                            Ver y gestionar los contratos específicos de este colegio
+                                        </Typography>
+                                        <Button
+                                            variant="contained"
+                                            color="primary"
+                                            size="large"
+                                            startIcon={<ContractIcon />}
+                                            onClick={handleViewContracts}
+                                            fullWidth
+                                            sx={{ borderRadius: 2 }}
+                                        >
+                                            Ver Contratos
+                                        </Button>
+                                    </CardContent>
+                                </SummaryCard>
+                            </Grid>
+                        </PermissionGuard>
 
                         {/* Sub-sección 6: Botón de protocolos */}
-                        <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <ProtocolIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Protocolos y Reglamentos
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar protocolos y reglamentos de este colegio
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<ProtocolIcon />}
-                                        onClick={handleViewProtocols}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Protocolos
-                                    </Button>
-                                </CardContent>
-                            </SummaryCard>
-                        </Grid>
+                        <PermissionGuard permission="colegios-protocolos-reglamentos">
+                            <Grid item xs={12}>
+                                <SummaryCard>
+                                    <CardContent sx={{ textAlign: 'center' }}>
+                                        <ProtocolIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                        <Typography variant="h6" gutterBottom>
+                                            Protocolos y Reglamentos
+                                        </Typography>
+                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                            Ver y gestionar protocolos y reglamentos de este colegio
+                                        </Typography>
+                                        <Button
+                                            variant="contained"
+                                            color="primary"
+                                            size="large"
+                                            startIcon={<ProtocolIcon />}
+                                            onClick={handleViewProtocols}
+                                            fullWidth
+                                            sx={{ borderRadius: 2 }}
+                                        >
+                                            Ver Protocolos
+                                        </Button>
+                                    </CardContent>
+                                </SummaryCard>
+                            </Grid>
+                        </PermissionGuard>
                     </Grid>
                 </Grid>
             </Grid>

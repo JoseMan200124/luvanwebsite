@@ -196,13 +196,17 @@ const CorporationsPage = () => {
     const fetchCorporations = useCallback(async () => {
         setLoading(true);
         try {
+            const params = { fiscalYear: selectedFiscalYear };
+            try {
+                const roleId = Number(auth.user?.roleId || 0);
+                if (roleId && ![1, 2].includes(roleId)) params.assignedOnly = true;
+            } catch (e) { /* ignore */ }
+
             const response = await api.get('/corporations', {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: {
-                    fiscalYear: selectedFiscalYear
-                }
+                params
             });
             const rawCorporations = Array.isArray(response.data.corporations) 
                 ? response.data.corporations 

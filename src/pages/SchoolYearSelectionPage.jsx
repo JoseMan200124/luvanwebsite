@@ -56,6 +56,7 @@ import tw from 'twin.macro';
 import SubmissionPreview from './SubmissionPreview';
 import ExcelJS from 'exceljs';
 import moment from 'moment';
+import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -246,13 +247,22 @@ const SchoolYearSelectionPage = () => {
     const fetchSchoolsByYear = useCallback(async () => {
         setLoading(true);
         try {
+            const params = { schoolYear: selectedSchoolYear };
+            // If the current user is not role 1 (Gestor) or 2 (Administrador),
+            // request only assigned schools. Backend also enforces this rule,
+            // but sending the hint keeps intent explicit.
+            try {
+                const roleId = Number(auth.user?.roleId || 0);
+                if (roleId && ![1, 2].includes(roleId)) {
+                    params.assignedOnly = true;
+                }
+            } catch (e) { /* ignore */ }
+
             const response = await api.get('/schools', {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: {
-                    schoolYear: selectedSchoolYear
-                }
+                params
             });
             // Procesar schools para asegurar que grades sea siempre un array
             const rawSchools = Array.isArray(response.data.schools) ? response.data.schools : [];
@@ -964,20 +974,24 @@ const SchoolYearSelectionPage = () => {
                             </FormControl>
 
                             <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button
-                                    variant="outlined"
-                                    color="primary"
-                                    onClick={handleOpenBulkUpload}
-                                >
-                                    Carga Masiva
-                                </Button>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    onClick={handleAddSchool}
-                                >
-                                    Añadir Colegio
-                                </Button>
+                                <PermissionGuard permission="colegios-crear">
+                                    <Button
+                                        variant="outlined"
+                                        color="primary"
+                                        onClick={handleOpenBulkUpload}
+                                    >
+                                        Carga Masiva
+                                    </Button>
+                                </PermissionGuard>
+                                <PermissionGuard permission="colegios-crear">
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleAddSchool}
+                                        >
+                                        Añadir Colegio
+                                    </Button>
+                                </PermissionGuard>
                             </Box>
                         </Box>
                     </Box>
@@ -1276,18 +1290,20 @@ const SchoolYearSelectionPage = () => {
                                                         <Visibility fontSize="small" />
                                                     </IconButton>
                                                 </Tooltip>
-                                                <Tooltip title="Eliminar colegio">
-                                                    <IconButton 
-                                                        size="small"
-                                                        color="error"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDeleteClick(school.id);
-                                                        }}
-                                                    >
-                                                        <Delete fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
+                                                <PermissionGuard permission="colegios-eliminar">
+                                                    <Tooltip title="Eliminar colegio">
+                                                        <IconButton 
+                                                            size="small"
+                                                            color="error"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteClick(school.id);
+                                                            }}
+                                                        >
+                                                            <Delete fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </PermissionGuard>
                                             </Box>
                                         </CardContent>
                                     </SchoolCard>

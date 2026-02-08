@@ -167,7 +167,7 @@ function App() {
                         <Route
                             path="escuelas/:schoolYear/:schoolId"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'colegios-dashboard'}>
                                     <SchoolDashboardPage />
                                 </ProtectedRoute>
                             }
@@ -175,7 +175,7 @@ function App() {
                         <Route
                             path="escuelas/:schoolYear/:schoolId/usuarios"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'colegios-familias'}>
                                     <SchoolUsersPage />
                                 </ProtectedRoute>
                             }
@@ -183,7 +183,7 @@ function App() {
                         <Route
                             path="escuelas/:schoolYear/:schoolId/buses-gestion"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'colegios-gestion-buses'}>
                                     <SchoolBusesPage />
                                 </ProtectedRoute>
                             }
@@ -191,7 +191,7 @@ function App() {
                         <Route
                             path="escuelas/:schoolYear/:schoolId/contratos"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'colegios-contratos'}>
                                     <SchoolContractsPage />
                                 </ProtectedRoute>
                             }
@@ -199,7 +199,7 @@ function App() {
                         <Route
                             path="escuelas/:schoolYear/:schoolId/protocolos"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'colegios-protocolos-reglamentos'}>
                                     <SchoolProtocolsPage />
                                 </ProtectedRoute>
                             }
@@ -207,7 +207,7 @@ function App() {
                         <Route
                             path="escuelas/:schoolYear/:schoolId/pagos"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'colegios-pagos'}>
                                     <SchoolPaymentsPage />
                                 </ProtectedRoute>
                             }
@@ -217,7 +217,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'corporaciones'}>
                                     <CorporateDashboardPage />
                                 </ProtectedRoute>
                             }
@@ -225,7 +225,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId/colaboradores"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'corporaciones-colaboradores'}>
                                     <ColaboradoresPage />
                                 </ProtectedRoute>
                             }
@@ -233,7 +233,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId/buses-gestion"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'corporaciones-gestion-buses'}>
                                     <CorporateBusesPage />
                                 </ProtectedRoute>
                             }
@@ -241,7 +241,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId/protocolos"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'corporaciones-protocolos-reglamentos'}>
                                     <CorporateProtocolsPage />
                                 </ProtectedRoute>
                             }
