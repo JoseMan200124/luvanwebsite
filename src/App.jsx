@@ -92,7 +92,7 @@ function App() {
                     <Route
                         path="/admin/contratos-llenados/:uuid"
                         element={
-                            <ProtectedRoute roles={['Administrador','Supervisor','Gestor']}>
+                            <ProtectedRoute moduleKey={'contratos-ver-llenado-detalle'}>
                                 <FilledContractViewer />
                             </ProtectedRoute>
                         }
@@ -100,7 +100,7 @@ function App() {
                     <Route
                         path="/admin/contratos/:uuid"
                         element={
-                            <ProtectedRoute roles={['Administrador','Supervisor','Gestor']}>
+                            <ProtectedRoute moduleKey={'contratos-ver-detalle'}>
                                 <ContractViewer />
                             </ProtectedRoute>
                         }
@@ -159,7 +159,7 @@ function App() {
                         <Route
                             path="escuelas"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey={'colegios-listar'}>
                                     <SchoolYearSelectionPage />
                                 </ProtectedRoute>
                             }
