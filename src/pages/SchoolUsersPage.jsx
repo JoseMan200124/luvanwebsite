@@ -58,6 +58,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
+import { normalizeKey } from '../utils/stringHelpers';
 import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
@@ -270,26 +271,27 @@ const SchoolUsersPage = () => {
             // Populate rows for each new parent
             newParents.forEach((u, idx) => {
                 const fd = u.FamilyDetail || {};
-                const row = [];
-                row.push(fd.familyLastName || '');
                 // Backend ya envía status forzado a Activo/Inactivo para mode=new
                 const statusText = u.state === 0 ? 'Inactivo' : 'Activo';
-                row.push(statusText);
-                row.push(u.name || '');
-                row.push(u.email || '');
-                row.push(fd.motherName || '');
-                row.push(fd.motherCellphone || '');
-                row.push(fd.motherEmail || '');
-                row.push(fd.fatherName || '');
-                row.push(fd.fatherCellphone || '');
-                row.push(fd.fatherEmail || '');
-                row.push(fd.mainAddress || '');
-                row.push(fd.alternativeAddress || '');
-                row.push(fd.zoneOrSector || '');
-                row.push(fd.routeType || '');
-                row.push(fd.emergencyContact || '');
-                row.push(fd.emergencyRelationship || '');
-                row.push(fd.emergencyPhone || '');
+                const row = [
+                    fd.familyLastName || '',
+                    statusText,
+                    u.name || '',
+                    u.email || '',
+                    fd.motherName || '',
+                    fd.motherCellphone || '',
+                    fd.motherEmail || '',
+                    fd.fatherName || '',
+                    fd.fatherCellphone || '',
+                    fd.fatherEmail || '',
+                    fd.mainAddress || '',
+                    fd.alternativeAddress || '',
+                    fd.zoneOrSector || '',
+                    fd.routeType || '',
+                    fd.emergencyContact || '',
+                    fd.emergencyRelationship || '',
+                    fd.emergencyPhone || ''
+                ];
 
                 for (let i = 0; i < maxStudents; i++) {
                     const student = Array.isArray(fd.Students) && fd.Students[i] ? fd.Students[i] : null;
@@ -936,7 +938,8 @@ const SchoolUsersPage = () => {
                 const fd = u.FamilyDetail || {};
                 const row = [];
                 row.push(fd.familyLastName || '');
-                const statusText = u.status || (typeof getUserStatus === 'function' ? getUserStatus(u) : (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo'));
+                const computed = (typeof getUserStatus === 'function') ? getUserStatus(u) : null;
+                const statusText = (computed === 'Duplicado') ? 'Duplicado' : (u.status || computed || (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo'));
                 row.push(statusText);
                 row.push(u.name || '');
                 row.push(u.email || '');
@@ -1072,13 +1075,13 @@ const SchoolUsersPage = () => {
 
     const isFamilyLastNameDuplicated = (user, allUsers) => {
         if (!user.FamilyDetail || !user.FamilyDetail.familyLastName) return false;
-        const lastName = user.FamilyDetail.familyLastName.trim().toLowerCase();
+        const lastName = normalizeKey(user.FamilyDetail.familyLastName);
         if (!lastName) return false;
         const count = allUsers.filter(
             u =>
                 u.FamilyDetail &&
                 u.FamilyDetail.familyLastName &&
-                u.FamilyDetail.familyLastName.trim().toLowerCase() === lastName
+                normalizeKey(u.FamilyDetail.familyLastName) === lastName
         ).length;
         return count > 1;
     };

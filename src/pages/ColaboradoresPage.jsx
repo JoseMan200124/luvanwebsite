@@ -62,6 +62,7 @@ import ColaboradorScheduleModal from '../components/modals/ColaboradorScheduleMo
 import BulkScheduleColaboradoresModal from '../components/modals/BulkScheduleColaboradoresModal';
 import ExcelJS from 'exceljs';
 import moment from 'moment-timezone';
+import { normalizeKey } from '../utils/stringHelpers';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -224,10 +225,10 @@ const ColaboradoresPage = () => {
     };
 
     const isColaboradorDuplicated = (colaborador, allColaboradores) => {
-        const email = colaborador.email?.trim().toLowerCase();
+        const email = normalizeKey(colaborador.email);
         if (!email) return false;
         const count = allColaboradores.filter(
-            e => e.email && e.email.trim().toLowerCase() === email
+            e => e.email && normalizeKey(e.email) === email
         ).length;
         return count > 1;
     };

@@ -36,16 +36,7 @@ import {
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
 import { Snackbar, Alert } from '@mui/material';
-import {
-    Edit,
-    Delete,
-    Add,
-    FileUpload,
-    DirectionsBus,
-    Mail,
-    FileDownload
-} from '@mui/icons-material';
-import StudentScheduleModal from '../components/modals/StudentScheduleModal';
+import { Edit, Delete, Add, FileUpload, FileDownload } from '@mui/icons-material';
 import styled from 'styled-components';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -110,33 +101,15 @@ const MobileValue = styled(Typography)`
     font-size: 1rem;
 `;
 
-// Helper para saber si un usuario es "nuevo"
+// Helper para saber si un usuario es "nuevo" (basado en fecha de creación)
 function isUserNew(user) {
-    if (!user.FamilyDetail) return false;
-    // Only consider families explicitly marked `isNew` and within 21 days
-    if (user.FamilyDetail.isNew === false) return false;
+    if (!user || !user.createdAt) return false;
     const createdAt = new Date(user.createdAt);
     const now = new Date();
     const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
-    return user.FamilyDetail.isNew === true && diffDays <= 21;
+    return diffDays <= 21;
 }
 
-// Helper para saber si el apellido de familia está duplicado
-function isFamilyLastNameDuplicated(user, allUsers) {
-    if (!user.FamilyDetail || !user.FamilyDetail.familyLastName) return false;
-    const lastName = user.FamilyDetail.familyLastName.trim().toLowerCase();
-    if (!lastName) return false;
-    // Cuenta cuántos usuarios tienen el mismo apellido de familia (ignorando mayúsculas/minúsculas)
-    const count = allUsers.filter(
-        u =>
-            u.FamilyDetail &&
-            u.FamilyDetail.familyLastName &&
-            u.FamilyDetail.familyLastName.trim().toLowerCase() === lastName
-    ).length;
-    return count > 1;
-}
-
-// Helpers para sort
 function descendingComparator(a, b, orderBy) {
     const aValue = getFieldValue(a, orderBy);
     const bValue = getFieldValue(b, orderBy);
@@ -155,6 +128,7 @@ function getComparator(order, orderBy) {
         ? (a, b) => descendingComparator(a, b, orderBy)
         : (a, b) => -descendingComparator(a, b, orderBy);
 }
+
 function stableSort(array, comparator) {
     const stabilizedThis = array.map((el, index) => [el, index]);
     stabilizedThis.sort((a, b) => {
@@ -170,8 +144,6 @@ function getFieldValue(user, field) {
             return user.name;
         case 'email':
             return user.email;
-        case 'familyLastName':
-            return user.FamilyDetail ? user.FamilyDetail.familyLastName : '';
         case 'role':
             return user.Role ? user.Role.name : '';
         case 'client':
@@ -185,91 +157,6 @@ function getFieldValue(user, field) {
     }
 }
 
-/* Nuevo diálogo para envío manual de contrato */
-const SendContractDialog = ({ open, onClose, user, contracts, onSent }) => {
-    const [selectedContract, setSelectedContract] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    // Mostrar contratos del colegio del usuario y los globales (schoolId null)
-    const filteredContracts = contracts.filter(
-        c =>
-            c.schoolId === null ||
-            Number(c.schoolId) === Number(user.school)
-    );
-
-    // Seleccionar automáticamente el contrato del colegio si existe
-    useEffect(() => {
-        if (open && user && contracts.length > 0) {
-            const contractForSchool = contracts.find(
-                c => Number(c.schoolId) === Number(user.school)
-            );
-            setSelectedContract(contractForSchool ? contractForSchool.uuid : '');
-        }
-    }, [open, user, contracts]);
-
-    const handleSend = async () => {
-        if (!selectedContract) return;
-        setLoading(true);
-        try {
-            const contractResp = await api.get(`/contracts/${selectedContract}`);
-            const contract = contractResp.data;
-            if (contract && user.email) {
-                const fatherShareUrl = `${contract.url}?parentId=${user.id}`;
-                await api.post('/mail/send', {
-                    to: user.email,
-                    subject: 'Enlace de Contrato Asignado (Manual)',
-                    html: `
-            <h1>Hola, ${user.name}</h1>
-            <p>Te han asignado el contrato <strong>${contract.title}</strong>.</p>
-            <p>Puedes llenarlo en el siguiente enlace:
-            <a href="${fatherShareUrl}" target="_blank">${fatherShareUrl}</a></p>
-            <br/>
-            <p>Atentamente, Sistema de Contratos</p>
-          `
-                });
-                onSent();
-            }
-        } catch (err) {
-            console.error('Error enviando contrato manualmente:', err);
-        }
-        setLoading(false);
-        onClose();
-    };
-
-    return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-            <DialogTitle>Enviar Contrato Manualmente</DialogTitle>
-            <DialogContent>
-                <DialogContentText>
-                    Selecciona el contrato que deseas enviar a <strong>{user?.name}</strong>.
-                </DialogContentText>
-                <FormControl fullWidth sx={{ mt: 2 }}>
-                    <InputLabel>Contrato</InputLabel>
-                    <Select
-                        value={selectedContract}
-                        onChange={(e) => setSelectedContract(e.target.value)}
-                        label="Contrato"
-                    >
-                        <MenuItem value="">
-                            <em>Ninguno</em>
-                        </MenuItem>
-                        {filteredContracts.map((c) => (
-                            <MenuItem key={c.uuid} value={c.uuid}>
-                                {c.title}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Cancelar</Button>
-                <Button onClick={handleSend} variant="contained" disabled={loading || !selectedContract}>
-                    {loading ? 'Enviando...' : 'Enviar Contrato'}
-                </Button>
-            </DialogActions>
-        </Dialog>
-    );
-};
 
 const RolesManagementPage = () => {
     const theme = useTheme();
@@ -286,25 +173,6 @@ const RolesManagementPage = () => {
     const [openDialog, setOpenDialog] = useState(false);
     
 
-    const [familyDetail, setFamilyDetail] = useState({
-        familyLastName: '',
-        motherName: '',
-        motherCellphone: '',
-        motherEmail: '',
-        fatherName: '',
-        fatherCellphone: '',
-        fatherEmail: '',
-        razonSocial: '',
-        nit: '',
-        mainAddress: '',
-        alternativeAddress: '',
-        routeType: '',
-        students: [],
-        scheduleSlots: [],
-        specialFee: 0
-    });
-    const [originalStudents, setOriginalStudents] = useState([]);
-    const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
     // Se elimina la gestión de contrato en el diálogo de edición
     // const [selectedContractUuid, setSelectedContractUuid] = useState('');
 
@@ -336,16 +204,7 @@ const RolesManagementPage = () => {
     const [, setSchoolGrades] = useState([]);
     const [openCircularModal, setOpenCircularModal] = useState(false);
     // bulk editors removed
-    const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
-    const [scheduleStudentId, setScheduleStudentId] = useState(null);
-    const [scheduleSchoolId, setScheduleSchoolId] = useState(null);
-    const [scheduleModalStudents, setScheduleModalStudents] = useState([]);
 
-    // Submodal para asignar buses (sólo para padres) - removed unused state
-
-    // Nuevo diálogo para envío manual de contrato
-    const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
-    const [selectedUserForManualSend, setSelectedUserForManualSend] = useState(null);
 
     // Dialog para descargar usuarios
     const [downloadAllDialogOpen, setDownloadAllDialogOpen] = useState(false);
@@ -514,15 +373,6 @@ const RolesManagementPage = () => {
                 console.error('Error al marcar como NO nuevo:', err);
             }
         }
-        // Nuevo: marcar hasUpdatedData como false si es padre y tiene FamilyDetail
-        if (Number(user.roleId) === 3 && user.FamilyDetail && user.FamilyDetail.id) {
-            try {
-                await api.put(`/parents/${user.FamilyDetail.id}/mark-not-updated`);
-                await fetchUsers();
-            } catch (err) {
-                console.error('Error al marcar hasUpdatedData como false:', err);
-            }
-        }
         const parsedRoleId = Number(user.roleId);
         setSelectedUser({
             ...user,
@@ -536,49 +386,6 @@ const RolesManagementPage = () => {
             const mdFullName = md && (md.fullName || md.full_name) ? (md.fullName || md.full_name) : '';
             const mdPhone = md && (md.phoneNumber || md.phone || md.phone_number) ? (md.phoneNumber || md.phone || md.phone_number) : '';
             setSelectedUser(prev => ({ ...prev, monitoraFullName: mdFullName, phoneNumber: mdPhone }));
-        }
-        if (parsedRoleId === 3 && user.FamilyDetail) {
-            setFamilyDetail({
-                familyLastName: user.FamilyDetail.familyLastName || '',
-                motherName: user.FamilyDetail.motherName || '',
-                motherCellphone: user.FamilyDetail.motherCellphone || '',
-                motherEmail: user.FamilyDetail.motherEmail || '',
-                fatherName: user.FamilyDetail.fatherName || '',
-                fatherCellphone: user.FamilyDetail.fatherCellphone || '',
-                fatherEmail: user.FamilyDetail.fatherEmail || '',
-                razonSocial: user.FamilyDetail.razonSocial || '',
-                nit: user.FamilyDetail.nit || '',
-                mainAddress: user.FamilyDetail.mainAddress || '',
-                alternativeAddress: user.FamilyDetail.alternativeAddress || '',
-                routeType: user.FamilyDetail.routeType || '',
-                students: user.FamilyDetail.Students || [],
-                scheduleSlots: user.FamilyDetail.ScheduleSlots || [],
-                specialFee: user.FamilyDetail.specialFee ?? 0
-            });
-            // Guardamos la lista original para comparar
-            setOriginalStudents(user.FamilyDetail.Students || []);
-            if (user.school) {
-                await fetchSchoolGrades(user.school);
-            }
-        } else {
-            setFamilyDetail({
-                familyLastName: '',
-                motherName: '',
-                motherCellphone: '',
-                motherEmail: '',
-                fatherName: '',
-                fatherCellphone: '',
-                fatherEmail: '',
-                razonSocial: '',
-                nit: '',
-                mainAddress: '',
-                alternativeAddress: '',
-                routeType: '',
-                students: [],
-                scheduleSlots: [],
-                specialFee: 0
-            });
-            setOriginalStudents([]);
         }
             // Nota: El select de contrato NO se muestra en el diálogo de edición
             if (parsedRoleId === 6 || (user.Role && user.Role.name === 'Supervisor')) {
@@ -632,21 +439,6 @@ const RolesManagementPage = () => {
         setOpenDialog(true);
     };
 
-    const handleStudentChange = (index, field, value) => {
-        setFamilyDetail(prev => {
-            const students = [...prev.students];
-            students[index] = { ...students[index], [field]: value };
-            return { ...prev, students };
-        });
-    };
-
-    const handleRemoveStudent = (index) => {
-        setFamilyDetail(prev => {
-            const students = [...prev.students];
-            students.splice(index, 1);
-            return { ...prev, students };
-        });
-    };
 
     const handleAddUser = () => {
         setSelectedUser({
@@ -658,24 +450,6 @@ const RolesManagementPage = () => {
             school: '',
             corporationId: ''
         });
-        setFamilyDetail({
-            familyLastName:  '',
-            motherName: '',
-            motherCellphone: '',
-            motherEmail: '',
-            fatherName: '',
-            fatherCellphone: '',
-            fatherEmail: '',
-            razonSocial: '',
-            nit: '',
-            mainAddress: '',
-            alternativeAddress: '',
-            routeType: '',
-            students: [],
-            scheduleSlots: [],
-            specialFee: 0
-        });
-        setOriginalStudents([]);
         setSelectedSupervisorSchools([]);
         setSelectedSupervisorCorporations([]);
         setSelectedAuxiliarSchools([]);
@@ -707,16 +481,6 @@ const RolesManagementPage = () => {
         }
     };
 
-    const handleSendContractManually = async (fatherUser) => {
-        try {
-            if (!fatherUser) return;
-            // Se abre el diálogo para envío manual (donde se muestra el select de contratos)
-            setSelectedUserForManualSend(fatherUser);
-            setOpenSendContractDialog(true);
-        } catch (err) {
-            console.error('Error en envío manual:', err);
-        }
-    };
 
     const handleUserChange = (e) => {
         setSelectedUser(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -732,61 +496,11 @@ const RolesManagementPage = () => {
         }
     };
 
-    const handleFamilyDetailChange = (e) => {
-        setFamilyDetail(prev => ({ ...prev, [e.target.name]: e.target.value }));
-    };
-
-    const handleAddStudent = () => {
-        if (!newStudent.fullName) return;
-        setFamilyDetail(prev => ({
-            ...prev,
-            students: [...prev.students, newStudent]
-        }));
-        setNewStudent({ fullName: '', grade: '' });
-    };
 
     // Horarios de parada gestionados por el modal por alumno; helpers removidos
 
     const handleSaveUser = async () => {
         try {
-            // === Normaliza alumnos CONSERVANDO el id para evitar borrar rutas al editar ===
-            const normalizeStudents = (arr = []) =>
-                (arr || [])
-                    .map(s => ({
-                        id: (s?.id ?? null),                         // <<-- clave para que el backend haga match y no borre slots
-                        fullName: (s?.fullName ?? '').trim(),
-                        grade: (s?.grade ?? '').trim()
-                    }))
-                    // Orden estable: primero por id (si existe), luego por nombre y grado
-                    .sort((a, b) => {
-                        const ai = a.id ?? Number.POSITIVE_INFINITY;
-                        const bi = b.id ?? Number.POSITIVE_INFINITY;
-                        if (ai !== bi) return ai - bi;
-                        const byName = a.fullName.localeCompare(b.fullName);
-                        if (byName !== 0) return byName;
-                        return a.grade.localeCompare(b.grade);
-                    });
-
-            // Construye el payload de FamilyDetail SIN schedules (este modal no los edita)
-            const familyDetailPayload = { ...familyDetail };
-            delete familyDetailPayload.scheduleSlots;
-            delete familyDetailPayload.ScheduleSlots; // por compatibilidad
-
-            // Solo envía students si realmente hubo cambios
-            const currentStudentsNorm  = normalizeStudents(familyDetail?.students);
-            const originalStudentsNorm = normalizeStudents(originalStudents);
-
-            if (
-                JSON.stringify(currentStudentsNorm) === JSON.stringify(originalStudentsNorm)
-            ) {
-                // No hubo cambios de alumnos: no enviar
-                delete familyDetailPayload.students;
-                delete familyDetailPayload.Students; // por compatibilidad
-            } else {
-                // Hubo cambios: enviar con id para preservar rutas
-                familyDetailPayload.students = currentStudentsNorm;
-                delete familyDetailPayload.Students; // por compatibilidad
-            }
 
             const roleIdNum = Number(selectedUser.roleId);
 
@@ -811,10 +525,6 @@ const RolesManagementPage = () => {
                 payload.phoneNumber = selectedUser.phoneNumber;
             }
 
-            // Solo incluye familyDetail si es Padre
-            if (roleIdNum === 3) {
-                payload.familyDetail = familyDetailPayload;
-            }
 
             // Supervisor: colegios a cargo (preferred)
             if (roleIdNum === 6) {
@@ -877,8 +587,7 @@ const RolesManagementPage = () => {
     const filteredUsers = users.filter((u) => {
         const matchesSearch =
             (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            ((u.FamilyDetail?.familyLastName || '').toLowerCase().includes(searchQuery.toLowerCase()));
+            (u.email || '').toLowerCase().includes(searchQuery.toLowerCase());
         if (!matchesSearch) return false;
         if (roleFilter) {
             if (Number(u.roleId) !== Number(roleFilter)) return false;
@@ -1050,8 +759,6 @@ const RolesManagementPage = () => {
             } else if (category === 'Sin afiliación') {
                 allUsers = allUsers.filter(u => !(u.school || u.corporationId || u.corporation));
             }
-            // Excluir usuarios con rol 'Padre' (roleId === 3)
-            allUsers = allUsers.filter(u => Number(u.roleId) !== 3);
 
             // Generar Excel (solo columnas solicitadas)
             const headers = [
@@ -1432,7 +1139,7 @@ const RolesManagementPage = () => {
                                         <Grid item xs={12}>
                                             <MobileField>
                                                 <MobileLabel>Apellido Familia</MobileLabel>
-                                                <MobileValue>{user.FamilyDetail ? user.FamilyDetail.familyLastName : '—'}</MobileValue>
+                                                <MobileValue>{user.lastName || '—'}</MobileValue>
                                             </MobileField>
                                         </Grid>
                                         <Grid item xs={12}>
@@ -1442,12 +1149,6 @@ const RolesManagementPage = () => {
                                                     {user.name}{' '}
                                                     {isUserNew(user) && (
                                                         <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
-                                                    )}
-                                                    {user.FamilyDetail?.hasUpdatedData && (
-                                                        <Chip label="ACTUALIZADO" color="info" size="small" sx={{ ml: 1 }} />
-                                                    )}
-                                                    {isFamilyLastNameDuplicated(user, users) && (
-                                                        <Chip label="POSIBLE DUPLICADO" color="warning" size="small" sx={{ ml: 1 }} />
                                                     )}
                                                 </MobileValue>
                                             </MobileField>
@@ -1481,26 +1182,6 @@ const RolesManagementPage = () => {
                                                     <Delete />
                                                 </IconButton>
                                             </Tooltip>
-                                            {user.roleId === 3 && (
-                                                <>
-                                                    <Tooltip title="Asignar Buses">
-                                                        <IconButton onClick={() => {
-                                                            setSelectedUser(user);
-                                                            // open the student schedule modal for this family's students
-                                                            setScheduleModalStudents(user.FamilyDetail?.Students || []);
-                                                            setScheduleSchoolId(Number(user?.school) || null);
-                                                            setOpenStudentScheduleModal(true);
-                                                        }}>
-                                                            <DirectionsBus />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Enviar Contrato Manualmente">
-                                                        <IconButton onClick={() => handleSendContractManually(user)}>
-                                                            <Mail />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </>
-                                            )}
                                         </Grid>
                                     </Grid>
                                 </MobileCard>
@@ -1596,19 +1277,14 @@ const RolesManagementPage = () => {
                                         {displayedUsers.map((user) => (
                                             <TableRow key={user.id}>
                                                 <ResponsiveTableCell data-label="Apellido Familia">
-                                                    {user.FamilyDetail ? user.FamilyDetail.familyLastName : '—'}
+                                                    {user.lastName || '—'}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Nombre">
                                                     {user.name}{' '}
                                                     {isUserNew(user) && (
                                                         <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
                                                     )}
-                                                    {user.FamilyDetail?.hasUpdatedData && (
-                                                        <Chip label="ACTUALIZADO" color="info" size="small" sx={{ ml: 1 }} />
-                                                    )}
-                                                    {isFamilyLastNameDuplicated(user, users) && (
-                                                        <Chip label="POSIBLE DUPLICADO" color="warning" size="small" sx={{ ml: 1 }} />
-                                                    )}
+                                                    {/* FamilyDetail badges removed */}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Correo">
                                                     {user.email}
@@ -1641,26 +1317,6 @@ const RolesManagementPage = () => {
                                                             <Delete />
                                                         </IconButton>
                                                     </Tooltip>
-                                                    {user.roleId === 3 && (
-                                                        <>
-                                                            <Tooltip title="Asignar Buses">
-                                                                    <IconButton onClick={() => {
-                                                                        setSelectedUser(user);
-                                                                        // open the student schedule modal for this family's students
-                                                                        setScheduleModalStudents(user.FamilyDetail?.Students || []);
-                                                                        setScheduleSchoolId(Number(user?.school) || null);
-                                                                        setOpenStudentScheduleModal(true);
-                                                                    }}>
-                                                                        <DirectionsBus />
-                                                                    </IconButton>
-                                                                </Tooltip>
-                                                            <Tooltip title="Enviar Contrato Manualmente">
-                                                                <IconButton onClick={() => handleSendContractManually(user)}>
-                                                                    <Mail />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                        </>
-                                                    )}
                                                 </ResponsiveTableCell>
                                             </TableRow>
                                         ))}
@@ -1861,219 +1517,6 @@ const RolesManagementPage = () => {
                                         </Select>
                                     </FormControl>
                                 </Grid>
-                            </>
-                        )}
-                        {Number(selectedUser?.roleId) === 3 && (
-                            <>
-                                {/* Se ha removido el select de contrato en el diálogo de edición */}
-                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
-                                    Datos de la Familia (Padre)
-                                </Typography>
-                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="familyLastName"
-                                            label="Apellido de la Familia"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.familyLastName}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="motherName"
-                                            label="Nombre de la Madre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.motherName}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="motherCellphone"
-                                            label="Celular de la Madre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.motherCellphone}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="motherEmail"
-                                            label="Correo de la Madre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.motherEmail}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="fatherName"
-                                            label="Nombre del Padre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.fatherName}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="fatherCellphone"
-                                            label="Celular del Padre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.fatherCellphone}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="fatherEmail"
-                                            label="Correo del Padre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.fatherEmail}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={6}>
-                                        <TextField
-                                            name="razonSocial"
-                                            label="Razón Social"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.razonSocial}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={6}>
-                                        <TextField
-                                            name="nit"
-                                            label="NIT"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.nit}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={6}>
-                                        <TextField
-                                            name="mainAddress"
-                                            label="Dirección Principal"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.mainAddress}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={6}>
-                                        <TextField
-                                            name="alternativeAddress"
-                                            label="Dirección Alterna"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.alternativeAddress}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={6}>
-                                        <TextField
-                                            name="specialFee"
-                                            label="Descuento Especial (monto)"
-                                            type="number"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.specialFee}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={6}>
-                                        <FormControl fullWidth>
-                                            <InputLabel>Tipo de ruta</InputLabel>
-                                            <Select
-                                                name="routeType"
-                                                label="Tipo de ruta"
-                                                value={familyDetail.routeType}
-                                                onChange={handleFamilyDetailChange}
-                                            >
-                                                <MenuItem value="Completa">Completa</MenuItem>
-                                                <MenuItem value="Media AM">Media AM</MenuItem>
-                                                <MenuItem value="Media PM">Media PM</MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                    </Grid>
-                                </Grid>
-                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
-                                    Alumnos
-                                </Typography>
-                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
-                                    {familyDetail.students.map((st, idx) => (
-                                        <React.Fragment key={idx}>
-                                            <Grid item xs={12} md={5}>
-                                                <TextField
-                                                    label="Nombre del Alumno"
-                                                    fullWidth
-                                                    value={st.fullName}
-                                                    onChange={e =>
-                                                        handleStudentChange(idx, 'fullName', e.target.value)
-                                                    }
-                                                />
-                                            </Grid>
-                                            <Grid item xs={10} md={5}>
-                                                <TextField
-
-                                                    label="Grado"
-                                                    fullWidth
-                                                    value={st.grade}
-                                                    onChange={e =>
-                                                        handleStudentChange(idx, 'grade', e.target.value)
-                                                    }
-                                                />
-                                            </Grid>
-                                            <Grid item xs={2} md={2} display="flex" alignItems="center">
-                                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                                    <IconButton
-                                                        color="error"
-                                                        aria-label="Eliminar alumno"
-                                                        onClick={() => handleRemoveStudent(idx)}
-                                                    >
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Box>
-                                            </Grid>
-                                        </React.Fragment>
-                                    ))}
-                                    <Grid item xs={12} md={6}>
-                                        <TextField
-                                            name="fullName"
-                                            label="Nombre Completo del Alumno"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={newStudent.fullName}
-                                            onChange={(e) => setNewStudent({ ...newStudent, fullName: e.target.value })}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="grade"
-                                            label="Grado"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={newStudent.grade}
-                                            onChange={(e) => setNewStudent({ ...newStudent, grade: e.target.value })}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={2} display="flex" alignItems="center">
-                                        <Button variant="outlined" onClick={handleAddStudent} sx={{ mt: 1 }}>
-                                            Agregar
-                                        </Button>
-                                    </Grid>
-                                </Grid>
-                                {/* Sección 'Horarios de Parada' removida: gestionada ahora por el modal por alumno */}
                             </>
                         )}
                         {Number(selectedUser?.roleId) === 6 && (
@@ -2324,36 +1767,6 @@ const RolesManagementPage = () => {
                 schools={schools}
                 onSuccess={() => {}}
             />
-
-            {/* Modal para editar horario por alumno (StudentScheduleModal) */}
-            <StudentScheduleModal
-                studentId={scheduleStudentId}
-                students={scheduleModalStudents}
-                schoolId={scheduleSchoolId}
-                open={openStudentScheduleModal}
-                onClose={() => {
-                    setOpenStudentScheduleModal(false);
-                    setScheduleStudentId(null);
-                    setScheduleSchoolId(null);
-                    setScheduleModalStudents([]);
-                    // refresh users to reflect any schedule changes
-                    fetchUsers();
-                }}
-            />
-
-            {/* Diálogo para envío manual de contrato */}
-            {openSendContractDialog && selectedUserForManualSend && (
-                <SendContractDialog
-                    open={openSendContractDialog}
-                    onClose={() => setOpenSendContractDialog(false)}
-                    user={selectedUserForManualSend}
-                    contracts={contracts}
-                    onSent={() => {
-                        setSnackbar({ open: true, message: 'Contrato enviado manualmente.', severity: 'success' });
-                        fetchUsers();
-                    }}
-                />
-            )}
 
             {/* Reporte de rutas eliminado */}
 
