@@ -22,12 +22,22 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
 } from '@mui/material';
 import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
 import UpdateParentInfoDialog from '../components/UpdateParentInfoDialog';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import SignatureCanvas from 'react-signature-canvas';
+import parse from 'html-react-parser';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // ---------- Estilos ----------
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
@@ -172,6 +182,20 @@ const ParentDashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({ open: false, sev: 'success', msg: '' });
 
+  // Estado para firma de contratos
+  const [contractsDialogOpen, setContractsDialogOpen] = useState(false);
+  const [contractsLoading, setContractsLoading] = useState(false);
+  const [contractsList, setContractsList] = useState([]);
+  const [filledContractsList, setFilledContractsList] = useState([]);
+  // Estado y refs para firma en modal
+  const [signingDialogOpen, setSigningDialogOpen] = useState(false);
+  const [signingContract, setSigningContract] = useState(null);
+  const [filledData, setFilledData] = useState({});
+  const [missingFields, setMissingFields] = useState([]);
+  const signaturePads = React.useRef({});
+  const fieldRefs = React.useRef({});
+  const [submittingSignature, setSubmittingSignature] = useState(false);
+
   const [parentInfo, setParentInfo] = useState(() => normalizeParentInfo({}));
   const [slotsByStudent, setSlotsByStudent] = useState({}); // { [studentId]: Slot[] }
 
@@ -237,6 +261,327 @@ const ParentDashboardPage = () => {
     } catch (e) {
       console.error('[ParentDashboard] Error fetching update data:', e);
       setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar la información para actualizar.' });
+    }
+  };
+
+  // ---------- Firma de contratos desde el dashboard ----------
+  const handleOpenContractsDialog = async () => {
+    const parentId = auth?.user?.id;
+    if (!parentId) {
+      setSnackbar({ open: true, sev: 'warning', msg: 'Sesión no encontrada. Inicia sesión nuevamente.' });
+      return;
+    }
+
+    try {
+      setContractsLoading(true);
+      // Obtener contratos disponibles del colegio
+      const [contractsRes, filledRes] = await Promise.all([
+        api.get(`/parents/${parentId}/contracts`),
+        api.get(`/parents/${parentId}/filled-contracts`)
+      ]);
+
+      const contracts = Array.isArray(contractsRes.data?.contracts) ? contractsRes.data.contracts : [];
+      const filled = Array.isArray(filledRes.data?.filledContracts) ? filledRes.data.filledContracts : [];
+
+      setContractsList(contracts);
+      setFilledContractsList(filled || []);
+      setContractsDialogOpen(true);
+    } catch (e) {
+      console.error('[ParentDashboard] Error fetching contracts:', e);
+      setSnackbar({ open: true, sev: 'error', msg: 'No se pudieron obtener los contratos disponibles.' });
+    } finally {
+      setContractsLoading(false);
+    }
+  };
+
+  const handleCloseContractsDialog = () => {
+    setContractsDialogOpen(false);
+    setContractsList([]);
+  };
+
+  const handleOpenContractShare = async (contract) => {
+    if (!contract || !contract.uuid) return;
+    try {
+      // Load shared contract HTML/content
+      const res = await api.get(`/contracts/share/${contract.uuid}`);
+      const data = res.data || {};
+      setSigningContract({ ...contract, title: data.title || contract.title, content: data.content || contract.content });
+      setFilledData({});
+      setMissingFields([]);
+      signaturePads.current = {};
+      fieldRefs.current = {};
+      setSigningDialogOpen(true);
+    } catch (err) {
+      console.error('Error loading shared contract:', err);
+      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar el contrato para firmar.' });
+    }
+  };
+
+  const handleOpenFilledView = (filled) => {
+    if (!filled || !filled.uuid) return;
+    const uuid = filled.uuid;
+    setViewFilledUuid(uuid);
+    setViewFilledLoading(true);
+    setViewFilledOpen(true);
+    setViewFilledData(null);
+    api.get(`/contracts/filled/${uuid}`).then((res) => {
+      setViewFilledData(res.data);
+    }).catch((err) => {
+      console.error('Error loading filled contract:', err);
+      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar el contrato firmado.' });
+      setViewFilledOpen(false);
+    }).finally(() => setViewFilledLoading(false));
+  };
+
+  // Estado para ver contrato firmado embebido
+  const [viewFilledOpen, setViewFilledOpen] = useState(false);
+  const [viewFilledUuid, setViewFilledUuid] = useState('');
+  const [viewFilledData, setViewFilledData] = useState(null);
+  const [viewFilledLoading, setViewFilledLoading] = useState(false);
+
+  // Helpers for signing modal
+  const extractPlaceholders = (content) => {
+    const regex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
+    const placeholders = [];
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      const nameTrim = match[1].trim();
+      placeholders.push({ name: nameTrim, type: match[2] });
+    }
+    return Array.from(new Set(placeholders.map(JSON.stringify))).map(JSON.parse);
+  };
+
+  const handleChangeField = (name, value) => {
+    setFilledData((prev) => ({ ...prev, [name]: value }));
+    if (value) setMissingFields((prev) => prev.filter((n) => n !== name));
+  };
+
+  const handleSignatureRef = (name, ref) => {
+    if (ref) signaturePads.current[name] = ref;
+  };
+
+  const handleSignatureEndLocal = (name) => {
+    const pad = signaturePads.current[name];
+    if (pad && !pad.isEmpty()) setMissingFields((prev) => prev.filter((n) => n !== name));
+  };
+
+  const renderSigningContent = (html) => {
+    const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
+    const elements = [];
+    let lastIndex = 0;
+    let match;
+    while ((match = placeholderRegex.exec(html)) !== null) {
+      const full = match[0];
+      const rawName = match[1];
+      const type = match[2];
+      const nameTrim = rawName.trim();
+      const before = html.substring(lastIndex, match.index);
+      if (before) elements.push(<span key={`before-${lastIndex}`} dangerouslySetInnerHTML={{ __html: before }} />);
+
+      if (type === 'signature') {
+        const isMissing = missingFields.includes(nameTrim);
+        elements.push(
+          <div key={`sig-${nameTrim}`} style={{ margin: '12px 0' }}>
+            <div style={{ marginBottom: 6 }}>{nameTrim}</div>
+            <div style={{ border: isMissing ? '2px solid #d32f2f' : '1px solid #000', display: 'inline-block' }}>
+              <SignatureCanvas penColor="black" canvasProps={{ width: 300, height: 120, style: { display: 'block' } }} ref={(r) => handleSignatureRef(nameTrim, r)} onEnd={() => handleSignatureEndLocal(nameTrim)} />
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <Button size="small" onClick={() => { const p = signaturePads.current[nameTrim]; if (p) { p.clear(); setMissingFields((prev) => [...prev, nameTrim]); } }}>Limpiar</Button>
+            </div>
+          </div>
+        );
+      } else {
+        elements.push(
+          <input
+            key={`inp-${nameTrim}-${match.index}`}
+            placeholder={nameTrim}
+            ref={(el) => { fieldRefs.current[nameTrim] = el; }}
+            type={type === 'date' ? 'date' : type === 'number' ? 'number' : 'text'}
+            value={filledData[nameTrim] || ''}
+            onChange={(e) => handleChangeField(nameTrim, e.target.value)}
+            style={{ border: 'none', borderBottom: '1px solid #000', minWidth: 160, margin: '0 6px' }}
+          />
+        );
+      }
+
+      lastIndex = match.index + full.length;
+    }
+    const remaining = html.substring(lastIndex);
+    if (remaining) elements.push(<span key={`rem-${lastIndex}`} dangerouslySetInnerHTML={{ __html: remaining }} />);
+    return elements;
+  };
+
+  // Renderiza el contenido ya llenado (muestra firmas e inputs como en FilledContractViewer)
+  const renderFilledContent = (content) => {
+    const placeholderRegex = /{{\s*(.+?)\s*:\s*(text|signature|date|number)\s*}}/g;
+    return parse(content, {
+      replace: (domNode) => {
+        if (domNode.type === 'text') {
+          const text = domNode.data;
+          const segments = [];
+          let lastIndex = 0;
+          let match;
+          while ((match = placeholderRegex.exec(text)) !== null) {
+            const [fullMatch, rawName, type] = match;
+            const nameTrim = rawName.trim();
+            const beforeText = text.substring(lastIndex, match.index);
+            if (beforeText) segments.push(beforeText);
+
+            if (type === 'signature') {
+              const signatureDataUrl = viewFilledData?.filledData[`${nameTrim}_signature`] || '';
+              if (signatureDataUrl) {
+                segments.push(
+                  <div key={`sig-${nameTrim}-${match.index}`} style={{ display: 'block', margin: '12px 0', clear: 'both' }}>
+                    <img src={signatureDataUrl} alt={`Firma de ${nameTrim}`} style={{ width: '200px', height: '100px', border: '1px solid #000' }} />
+                  </div>
+                );
+              } else {
+                segments.push(
+                  <div key={`sig-placeholder-${nameTrim}-${match.index}`} style={{ display: 'block', margin: '12px 0', clear: 'both', border: '1px solid #000', width: '200px', height: '100px' }}>
+                    <Typography variant="subtitle1" gutterBottom>{nameTrim}</Typography>
+                  </div>
+                );
+              }
+            } else {
+              const value = viewFilledData?.filledData[nameTrim] || '';
+              segments.push(
+                <Typography key={`field-${nameTrim}-${match.index}`} variant="body1" style={{ display: 'inline-block', minWidth: '150px', borderBottom: '1px solid #000', margin: '0 5px' }}>
+                  {value}
+                </Typography>
+              );
+            }
+
+            lastIndex = match.index + fullMatch.length;
+          }
+
+          const remainingText = text.substring(lastIndex);
+          if (remainingText) segments.push(remainingText);
+
+          if (segments.length > 0) return <React.Fragment key={`frag-${domNode.key}`}>{segments}</React.Fragment>;
+        }
+      }
+    });
+  };
+
+  // Genera PDF a partir del contenido llenado (similar a FilledContractViewer)
+  const handleGeneratePDFView = async () => {
+    if (!viewFilledData) return;
+
+    const filledContract = viewFilledData;
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = filledContract.content;
+    tempDiv.style.width = '210mm';
+    tempDiv.style.padding = '20mm';
+    tempDiv.style.boxSizing = 'border-box';
+    tempDiv.style.fontFamily = "'Times New Roman', serif";
+    tempDiv.style.lineHeight = '1.5';
+    tempDiv.style.textAlign = 'justify';
+    tempDiv.style.backgroundColor = '#fff';
+    document.body.appendChild(tempDiv);
+
+    try {
+      const canvas = await html2canvas(tempDiv, { scale: 2, useCORS: true });
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      // canvas dimensions in px
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+
+      // Height of a PDF page in canvas pixels
+      const pageHeightPx = Math.floor(canvasWidth * (pdfHeight / pdfWidth));
+
+      let remainingHeight = canvasHeight;
+      let position = 0;
+      let pageIndex = 0;
+
+      while (remainingHeight > 0) {
+        const chunkHeight = Math.min(pageHeightPx, remainingHeight);
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvasWidth;
+        pageCanvas.height = chunkHeight;
+        const ctx = pageCanvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        ctx.drawImage(canvas, 0, position, canvasWidth, chunkHeight, 0, 0, pageCanvas.width, pageCanvas.height);
+
+        const pageData = pageCanvas.toDataURL('image/png');
+        const pageImgHeight = (pageCanvas.height * pdfWidth) / pageCanvas.width;
+
+        if (pageIndex === 0) {
+          pdf.addImage(pageData, 'PNG', 0, 0, pdfWidth, pageImgHeight);
+        } else {
+          pdf.addPage();
+          pdf.addImage(pageData, 'PNG', 0, 0, pdfWidth, pageImgHeight);
+        }
+
+        remainingHeight -= chunkHeight;
+        position += chunkHeight;
+        pageIndex += 1;
+      }
+
+      pdf.save(`${(filledContract.title || 'contrato').replace(/[^a-z0-9\-_. ]/gi, '')}.pdf`);
+      setSnackbar({ open: true, sev: 'success', msg: 'PDF generado exitosamente.' });
+    } catch (error) {
+      console.error('Error generando el PDF:', error);
+      setSnackbar({ open: true, sev: 'error', msg: 'Hubo un error al generar el PDF.' });
+    }
+
+    document.body.removeChild(tempDiv);
+  };
+
+  const handleSubmitSigning = async () => {
+    if (!signingContract) return;
+    // validate
+    const placeholders = extractPlaceholders(signingContract.content);
+    const newlyMissing = [];
+    for (const ph of placeholders) {
+      const name = ph.name;
+      if (ph.type === 'signature') {
+        const pad = signaturePads.current[name];
+        if (!pad || pad.isEmpty()) newlyMissing.push(name);
+      } else {
+        const val = filledData[name];
+        if (val === undefined || val === null || val === '') newlyMissing.push(name);
+      }
+    }
+    if (newlyMissing.length > 0) {
+      setMissingFields(newlyMissing);
+      setSnackbar({ open: true, sev: 'warning', msg: `Faltan campos: ${newlyMissing.slice(0,3).join(', ')}${newlyMissing.length>3? '...':''}` });
+      const first = newlyMissing[0];
+      setTimeout(() => { const el = fieldRefs.current[first]; if (el && el.focus) try { el.focus(); } catch(e){} }, 50);
+      return;
+    }
+
+    // collect signatures
+    const signatures = {};
+    for (const [name, pad] of Object.entries(signaturePads.current)) {
+      if (pad && !pad.isEmpty()) signatures[`${name}_signature`] = pad.getTrimmedCanvas().toDataURL('image/png');
+      else signatures[`${name}_signature`] = '';
+    }
+
+    const payload = { filledData: { ...filledData, ...signatures }, parentId: auth?.user?.id };
+
+    try {
+      setSubmittingSignature(true);
+      const res = await api.post(`/contracts/share/${signingContract.uuid}`, payload);
+      setSnackbar({ open: true, sev: 'success', msg: 'Contrato firmado y guardado correctamente.' });
+      // refresh lists: remove from contractsList and reload filledContractsList
+      // simple approach: refetch dialog data
+      const parentId = auth?.user?.id;
+      if (parentId) {
+        const [contractsRes, filledRes] = await Promise.all([api.get(`/parents/${parentId}/contracts`), api.get(`/parents/${parentId}/filled-contracts`)]);
+        setContractsList(Array.isArray(contractsRes.data?.contracts) ? contractsRes.data.contracts : []);
+        setFilledContractsList(Array.isArray(filledRes.data?.filledContracts) ? filledRes.data.filledContracts : []);
+      }
+      setSigningDialogOpen(false);
+    } catch (err) {
+      console.error('Error submitting filled contract:', err);
+      setSnackbar({ open: true, sev: 'error', msg: 'Ocurrió un error al enviar el contrato.' });
+    } finally {
+      setSubmittingSignature(false);
     }
   };
 
@@ -319,6 +664,16 @@ const ParentDashboardPage = () => {
                 >
                   Actualizar Mis Datos
                 </Button>
+                <div style={{ marginTop: 8 }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    onClick={handleOpenContractsDialog}
+                  >
+                    Firmar Contrato
+                  </Button>
+                </div>
               </CardContent>
             </SectionCard>
           </Grid>
@@ -638,6 +993,137 @@ const ParentDashboardPage = () => {
           </Grid>
         </Grid>
       </Container>
+
+      {/* Diálogo para listar contratos y abrir link de firma */}
+      <Dialog open={contractsDialogOpen} onClose={handleCloseContractsDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Firmar Contrato</DialogTitle>
+        <DialogContent dividers>
+          {contractsLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
+              <CircularProgress />
+            </div>
+          ) : (
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={12}>
+                    <Typography variant="h6" sx={{ mb: 1 }}>Contratos Disponibles</Typography>
+                    {contractsLoading ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}><CircularProgress size={20} /></div>
+                    ) : (
+                      (() => {
+                        const available = contractsList.filter(c => !filledContractsList.some(fc => (fc.contractId && fc.contractId === c.id) || (fc.contract && (fc.contract.id === c.id || fc.contract.uuid === c.uuid))));
+                        if (!available || available.length === 0) {
+                          return <Typography variant="body2" sx={{ color: 'text.secondary' }}>No hay contratos disponibles para firmar.</Typography>;
+                        }
+                        return (
+                          <List>
+                            {available.map((c) => (
+                              <ListItem key={c.uuid} divider sx={{ mb: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 12 }}>
+                                  <div style={{ background: '#e1f5fe', padding: '6px 10px', borderRadius: 8, fontSize: 12, color: '#01579b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    Disponible
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 700 }}>{c.title || 'Sin título'}</div>
+                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{c.createdAt ? `Creado el ${new Date(c.createdAt).toLocaleDateString()}` : ''}</div>
+                                  </div>
+                                  <div>
+                                    <Button size="small" variant="contained" onClick={() => handleOpenContractShare(c)} sx={{ backgroundColor: '#0288d1' }}>Firmar</Button>
+                                  </div>
+                                </div>
+                              </ListItem>
+                            ))}
+                          </List>
+                        );
+                      })()
+                    )}
+                  </Grid>
+
+                  <Grid item xs={12} md={12}>
+                    <Typography variant="h6" sx={{ mb: 1 }}>Contratos Firmados</Typography>
+                    {contractsLoading ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}><CircularProgress size={20} /></div>
+                    ) : (
+                      (() => {
+                        if (!filledContractsList || filledContractsList.length === 0) {
+                          return <Typography variant="body2" sx={{ color: 'text.secondary' }}>Aún no has firmado ningún contrato.</Typography>;
+                        }
+                        return (
+                          <List>
+                            {filledContractsList.map((f) => (
+                              <ListItem key={f.uuid} divider sx={{ mb: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 12 }}>
+                                  <div style={{ background: '#e8f5e9', padding: '6px 10px', borderRadius: 8, fontSize: 12, color: '#2e7d32', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    Firmado
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 700 }}>{f.title || f.contract?.title || 'Contrato firmado'}</div>
+                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{f.createdAt ? `Firmado el ${new Date(f.createdAt).toLocaleDateString()}` : ''}</div>
+                                  </div>
+                                  <div>
+                                    <Button size="small" variant="outlined" onClick={() => handleOpenFilledView(f)} sx={{ borderColor: '#2e7d32', color: '#2e7d32' }}>Ver</Button>
+                                  </div>
+                                </div>
+                              </ListItem>
+                            ))}
+                          </List>
+                        );
+                      })()
+                    )}
+                  </Grid>
+                </Grid>
+            )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseContractsDialog}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo embebido para firmar */}
+      <Dialog open={signingDialogOpen} onClose={() => setSigningDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Firmar: {signingContract?.title || ''}</DialogTitle>
+        <DialogContent dividers>
+          {!signingContract ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><CircularProgress /></div>
+          ) : (
+            <div style={{ fontFamily: "'Times New Roman', serif", lineHeight: 1.5 }}>
+              {/* Render contract content with inputs and signature canvases */}
+              {renderSigningContent(signingContract.content)}
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSigningDialogOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSubmitSigning} disabled={submittingSignature}>{submittingSignature ? 'Enviando...' : 'Enviar y Firmar'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo para ver contrato firmado embebido (usa mismo render que FilledContractViewer) */}
+      <Dialog open={viewFilledOpen} onClose={() => setViewFilledOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Contrato Firmado</DialogTitle>
+        <DialogContent dividers>
+          {viewFilledLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><CircularProgress /></div>
+          ) : !viewFilledData ? (
+            <Typography variant="body1">No se encontró el contrato.</Typography>
+          ) : (
+            <div style={{ padding: 8 }}>
+              <Typography variant="h6" gutterBottom>{viewFilledData.title}</Typography>
+              <Divider sx={{ mb: 1 }} />
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={12}>
+                  <div id="contract-preview" style={{ border: '1px solid #ccc', padding: 12, borderRadius: 4, minHeight: 240, backgroundColor: '#fff', overflowY: 'auto', fontFamily: "'Times New Roman', serif", lineHeight: 1.5, textAlign: 'justify' }}>
+                    {renderFilledContent(viewFilledData.content)}
+                  </div>
+                </Grid>
+              </Grid>
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={handleGeneratePDFView} disabled={viewFilledLoading || !viewFilledData}>Generar PDF</Button>
+          <Button onClick={() => setViewFilledOpen(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snackbar.open}
