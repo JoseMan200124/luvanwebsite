@@ -45,6 +45,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
+import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -1076,13 +1077,16 @@ const CorporationsPage = () => {
                             </FormControl>
 
                             <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    onClick={handleOpenCreateDialog}
-                                >
-                                    Añadir Corporación
-                                </Button>
+                                <PermissionGuard permission="corporaciones-crear">    
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleOpenCreateDialog}
+                                        >
+                                        Añadir Corporación
+                                    </Button>
+                                </PermissionGuard>
+                                
                             </Box>
                         </Box>
                     </Box>
@@ -1185,18 +1189,20 @@ const CorporationsPage = () => {
                                                         <Edit fontSize="small" />
                                                     </IconButton>
                                                 </Tooltip>
-                                                <Tooltip title="Eliminar corporación">
-                                                    <IconButton 
-                                                        size="small"
-                                                        color="error"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleOpenDeleteDialog(corporation);
-                                                        }}
-                                                    >
-                                                        <Delete fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
+                                                <PermissionGuard permission="corporaciones-eliminar">
+                                                    <Tooltip title="Eliminar corporación">
+                                                        <IconButton 
+                                                            size="small"
+                                                            color="error"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenDeleteDialog(corporation);
+                                                            }}
+                                                        >
+                                                            <Delete fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </PermissionGuard>
                                             </Box>
                                         </CardContent>
                                     </CorporationCard>

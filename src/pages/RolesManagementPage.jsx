@@ -425,13 +425,13 @@ const RolesManagementPage = () => {
                 setSelectedAuxiliarSchools([]);
             }
             
-            // Temporarily disabled - monitoras not assigned to corporations yet
-            // const attachedCorporations = user.attachedAuxiliarCorporations || [];
-            // if (attachedCorporations.length > 0) {
-            //     setSelectedAuxiliarCorporations(attachedCorporations.map(c => Number(c)));
-            // } else {
-            //     setSelectedAuxiliarCorporations([]);
-            // }
+            // Load attached corporations for auxiliar (if backend provided them)
+            const attachedCorporations = user.attachedAuxiliarCorporations || [];
+            if (attachedCorporations.length > 0) {
+                setSelectedAuxiliarCorporations(attachedCorporations.map(c => Number(c)));
+            } else {
+                setSelectedAuxiliarCorporations([]);
+            }
         } else {
             setSelectedAuxiliarSchools([]);
             // setSelectedAuxiliarCorporations([]);
@@ -1628,7 +1628,6 @@ const RolesManagementPage = () => {
                                     </Select>
                                 </FormControl>
 
-                                {/* Temporarily disabled - monitoras not assigned to corporations yet
                                 <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
                                     Corporaciones
                                 </Typography>
@@ -1649,7 +1648,6 @@ const RolesManagementPage = () => {
                                         ))}
                                     </Select>
                                 </FormControl>
-                                */}
 
                                 <Typography variant="subtitle2" sx={{ mt: 2 }}>Monitoras enlazadas automáticamente:</Typography>
                                 <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
@@ -1658,11 +1656,10 @@ const RolesManagementPage = () => {
                                         const schoolMonitoras = selectedAuxiliarSchools.length > 0 
                                             ? allMonitoras.filter(m => selectedAuxiliarSchools.includes(Number(m.school)))
                                             : [];
-                                        // Temporarily disabled - monitoras not assigned to corporations yet
-                                        // const corpMonitoras = selectedAuxiliarCorporations.length > 0
-                                        //     ? allMonitoras.filter(m => selectedAuxiliarCorporations.includes(Number(m.corporationId)))
-                                        //     : [];
-                                        const allLinkedMonitoras = [...schoolMonitoras]; // , ...corpMonitoras
+                                        const corpMonitoras = selectedAuxiliarCorporations.length > 0
+                                            ? allMonitoras.filter(m => selectedAuxiliarCorporations.includes(Number(m.corporationId)))
+                                            : [];
+                                        const allLinkedMonitoras = [...schoolMonitoras, ...corpMonitoras];
                                         
                                         if (allLinkedMonitoras.length === 0) return (
                                             <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay monitoras asignadas.</Typography>
