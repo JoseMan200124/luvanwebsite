@@ -1386,10 +1386,13 @@ const SchoolPaymentsPage = () => {
                     setAutoDebitPayload({ userId, payment: payload?.payment || payment });
                     setOpenAutoDebitDialog(true);
                     return; // No ejecutar aún, esperar respuesta del diálogo
+                } else {                
+                    // Si se está DESACTIVANDO, usar el nuevo endpoint para actualizar ambas tablas (FamilyDetail y NewPayment)
+                    await api.post('/payments/v2/activate-auto-debit', { 
+                        userId, 
+                        activateAutoDebit: false 
+                    });
                 }
-                
-                // Si se está DESACTIVANDO, proceder directo
-                await api.put(`/users/${userId}`, { familyDetail: { autoDebit: false } });
                 setSnackbar({ open: true, message: 'Débito automático desactivado', severity: 'success' });
             } else if (actionName === 'toggleRequiresInvoice') {
                 // Use payments endpoint to set invoice need
@@ -3323,15 +3326,14 @@ const SchoolPaymentsPage = () => {
                                         onClick={async () => {
                                             try {
                                                 const { userId } = autoDebitPayload;
-                                                await api.put(`/users/${userId}`, { 
-                                                    familyDetail: { 
-                                                        autoDebit: true,
-                                                        applyToCurrentMonth: true 
-                                                    } 
+                                                await api.post('/payments/v2/activate-auto-debit', { 
+                                                    userId,
+                                                    activateAutoDebit: true,
+                                                    applyToCurrentMonth: true 
                                                 });
                                                 setSnackbar({ 
                                                     open: true, 
-                                                    message: 'Débito automático activado para el mes actual. Si ya pasó la fecha de pago, se procesará de inmediato y se exonerará la mora.', 
+                                                    message: 'Débito automático activado para el mes actual. Se procesó el pago y se exoneró la mora existente.', 
                                                     severity: 'success' 
                                                 });
                                                 setOpenAutoDebitDialog(false);
@@ -3362,11 +3364,10 @@ const SchoolPaymentsPage = () => {
                                         onClick={async () => {
                                             try {
                                                 const { userId } = autoDebitPayload;
-                                                await api.put(`/users/${userId}`, { 
-                                                    familyDetail: { 
-                                                        autoDebit: true,
-                                                        applyToCurrentMonth: false 
-                                                    } 
+                                                await api.post('/payments/v2/activate-auto-debit', { 
+                                                    userId,
+                                                    activateAutoDebit: true,
+                                                    applyToCurrentMonth: false 
                                                 });
                                                 setSnackbar({ 
                                                     open: true, 
