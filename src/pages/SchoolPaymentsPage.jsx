@@ -1440,6 +1440,8 @@ const SchoolPaymentsPage = () => {
                 });
                 const message = type === 'EXONERATION' ? 'Mora exonerada exitosamente' : 'Descuento aplicado a mora';
                 setSnackbar({ open: true, message, severity: 'success' });
+            } else if (actionName === 'refreshPayments') {
+                // Child requested a refresh only (no API call needed here).
             } else {
                 setSnackbar({ open: true, message: `Acción no manejada: ${actionName}`, severity: 'info' });
             }
@@ -1806,22 +1808,14 @@ const SchoolPaymentsPage = () => {
         }
     }, [paymentsAll, school, schoolId]);
 
-    const handleSaveDiscount = async (payment, newDiscount) => {
+    // Legacy discount-save flow removed.
+    // The new retroactive discount flow is applied via POST /payments/v2/:id/apply-family-discount.
+    const handleSaveDiscount = async (payment) => {
         try {
-            const userId = payment?.User?.id;
-            if (!userId) {
-                setSnackbar({ open: true, message: 'Usuario asociado no encontrado', severity: 'error' });
-                return;
-            }
-            // Use dedicated family-detail endpoint to avoid accidental overwrites
-            await api.put(`/users/${userId}/family-detail`, { specialFee: Number(newDiscount || 0) });
-            setSnackbar({ open: true, message: 'Descuento actualizado', severity: 'success' });
-            // Invalidate cache for this user so modal will fetch fresh histories
             invalidatePaymentHistCacheForUser(payment?.User?.id || payment?.userId);
             fetchAllPayments(statusFilter, search);
         } catch (err) {
             console.error(err);
-            setSnackbar({ open: true, message: 'Error guardando descuento', severity: 'error' });
         }
     };
 
@@ -1904,8 +1898,26 @@ const SchoolPaymentsPage = () => {
     // monthlyFee = tarifa base × cantidad de estudiantes (antes de descuentos)
     const dialogMonthlyFee = Number(registerPaymentTarget?.monthlyFee || 0);
     
-    // specialDiscount = descuento familiar aplicado
-    const dialogFamilySpecialFee = Number(registerPaymentTarget?.specialDiscount || 0);
+    // specialDiscount (UI): prefer per-period discountApplied when there is a single unpaid period.
+    // This avoids showing the latest configured family discount (future periods) for an already-generated period.
+    const dialogFamilySpecialFee = (() => {
+        try {
+            const raw = registerPaymentTarget?.unpaidPeriods
+                ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
+                    ? JSON.parse(registerPaymentTarget.unpaidPeriods)
+                    : registerPaymentTarget.unpaidPeriods)
+                : [];
+
+            const periods = (Array.isArray(raw) ? raw : []).filter(p => Number(p?.amountDue ?? p?.amount ?? 0) > 0);
+            if (periods.length === 1) {
+                const perPeriodDiscount = Number(periods[0]?.discountApplied ?? periods[0]?.discount ?? NaN);
+                if (Number.isFinite(perPeriodDiscount) && perPeriodDiscount >= 0) return perPeriodDiscount;
+            }
+        } catch (e) {
+            // ignore and fall back
+        }
+        return Number(registerPaymentTarget?.specialDiscount || 0);
+    })();
     
     // netMonthlyFee = monthlyFee - specialDiscount (lo que realmente debe pagar mensualmente)
     const dialogNetMonthlyFee = Number(registerPaymentTarget?.netMonthlyFee || 0);
@@ -2338,7 +2350,6 @@ const SchoolPaymentsPage = () => {
                             payment={manageTarget}
                             onAction={handleManageAction}
                             onToggleInvoiceSent={handleToggleInvoiceSent}
-                            onSaveDiscount={handleSaveDiscount}
                         />
 
                         {/* Dialog: Exportar pagos por periodo */}
@@ -2535,7 +2546,27 @@ const SchoolPaymentsPage = () => {
                                             </Box>
 
                                             {/* Sección: Descuentos y Créditos */}
-                                            {(dialogCredito > 0 || dialogFamilySpecialFee > 0 || dialogExtraDiscount > 0) && (
+                                            {(() => {
+                                                // When there are multiple unpaid periods, the family discount can vary per period.
+                                                // Avoid showing a misleading single "Descuento familiar" line here.
+                                                let hasMultiplePeriods = false;
+                                                try {
+                                                    const raw = registerPaymentTarget?.unpaidPeriods
+                                                        ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
+                                                            ? JSON.parse(registerPaymentTarget.unpaidPeriods)
+                                                            : registerPaymentTarget.unpaidPeriods)
+                                                        : [];
+                                                    const filtered = (Array.isArray(raw) ? raw : []).filter(p => Number(p?.amountDue ?? p?.amount ?? 0) > 0);
+                                                    hasMultiplePeriods = filtered.length > 1;
+                                                } catch (e) {
+                                                    hasMultiplePeriods = false;
+                                                }
+
+                                                const showFamilyLine = dialogFamilySpecialFee > 0 && !hasMultiplePeriods;
+                                                const showBlock = dialogCredito > 0 || showFamilyLine || dialogExtraDiscount > 0;
+                                                if (!showBlock) return null;
+
+                                                return (
                                                 <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
                                                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'success.main', display: 'block', mb: 1 }}>
                                                         DESCUENTOS Y CRÉDITOS
@@ -2550,7 +2581,7 @@ const SchoolPaymentsPage = () => {
                                                         </Box>
                                                     )}
                                                     
-                                                    {dialogFamilySpecialFee > 0 && (
+                                                    {showFamilyLine && (
                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
                                                             <Typography variant="body2" color="text.secondary">
                                                                 Descuento familiar
@@ -2570,7 +2601,8 @@ const SchoolPaymentsPage = () => {
                                                         </Box>
                                                     )}
                                                 </Box>
-                                            )}
+                                                );
+                                            })()}
 
                                             {/* Desglose por períodos pendientes si hay varios meses */}
                                             {(() => {
@@ -2580,7 +2612,7 @@ const SchoolPaymentsPage = () => {
                                                             ? JSON.parse(registerPaymentTarget.unpaidPeriods)
                                                             : registerPaymentTarget.unpaidPeriods)
                                                         : [];
-                                                    const periods = allPeriods.filter(p => Number(p.amount || 0) > 0);
+                                                    const periods = allPeriods.filter(p => Number(p.amountDue ?? p.amount ?? 0) > 0);
                                                     
                                                     if (Array.isArray(periods) && periods.length > 1) {
                                                         const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -2598,9 +2630,15 @@ const SchoolPaymentsPage = () => {
                                                                         const dueDate = period.dueDate ? moment(period.dueDate).format('DD/MM/YY') : 'N/A';
                                                                         
                                                                         // Verificar si es pago parcial
-                                                                        const periodNetAmount = dialogMonthlyFee - dialogFamilySpecialFee;
-                                                                        const isParcial = Number(period.amount || 0) < periodNetAmount && Number(period.amount || 0) > 0;
-                                                                        const amountPaid = isParcial ? (periodNetAmount - Number(period.amount || 0)) : 0;
+                                                                        const originalAmount = Number(period.originalAmount ?? dialogMonthlyFee ?? 0) || 0;
+                                                                        const periodDiscount = Number(period.discountApplied ?? 0) || 0;
+                                                                        const periodNetAmount = Number(period.netAmount ?? (originalAmount - periodDiscount)) || 0;
+                                                                        const periodAmountDue = Number(period.amountDue ?? period.amount ?? 0) || 0;
+
+                                                                        const isParcial = periodAmountDue < periodNetAmount && periodAmountDue > 0;
+                                                                        const amountPaid = isParcial
+                                                                            ? (periodNetAmount - periodAmountDue)
+                                                                            : (Number(period.amountPaid ?? 0) || 0);
                                                                         
                                                                         return (
                                                                             <Box key={idx} sx={{ mb: idx < periods.length - 1 ? 2 : 0, pb: idx < periods.length - 1 ? 2 : 0, borderBottom: idx < periods.length - 1 ? '1px dashed rgba(0,0,0,0.15)' : 'none' }}>
@@ -2631,18 +2669,18 @@ const SchoolPaymentsPage = () => {
                                                                                         Tarifa mensual:
                                                                                     </Typography>
                                                                                     <Typography variant="caption">
-                                                                                        {formatCurrency(dialogMonthlyFee)}
+                                                                                        {formatCurrency(originalAmount)}
                                                                                     </Typography>
                                                                                 </Box>
                                                                                 
-                                                                                {/* Descuento familiar completo aplicado cada mes */}
-                                                                                {dialogFamilySpecialFee > 0 && (
+                                                                                {/* Descuento familiar aplicado a este período (puede variar por mes) */}
+                                                                                {periodDiscount > 0 && (
                                                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
                                                                                         <Typography variant="caption" color="text.secondary">
                                                                                             Descuento familiar:
                                                                                         </Typography>
                                                                                         <Typography variant="caption" sx={{ color: 'success.main' }}>
-                                                                                            - {formatCurrency(dialogFamilySpecialFee)}
+                                                                                            - {formatCurrency(periodDiscount)}
                                                                                         </Typography>
                                                                                     </Box>
                                                                                 )}
@@ -2663,7 +2701,7 @@ const SchoolPaymentsPage = () => {
                                                                                                 Saldo pendiente:
                                                                                             </Typography>
                                                                                             <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>
-                                                                                                {formatCurrency(period.amount)}
+                                                                                                {formatCurrency(periodAmountDue)}
                                                                                             </Typography>
                                                                                         </Box>
                                                                                     </>
@@ -2675,7 +2713,7 @@ const SchoolPaymentsPage = () => {
                                                                                         {isParcial ? 'A pagar este período:' : 'Subtotal período:'}
                                                                                     </Typography>
                                                                                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                                                                                        {formatCurrency(period.amount)}
+                                                                                        {formatCurrency(periodAmountDue)}
                                                                                     </Typography>
                                                                                 </Box>
                                                                             </Box>

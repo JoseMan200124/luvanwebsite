@@ -42,11 +42,12 @@ import moment from 'moment';
 import api from '../utils/axiosConfig';
 import dateService from '../services/dateService';
 import ReceiptsPane from './ReceiptsPane';
+import PaymentDiscountModal from './modals/PaymentDiscountModal';
 
 // cache TTL (ms)
 const PAYMENT_HIST_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
-const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {}, onToggleInvoiceSent = () => {}, onSaveDiscount = () => {} }) => {
+const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {}, onToggleInvoiceSent = () => {} }) => {
     const [localPayment, setLocalPayment] = useState(payment);
     useEffect(() => setLocalPayment(payment), [payment]);
     const family = localPayment?.User?.FamilyDetail || payment?.User?.FamilyDetail || {};
@@ -54,12 +55,12 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const isDeleted = finalStatus === 'ELIMINADO' || !!family.deleted;
     const [autoDebit, setAutoDebit] = useState(!!family.autoDebit || false);
     const [requiresInvoice, setRequiresInvoice] = useState(!!family.requiresInvoice || false);
-    const [discount, setDiscount] = useState(family.specialFee || family.discount || 0);
+    const [discount, setDiscount] = useState(family.specialFee ?? family.discount ?? 0);
 
     useEffect(() => {
         setAutoDebit(!!(payment?.User?.FamilyDetail?.autoDebit));
         setRequiresInvoice(!!(payment?.User?.FamilyDetail?.requiresInvoice));
-        setDiscount(payment?.User?.FamilyDetail?.specialFee || payment?.User?.FamilyDetail?.discount || 0);
+        setDiscount(payment?.User?.FamilyDetail?.specialFee ?? payment?.User?.FamilyDetail?.discount ?? 0);
     }, [payment, open]);
 
     // Prefer Sequelize included PaymentTransactions (backend includes them as PaymentTransactions)
@@ -111,6 +112,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const computedTariff = Number(payment?.monthlyFee || 0);
 
     const [openExonerateDialog, setOpenExonerateDialog] = useState(false);
+    const [openDiscountModal, setOpenDiscountModal] = useState(false);
     const [exonerateAmount, setExonerateAmount] = useState('');
 
     // Delete confirmation dialog
@@ -351,9 +353,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         document.body.removeChild(a);
     };
 
-    const handleSaveDiscount = () => {
-        if (isDeleted) return;
-        // Invalidate cached histories for this user (discount may affect snapshots)
+    const invalidateHistoryCacheForPayment = () => {
         try {
             const paymentId = (localPayment || payment)?.id;
             if (paymentId) {
@@ -363,9 +363,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 }
             }
         } catch (err) {
-            console.warn('Error invalidando cache tras guardar descuento:', err);
+            console.warn('Error invalidando cache:', err);
         }
-        onSaveDiscount(localPayment || payment, Number(discount || 0));
     };
 
     // compute total after discount (clamp to zero)
@@ -421,9 +420,14 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 </Box>
                                 <Box sx={{ ml: 'auto' }}>
                                     <Typography variant="caption" color="text.secondary">Descuento (Q)</Typography>
-                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                                         <TextField label="" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: 100 }} disabled={isDeleted} />
-                                        <Button variant="outlined" size="small" onClick={handleSaveDiscount} disabled={isDeleted}>GUARDAR</Button>
+                                        <Button variant="outlined" size="small" onClick={() => {
+                                            if (isDeleted) return;
+                                            // IMPORTANT: Do NOT persist discount here.
+                                            // The new flow applies the discount from the modal (retroactive scopes).
+                                            setOpenDiscountModal(true);
+                                        }} disabled={isDeleted}>APLICAR</Button>
                                     </Box>
                                 </Box>
                             </Box>
@@ -530,6 +534,25 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         <Button onClick={() => { setOpenReceiptsDialog(false); setUploadedReceipts([]); setSelectedReceipt(null); setReceiptZoom(1); }}>Cerrar</Button>
                     </DialogActions>
                 </Dialog>
+
+                {/* Discount modal */}
+                <PaymentDiscountModal open={openDiscountModal} onClose={() => setOpenDiscountModal(false)} payment={localPayment || payment} currentDiscount={discount} onApplied={async () => {
+                    invalidateHistoryCacheForPayment();
+
+                    // Refresh local payment snapshot inside this modal
+                    try {
+                        const id = (localPayment || payment)?.id;
+                        if (id) {
+                            const res = await api.get(`/payments/${id}`);
+                            if (res?.data) setLocalPayment(res.data.payment || res.data);
+                        }
+                    } catch (err) {
+                        console.error('Error fetching updated payment after applying discount', err);
+                    }
+
+                    // Ask parent page to refresh list/analysis (no legacy discount-save flow)
+                    onAction('refreshPayments', { payment: (localPayment || payment) });
+                }} />
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 1 }}>
                     <Typography variant="h6">Historial de Pagos</Typography>
