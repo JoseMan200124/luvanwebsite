@@ -1,6 +1,7 @@
 // src/hooks/usePermissions.js
 import { useContext } from 'react';
 import { AuthContext } from '../context/AuthProvider';
+import { PermissionsContext } from '../context/PermissionsProvider';
 
 /**
  * Hook para verificar permisos del usuario
@@ -8,7 +9,43 @@ import { AuthContext } from '../context/AuthProvider';
  */
 const usePermissions = () => {
     const { auth } = useContext(AuthContext);
+    const permCtx = useContext(PermissionsContext);
 
+    // If PermissionsContext is available, prefer it (single source of truth)
+    if (permCtx && typeof permCtx.hasPermission === 'function') {
+        const hasPermission = (permissionKey) => {
+            if (!permCtx.permissions || !permissionKey) return false;
+            return !!permCtx.permissions[permissionKey];
+        };
+
+        const hasAnyPermission = (permissionKeys) => {
+            if (!Array.isArray(permissionKeys) || permissionKeys.length === 0) return false;
+            return permissionKeys.some(key => hasPermission(key));
+        };
+
+        const hasAllPermissions = (permissionKeys) => {
+            if (!Array.isArray(permissionKeys) || permissionKeys.length === 0) return false;
+            return permissionKeys.every(key => hasPermission(key));
+        };
+
+        const hasRole = (roles) => {
+            if (!auth.user || !auth.user.role) return false;
+            if (typeof roles === 'string') return auth.user.role === roles;
+            if (Array.isArray(roles)) return roles.includes(auth.user.role);
+            return false;
+        };
+
+        return {
+            permissions: permCtx.permissions || {},
+            hasPermission,
+            hasAnyPermission,
+            hasAllPermissions,
+            hasRole,
+            isLoading: permCtx.loading || false,
+        };
+    }
+
+    // Fallback to legacy behavior using AuthContext.permissions
     /**
      * Verifica si el usuario tiene un permiso específico
      * @param {string} permissionKey - La clave del permiso a verificar (ej: 'horarios-carga-masiva')
