@@ -42,7 +42,7 @@ const PermissionsProvider = ({ children }) => {
         };
 
         loadPermissions();
-    }, [auth?.token, auth?.user?.id]); // Solo recargar si cambia el token o el userId
+    }, [auth?.token, auth?.user, auth?.user?.roleId, auth?.user?.role]);
 
     const hasPermission = (moduleKey) => {
         return !!permissions[moduleKey];

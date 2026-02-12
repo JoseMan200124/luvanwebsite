@@ -21,7 +21,7 @@ const AuthProvider = ({ children }) => {
     const location = useLocation();
 
     const [initialLoad, setInitialLoad] = useState(true);
-    const [auth, setAuth] = useState({ user: null, token: null });
+    const [auth, setAuth] = useState({ user: null, token: null, permissions: null, permissionsLoading: false });
     const [showIdleSnackbar, setShowIdleSnackbar] = useState(false);
 
     // lastActivity se sincroniza entre pestañas vía localStorage
@@ -39,12 +39,12 @@ const AuthProvider = ({ children }) => {
 
     const logout = useCallback(() => {
         try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); } catch (e) {}
-        closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
+        closeSocket(); setAuth({ user: null, token: null, permissions: null, permissionsLoading: false }); navigate('/login');
     }, [navigate]);
 
     const logoutByIdle = useCallback(() => {
         try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); } catch (e) {}
-        closeSocket(); setAuth({ user: null, token: null }); setShowIdleSnackbar(true); navigate('/login');
+        closeSocket(); setAuth({ user: null, token: null, permissions: null, permissionsLoading: false }); setShowIdleSnackbar(true); navigate('/login');
     }, [navigate]);
 
     const silentRefreshIfNeeded = useCallback(async () => {
@@ -63,7 +63,26 @@ const AuthProvider = ({ children }) => {
         }
     }, [logout]);
 
-    // Permisos ahora se cargan exclusivamente en PermissionsProvider
+    const loadUserPermissions = useCallback(async () => {
+        try {
+            setAuth(prev => ({ ...prev, permissionsLoading: true }));
+            const response = await api.get('/permissions/user/me', {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            setAuth(prev => ({ 
+                ...prev, 
+                permissions: response.data.permissions || {},
+                permissionsLoading: false 
+            }));
+        } catch (error) {
+            console.error('Error cargando permisos:', error);
+            setAuth(prev => ({ 
+                ...prev, 
+                permissions: {},
+                permissionsLoading: false 
+            }));
+        }
+    }, [auth.token]);
 
     useEffect(() => {
         const checkIdle = () => { const now = Date.now(); if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) logoutByIdle(); };
@@ -102,7 +121,16 @@ const AuthProvider = ({ children }) => {
             if (storedToken) {
                 const decoded = jwtDecode(storedToken);
                 if (decoded.exp * 1000 >= Date.now()) {
-                    setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: storedToken });
+                    setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: storedToken, permissions: null, permissionsLoading: false });
+                    // Cargar permisos del usuario restaurado
+                    api.get('/permissions/user/me', {
+                        headers: { Authorization: `Bearer ${storedToken}` }
+                    }).then(res => {
+                        setAuth(prev => ({ ...prev, permissions: res.data.permissions || {} }));
+                    }).catch(err => {
+                        console.error('Error cargando permisos:', err);
+                        setAuth(prev => ({ ...prev, permissions: {} }));
+                    });
                 } else {
                     localStorage.removeItem('token');
                 }
@@ -111,7 +139,16 @@ const AuthProvider = ({ children }) => {
             if (tokenFromOAuth) {
                 const decoded = jwtDecode(tokenFromOAuth);
                 localStorage.setItem('token', tokenFromOAuth);
-                setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: tokenFromOAuth });
+                setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: tokenFromOAuth, permissions: null, permissionsLoading: false });
+                // Cargar permisos del usuario OAuth
+                api.get('/permissions/user/me', {
+                    headers: { Authorization: `Bearer ${tokenFromOAuth}` }
+                }).then(res => {
+                    setAuth(prev => ({ ...prev, permissions: res.data.permissions || {} }));
+                }).catch(err => {
+                    console.error('Error cargando permisos:', err);
+                    setAuth(prev => ({ ...prev, permissions: {} }));
+                });
             }
         } catch (e) { localStorage.removeItem('token'); }
         setInitialLoad(false);
@@ -127,7 +164,19 @@ const AuthProvider = ({ children }) => {
             const restrictedRoles = [3, 8]; // allow Padres (3) and Colaboradores (8) to use this dialog
             if (!restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la página principal.`);
             localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
+            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token, permissions: null, permissionsLoading: false });
+            // Cargar permisos en segundo plano
+            setTimeout(async () => {
+                try {
+                    const permissionsRes = await api.get('/permissions/user/me', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setAuth(prev => ({ ...prev, permissions: permissionsRes.data.permissions || {} }));
+                } catch (err) {
+                    console.error('Error cargando permisos:', err);
+                    setAuth(prev => ({ ...prev, permissions: {} }));
+                }
+            }, 100);
             return { passwordExpired, roleId: decoded.roleId };
         } catch (error) { throw error; }
     };
@@ -138,7 +187,19 @@ const AuthProvider = ({ children }) => {
             const { token, passwordExpired, refreshToken } = response.data; const decoded = jwtDecode(token);
             const restrictedRoles = [4,5]; if (restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la app móvil.`);
             localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
+            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token, permissions: null, permissionsLoading: false });
+            // Cargar permisos en segundo plano
+            setTimeout(async () => {
+                try {
+                    const permissionsRes = await api.get('/permissions/user/me', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setAuth(prev => ({ ...prev, permissions: permissionsRes.data.permissions || {} }));
+                } catch (err) {
+                    console.error('Error cargando permisos:', err);
+                    setAuth(prev => ({ ...prev, permissions: {} }));
+                }
+            }, 100);
             return { passwordExpired, roleId: decoded.roleId };
         } catch (error) { throw error; }
     };
@@ -155,7 +216,7 @@ const AuthProvider = ({ children }) => {
         catch (error) { logout(); }
     };
 
-    const value = { auth, initialLoad, loginUpdateParentsInfo, login, logout, verifyToken };
+    const value = { auth, initialLoad, loginUpdateParentsInfo, login, logout, verifyToken, loadUserPermissions };
 
     return (
         <AuthContext.Provider value={value}>
