@@ -134,6 +134,8 @@ const SchoolContractsPage = () => {
 
     // Nuevo: switch para mostrar solo familias no firmadas por contrato
     const [onlyUnfilled, setOnlyUnfilled] = useState(false);
+    // Nuevo: toggle para mostrar familias inactivas. Por defecto false -> mostrar solo activas
+    const [showInactive, setShowInactive] = useState(false);
     const MIN_LOADING_MS = 600; // ms mínimo para mostrar el loader y mejorar percepción
     const [unfilledFamilies, setUnfilledFamilies] = useState([]);
     const [unfilledLoading, setUnfilledLoading] = useState(false);
@@ -224,9 +226,13 @@ const SchoolContractsPage = () => {
                         contractUuid: selectedContractUuid
                     };
                     if (filledContractsSearch) params.search = filledContractsSearch;
+                    // Por defecto solicitar sólo familias activas al backend salvo que se active "showInactive"
+                    params.isActive = !showInactive;
 
                     const response = await api.get('/contracts/unfilled', { params });
-                    setUnfilledFamilies(response.data.data || []);
+                    const raw = response.data.data || [];
+                    // Backend devuelve según el parámetro `active`; asignar directamente
+                    setUnfilledFamilies(raw);
                     setFilledContractsTotalPages(response.data.meta.totalPages);
                     const totalCount = response.data.meta?.total ?? 0;
                     setFilledContractsTotalCount(totalCount);
@@ -253,10 +259,14 @@ const SchoolContractsPage = () => {
                     schoolId: schoolId
                 };
                 if (filledContractsSearch) params.search = filledContractsSearch;
-                    if (selectedContractUuid) params.contractUuid = selectedContractUuid;
+                if (selectedContractUuid) params.contractUuid = selectedContractUuid;
+                // Por defecto solicitar sólo familias activas al backend salvo que se active "showInactive"
+                params.isActive = !showInactive;
 
                 const response = await api.get('/contracts/filled', { params });
-                setFilledContracts(response.data.data);
+                const raw = response.data.data || [];
+                // Backend devuelve según el parámetro `active`; asignar directamente
+                setFilledContracts(raw);
                 setFilledContractsTotalPages(response.data.meta.totalPages);
                 const totalCount = response.data.meta?.totalItems ?? response.data.meta?.total ?? response.data.meta?.totalCount ?? response.data.meta?.count ?? 0;
                 setFilledContractsTotalCount(totalCount);
@@ -272,7 +282,7 @@ const SchoolContractsPage = () => {
             }
         };
         fetchItems();
-    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid]);
+    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid, showInactive]);
 
     // ---------------------------
     // Función para subir archivo Word y convertirlo a HTML (igual que ContractsManagementPage)
@@ -893,63 +903,91 @@ const SchoolContractsPage = () => {
                     {onlyUnfilled ? 'Familias sin firmar contrato' : 'Contratos Firmados'}
                 </Typography>
 
-                <Box display="flex" gap={2} justifyContent="flex-end" mt={2} mb={2} flexWrap="wrap">
-                    <TextField
-                        select
-                        label="Contrato"
-                        size="small"
-                        value={selectedContractUuid || ''}
-                        onChange={(e) => setSelectedContractUuid(e.target.value)}
-                        style={{ minWidth: 220 }}
-                    >
-                        {contracts.map((c) => (
-                            <MenuItem key={c.uuid} value={c.uuid}>
-                                {c.title}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={onlyUnfilled}
-                                onChange={(e) => { setOnlyUnfilled(e.target.checked); setFilledContractsPage(1); }}
-                                color="primary"
-                            />
-                        }
-                        label="Mostrar familias sin firmar contrato"
-                    />
-                    {/* spinner inline removido: el loader se mostrará únicamente en el área de datos */}
-                    <TextField
-                        label="Buscar por apellido de familia"
-                        variant="outlined"
-                        size="small"
-                        value={filledContractsSearchInput}
-                        onChange={(e) => setFilledContractsSearchInput(e.target.value)}
-                        onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                                handleSearch();
+                <Box
+                    sx={{
+                        display: 'flex',
+                        flexDirection: isMobile ? 'column' : 'row',
+                        justifyContent: 'space-between',
+                        alignItems: isMobile ? 'stretch' : 'center',
+                        gap: 2,
+                        mt: 2,
+                        mb: 2,
+                        flexWrap: 'wrap'
+                    }}
+                >
+                    {/* Left: selector y switch, alineado a la izquierda */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <TextField
+                            select
+                            label="Contrato"
+                            size="small"
+                            value={selectedContractUuid || ''}
+                            onChange={(e) => setSelectedContractUuid(e.target.value)}
+                            style={{ minWidth: 220 }}
+                        >
+                            {contracts.map((c) => (
+                                <MenuItem key={c.uuid} value={c.uuid}>
+                                    {c.title}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={onlyUnfilled}
+                                    onChange={(e) => { setOnlyUnfilled(e.target.checked); setFilledContractsPage(1); }}
+                                    color="primary"
+                                />
                             }
-                        }}
-                        style={{ width: isMobile ? '100%' : '300px' }}
-                    />
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleSearch}
-                        disabled={filledContractsLoading}
-                    >
-                        Buscar
-                    </Button>
-                    {filledContractsSearch && (
-                        <Button
+                            label="Sin firmar contrato"
+                        />
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={showInactive}
+                                    onChange={(e) => { setShowInactive(e.target.checked); setFilledContractsPage(1); }}
+                                    color="primary"
+                                />
+                            }
+                            label="Solo inactivos"
+                        />
+                    </Box>
+
+                    {/* Right: buscador, alineado a la derecha */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <TextField
+                            label="Buscar por apellido de familia"
                             variant="outlined"
-                            color="secondary"
-                            onClick={handleClearSearch}
+                            size="small"
+                            value={filledContractsSearchInput}
+                            onChange={(e) => setFilledContractsSearchInput(e.target.value)}
+                            onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleSearch();
+                                }
+                            }}
+                            style={{ width: isMobile ? '100%' : '300px' }}
+                        />
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleSearch}
                             disabled={filledContractsLoading}
                         >
-                            Limpiar
+                            Buscar
                         </Button>
-                    )}
+                        {filledContractsSearch && (
+                            <Button
+                                variant="outlined"
+                                color="secondary"
+                                onClick={handleClearSearch}
+                                disabled={filledContractsLoading}
+                            >
+                                Limpiar
+                            </Button>
+                        )}
+                    </Box>
                 </Box>
 
                 <Box style={{ minHeight: '120px' }}>
