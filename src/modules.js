@@ -16,6 +16,7 @@ import AuxiliaresManagementPage from './pages/AuxiliaresManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import BusesManagementPage from './pages/BusesManagementPage';
+import RouteHistoryPage from './pages/RouteHistoryPage';
 // ✅ REMOVIDO: import ActivityLogPage from './pages/ActivityLogPage';
 import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
@@ -76,6 +77,13 @@ export const modules = [
                 name: 'Buses',
                 path: 'buses',
                 component: BusesManagementPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'historial-recorridos-rutas',
+                name: 'Historial de Recorridos de Rutas',
+                path: 'historial-recorridos-rutas',
+                component: RouteHistoryPage,
                 roles: ['Administrador', 'Gestor'],
             },
             {
