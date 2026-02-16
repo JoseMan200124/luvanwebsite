@@ -49,7 +49,7 @@ import {
     Pie
 } from 'recharts';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowBack, School as SchoolIcon, CalendarToday, InfoOutlined } from '@mui/icons-material';
+import { ArrowBack, School as SchoolIcon, CalendarToday, InfoOutlined, People } from '@mui/icons-material';
 import DownloadIcon from '@mui/icons-material/GetApp';
 import { getCurrentDate } from '../hooks/useCurrentDate';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -1974,11 +1974,18 @@ const SchoolPaymentsPage = () => {
                             <Typography variant="h4" component="h1" gutterBottom>
                                 Gestión de Pagos - {school?.name || 'Cargando...'}
                             </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Chip 
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                <Chip
+                                    size="small"
                                     icon={<CalendarToday />}
                                     label={`Ciclo Escolar ${schoolYear || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
+                                />
+                                <Chip
+                                    size="small"
+                                    icon={<People />}
+                                    label={`${totalPayments} familias`}
+                                    sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', fontWeight: 600 }}
                                 />
                             </Box>
                         </Box>
@@ -2306,11 +2313,11 @@ const SchoolPaymentsPage = () => {
                 </Grid>
                 <Grid item xs={12}>
                     <ChipsRow>
-                        <Chip label={`Total familias: ${totalPayments}`} variant="outlined" />
+                        <Chip label={`Activos: ${familiasActivas}`} sx={{ backgroundColor: '#4caf50', color: 'white' }} />
+                        <Chip label={`Inactivos: ${totalInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
                         <Chip label={`Pagados: ${totalPaidCount}`} color="success" />
                         <Chip label={`Pendientes: ${totalPendingCount}`} color="warning" />
                         <Chip label={`En Mora: ${totalMoraCount}`} color="error" />
-                        <Chip label={`Inactivos: ${totalInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
                         <Chip label={`Eliminados: ${eliminadoCount}`} sx={{ backgroundColor: '#000000', color: 'white' }} />
                         <Box sx={{ flex: 1 }} />
                     </ChipsRow>
