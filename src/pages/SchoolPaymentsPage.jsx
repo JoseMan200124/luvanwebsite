@@ -192,7 +192,8 @@ const SchoolPaymentsPage = () => {
     useEffect(() => {
         (async () => {
             setLoading(true);
-            if (!school && schoolId) await fetchSchool();
+            // If the current `school` is missing or does not match the requested `schoolId`, fetch it.
+            if (!school || String(school.id) !== String(schoolId)) await fetchSchool();
             // trigger batch recalc for this school before loading payments
             try {
                 // Trigger background recalculation so UI load is not blocked.
