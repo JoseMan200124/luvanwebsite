@@ -198,10 +198,7 @@ const RouteHistoryPage = () => {
                 ...opts
             };
 
-            const response = await api.get('/transportistas/historial-rutas', {
-                headers: { Authorization: `Bearer ${auth.token}` },
-                params
-            });
+            const response = await api.get('/transportistas/historial-rutas', { params });
 
             setRoutes(response.data.routes || []);
             setTotal(response.data.total || 0);
@@ -233,8 +230,8 @@ const RouteHistoryPage = () => {
                 const loadClients = async () => {
                     try {
                         const [schoolsResp, corpsResp] = await Promise.all([
-                            api.get('/schools', { headers: { Authorization: `Bearer ${auth.token}` } }),
-                            api.get('/corporations', { headers: { Authorization: `Bearer ${auth.token}` } })
+                            api.get('/schools'),
+                            api.get('/corporations')
                         ]);
 
                         const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
@@ -299,7 +296,7 @@ const RouteHistoryPage = () => {
                 let url = `/users/pilots?query=${encodeURIComponent(pilotInput)}`;
                 if (selectedClient.type === 'school') url += `&schoolId=${selectedClient.id}`;
                 if (selectedClient.type === 'corporation') url += `&corporationId=${selectedClient.id}`;
-                const resp = await api.get(url, { headers: { Authorization: `Bearer ${auth.token}` } });
+                const resp = await api.get(url);
                 const pilots = Array.isArray(resp.data?.users) ? resp.data.users : (resp.data || []);
                 const pilotsOpts = pilots.map(p => ({ id: p.id || p._id, name: p.name || p.fullName || p.nombre }));
                 pilotsCacheRef.current.set(cacheKey, pilotsOpts);
@@ -341,7 +338,7 @@ const RouteHistoryPage = () => {
                 let url = `/buses?query=${encodeURIComponent(busInput)}`;
                 if (selectedClient.type === 'school') url += `&schoolId=${selectedClient.id}`;
                 if (selectedClient.type === 'corporation') url += `&corporationId=${selectedClient.id}`;
-                const resp = await api.get(url, { headers: { Authorization: `Bearer ${auth.token}` } });
+                const resp = await api.get(url);
                 const busesList = resp.data?.buses || resp.data || [];
                 const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
                 busesCacheRef.current.set(cacheKey, busesOpts);
@@ -383,7 +380,7 @@ const RouteHistoryPage = () => {
                 let url = `/buses?query=${encodeURIComponent(statsBusInput)}`;
                 if (statsSelectedClient.type === 'school') url += `&schoolId=${statsSelectedClient.id}`;
                 if (statsSelectedClient.type === 'corporation') url += `&corporationId=${statsSelectedClient.id}`;
-                const resp = await api.get(url, { headers: { Authorization: `Bearer ${auth.token}` } });
+                const resp = await api.get(url);
                 const busesList = resp.data?.buses || resp.data || [];
                 const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
                 busesCacheRef.current.set(cacheKey, busesOpts);
@@ -425,7 +422,7 @@ const RouteHistoryPage = () => {
                     url = `/routes/school/${selectedClient.id}/numbers`;
                 }
 
-                const resp = await api.get(url, { headers: { Authorization: `Bearer ${auth.token}` } });
+                const resp = await api.get(url);
                 const nums = resp.data?.routeNumbers || resp.data?.routes || resp.data || [];
                 // Normalize to objects { number }
                 const opts = (Array.isArray(nums) ? nums : []).map(n => (typeof n === 'object' ? ({ number: n.routeNumber || n.routeNumber || n.routeNumber }) : ({ number: String(n) })));
@@ -472,7 +469,7 @@ const RouteHistoryPage = () => {
                     url = `/routes/school/${statsSelectedClient.id}/numbers`;
                 }
 
-                const resp = await api.get(url, { headers: { Authorization: `Bearer ${auth.token}` } });
+                const resp = await api.get(url);
                 const nums = resp.data?.routeNumbers || resp.data?.routes || resp.data || [];
                 const opts = (Array.isArray(nums) ? nums : []).map((n) => {
                     if (typeof n === 'object' && n) {
@@ -653,7 +650,7 @@ const RouteHistoryPage = () => {
                 plate: statsPlate || undefined,
             };
 
-            const resp = await api.get('/transportistas/estadisticas-kilometros', { headers: { Authorization: `Bearer ${auth.token}` }, params });
+            const resp = await api.get('/transportistas/estadisticas-kilometros', { params });
             const groups = resp.data?.groups || [];
             const overall = resp.data?.overallTotalKm || 0;
             const dateArray = resp.data?.dateArray || [];
@@ -698,7 +695,6 @@ const RouteHistoryPage = () => {
             const groupByToUse = statsLastLoadedParams.groupBy || statsLastLoadedGroupBy || statsGroupBy;
 
             const resp = await api.get('/transportistas/estadisticas-kilometros/reporte', {
-                headers: { Authorization: `Bearer ${auth.token}` },
                 params: statsLastLoadedParams,
                 responseType: 'blob',
             });
