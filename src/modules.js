@@ -18,7 +18,6 @@ import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import RouteHistoryPage from './pages/RouteHistoryPage';
 // ✅ REMOVIDO: import ActivityLogPage from './pages/ActivityLogPage';
-import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
 import AttendanceManagementPage from './pages/AttendanceManagementPage';
 import StudentIncidentsPage from './pages/StudentIncidentsPage';
@@ -84,13 +83,6 @@ export const modules = [
                 name: 'Historial de Recorridos de Rutas',
                 path: 'historial-recorridos-rutas',
                 component: RouteHistoryPage,
-                roles: ['Administrador', 'Gestor'],
-            },
-            {
-                key: 'carga-masiva-horarios',
-                name: 'Carga Masiva de Horarios',
-                path: 'carga-masiva-horarios',
-                component: BulkScheduleUpdatePage,
                 roles: ['Administrador', 'Gestor'],
             },
         ],

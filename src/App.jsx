@@ -25,7 +25,6 @@ import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
-import BulkScheduleUpdatePage from './pages/BulkScheduleUpdatePage';
 import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
 import SchoolDashboardPage from './pages/SchoolDashboardPage';
 import SchoolUsersPage from './pages/SchoolUsersPage';
@@ -145,15 +144,6 @@ function App() {
                             }
                         />
 
-                        {/* Carga Masiva de Horarios */}
-                        <Route
-                            path="carga-masiva-horarios"
-                            element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
-                                    <BulkScheduleUpdatePage />
-                                </ProtectedRoute>
-                            }
-                        />
 
                         {/* Nuevas rutas para gestión de escuelas por ciclo escolar */}
                         <Route
