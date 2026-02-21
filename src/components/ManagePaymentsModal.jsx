@@ -42,7 +42,7 @@ import moment from 'moment';
 import api from '../utils/axiosConfig';
 import dateService from '../services/dateService';
 import ReceiptsPane from './ReceiptsPane';
-import PaymentDiscountModal from './modals/PaymentDiscountModal';
+import RetroactiveApplyModal from './modals/RetroactiveApplyModal';
 
 // cache TTL (ms)
 const PAYMENT_HIST_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
@@ -536,23 +536,32 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 </Dialog>
 
                 {/* Discount modal */}
-                <PaymentDiscountModal open={openDiscountModal} onClose={() => setOpenDiscountModal(false)} payment={localPayment || payment} currentDiscount={discount} onApplied={async () => {
-                    invalidateHistoryCacheForPayment();
+                <RetroactiveApplyModal
+                    open={openDiscountModal}
+                    onClose={() => setOpenDiscountModal(false)}
+                    mode="DISCOUNT"
+                    payment={localPayment || payment}
+                    currentDiscount={discount}
+                    onApplied={() => {
+                        (async () => {
+                            invalidateHistoryCacheForPayment();
 
-                    // Refresh local payment snapshot inside this modal
-                    try {
-                        const id = (localPayment || payment)?.id;
-                        if (id) {
-                            const res = await api.get(`/payments/${id}`);
-                            if (res?.data) setLocalPayment(res.data.payment || res.data);
-                        }
-                    } catch (err) {
-                        console.error('Error fetching updated payment after applying discount', err);
-                    }
+                            // Refresh local payment snapshot inside this modal
+                            try {
+                                const id = (localPayment || payment)?.id;
+                                if (id) {
+                                    const res = await api.get(`/payments/${id}`);
+                                    if (res?.data) setLocalPayment(res.data.payment || res.data);
+                                }
+                            } catch (err) {
+                                console.error('Error fetching updated payment after applying discount', err);
+                            }
 
-                    // Ask parent page to refresh list/analysis (no legacy discount-save flow)
-                    onAction('refreshPayments', { payment: (localPayment || payment) });
-                }} />
+                            // Ask parent page to refresh list/analysis (no legacy discount-save flow)
+                            onAction('refreshPayments', { payment: (localPayment || payment) });
+                        })();
+                    }}
+                />
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 1 }}>
                     <Typography variant="h6">Historial de Pagos</Typography>

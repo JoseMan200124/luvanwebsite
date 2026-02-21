@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
+import { alpha } from '@mui/material/styles';
 import {
     Typography,
     Box,
@@ -63,6 +64,7 @@ import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import BulkScheduleModal from '../components/modals/BulkScheduleModal';
+import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 
 // Opciones de roles disponibles en esta vista: Padre solamente
 const roleOptions = [
@@ -114,6 +116,7 @@ const SchoolUsersPage = () => {
     const [openActivateConfirm, setOpenActivateConfirm] = useState(false);
     const [openSuspendConfirm, setOpenSuspendConfirm] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
+    const [openRouteTypeModal, setOpenRouteTypeModal] = useState(false);
     const [activateLoading, setActivateLoading] = useState(false);
     const [suspendLoading, setSuspendLoading] = useState(false);
     const [openCircularModal, setOpenCircularModal] = useState(false);
@@ -156,6 +159,9 @@ const SchoolUsersPage = () => {
         scheduleSlots: [],
         specialFee: 0
     });
+    // Para familias existentes: el tipo de ruta se elige aquí, pero solo se persiste con "Aplicar cambio a pagos"
+    const [routeTypeDraft, setRouteTypeDraft] = useState('');
+    const [isRouteTypeSelectOpen, setIsRouteTypeSelectOpen] = useState(false);
     const [originalStudents, setOriginalStudents] = useState([]);
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
     
@@ -1021,7 +1027,36 @@ const SchoolUsersPage = () => {
     };
 
     const handleFamilyDetailChange = (e) => {
-        setFamilyDetail(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        const { name, value } = e.target;
+
+        // En edición de familia existente: routeType NO debe guardarse con "Guardar cambios"
+        if (name === 'routeType' && selectedUser?.id) {
+            setRouteTypeDraft(value);
+
+            const nextTrimmed = String(value || '').trim();
+            // Abrir siempre el flujo al seleccionar un tipo (incluso si es el mismo),
+            // así pueden re-aplicarlo a otros períodos.
+            if (nextTrimmed) {
+                setOpenRouteTypeModal(true);
+            }
+            return;
+        }
+
+        setFamilyDetail(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleRouteTypePick = (nextValue) => {
+        const trimmed = String(nextValue || '').trim();
+        if (!selectedUser?.id) return;
+        if (!trimmed) return;
+        setRouteTypeDraft(nextValue);
+        setOpenRouteTypeModal(true);
+    };
+
+    const handleCloseRouteTypeModal = () => {
+        setOpenRouteTypeModal(false);
+        // Si no se aplicó, revertir el select al valor guardado
+        setRouteTypeDraft(String(familyDetail.routeType || ''));
     };
 
     const handleAddStudent = () => {
@@ -1385,6 +1420,7 @@ const SchoolUsersPage = () => {
                 scheduleSlots: user.FamilyDetail.ScheduleSlots || [],
                 specialFee: user.FamilyDetail.specialFee ?? 0
             });
+            setRouteTypeDraft(user.FamilyDetail.routeType || '');
             setOriginalStudents(user.FamilyDetail.Students || []);
         } else {
             setFamilyDetail({
@@ -1408,6 +1444,7 @@ const SchoolUsersPage = () => {
                 scheduleSlots: [],
                 specialFee: 0
             });
+            setRouteTypeDraft('');
             setOriginalStudents([]);
         }
 
@@ -1714,6 +1751,7 @@ const SchoolUsersPage = () => {
             scheduleSlots: [],
             specialFee: 0
         });
+        setRouteTypeDraft('');
         setOriginalStudents([]);
         setSelectedSupervisorPilots([]);
         setSelectedAuxiliarMonitoras([]);
@@ -2660,9 +2698,15 @@ const SchoolUsersPage = () => {
             </Snackbar>
 
             {/* Diálogo para crear/editar usuario */}
-            <Dialog open={openEditDialog} onClose={() => {
-                setOpenEditDialog(false);
-            }} maxWidth="md" fullWidth>
+            <Dialog
+                open={openEditDialog}
+                onClose={() => {
+                    setOpenRouteTypeModal(false);
+                    setOpenEditDialog(false);
+                }}
+                maxWidth="md"
+                fullWidth
+            >
                 <DialogTitle>{selectedUser?.id ? 'Editar Familia' : 'Añadir Familia'}</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
@@ -2730,11 +2774,9 @@ const SchoolUsersPage = () => {
                         )}
                         {Number(selectedUser?.roleId) === 3 && (
                             <>
-                                <Grid item xs={12}>
-                                    <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
-                                        Datos de la Familia (Padre)
-                                    </Typography>
-                                </Grid>
+                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
+                                    Datos de la Familia
+                                </Typography>
                                 <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
                                     <Grid item xs={12} md={4}>
                                         <TextField
@@ -2858,24 +2900,6 @@ const SchoolUsersPage = () => {
                                         />
                                     </Grid>
                                     <Grid item xs={12} md={4}>
-                                        <FormControl variant="outlined" fullWidth>
-                                            <InputLabel>Tipo de Ruta</InputLabel>
-                                            <Select
-                                                name="routeType"
-                                                value={familyDetail.routeType}
-                                                onChange={handleFamilyDetailChange}
-                                                label="Tipo de Ruta"
-                                            >
-                                                <MenuItem value="">
-                                                    <em>Seleccione un tipo</em>
-                                                </MenuItem>
-                                                <MenuItem value="Completa">Completa</MenuItem>
-                                                <MenuItem value="Media AM">Media AM</MenuItem>
-                                                <MenuItem value="Media PM">Media PM</MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
                                         <TextField
                                             name="specialFee"
                                             label="Descuento Especial"
@@ -2886,6 +2910,61 @@ const SchoolUsersPage = () => {
                                             onChange={handleFamilyDetailChange}
                                         />
                                     </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <FormControl variant="outlined" fullWidth>
+                                            <InputLabel>Tipo de Ruta</InputLabel>
+                                            <Select
+                                                name="routeType"
+                                                value={selectedUser?.id ? routeTypeDraft : familyDetail.routeType}
+                                                onChange={handleFamilyDetailChange}
+                                                onOpen={() => setIsRouteTypeSelectOpen(true)}
+                                                onClose={() => setIsRouteTypeSelectOpen(false)}
+                                                label="Tipo de Ruta"
+                                            >
+                                                <MenuItem
+                                                    value="Completa"
+                                                    onClick={selectedUser?.id ? () => handleRouteTypePick('Completa') : undefined}
+                                                >
+                                                    Completa
+                                                </MenuItem>
+                                                <MenuItem
+                                                    value="Media AM"
+                                                    onClick={selectedUser?.id ? () => handleRouteTypePick('Media AM') : undefined}
+                                                >
+                                                    Media AM
+                                                </MenuItem>
+                                                <MenuItem
+                                                    value="Media PM"
+                                                    onClick={selectedUser?.id ? () => handleRouteTypePick('Media PM') : undefined}
+                                                >
+                                                    Media PM
+                                                </MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+                                    {selectedUser?.id && isRouteTypeSelectOpen && (
+                                        <Grid item xs={12} md={4}>
+                                            <Paper variant="outlined" sx={(theme) => ({
+                                                p: 2,
+                                                height: '100%',
+                                                borderColor: theme.palette.warning.main,
+                                                backgroundColor: alpha(theme.palette.warning.main, 0.10),
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                justifyContent: 'center'
+                                            })}>
+                                                <Typography variant="body2" sx={(theme) => ({ fontWeight: 700, color: theme.palette.warning.dark })}>
+                                                    Cambio de ruta
+                                                </Typography>
+                                                <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
+                                                    - Selecciona un tipo de ruta para proceder con el cambio.
+                                                </Typography>
+                                                <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
+                                                    - Para proceder con el tipo de ruta actual, selecciona el mismo tipo de ruta.
+                                                </Typography>
+                                            </Paper>
+                                        </Grid>
+                                    )}
                                 </Grid>
 
                                 {/* Sección de contacto de emergencia */}
@@ -3101,7 +3180,10 @@ const SchoolUsersPage = () => {
                     </Grid>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setOpenEditDialog(false)}>Cancelar</Button>
+                    <Button onClick={() => {
+                        setOpenRouteTypeModal(false);
+                        setOpenEditDialog(false);
+                    }}>Cancelar</Button>
                     <Button 
                         variant="contained" 
                         color="primary"
@@ -3112,6 +3194,22 @@ const SchoolUsersPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {selectedUser?.id && (
+                <RetroactiveApplyModal
+                    open={openRouteTypeModal}
+                    onClose={handleCloseRouteTypeModal}
+                    mode="ROUTE_TYPE"
+                    userId={selectedUser?.id || null}
+                    routeType={routeTypeDraft}
+                    onApplied={() => {
+                        setFamilyDetail(prev => ({ ...prev, routeType: routeTypeDraft }));
+                        setOpenRouteTypeModal(false);
+                        setSnackbar({ open: true, message: 'Cambio de tipo de ruta aplicado correctamente', severity: 'success' });
+                        fetchUsers();
+                    }}
+                />
+            )}
         </PageContainer>
     );
 };

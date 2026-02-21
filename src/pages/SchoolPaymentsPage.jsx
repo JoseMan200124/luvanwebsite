@@ -1942,6 +1942,32 @@ const SchoolPaymentsPage = () => {
     const dialogLeftover = Number(registerPaymentTarget?.balanceDue || 0);
     
     const dialogExtraDiscount = Number(registerPaymentExtra?.extraordinaryDiscount || 0);
+
+    // Períodos pendientes (para desglose): filtrar solo los que tienen monto pendiente
+    const dialogPendingPeriods = (() => {
+        try {
+            const raw = registerPaymentTarget?.unpaidPeriods
+                ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
+                    ? JSON.parse(registerPaymentTarget.unpaidPeriods)
+                    : registerPaymentTarget.unpaidPeriods)
+                : [];
+            return (Array.isArray(raw) ? raw : []).filter(p => Number(p?.amountDue ?? p?.amount ?? 0) > 0);
+        } catch (e) {
+            return [];
+        }
+    })();
+
+    const hasSinglePendingPeriod = dialogPendingPeriods.length === 1;
+    const hasMultiplePendingPeriods = dialogPendingPeriods.length > 1;
+
+    // UX (previous behavior):
+    // - If there is exactly 1 pending period, show only the "CARGOS BASE" section (no per-period orange box).
+    // - Ensure CARGOS BASE reflects that pending period's snapshot values (routeType/originalAmount) to avoid
+    //   showing the latest FamilyDetail.routeType for a historical month.
+    const singlePendingPeriod = hasSinglePendingPeriod ? dialogPendingPeriods[0] : null;
+    const effectiveRouteType = singlePendingPeriod?.routeType || routeType;
+    const effectiveMonthlyFee = Number(singlePendingPeriod?.originalAmount ?? dialogMonthlyFee ?? 0) || 0;
+    const effectiveBaseFee = studentCount > 0 ? (effectiveMonthlyFee / studentCount) : effectiveMonthlyFee;
     
     // Total a pagar en pestaña de Tarifa: NO incluye mora (se paga por separado)
     const dialogTotalToPay = Math.max(0, 
@@ -2528,52 +2554,41 @@ const SchoolPaymentsPage = () => {
                                             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>📋 Desglose de Pago</Typography>
                                             
                                             {/* Sección: Cargos Base */}
-                                            <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-                                                <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', display: 'block', mb: 1 }}>
-                                                    CARGOS BASE
-                                                </Typography>
-                                                
-                                                {/* Tarifa base por estudiante */}
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        Tarifa base
-                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
-                                                            (Ruta {routeType})
-                                                        </Typography>
+                                            {dialogPendingPeriods.length <= 1 && (
+                                                <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', display: 'block', mb: 1 }}>
+                                                        CARGOS BASE
                                                     </Typography>
-                                                    <Typography variant="body2">{formatCurrency(dialogBaseFee)}</Typography>
-                                                </Box>
-                                                
-                                                {/* Tarifa mensual total (base × estudiantes) */}
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        Tarifa mensual
-                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
-                                                            ({studentCount} {studentCount === 1 ? 'estudiante' : 'estudiantes'})
+                                                    
+                                                    {/* Tarifa base por estudiante */}
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            Tarifa base
+                                                            <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
+                                                                ({effectiveRouteType})
+                                                            </Typography>
                                                         </Typography>
-                                                    </Typography>
-                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatCurrency(dialogMonthlyFee)}</Typography>
+                                                        <Typography variant="body2">{formatCurrency(effectiveBaseFee)}</Typography>
+                                                    </Box>
+                                                    
+                                                    {/* Tarifa mensual total (base × estudiantes) */}
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            Tarifa mensual
+                                                            <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
+                                                                ({studentCount} {studentCount === 1 ? 'estudiante' : 'estudiantes'})
+                                                            </Typography>
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatCurrency(effectiveMonthlyFee)}</Typography>
+                                                    </Box>
                                                 </Box>
-                                            </Box>
+                                            )}
 
                                             {/* Sección: Descuentos y Créditos */}
                                             {(() => {
                                                 // When there are multiple unpaid periods, the family discount can vary per period.
                                                 // Avoid showing a misleading single "Descuento familiar" line here.
-                                                let hasMultiplePeriods = false;
-                                                try {
-                                                    const raw = registerPaymentTarget?.unpaidPeriods
-                                                        ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
-                                                            ? JSON.parse(registerPaymentTarget.unpaidPeriods)
-                                                            : registerPaymentTarget.unpaidPeriods)
-                                                        : [];
-                                                    const filtered = (Array.isArray(raw) ? raw : []).filter(p => Number(p?.amountDue ?? p?.amount ?? 0) > 0);
-                                                    hasMultiplePeriods = filtered.length > 1;
-                                                } catch (e) {
-                                                    hasMultiplePeriods = false;
-                                                }
-
-                                                const showFamilyLine = dialogFamilySpecialFee > 0 && !hasMultiplePeriods;
+                                                const showFamilyLine = dialogFamilySpecialFee > 0 && !hasMultiplePendingPeriods;
                                                 const showBlock = dialogCredito > 0 || showFamilyLine || dialogExtraDiscount > 0;
                                                 if (!showBlock) return null;
 
@@ -2618,12 +2633,7 @@ const SchoolPaymentsPage = () => {
                                             {/* Desglose por períodos pendientes si hay varios meses */}
                                             {(() => {
                                                 try {
-                                                    const allPeriods = registerPaymentTarget?.unpaidPeriods
-                                                        ? (typeof registerPaymentTarget.unpaidPeriods === 'string'
-                                                            ? JSON.parse(registerPaymentTarget.unpaidPeriods)
-                                                            : registerPaymentTarget.unpaidPeriods)
-                                                        : [];
-                                                    const periods = allPeriods.filter(p => Number(p.amountDue ?? p.amount ?? 0) > 0);
+                                                    const periods = dialogPendingPeriods;
                                                     
                                                     if (Array.isArray(periods) && periods.length > 1) {
                                                         const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -2645,6 +2655,12 @@ const SchoolPaymentsPage = () => {
                                                                         const periodDiscount = Number(period.discountApplied ?? 0) || 0;
                                                                         const periodNetAmount = Number(period.netAmount ?? (originalAmount - periodDiscount)) || 0;
                                                                         const periodAmountDue = Number(period.amountDue ?? period.amount ?? 0) || 0;
+
+                                                                        const periodRouteType = period.routeType || routeType;
+
+                                                                        // Tarifa base por estudiante para este período
+                                                                        const safeStudentCount = Math.max(1, Number(studentCount || 1));
+                                                                        const periodBaseFee = safeStudentCount > 0 ? (originalAmount / safeStudentCount) : originalAmount;
 
                                                                         const isParcial = periodAmountDue < periodNetAmount && periodAmountDue > 0;
                                                                         const amountPaid = isParcial
@@ -2673,11 +2689,25 @@ const SchoolPaymentsPage = () => {
                                                                                         </Typography>
                                                                                     )}
                                                                                 </Typography>
+
+                                                                                {/* Tarifa base */}
+                                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2 }}>
+                                                                                    <Typography variant="caption" color="text.secondary">
+                                                                                        Tarifa base
+                                                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
+                                                                                            ({periodRouteType})
+                                                                                        </Typography>
+                                                                                        :
+                                                                                    </Typography>
+                                                                                    <Typography variant="caption">
+                                                                                        {formatCurrency(periodBaseFee)}
+                                                                                    </Typography>
+                                                                                </Box>
                                                                                 
                                                                                 {/* Tarifa mensual */}
                                                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2 }}>
                                                                                     <Typography variant="caption" color="text.secondary">
-                                                                                        Tarifa mensual:
+                                                                                        Tarifa mensual ({studentCount} {studentCount === 1 ? 'estudiante' : 'estudiantes'}):
                                                                                     </Typography>
                                                                                     <Typography variant="caption">
                                                                                         {formatCurrency(originalAmount)}
@@ -2733,6 +2763,12 @@ const SchoolPaymentsPage = () => {
                                                                 </Box>
                                                             </Box>
                                                         );
+                                                    }
+
+                                                    // Caso: solo 1 período pendiente
+                                                    // UX: cuando hay 1 solo período pendiente, se muestra únicamente "CARGOS BASE" arriba.
+                                                    if (Array.isArray(periods) && periods.length === 1) {
+                                                        return null;
                                                     }
                                                 } catch (e) {
                                                     console.error('Error parsing periods:', e);
