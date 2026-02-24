@@ -60,6 +60,7 @@ import api from '../utils/axiosConfig';
 import PaymentFilters from '../components/PaymentFilters';
 import PaymentTable from '../components/PaymentTable';
 import ManagePaymentsModal from '../components/ManagePaymentsModal';
+import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
 
@@ -953,6 +954,14 @@ const SchoolPaymentsPage = () => {
     const handleManagePayments = useCallback(async (payment) => {
         setManageTarget(payment);
         setOpenManageModal(true);
+    }, []);
+
+    // Open Manage Periods modal for a given family/payment
+    const [openPeriodsModal, setOpenPeriodsModal] = useState(false);
+    const [periodsTarget, setPeriodsTarget] = useState(null);
+    const handleManagePeriods = useCallback((payment) => {
+        setPeriodsTarget(payment);
+        setOpenPeriodsModal(true);
     }, []);
 
     // Download payment history as a presentable PDF (jsPDF + autotable)
@@ -2374,6 +2383,7 @@ const SchoolPaymentsPage = () => {
                             onReceiptClick={handleOpenReceipt}
                             onEmailClick={handleOpenEmail}
                             onManageClick={handleManagePayments}
+                            onManagePeriodsClick={handleManagePeriods}
                             onNotesClick={handleOpenNotes}
                             onDownloadHistory={handleDownloadHistory}
                             order={order}
@@ -2387,6 +2397,17 @@ const SchoolPaymentsPage = () => {
                             payment={manageTarget}
                             onAction={handleManageAction}
                             onToggleInvoiceSent={handleToggleInvoiceSent}
+                        />
+
+                        <ManagePeriodsModal
+                            open={openPeriodsModal}
+                            onClose={() => setOpenPeriodsModal(false)}
+                            payment={periodsTarget}
+                            onChanged={() => {
+                                // Períodos impactan balances/estados, refrescar dataset y análisis
+                                fetchAllPayments(statusFilter, search);
+                                fetchPaymentsAnalysis(schoolId);
+                            }}
                         />
 
                         {/* Dialog: Exportar pagos por periodo */}

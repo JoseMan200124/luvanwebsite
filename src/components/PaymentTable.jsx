@@ -1,10 +1,10 @@
 // src/components/PaymentTable.jsx
 import React from 'react';
 import { Table, TableHead, TableRow, TableCell, TableBody, IconButton, TableContainer, Paper, Box, Chip, TableSortLabel } from '@mui/material';
-import { Payment as PaymentIcon, CheckCircle as CheckCircleIcon, Close as CloseIcon, NoteAlt as NoteAltIcon, Download as DownloadIcon, ManageAccounts as ManageAccountsIcon } from '@mui/icons-material';
+import { Payment as PaymentIcon, CheckCircle as CheckCircleIcon, Close as CloseIcon, NoteAlt as NoteAltIcon, Download as DownloadIcon, ManageAccounts as ManageAccountsIcon, CalendarMonth as CalendarMonthIcon } from '@mui/icons-material';
 import moment from 'moment';
 
-const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory }) => {
+const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick }) => {
     const family = p.User?.FamilyDetail || {};
     const lastName = family.familyLastName || '-';
     const autoDebit = !!(p.automaticDebit || family.automaticDebit || family.autoDebit);
@@ -69,13 +69,14 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
                     </IconButton>
                     <IconButton title="Descargar Reporte PDF" onClick={() => (onDownloadHistory ? onDownloadHistory(p) : (onEmailClick && onEmailClick(p)))}><DownloadIcon /></IconButton>
                     <IconButton title="Gestionar Pagos" onClick={() => onManageClick && onManageClick(p)}><ManageAccountsIcon /></IconButton>
+                    <IconButton title="Gestionar Períodos" onClick={() => onManagePeriodsClick && onManagePeriodsClick(p)}><CalendarMonthIcon /></IconButton>
                 </Box>
             </TableCell>
         </TableRow>
     );
 });
 
-const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, order, orderBy, onRequestSort }) => {
+const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick, order, orderBy, onRequestSort }) => {
     // This component is now a controlled renderer: sorting is performed by the parent.
     // It receives `order` ('asc'|'desc'), `orderBy` (key), and `onRequestSort(property)` to toggle sorting.
 
@@ -153,6 +154,7 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
                             onDownloadHistory={onDownloadHistory}
                             onManageClick={onManageClick}
                             onNotesClick={onNotesClick}
+                            onManagePeriodsClick={onManagePeriodsClick}
                         />
                     ))}
                 </TableBody>

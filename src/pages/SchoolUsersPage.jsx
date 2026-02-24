@@ -1642,6 +1642,12 @@ const SchoolUsersPage = () => {
             delete familyDetailPayload.scheduleSlots;
             delete familyDetailPayload.ScheduleSlots; // por compatibilidad
 
+            // IMPORTANTE: En edición, el tipo de ruta NO se actualiza desde este modal.
+            // El único flujo válido es el de cambio de tipo de ruta.
+            if (selectedUser?.id) {
+                delete familyDetailPayload.routeType;
+            }
+
             // Solo envía students si realmente hubo cambios
             const currentStudentsNorm  = normalizeStudents(familyDetail?.students);
             const originalStudentsNorm = normalizeStudents(originalStudents);
