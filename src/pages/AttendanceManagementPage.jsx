@@ -44,6 +44,7 @@ import {
     Cancel as CancelIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAttendances, getAttendanceDetails } from '../services/attendanceService';
 import api from '../utils/axiosConfig';
@@ -175,6 +176,11 @@ const AttendanceManagementPage = () => {
             setLoading(false);
         }
     };
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchAttendances();
+    }, [fetchAttendances]);
 
     const handleViewDetails = async (attendance) => {
         setSelectedAttendance(attendance);
@@ -392,13 +398,7 @@ const AttendanceManagementPage = () => {
                                 onChange={(newValue) => setEndDate(newValue)}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={12} display="flex" justifyContent="flex-end">
-                            <Tooltip title="Actualizar">
-                                <IconButton onClick={handleRefresh} color="primary">
-                                    <RefreshIcon />
-                                </IconButton>
-                            </Tooltip>
-                        </Grid>
+                        {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
                     </Grid>
                 </Paper>
 

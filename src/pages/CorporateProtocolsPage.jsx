@@ -48,6 +48,7 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 // Styled components
 const PageContainer = styled.div`
@@ -184,6 +185,10 @@ const CorporateProtocolsPage = () => {
     useEffect(() => {
         fetchProtocols();
     }, [page, search, typeFilter, fetchProtocols]);
+
+    useRegisterPageRefresh(async () => {
+        await fetchProtocols();
+    }, [fetchProtocols]);
 
     // ---------------------------
     // Funciones auxiliares

@@ -31,6 +31,7 @@ import tw from 'twin.macro';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 // Container principal con estilos responsivos
 const SupervisorsContainer = styled.div`
@@ -129,6 +130,11 @@ const SupervisorsManagementPage = () => {
         }
         setLoading(false);
     };
+
+        // Register page-level refresh handler for global refresh control
+        useRegisterPageRefresh(async () => {
+            await fetchSupervisors();
+        }, [fetchSupervisors]);
 
     // Filtrar supervisores
     const filteredSupervisors = supervisors.filter((s) => {

@@ -1,5 +1,5 @@
 // src/pages/SchoolContractsPage.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Button,
     List,
@@ -42,6 +42,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 
 import SimpleEditor from './SimpleEditor';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import mammoth from 'mammoth';
 import ErrorBoundary from '../components/ErrorBoundary';
 import parse from 'html-react-parser';
@@ -178,6 +179,73 @@ const SchoolContractsPage = () => {
         
         fetchContracts();
     }, [schoolId]);
+
+    const refreshPage = useCallback(async () => {
+        try {
+            const response = await api.get('/contracts', { params: { schoolId } });
+            setContracts(response.data || []);
+            if (Array.isArray(response.data) && response.data.length > 0 && !selectedContractUuid) {
+                setSelectedContractUuid(response.data[0].uuid);
+            }
+        } catch (err) {
+            console.error('refreshPage contracts error', err);
+        }
+
+        try {
+            // If onlyUnfilled is active, fetch unfilled families endpoint
+            if (onlyUnfilled) {
+                if (!selectedContractUuid) {
+                    setUnfilledFamilies([]);
+                    setFilledContractsTotalPages(1);
+                    setFilledContractsTotalCount(0);
+                    return;
+                }
+
+                const params = {
+                    page: filledContractsPage,
+                    limit: filledContractsLimit,
+                    schoolId,
+                    contractUuid: selectedContractUuid
+                };
+                if (filledContractsSearch) params.search = filledContractsSearch;
+                params.isActive = !showInactive;
+
+                const resp = await api.get('/contracts/unfilled', { params });
+                const raw = resp.data.data || [];
+                setUnfilledFamilies(raw);
+                setFilledContractsTotalPages(resp.data.meta?.totalPages || 1);
+                const totalCount = resp.data.meta?.total ?? 0;
+                setFilledContractsTotalCount(totalCount);
+                return;
+            }
+
+            // Default: fetch filled contracts
+            const params = {
+                page: filledContractsPage,
+                limit: filledContractsLimit,
+                schoolId
+            };
+            if (filledContractsSearch) params.search = filledContractsSearch;
+            if (selectedContractUuid) params.contractUuid = selectedContractUuid;
+            params.isActive = !showInactive;
+
+            const resp = await api.get('/contracts/filled', { params });
+            setFilledContracts(resp.data.data || []);
+            setFilledContractsTotalPages(resp.data.meta?.totalPages || 1);
+            setFilledContractsTotalCount(resp.data.meta?.totalItems || resp.data.meta?.total || 0);
+        } catch (err) {
+            console.error('refreshPage filled contracts error', err);
+        }
+    }, [schoolId, filledContractsPage, filledContractsLimit, filledContractsSearch, selectedContractUuid, showInactive, onlyUnfilled]);
+
+    useRegisterPageRefresh(async () => {
+        setFilledContractsLoading(true);
+        try {
+            await refreshPage();
+        } finally {
+            setFilledContractsLoading(false);
+        }
+    }, [refreshPage]);
 
     // ---------------------------
     // useEffect para cargar datos del colegio

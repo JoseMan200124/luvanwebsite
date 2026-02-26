@@ -1,6 +1,7 @@
 // src/pages/RouteTimeLogsPage.jsx
 
 import React, { useEffect, useState } from 'react';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Typography,
     Paper,
@@ -189,6 +190,11 @@ const RouteTimeLogsPage = () => {
     const handleRefresh = () => {
         fetchTimeLogs();
     };
+
+    // Register page-level refresh handler for the global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchTimeLogs();
+    }, [fetchTimeLogs]);
 
     const handleOpenDelete = (id) => {
         setDeleteId(id);
@@ -437,11 +443,7 @@ const RouteTimeLogsPage = () => {
                             />
                         </Grid>
                         <Grid item xs={12} display="flex" justifyContent="flex-end">
-                            <Tooltip title="Actualizar">
-                                <IconButton onClick={handleRefresh} color="primary">
-                                    <RefreshIcon />
-                                </IconButton>
-                            </Tooltip>
+                            {/* Local refresh removed; use global refresh button instead */}
                         </Grid>
                     </Grid>
                 </Paper>

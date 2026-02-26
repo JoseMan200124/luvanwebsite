@@ -62,6 +62,7 @@ import {
     STATE_COLORS
 } from '../services/mechanicRequestService';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 const PageContainer = styled.div`
     ${tw`p-6`}
@@ -188,6 +189,11 @@ const MechanicRequestsPage = () => {
     useEffect(() => {
         fetchStatistics();
     }, [fetchStatistics]);
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchRequests();
+    }, [fetchRequests]);
 
     // Manejadores de filtros
     const handleFilterChange = (field) => (event) => {

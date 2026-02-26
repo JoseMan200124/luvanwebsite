@@ -43,6 +43,7 @@ import {
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -245,6 +246,15 @@ const SchoolDashboardPage = () => {
             });
         }
     }, [auth.token, schoolId, fetchSchoolData, fetchRouteOccupancy, fetchUserSummary, fetchStudentSummary]);
+
+    useRegisterPageRefresh(async () => {
+        setLoading(true);
+        try {
+            await Promise.all([fetchSchoolData(), fetchRouteOccupancy(), fetchUserSummary(), fetchStudentSummary()]);
+        } finally {
+            setLoading(false);
+        }
+    }, [fetchSchoolData, fetchRouteOccupancy, fetchUserSummary, fetchStudentSummary]);
 
     const handleBackToSelection = () => {
         navigate('/admin/escuelas');

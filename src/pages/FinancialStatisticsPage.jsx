@@ -1,6 +1,6 @@
 // src/pages/FinancialStatisticsPage.jsx
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
     Typography,
     Grid,
@@ -26,6 +26,7 @@ import {
     ResponsiveContainer,
 } from 'recharts';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -51,32 +52,37 @@ const FinancialStatisticsPage = () => {
     const [error, setError] = useState(null);
     const reportRef = useRef();
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const [revenueRes, outstandingRes, lateRes] = await Promise.all([
-                    api.get('/reports/revenue'),
-                    api.get('/reports/outstanding-payments'),
-                    api.get('/reports/late-payments'),
-                ]);
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [revenueRes, outstandingRes, lateRes] = await Promise.all([
+                api.get('/reports/revenue'),
+                api.get('/reports/outstanding-payments'),
+                api.get('/reports/late-payments'),
+            ]);
 
-                setData({
-                    revenue: revenueRes.data.revenue,
-                    outstandingPayments: outstandingRes.data.outstandingPayments,
-                    latePayments: lateRes.data.latePayments,
-                });
-            } catch (error) {
-                console.error('Error fetching financial data', error);
-                setError('Error al obtener datos financieros. Por favor, inténtalo de nuevo más tarde.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
+            setData({
+                revenue: revenueRes.data.revenue,
+                outstandingPayments: outstandingRes.data.outstandingPayments,
+                latePayments: lateRes.data.latePayments,
+            });
+        } catch (error) {
+            console.error('Error fetching financial data', error);
+            setError('Error al obtener datos financieros. Por favor, inténtalo de nuevo más tarde.');
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchData();
+    }, [fetchData]);
 
     // Función para generar PDF sin modificar la lógica
     const generatePDF = async () => {

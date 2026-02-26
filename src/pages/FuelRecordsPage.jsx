@@ -1,6 +1,7 @@
 // src/pages/FuelRecordsPage.jsx
 
 import React, { useEffect, useState } from 'react';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Typography,
     Paper,
@@ -403,6 +404,11 @@ const FuelRecordsPage = () => {
         fetchStatistics();
     };
 
+    // Register handler so the global refresh control triggers this page's refresh
+    useRegisterPageRefresh(async () => {
+        await Promise.all([fetchFuelRecords(), fetchStatistics()]);
+    }, [fetchFuelRecords, fetchStatistics]);
+
     const handleViewDetails = async (recordId) => {
         try {
             const response = await getFuelRecordById(recordId);
@@ -723,11 +729,7 @@ const FuelRecordsPage = () => {
                                 <Button onClick={() => setCreateOpen(true)} variant="contained" color="primary" sx={{ mr: 1 }}>
                                     Nuevo Registro
                                 </Button>
-                                <Tooltip title="Actualizar">
-                                    <IconButton onClick={handleRefresh} color="primary">
-                                        <RefreshIcon />
-                                    </IconButton>
-                                </Tooltip>
+                                {/* Local refresh removed; use global refresh button */}
                             </Box>
                         </Grid>
                     </Grid>

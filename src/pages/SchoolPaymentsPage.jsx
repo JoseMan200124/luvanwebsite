@@ -57,6 +57,7 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import PaymentFilters from '../components/PaymentFilters';
 import PaymentTable from '../components/PaymentTable';
 import ManagePaymentsModal from '../components/ManagePaymentsModal';
@@ -405,6 +406,17 @@ const SchoolPaymentsPage = () => {
         combined.sort((a, b) => (a.year - b.year) || (a.month - b.month));
         return combined;
     };
+
+    // Register global refresh after helper fetch functions are defined
+    useRegisterPageRefresh(async () => {
+        setLoading(true);
+        try {
+            await fetchAllPayments();
+            await fetchPaymentsAnalysis(schoolId);
+        } finally {
+            setLoading(false);
+        }
+    }, [fetchAllPayments, fetchPaymentsAnalysis, schoolId]);
 
     // Extraordinary payments are handled by the shared ExtraordinaryPaymentSection component
 

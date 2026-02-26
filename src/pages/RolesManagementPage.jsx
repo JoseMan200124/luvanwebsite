@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
     Typography,
     Table,
@@ -23,7 +23,6 @@ import {
     useTheme,
     Chip,
     TableSortLabel,
-    FormControlLabel,
     Checkbox,
     FormControl,
     InputLabel,
@@ -42,6 +41,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import * as XLSX from 'xlsx';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -168,7 +168,6 @@ const RolesManagementPage = () => {
     const [corporations, setCorporations] = useState([]);
     const [roleOptions, setRoleOptions] = useState(roleOptionsStatic);
     // Buses no longer needed for route report generation (slots carry routeNumber)
-    const [contracts, setContracts] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
     
@@ -240,13 +239,16 @@ const RolesManagementPage = () => {
     };
 
     useEffect(() => {
-        fetchUsers();
-        fetchSchools();
-        fetchCorporations();
-        fetchRoles();
-        fetchContracts();
-        fetchAllPilots();
-        fetchAllMonitoras();
+        // Inicializar datos
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        (async () => {
+            fetchUsers();
+            fetchSchools();
+            fetchCorporations();
+            fetchRoles();
+            fetchAllPilots();
+            fetchAllMonitoras();
+        })();
     }, []);
 
     useEffect(() => {
@@ -319,6 +321,11 @@ const RolesManagementPage = () => {
         fetchUsers();
     }, [page, rowsPerPage, roleFilter, clientFilter, searchQuery]);
 
+        // Register page-level refresh handler for global refresh control
+        useRegisterPageRefresh(async () => {
+            await fetchUsers();
+        }, [fetchUsers]);
+
     const fetchSchools = async () => {
         try {
             const resp = await api.get('/schools');
@@ -341,14 +348,7 @@ const RolesManagementPage = () => {
 
     // Removed fetchBuses
 
-    const fetchContracts = async () => {
-        try {
-            const resp = await api.get('/contracts');
-            setContracts(resp.data || []);
-        } catch (err) {
-            console.error('[fetchContracts] Error:', err);
-        }
-    };
+    
 
     const fetchSchoolGrades = async (schoolId) => {
         try {

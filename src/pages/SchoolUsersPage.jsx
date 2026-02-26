@@ -57,6 +57,7 @@ import {
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import { normalizeKey } from '../utils/stringHelpers';
@@ -1287,6 +1288,19 @@ const SchoolUsersPage = () => {
             fetchAllMonitoras();
         }
     }, [auth.token, schoolId, fetchUsers, fetchContracts, fetchSchools]);
+
+    const refreshPageData = useCallback(async () => {
+        if (!auth.token || !schoolId) return;
+        await Promise.all([
+            fetchUsers(),
+            fetchContracts(),
+            fetchSchools(),
+            fetchAllPilots(),
+            fetchAllMonitoras(),
+        ]);
+    }, [auth.token, schoolId, fetchUsers, fetchContracts, fetchSchools]);
+
+    useRegisterPageRefresh(refreshPageData, [auth.token, schoolId, refreshPageData]);
 
     useEffect(() => {
         let filtered = users;

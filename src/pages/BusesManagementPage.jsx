@@ -38,6 +38,7 @@ import {
     TableSortLabel
 } from '@mui/material';
 import { Autocomplete } from '@mui/material';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Edit,
     Delete,
@@ -46,7 +47,6 @@ import {
     Image as ImageIcon,
     FileUpload
 } from '@mui/icons-material';
-import { History } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import tw from 'twin.macro';
@@ -247,6 +247,11 @@ const BusesManagementPage = () => {
         fetchBuses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [auth.token]);
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchBuses();
+    }, [fetchBuses]);
 
     // Schedules are now tied to the Bus (school) and are fetched when the bus's school is selected
 

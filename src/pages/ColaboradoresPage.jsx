@@ -55,6 +55,7 @@ import {
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -375,6 +376,15 @@ const ColaboradoresPage = () => {
             fetchColaboradores();
         }
     }, [auth.token, corporationId, fetchCorporationData, fetchColaboradores]);
+
+    useRegisterPageRefresh(async () => {
+        setLoading(true);
+        try {
+            await Promise.all([fetchCorporationData(), fetchColaboradores()]);
+        } finally {
+            setLoading(false);
+        }
+    }, [fetchCorporationData, fetchColaboradores]);
 
     // Filtrado y ordenamiento
     useEffect(() => {

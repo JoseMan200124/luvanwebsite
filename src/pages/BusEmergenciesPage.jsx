@@ -41,6 +41,7 @@ import {
     Warning as WarningIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAllBusEmergencies, getBusEmergencyById, deleteBusEmergency } from '../services/busEmergencyService';
 import api from '../utils/axiosConfig';
@@ -230,6 +231,11 @@ const BusEmergenciesPage = () => {
             setLoading(false);
         }
     };
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchEmergencies();
+    }, [fetchEmergencies]);
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -456,13 +462,7 @@ const BusEmergenciesPage = () => {
                                 slotProps={{ textField: { fullWidth: true } }}
                             />
                         </Grid>
-                        <Grid item xs={12} display="flex" justifyContent="flex-end">
-                            <Tooltip title="Actualizar">
-                                <IconButton onClick={handleRefresh} color="primary">
-                                    <RefreshIcon />
-                                </IconButton>
-                            </Tooltip>
-                        </Grid>
+                        {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
                     </Grid>
                 </Paper>
 

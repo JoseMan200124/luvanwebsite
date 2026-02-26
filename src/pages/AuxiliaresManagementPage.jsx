@@ -29,6 +29,7 @@ import tw from 'twin.macro';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 // Container principal con estilos responsivos
 const AuxiliaresContainer = styled.div`
@@ -127,6 +128,11 @@ const AuxiliaresManagementPage = () => {
         }
         setLoading(false);
     };
+
+        // Register page-level refresh handler for global refresh control
+        useRegisterPageRefresh(async () => {
+            await fetchAuxiliares();
+        }, [fetchAuxiliares]);
 
     // Filtrar auxiliares
     const filteredAuxiliares = auxiliares.filter((a) => {

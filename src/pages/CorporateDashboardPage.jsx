@@ -42,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -243,6 +244,15 @@ const CorporateDashboardPage = () => {
             });
         }
     }, [auth.token, corporationId, fetchCorporationData, fetchRouteOccupancy, fetchColaboradorSummary]);
+
+    useRegisterPageRefresh(async () => {
+        setLoading(true);
+        try {
+            await Promise.all([fetchCorporationData(), fetchRouteOccupancy(), fetchColaboradorSummary()]);
+        } finally {
+            setLoading(false);
+        }
+    }, [fetchCorporationData, fetchRouteOccupancy, fetchColaboradorSummary]);
 
     const handleBackToSelection = () => {
         navigate('/admin/corporaciones');

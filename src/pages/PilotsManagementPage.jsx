@@ -30,6 +30,7 @@ import tw from 'twin.macro';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 
@@ -171,6 +172,11 @@ const PilotsManagementPage = () => {
         }
         setLoading(false);
     };
+
+        // Register page-level refresh handler for global refresh control
+        useRegisterPageRefresh(async () => {
+            await fetchPilots();
+        }, [fetchPilots]);
 
     // Filtrado
     const filteredPilots = pilots.filter((p) => {

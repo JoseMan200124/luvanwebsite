@@ -54,6 +54,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
 
@@ -216,6 +217,23 @@ const RouteHistoryPage = () => {
             setLoading(false);
         }
     };
+    // Register page-level refresh handler for global refresh control
+    // Ensure we pass the current filters so the global refresh respects them
+    useRegisterPageRefresh(async () => {
+        setPage(1);
+        await fetchRouteHistory({
+            startDate: startDate || undefined,
+            endDate: endDate || undefined,
+            pilotoName: pilotoFilter || undefined,
+            busPlaca: busFilter || undefined,
+            onlyFailures: onlyFailures ? '1' : undefined,
+            status: statusFilter || undefined,
+            startHour: startHour || undefined,
+            endHour: endHour || undefined,
+            routeNumber: routeNumber || undefined,
+            page: 1
+        });
+    }, [fetchRouteHistory, startDate, endDate, pilotoFilter, busFilter, onlyFailures, statusFilter, startHour, endHour, routeNumber]);
 
     useEffect(() => {
         if (!initialFetchDone && (selectedClient || clientId)) {
@@ -729,8 +747,8 @@ const RouteHistoryPage = () => {
 
             const start = statsLastLoadedParams.startDate || '';
             const end = statsLastLoadedParams.endDate || '';
-            const safeStart = start ? String(start).replace(/[^0-9\-]/g, '_') : 'sin-inicio';
-            const safeEnd = end ? String(end).replace(/[^0-9\-]/g, '_') : 'sin-fin';
+            const safeStart = start ? String(start).replace(/[^0-9-]/g, '_') : 'sin-inicio';
+            const safeEnd = end ? String(end).replace(/[^0-9-]/g, '_') : 'sin-fin';
             const filename = `reporte_kilometros_${groupByToUse}_${safeStart}_${safeEnd}.pdf`;
 
             const a = document.createElement('a');

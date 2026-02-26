@@ -53,6 +53,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import SubmissionPreview from './SubmissionPreview';
 import ExcelJS from 'exceljs';
 import moment from 'moment';
@@ -299,6 +300,11 @@ const SchoolYearSelectionPage = () => {
             setLoading(false);
         }
     }, [auth.token, selectedSchoolYear]);
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchSchoolsByYear();
+    }, [fetchSchoolsByYear]);
 
     useEffect(() => {
         if (auth.token && selectedSchoolYear) {

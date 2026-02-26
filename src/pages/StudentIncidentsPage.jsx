@@ -33,6 +33,7 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { Refresh as RefreshIcon, Visibility as VisibilityIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAllStudentIncidents, getStudentIncidentById, INCIDENT_TYPES } from '../services/studentIncidentService';
 import api from '../utils/axiosConfig';
@@ -169,6 +170,11 @@ const StudentIncidentsPage = () => {
             setLoading(false);
         }
     };
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchIncidents();
+    }, [fetchIncidents]);
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -383,13 +389,7 @@ const StudentIncidentsPage = () => {
                                 onChange={(newValue) => setEndDate(newValue)}
                             />
                         </Grid>
-                        <Grid item xs={12} display="flex" justifyContent="flex-end">
-                            <Tooltip title="Actualizar">
-                                <IconButton onClick={handleRefresh} color="primary">
-                                    <RefreshIcon />
-                                </IconButton>
-                            </Tooltip>
-                        </Grid>
+                        {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
                     </Grid>
                 </Paper>
 

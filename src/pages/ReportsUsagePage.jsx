@@ -1,6 +1,6 @@
 // src/pages/ReportsUsagePage.jsx
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
     Typography,
     Grid,
@@ -29,6 +29,7 @@ import {
     ResponsiveContainer
 } from 'recharts';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -130,32 +131,37 @@ const ReportsUsagePage = () => {
     const [distanceTopN, setDistanceTopN] = useState(isMobile ? 10 : 15);
     const [schoolsTopN, setSchoolsTopN] = useState(isMobile ? 8 : 12);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const [schoolsRes, incidentsRes, distancePerPilotRes] = await Promise.all([
-                    api.get('/reports/schools-usage'),
-                    api.get('/reports/incidents-by-type'),
-                    api.get('/reports/distance-per-pilot'),
-                ]);
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [schoolsRes, incidentsRes, distancePerPilotRes] = await Promise.all([
+                api.get('/reports/schools-usage'),
+                api.get('/reports/incidents-by-type'),
+                api.get('/reports/distance-per-pilot'),
+            ]);
 
-                setData({
-                    schools: schoolsRes.data.schools || [],
-                    incidents: incidentsRes.data.incidents || [],
-                    distancePerPilot: distancePerPilotRes.data.distancePerPilot || [],
-                });
-            } catch (err) {
-                console.error('Error fetching report data', err);
-                setError('Error al obtener datos de reportes. Por favor, inténtalo de nuevo más tarde.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
+            setData({
+                schools: schoolsRes.data.schools || [],
+                incidents: incidentsRes.data.incidents || [],
+                distancePerPilot: distancePerPilotRes.data.distancePerPilot || [],
+            });
+        } catch (err) {
+            console.error('Error fetching report data', err);
+            setError('Error al obtener datos de reportes. Por favor, inténtalo de nuevo más tarde.');
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchData();
+    }, [fetchData]);
 
     // Preparar datos “Top N + Otros” para gráficas con demasiadas categorías
     const distanceChartData = useMemo(() => {

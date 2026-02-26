@@ -32,6 +32,7 @@ import moment from 'moment-timezone';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -174,6 +175,11 @@ const MonitorsManagementPage = () => {
         }
         setLoading(false);
     };
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchMonitors();
+    }, [fetchMonitors]);
 
     // Filtrado por texto
     const filteredMonitors = monitors.filter((m) => {

@@ -4,6 +4,7 @@
  * Enhanced Requests management page (uses layout from MechanicRequestsPage)
  */
 import React, { useState, useEffect, useCallback, useContext } from 'react';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Box,
     Typography,
@@ -205,6 +206,12 @@ const RequestsPage = () => {
         fetchStatistics();
     };
 
+    // Register global refresh handler so the global button triggers this page's refresh
+    useRegisterPageRefresh(async () => {
+        setPage(0);
+        await Promise.all([fetchRequests(), fetchStatistics()]);
+    }, [fetchRequests, fetchStatistics]);
+
     const handleViewDetail = async (request) => {
         try {
             const detail = await getRequestById(request.id);
@@ -317,7 +324,7 @@ const RequestsPage = () => {
                     Solicitudes de Usuarios
                 </Typography>
                 <Box>
-                    <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={handleRefresh}>Refrescar</Button>
+                    {/* Refrescar global: botón local eliminado */}
                 </Box>
             </Box>
 

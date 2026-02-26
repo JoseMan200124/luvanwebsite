@@ -43,6 +43,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import PermissionGuard from '../components/PermissionGuard';
@@ -287,6 +288,11 @@ const CorporationsPage = () => {
             fetchCorporations();
         }
     }, [auth.token, selectedFiscalYear, fetchCorporations]);
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchCorporations();
+    }, [fetchCorporations]);
 
     const handleCorporationSelect = (corporation) => {
         navigate(`/admin/corporaciones/${selectedFiscalYear}/${corporation.id}`, {
