@@ -61,6 +61,8 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import { normalizeKey } from '../utils/stringHelpers';
+import DuplicateEmailAlert from '../components/DuplicateEmailAlert';
+import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
@@ -1735,8 +1737,17 @@ const SchoolUsersPage = () => {
             fetchUsers();
             setOpenEditDialog(false);
         } catch (err) {
+            // Centralized duplicate-email handler: it shows the snackbar and returns true if handled
+            try {
+                if (showDuplicateEmailFromError(err, setSnackbar)) return;
+            } catch (e) {
+                // fallthrough to generic handling
+            }
+
             console.error('[handleSaveUser] Error:', err);
-            setSnackbar({ open: true, message: 'Error al guardar usuario', severity: 'error' });
+            const resp = err?.response?.data || {};
+            const messageToShow = resp.message || 'Error al guardar usuario';
+            setSnackbar({ open: true, message: messageToShow, severity: 'error' });
         }
     };
 

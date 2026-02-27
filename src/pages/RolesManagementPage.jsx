@@ -42,6 +42,7 @@ import api from '../utils/axiosConfig';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
+import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -561,6 +562,12 @@ const RolesManagementPage = () => {
             fetchUsers();
             handleDialogClose();
         } catch (err) {
+            try {
+                if (showDuplicateEmailFromError(err, setSnackbar)) return;
+            } catch (e) {
+                // ignore and fallback to generic handling
+            }
+
             console.error('[handleSaveUser] Error:', err);
             setSnackbar({ open: true, message: 'Error al guardar usuario', severity: 'error' });
         }

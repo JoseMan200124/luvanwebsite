@@ -64,6 +64,7 @@ import BulkScheduleColaboradoresModal from '../components/modals/BulkScheduleCol
 import ExcelJS from 'exceljs';
 import moment from 'moment-timezone';
 import { normalizeKey } from '../utils/stringHelpers';
+import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -648,6 +649,12 @@ const ColaboradoresPage = () => {
             handleCloseDialogs();
             fetchColaboradores();
         } catch (err) {
+            try {
+                if (showDuplicateEmailFromError(err, setSnackbar)) return;
+            } catch (e) {
+                // fallthrough to generic handling
+            }
+
             console.error('Error creating colaborador:', err);
             setSnackbar({
                 open: true,
@@ -2417,12 +2424,12 @@ const ColaboradoresPage = () => {
                 open={snackbar.open}
                 autoHideDuration={6000}
                 onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert 
-                    onClose={() => setSnackbar({ ...snackbar, open: false })} 
+                <Alert
+                    onClose={() => setSnackbar({ ...snackbar, open: false })}
                     severity={snackbar.severity}
-                    variant="filled"
+                    sx={{ width: '100%' }}
                 >
                     {snackbar.message}
                 </Alert>
