@@ -28,7 +28,7 @@ jobs:
         env:
           CI: false
 
-      - run: sudo apt-get update && sudo apt-get install -y rsync openssh-client
+      - run: sudo apt-get update && sudo apt-get install -y openssh-client
 
       - name: Setup SSH
         run: |
@@ -36,13 +36,25 @@ jobs:
           echo "${{ secrets.CPANEL_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p ${{ secrets.CPANEL_PORT }} ${{ secrets.CPANEL_HOST }} >> ~/.ssh/known_hosts
-          ssh-keygen -lf ~/.ssh/id_ed25519
 
-      - name: Deploy build/ to cPanel public_html
+      - name: Create build artifact
         run: |
-          RSYNC_RSH="ssh -p ${{ secrets.CPANEL_PORT }} -i ~/.ssh/id_ed25519 -T -o LogLevel=ERROR"
-          rsync -az --delete \
-            --rsync-path="rsync" \
-            -e "$RSYNC_RSH" \
-            build/ \
-            ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:${{ secrets.CPANEL_TARGET_DIR }}
+          tar -C build -czf build.tgz .
+
+      - name: Upload artifact to server
+        run: |
+          scp -P ${{ secrets.CPANEL_PORT }} -i ~/.ssh/id_ed25519 build.tgz \
+            ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:/home/${{ secrets.CPANEL_USER }}/tmp/build.tgz
+
+      - name: Deploy on server
+        run: |
+          ssh -p ${{ secrets.CPANEL_PORT }} -i ~/.ssh/id_ed25519 -T \
+            ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }} "\
+              set -e; \
+              TARGET='${{ secrets.CPANEL_TARGET_DIR }}'; \
+              TMP='/home/${{ secrets.CPANEL_USER }}/tmp/build.tgz'; \
+              mkdir -p \"\$TARGET\"; \
+              rm -rf \"\$TARGET/static\"; \
+              tar -xzf \"\$TMP\" -C \"\$TARGET\"; \
+              rm -f \"\$TMP\"; \
+            "
