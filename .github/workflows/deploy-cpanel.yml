@@ -1,4 +1,4 @@
-name: Deploy Frontend to cPanel
+name: Deploy Frontend to cPanel (No Shell)
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  build-and-deploy:
+  build-and-upload:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,24 +37,11 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p ${{ secrets.CPANEL_PORT }} ${{ secrets.CPANEL_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Create build artifact
+      - name: Add deploy marker
         run: |
-          tar -C build -czf build.tgz .
+          echo "Deployed: $(date -u) | Commit: $GITHUB_SHA" > build/__deploy.txt
 
-      - name: Upload artifact to server
+      - name: Upload build to Document Root
         run: |
-          scp -P ${{ secrets.CPANEL_PORT }} -i ~/.ssh/id_ed25519 build.tgz \
-            ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:/home/${{ secrets.CPANEL_USER }}/tmp/build.tgz
-
-      - name: Deploy on server
-        run: |
-          ssh -p ${{ secrets.CPANEL_PORT }} -i ~/.ssh/id_ed25519 -T \
-            ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }} "\
-              set -e; \
-              TARGET='${{ secrets.CPANEL_TARGET_DIR }}'; \
-              TMP='/home/${{ secrets.CPANEL_USER }}/tmp/build.tgz'; \
-              mkdir -p \"\$TARGET\"; \
-              rm -rf \"\$TARGET/static\"; \
-              tar -xzf \"\$TMP\" -C \"\$TARGET\"; \
-              rm -f \"\$TMP\"; \
-            "
+          scp -P ${{ secrets.CPANEL_PORT }} -i ~/.ssh/id_ed25519 -r build/* \
+            ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:${{ secrets.CPANEL_TARGET_DIR }}
