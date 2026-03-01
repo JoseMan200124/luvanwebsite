@@ -128,7 +128,7 @@ const LandingPage = () => {
                         tw="font-bold mb-4 text-center text-4xl md:text-5xl lg:text-6xl"
                         style={{ lineHeight: '1.2' }}
                     >
-                        Transportes Luvan
+                        Transportes Luvan 100019
                     </Typography>
 
                     <Typography
