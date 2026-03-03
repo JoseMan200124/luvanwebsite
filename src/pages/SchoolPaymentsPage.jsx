@@ -459,7 +459,7 @@ const SchoolPaymentsPage = () => {
                     if (isUserInactive) return false;
 
                     const s = (p.finalStatus || p.status || '').toUpperCase();
-                    const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA'];
+                    const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
                     if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO'))) return false;
                 }
                 if (qq) {
