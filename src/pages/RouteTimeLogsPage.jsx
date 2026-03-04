@@ -1,6 +1,6 @@
 // src/pages/RouteTimeLogsPage.jsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Typography,
@@ -78,6 +78,9 @@ const RouteTimeLogsPage = () => {
     const [deleteId, setDeleteId] = useState(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
+    // ignoramos la respuesta vieja para que el primer click no "se pierda".
+    const timeLogsRequestSeqRef = useRef(0);
+
     useEffect(() => {
         fetchSchools();
     }, []);
@@ -91,11 +94,6 @@ const RouteTimeLogsPage = () => {
             setSchoolRoutes([]);
         }
     }, [selectedSchool]);
-
-    useEffect(() => {
-        fetchTimeLogs();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedSchedule, selectedDay, startDate, endDate, orderBy, order]);
 
     const fetchSchools = async () => {
         try {
@@ -130,7 +128,8 @@ const RouteTimeLogsPage = () => {
         }
     };
 
-    const fetchTimeLogs = async () => {
+    const fetchTimeLogs = useCallback(async () => {
+        const requestSeq = ++timeLogsRequestSeqRef.current;
         setLoading(true);
         try {
             const filters = {
@@ -151,7 +150,10 @@ const RouteTimeLogsPage = () => {
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
 
             const data = await getRouteTimeLogs(filters);
-            
+
+            // Si llegó otra request más reciente, ignorar esta respuesta
+            if (requestSeq !== timeLogsRequestSeqRef.current) return;
+
             const logsList = data.timeLogs || data.data || [];
             setTimeLogs(logsList);
             setTotalCount(data.total || 0);
@@ -172,11 +174,32 @@ const RouteTimeLogsPage = () => {
                 });
             }
         } catch (error) {
-            console.error('Error al cargar registros de tiempo:', error);
+            // Solo entrar si esta request aún es la vigente
+            if (requestSeq === timeLogsRequestSeqRef.current) {
+                console.error('Error al cargar registros de tiempo:', error);
+            }
         } finally {
-            setLoading(false);
+            if (requestSeq === timeLogsRequestSeqRef.current) {
+                setLoading(false);
+            }
         }
-    };
+    }, [
+        page,
+        rowsPerPage,
+        orderBy,
+        order,
+        selectedSchool,
+        selectedPlate,
+        selectedRoute,
+        selectedSchedule,
+        selectedDay,
+        startDate,
+        endDate,
+    ]);
+
+    useEffect(() => {
+        fetchTimeLogs();
+    }, [fetchTimeLogs]);
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -192,9 +215,7 @@ const RouteTimeLogsPage = () => {
     };
 
     // Register page-level refresh handler for the global refresh control
-    useRegisterPageRefresh(async () => {
-        await fetchTimeLogs();
-    }, [fetchTimeLogs]);
+    useRegisterPageRefresh(fetchTimeLogs);
 
     const handleOpenDelete = (id) => {
         setDeleteId(id);
@@ -487,6 +508,15 @@ const RouteTimeLogsPage = () => {
                                                     Horario
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell sortDirection={orderBy === 'school' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'school'}
+                                                    direction={orderBy === 'school' ? order : 'asc'}
+                                                    onClick={() => handleSort('school')}
+                                                >
+                                                    Colegio
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell sortDirection={orderBy === 'monitora' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'monitora'}
@@ -583,6 +613,9 @@ const RouteTimeLogsPage = () => {
                                                     />
                                                 </TableCell>
                                                 <TableCell>
+                                                    {log.school?.name || 'N/A'}
+                                                </TableCell>
+                                                <TableCell>
                                                     {log.monitora?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
@@ -645,7 +678,7 @@ const RouteTimeLogsPage = () => {
                                         ))}
                                         {timeLogs.length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={11} align="center">
+                                                <TableCell colSpan={13} align="center">
                                                     No se encontraron registros de tiempos de rutas
                                                 </TableCell>
                                             </TableRow>
