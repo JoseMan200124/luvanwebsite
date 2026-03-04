@@ -38,13 +38,23 @@ import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import tw from 'twin.macro';
-import { getRouteTimeLogs } from '../services/routeTimeLogService';
+import { getRouteTimeLogs, getAllRouteTimeLogs } from '../services/routeTimeLogService';
 import { deleteRouteTimeLog } from '../services/routeTimeLogService';
+import ExcelJS from 'exceljs';
 import api from '../utils/axiosConfig';
 
 moment.tz.setDefault('America/Guatemala');
 
 const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
+
+// Simple inline Excel-like icon (green box with white X)
+const ExcelIcon = ({ size = 20 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+        <rect x="2" y="2" width="20" height="20" rx="3" fill="#217346" />
+        <path d="M7.5 7.5 L16.5 16.5" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M16.5 7.5 L7.5 16.5" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+);
 
 const RouteTimeLogsPage = () => {
     const [timeLogs, setTimeLogs] = useState([]);
@@ -74,6 +84,7 @@ const RouteTimeLogsPage = () => {
         total: 0,
         averageDuration: 0,
     });
+    const [exporting, setExporting] = useState(false);
     // Delete dialog state
     const [deleteId, setDeleteId] = useState(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -294,6 +305,122 @@ const RouteTimeLogsPage = () => {
         return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
     };
 
+    const handleDownloadExcel = async () => {
+        try {
+            if (!totalCount || totalCount === 0) {
+                window.alert('No hay registros para exportar con los filtros seleccionados.');
+                return;
+            }
+            setExporting(true);
+
+            const filters = {};
+            if (selectedSchool) filters.schoolId = selectedSchool;
+            if (selectedPlate) filters.plate = selectedPlate;
+            if (selectedRoute) filters.routeNumber = selectedRoute;
+            if (selectedSchedule) filters.schedule = selectedSchedule;
+            if (selectedDay) filters.day = selectedDay;
+            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
+            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+
+            const all = await getAllRouteTimeLogs(filters, 1000);
+
+            const workbook = new ExcelJS.Workbook();
+            workbook.creator = 'Luvan';
+            workbook.created = new Date();
+            const sheet = workbook.addWorksheet('Horarios');
+
+            const headers = [
+                'Fecha',
+                'Día',
+                'Horario',
+                'Colegio',
+                'Monitora',
+                'Placa',
+                'Ruta',
+                'Salida Colegio',
+                'Primera Parada',
+                'Última Parada',
+                'Llegada Colegio',
+                'Duración Total'
+            ];
+
+            sheet.addRow(headers);
+
+            // style header (morado)
+            const headerRow = sheet.getRow(1);
+            headerRow.height = 20;
+            headerRow.eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6A4BCF' } };
+                cell.border = { bottom: { style: 'thin', color: { argb: 'FFDDCCFF' } } };
+            });
+
+            // add data rows
+            all.forEach((log) => {
+                const rawRoute = log.routeNumber ?? '';
+                const routeValue = (rawRoute !== '' && /^\d+$/.test(String(rawRoute).trim())) ? Number(String(rawRoute).trim()) : (rawRoute || '');
+
+                const rowValues = [
+                    log.fecha ? moment(log.fecha).format('DD/MM/YYYY') : '',
+                    getDayLabel(log.day),
+                    getScheduleLabel(log.schedule),
+                    log.school?.name || '',
+                    log.monitora?.name || '',
+                    log.bus?.plate || '',
+                    routeValue,
+                    log.schoolDepartureTime ? moment(log.schoolDepartureTime).format('hh:mm A') : '',
+                    log.firstStopTime ? moment(log.firstStopTime).format('hh:mm A') : '',
+                    log.lastStopTime ? moment(log.lastStopTime).format('hh:mm A') : '',
+                    log.schoolArrivalTime ? moment(log.schoolArrivalTime).format('hh:mm A') : '',
+                    typeof log.tripDuration === 'number' ? formatDuration(log.tripDuration) : ''
+                ];
+
+                sheet.addRow(rowValues);
+            });
+
+            // alternating row fill and autosize
+            const columnWidths = new Array(headers.length).fill(10);
+            sheet.eachRow((row, rowNumber) => {
+                // apply a subtle neutral alternating background for readability
+                if (rowNumber > 1 && rowNumber % 2 === 0) {
+                    row.eachCell((cell) => {
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+                    });
+                }
+                row.eachCell((cell, colNumber) => {
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                    const v = cell.value ? String(cell.value) : '';
+                    columnWidths[colNumber - 1] = Math.max(columnWidths[colNumber - 1] || 10, Math.min(60, v.length + 2));
+                });
+            });
+
+            sheet.columns.forEach((col, idx) => {
+                col.width = columnWidths[idx] || 15;
+            });
+
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+            const lastCol = String.fromCharCode(64 + headers.length);
+            sheet.autoFilter = { from: 'A1', to: `${lastCol}1` };
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `horarios_rutas_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+
+        } catch (err) {
+            console.error('Error generando Excel:', err);
+        } finally {
+            setExporting(false);
+        }
+    };
+
     return (
         <LocalizationProvider dateAdapter={AdapterMoment}>
             <Container>
@@ -352,7 +479,7 @@ const RouteTimeLogsPage = () => {
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={3}>
                             <FormControl fullWidth>
                                 <InputLabel>Colegio</InputLabel>
                                 <Select
@@ -381,6 +508,11 @@ const RouteTimeLogsPage = () => {
                                     onChange={(e) => setSelectedPlate(e.target.value)}
                                     label="Placa"
                                     disabled={!selectedSchool}
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {[...new Set(buses.map(b => b.plate))].map((plate) => (
@@ -391,7 +523,7 @@ const RouteTimeLogsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Ruta</InputLabel>
                                 <Select
@@ -399,6 +531,11 @@ const RouteTimeLogsPage = () => {
                                     onChange={(e) => setSelectedRoute(e.target.value)}
                                     label="Ruta"
                                     disabled={!selectedSchool}
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
@@ -414,7 +551,7 @@ const RouteTimeLogsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Horario</InputLabel>
                                 <Select
@@ -430,7 +567,7 @@ const RouteTimeLogsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Día</InputLabel>
                                 <Select
@@ -449,22 +586,41 @@ const RouteTimeLogsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
-                            <DatePicker
-                                label="Fecha Inicio"
-                                value={startDate}
-                                onChange={(newValue) => setStartDate(newValue)}
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
-                            <DatePicker
-                                label="Fecha Fin"
-                                value={endDate}
-                                onChange={(newValue) => setEndDate(newValue)}
-                            />
+                        <Grid item xs={12} sm={6} md={4}>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}>
+                                    <DatePicker
+                                        label="Fecha Inicio"
+                                        value={startDate}
+                                        onChange={(newValue) => setStartDate(newValue)}
+                                    />
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <DatePicker
+                                        label="Fecha Fin"
+                                        value={endDate}
+                                        onChange={(newValue) => setEndDate(newValue)}
+                                    />
+                                </Grid>
+                            </Grid>
                         </Grid>
                         <Grid item xs={12} display="flex" justifyContent="flex-end">
-                            {/* Local refresh removed; use global refresh button instead */}
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={<ExcelIcon size={18} />}
+                                            onClick={() => handleDownloadExcel()}
+                                            disabled={exporting || totalCount === 0}
+                                            size="small"
+                                            sx={{
+                                                color: 'success.main',
+                                                borderColor: 'success.main',
+                                                '&:hover': { backgroundColor: 'rgba(33,115,70,0.08)', borderColor: 'success.dark' }
+                                            }}
+                                        >
+                                            {exporting ? 'Generando...' : 'Generar reporte'}
+                                        </Button>
+                            </Box>
                         </Grid>
                     </Grid>
                 </Paper>
