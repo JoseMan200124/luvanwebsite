@@ -508,6 +508,15 @@ const RouteTimeLogsPage = () => {
                                                     Horario
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell sortDirection={orderBy === 'school' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'school'}
+                                                    direction={orderBy === 'school' ? order : 'asc'}
+                                                    onClick={() => handleSort('school')}
+                                                >
+                                                    Colegio
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell sortDirection={orderBy === 'monitora' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'monitora'}
@@ -604,6 +613,9 @@ const RouteTimeLogsPage = () => {
                                                     />
                                                 </TableCell>
                                                 <TableCell>
+                                                    {log.school?.name || 'N/A'}
+                                                </TableCell>
+                                                <TableCell>
                                                     {log.monitora?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
@@ -666,7 +678,7 @@ const RouteTimeLogsPage = () => {
                                         ))}
                                         {timeLogs.length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={11} align="center">
+                                                <TableCell colSpan={13} align="center">
                                                     No se encontraron registros de tiempos de rutas
                                                 </TableCell>
                                             </TableRow>
