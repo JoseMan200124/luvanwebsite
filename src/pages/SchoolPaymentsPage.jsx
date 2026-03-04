@@ -28,7 +28,9 @@ import {
     Tabs,
     Tab,
     Switch,
-    Tooltip
+    Tooltip,
+    ToggleButton,
+    ToggleButtonGroup
 } from '@mui/material';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
@@ -119,7 +121,9 @@ const SchoolPaymentsPage = () => {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [autoDebitFilter, setAutoDebitFilter] = useState('');
+    const [serviceStatusFilter, setServiceStatusFilter] = useState('');
     const [showDeleted, setShowDeleted] = useState(false);
+    const [countersView, setCountersView] = useState('payment'); // 'payment' o 'service'
     useEffect(() => {
         if (statusFilter) setShowDeleted(false);
     }, [statusFilter]);
@@ -143,7 +147,8 @@ const SchoolPaymentsPage = () => {
 
     // Indicators derived from analysisData/combinedEarnings
     // IMPORTANTE: Solo contar usuarios activos (state !== 0)
-    // V2: Estados son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO, INACTIVO
+    // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO
+    // El estado INACTIVO es exclusivo del serviceStatus (estado del servicio), no del pago
     const confirmadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'CONFIRMADO')?.count || 0;
     const adelantadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ADELANTADO')?.count || 0;
     const pagadoCount = confirmadoCount + adelantadoCount; // CONFIRMADO + ADELANTADO = pagos al día
@@ -151,7 +156,7 @@ const SchoolPaymentsPage = () => {
     const atrasadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ATRASADO')?.count || 0;
     const enProcesoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'EN_PROCESO')?.count || 0;
     const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
-    const inactivoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'INACTIVO')?.count || 0;
+    const inactivoCount = paymentsAll.filter(p => (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE').length;
     const eliminadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ELIMINADO')?.count || 0;
     const currentMonthEarnings = combinedEarnings.find(item =>
         item.year === moment().year() && item.month === (moment().month() + 1)
@@ -178,6 +183,24 @@ const SchoolPaymentsPage = () => {
     // Eficiencia de cobro: (Ingreso Real / Ingreso Potencial) * 100
     const ingresoPotencial = Number(analysisData?.totals?.netMonthlyFee || 0) * (combinedEarnings.filter(i => i.total > 0).length || 1);
     const eficienciaCobro = ingresoPotencial > 0 ? ((ingresoTotal / ingresoPotencial) * 100).toFixed(1) : 0;
+    
+    // Contadores de estado del servicio (calculados desde paymentsAll)
+    const serviceActiveCount = paymentsAll.filter(p => {
+        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+        return serviceStatus === 'ACTIVE';
+    }).length;
+    const servicePausedCount = paymentsAll.filter(p => {
+        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+        return serviceStatus === 'PAUSED';
+    }).length;
+    const serviceSuspendedCount = paymentsAll.filter(p => {
+        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+        return serviceStatus === 'SUSPENDED';
+    }).length;
+    const serviceInactiveCount = paymentsAll.filter(p => {
+        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+        return serviceStatus === 'INACTIVE';
+    }).length;
     
     // Tendencia (comparar mes actual vs mes anterior)
     const currentMonth = moment().month() + 1;
@@ -253,7 +276,13 @@ const SchoolPaymentsPage = () => {
             const st = status ? String(status).toUpperCase().trim() : '';
             const qq = q ? String(q).trim() : '';
             const params = { schoolId, schoolYear, page: 1, limit: 10000 };
-            if (st) params.status = st;
+
+            // MORA y PENDIENTE son valores de finalStatus → filtrar en el servidor.
+            // PAGADO (= CONFIRMADO + ADELANTADO) e INACTIVO (= serviceStatus INACTIVE)
+            // se manejan solo en cliente porque no son un único valor de columna.
+            const SERVER_FINAL_STATUS = new Set(['MORA', 'PENDIENTE', 'EN_PROCESO', 'ATRASADO', 'CONFIRMADO', 'ADELANTADO', 'ELIMINADO']);
+            if (st && SERVER_FINAL_STATUS.has(st)) params.finalStatus = st;
+            // PAGADO e INACTIVO: no enviar filtro al servidor, el cliente filtra
             if (qq) params.search = qq;
             // include auto-debit filter if set: 'yes'|'no'
             if (autoDebitFilter === 'yes') params.autoDebit = true;
@@ -270,7 +299,8 @@ const SchoolPaymentsPage = () => {
                 const pages = Math.ceil(Number(total) / per);
                 const all = [];
                 for (let p = 0; p < pages; p++) {
-                    const r = await api.get('/payments', { params: { schoolId, schoolYear, page: p + 1, limit: per, ...(st ? { status: st } : {}), ...(qq ? { search: qq } : {}) } });
+                    const serverFilter = st && SERVER_FINAL_STATUS.has(st) ? { finalStatus: st } : {};
+                    const r = await api.get('/payments', { params: { schoolId, schoolYear, page: p + 1, limit: per, ...serverFilter, ...(qq ? { search: qq } : {}) } });
                     const part = r.data.payments || r.data.rows || [];
                     if (Array.isArray(part) && part.length > 0) all.push(...part);
                 }
@@ -310,28 +340,27 @@ const SchoolPaymentsPage = () => {
             const res = await api.get('/payments/analysis', { params: { schoolId: schId, schoolYear, excludeInactive: true } });
             // expected shape: { statusDistribution: [...], monthlyEarnings: [...] }
             const data = res.data || null;
-            // Exclude families marked as deleted from the "Distribución de Familias".
-            // If the backend included an ELIMINADO bucket, remove it and adjust totalPayments accordingly.
+            // Keep ELIMINADO in statusDistribution so the counter chip reads the correct value.
+            // Only exclude it from totalPayments (active-family count).
             const originalDist = Array.isArray(data?.statusDistribution) ? data.statusDistribution : [];
             const eliminatedEntry = originalDist.find(s => (s.finalStatus || '').toUpperCase() === 'ELIMINADO');
             const eliminatedCount = eliminatedEntry?.count || 0;
-            const filteredDist = originalDist.filter(s => (s.finalStatus || '').toUpperCase() !== 'ELIMINADO');
             const sanitized = {
                 ...data,
-                statusDistribution: filteredDist,
+                statusDistribution: originalDist,
                 totalPayments: Math.max(0, (data?.totalPayments || 0) - eliminatedCount)
             };
             setAnalysisData(sanitized);
             setCombinedEarnings(Array.isArray(data?.monthlyEarnings) ? data.monthlyEarnings : []);
     } catch (e) {
             // fallback: derive from current payments (best-effort)
-            // IMPORTANTE: Excluir usuarios inactivos de los conteos de PAGADO/MORA/PENDIENTE
+            // IMPORTANTE: Separar familias con servicio inactivo (serviceStatus=INACTIVE)
             try {
-                const isUserActive = (p) => Number(p.User?.state) !== 0;
-                const activePayments = (paymentsAll || []).filter(isUserActive);
-                const inactivePayments = (paymentsAll || []).filter(p => !isUserActive(p));
+                const isServiceInactive = (p) => (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE';
+                const activePayments = (paymentsAll || []).filter(p => !isServiceInactive(p));
+                const inactivePayments = (paymentsAll || []).filter(isServiceInactive);
                 
-                // V2: Estados son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO, INACTIVO
+                // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO
                 const confirmado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'CONFIRMADO').length;
                 const adelantado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'ADELANTADO').length;
                 const mora = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'MORA').length;
@@ -429,20 +458,20 @@ const SchoolPaymentsPage = () => {
             const st = statusFilter ? String(statusFilter).toUpperCase().trim() : '';
             const qq = search ? String(search).toLowerCase().trim() : '';
             const arr = (paymentsAll || []).filter(p => {
-                // Determinar si el usuario está inactivo (state = 0)
-                const isUserInactive = Number(p.User?.state) === 0;
+                // Determinar si la familia tiene servicio inactivo (serviceStatus = INACTIVE)
+                const isServiceInactive = (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE';
                 const isDeleted = !!p.User?.FamilyDetail?.deleted;
 
                 if (st) {
                     if (st === 'INACTIVO') {
-                        // Filtrar solo usuarios inactivos
-                        if (!isUserInactive) return false;
+                        // Filtrar solo familias con servicio inactivo
+                        if (!isServiceInactive) return false;
                     } else if (st === 'ELIMINADO') {
                         // Filtrar solo eliminados
                         if (!isDeleted) return false;
                     } else {
-                        // Para otros estados, excluir usuarios inactivos y filtrar por finalStatus
-                        if (isUserInactive) return false;
+                        // Para otros estados, excluir familias con servicio inactivo y filtrar por finalStatus
+                        if (isServiceInactive) return false;
                         if (isDeleted && !showDeleted) return false;
                         const s = (p.finalStatus || p.status || '').toUpperCase();
                         
@@ -456,11 +485,10 @@ const SchoolPaymentsPage = () => {
                 } else {
                     // No se seleccionó estado: aplicar reglas por defecto
                     if (isDeleted && !showDeleted) return false;
-                    if (isUserInactive) return false;
 
                     const s = (p.finalStatus || p.status || '').toUpperCase();
                     const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
-                    if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO'))) return false;
+                    if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO') || isServiceInactive)) return false;
                 }
                 if (qq) {
                     const familyLast = (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toLowerCase();
@@ -473,6 +501,11 @@ const SchoolPaymentsPage = () => {
                     const auto = !!(p.automaticDebit || p.User?.FamilyDetail?.automaticDebit || p.User?.FamilyDetail?.autoDebit);
                     if (auto) return false;
                 }
+                // Filtrado por estado del servicio
+                if (serviceStatusFilter) {
+                    const paymentServiceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+                    if (paymentServiceStatus !== serviceStatusFilter) return false;
+                }
                 return true;
             });
             setFiltered(arr);
@@ -481,7 +514,7 @@ const SchoolPaymentsPage = () => {
             console.error('filtering error', e);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted]);
+    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, serviceStatusFilter]);
 
     const handleBack = () => {
         navigate(`/admin/escuelas/${schoolYear || ''}/${schoolId}`, { state: { school, schoolYear } });
@@ -506,6 +539,7 @@ const SchoolPaymentsPage = () => {
             if (key === 'discount') return Number(p.User?.FamilyDetail?.specialFee ?? p.specialFee ?? 0) || 0;
             if (key === 'invoice') return !!(p.User?.FamilyDetail?.requiresInvoice || p.requiresInvoice) ? 1 : 0;
             if (key === 'status') return (p.finalStatus || '').toString().toLowerCase();
+            if (key === 'serviceStatus') return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
         } catch (e) {
             return '';
         }
@@ -1557,19 +1591,20 @@ const SchoolPaymentsPage = () => {
             const monthStrPad = month ? String(month).padStart(2, '0') : null;
 
             historiesAll.forEach(h => {
-                // Determinar si el usuario está inactivo (state = 0)
+                // Determinar si la familia tiene servicio inactivo
                 const userState = h.User?.state ?? h.Payment?.User?.state ?? 1;
-                const isUserInactive = Number(userState) === 0;
+                const isServiceInactive = (h.serviceStatus || h.User?.FamilyDetail?.serviceStatus) === 'INACTIVE'
+                    || Number(userState) === 0; // fallback para registros legacy
                 
-                // Si el filtro es INACTIVO, solo incluir usuarios inactivos
-                // Si el filtro es otro estado, excluir usuarios inactivos
+                // Si el filtro es INACTIVO, solo incluir familias con servicio inactivo
+                // Si el filtro es otro estado, excluir familias con servicio inactivo
                 if (exportFinalStatus === 'INACTIVO') {
-                    if (!isUserInactive) return; // Solo usuarios inactivos
+                    if (!isServiceInactive) return; // Solo familias con servicio inactivo
                 } else if (exportFinalStatus && exportFinalStatus !== 'GENERAL') {
-                    if (isUserInactive) return; // Excluir usuarios inactivos
+                    if (isServiceInactive) return; // Excluir familias con servicio inactivo
                 } else {
                     // GENERAL: incluir todos excepto inactivos
-                    if (isUserInactive) return;
+                    if (isServiceInactive) return;
                 }
                 
                 const familyLast = h.familyLastName || h.familyLast || h.familyLastname || h.User?.FamilyDetail?.familyLastName || h.User?.familyLastName || '';
@@ -1698,9 +1733,10 @@ const SchoolPaymentsPage = () => {
             const estadoNorm = estado ? String(estado).toUpperCase().trim() : '';
             const arr = Array.isArray(paymentsAll) ? paymentsAll : [];
             const filteredRows = arr.filter(p => {
-                // Determinar si el usuario está inactivo (state = 0)
+                // Determinar si la familia tiene servicio inactivo
                 const userState = p.User?.state ?? 1;
-                const isUserInactive = Number(userState) === 0;
+                const isServiceInactive = (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE'
+                    || Number(userState) === 0; // fallback para registros legacy
                 // Determinar si la familia/usuario está marcado como eliminado (deleted)
                 const isDeleted = !!p.User?.FamilyDetail?.deleted;
 
@@ -1708,16 +1744,16 @@ const SchoolPaymentsPage = () => {
                 if (isDeleted) return false;
 
                 if (estadoNorm === 'INACTIVO') {
-                    // Filtrar solo usuarios inactivos
-                    return isUserInactive;
+                    // Filtrar solo familias con servicio inactivo
+                    return isServiceInactive;
                 } else if (estadoNorm) {
-                    // Para otros estados, excluir usuarios inactivos y filtrar por finalStatus
-                    if (isUserInactive) return false;
+                    // Para otros estados, excluir familias con servicio inactivo y filtrar por finalStatus
+                    if (isServiceInactive) return false;
                     const s = (p.finalStatus || p.status || '').toString().toUpperCase();
                     return s === estadoNorm;
                 } else {
-                    // Sin filtro de estado: excluir usuarios inactivos
-                    return !isUserInactive;
+                    // Sin filtro de estado: excluir familias con servicio inactivo
+                    return !isServiceInactive;
                 }
             });
 
@@ -2370,12 +2406,35 @@ const SchoolPaymentsPage = () => {
                 </Grid>
                 <Grid item xs={12}>
                     <ChipsRow>
-                        <Chip label={`Activos: ${familiasActivas}`} sx={{ backgroundColor: '#4caf50', color: 'white' }} />
-                        <Chip label={`Inactivos: ${totalInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
-                        <Chip label={`Pagados: ${totalPaidCount}`} color="success" />
-                        <Chip label={`Pendientes: ${totalPendingCount}`} color="warning" />
-                        <Chip label={`En Mora: ${totalMoraCount}`} color="error" />
-                        <Chip label={`Eliminados: ${eliminadoCount}`} sx={{ backgroundColor: '#000000', color: 'white' }} />
+                        <ToggleButtonGroup
+                            value={countersView}
+                            exclusive
+                            onChange={(e, newView) => {
+                                if (newView !== null) setCountersView(newView);
+                            }}
+                            size="small"
+                            sx={{ mr: 2 }}
+                        >
+                            <ToggleButton value="payment">Estado de Pago</ToggleButton>
+                            <ToggleButton value="service">Estado del Servicio</ToggleButton>
+                        </ToggleButtonGroup>
+                        
+                        {countersView === 'payment' ? (
+                            <>
+                                <Chip label={`Pagados: ${totalPaidCount}`} color="success" />
+                                <Chip label={`Pendientes: ${totalPendingCount}`} color="warning" />
+                                <Chip label={`En Mora: ${totalMoraCount}`} color="error" />
+                                <Chip label={`Eliminados: ${eliminadoCount}`} sx={{ backgroundColor: '#000000', color: 'white' }} />
+                            </>
+                        ) : (
+                            <>
+                                <Chip label={`Activos: ${serviceActiveCount}`} color="success" />
+                                <Chip label={`Pausados: ${servicePausedCount}`} color="warning" />
+                                <Chip label={`Suspendidos: ${serviceSuspendedCount}`} color="error" />
+                                <Chip label={`Inactivos: ${serviceInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
+                            </>
+                        )}
+                        
                         <Box sx={{ flex: 1 }} />
                     </ChipsRow>
                 </Grid>
@@ -2383,7 +2442,18 @@ const SchoolPaymentsPage = () => {
                 <Grid item xs={12}>
                     <Paper sx={{ p: 2 }}>
                         <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
-                            <PaymentFilters search={search} onSearchChange={setSearch} status={statusFilter} onStatusChange={setStatusFilter} autoDebit={autoDebitFilter} onAutoDebitChange={setAutoDebitFilter} showDeleted={showDeleted} onShowDeletedChange={setShowDeleted} />
+                            <PaymentFilters 
+                                search={search} 
+                                onSearchChange={setSearch} 
+                                status={statusFilter} 
+                                onStatusChange={setStatusFilter} 
+                                autoDebit={autoDebitFilter} 
+                                onAutoDebitChange={setAutoDebitFilter} 
+                                showDeleted={showDeleted} 
+                                onShowDeletedChange={setShowDeleted}
+                                serviceStatus={serviceStatusFilter}
+                                onServiceStatusChange={setServiceStatusFilter}
+                            />
                             <Box sx={{ flex: 1 }} />
                             <Button startIcon={<DownloadIcon />} size="small" onClick={() => setOpenExportStatusDialog(true)} sx={{ textTransform: 'none', mr: 1 }}>
                                 Descargar Historial
