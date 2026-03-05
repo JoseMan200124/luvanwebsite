@@ -459,7 +459,7 @@ const SchoolPaymentsPage = () => {
                     if (isUserInactive) return false;
 
                     const s = (p.finalStatus || p.status || '').toUpperCase();
-                    const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA'];
+                    const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
                     if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO'))) return false;
                 }
                 if (qq) {
@@ -1860,6 +1860,15 @@ const SchoolPaymentsPage = () => {
         // Si la fecha de pago es igual o después de hoy, no es retroactivo
         if (paymentMoment.isSameOrAfter(today)) {
             return null;
+        }
+
+        // Si existe una fecha de congelamiento, no permitir retroactivo para fechas iguales o posteriores a la fecha de congelamiento.
+        const freezeDateStr = registerPaymentTarget?.penaltyFrozenAt || registerPaymentTarget?.penaltyFrozenUntil || null;
+        if (freezeDateStr) {
+            const freezeMoment = moment(freezeDateStr).startOf('day');
+            if (!paymentMoment.isBefore(freezeMoment)) {
+                return null;
+            }
         }
         
         // Si la fecha de pago es antes del inicio de mora, no hay mora
