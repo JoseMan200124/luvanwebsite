@@ -219,15 +219,23 @@ const SchoolDashboardPage = () => {
             });
             
             const summary = response.data.summary || {};
+            const completa = summary.completa || 0;
+            const mediaAM = summary.mediaAM || 0;
+            const mediaPM = summary.mediaPM || 0;
+            const inactive = summary.inactive || 0;
+            // The backend returns `summary.total` as the sum of route-type counters.
+            // Prefer that value; fall back to the sum of route-types (exclude inactive)
+            const total = typeof summary.total === 'number' ? summary.total : (completa + mediaAM + mediaPM);
             setStudentSummary({
-                completa: summary.completa || 0,
-                mediaAM: summary.mediaAM || 0,
-                mediaPM: summary.mediaPM || 0,
-                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0)
+                completa,
+                mediaAM,
+                mediaPM,
+                inactive,
+                total
             });
         } catch (err) {
             console.error('Error fetching student summary:', err);
-            setStudentSummary({ completa: 0, mediaAM: 0, mediaPM: 0, total: 0 });
+            setStudentSummary({ completa: 0, mediaAM: 0, mediaPM: 0, inactive: 0, total: 0 });
         }
     }, [auth.token, schoolId, schoolYear]);
 
@@ -244,18 +252,20 @@ const SchoolDashboardPage = () => {
                     api.get(`/parents/summary/${schoolId}`, {
                         headers: { Authorization: `Bearer ${auth.token}` },
                         params: { schoolYear, serviceStatus: s }
-                    }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0) }))
-                      .catch(() => ({ status: s, total: 0 }))
+                    }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
+                    .catch(() => ({ status: s, total: 0, inactive: 0 }))
                 )),
                 Promise.all(allStatuses.map(s =>
                     api.get(`/students/summary/${schoolId}`, {
                         headers: { Authorization: `Bearer ${auth.token}` },
                         params: { schoolYear, serviceStatus: s }
-                    }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0) }))
-                      .catch(() => ({ status: s, total: 0 }))
+                    }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
+                    .catch(() => ({ status: s, total: 0, inactive: 0 }))
                 ))
             ]);
 
+            // The API's per-status `total` already counts students/families for that status
+            // (route-type counters include those users), so use `total` directly to avoid double-counting.
             const famMap = Object.fromEntries(famResults.map(r => [r.status, r.total]));
             const stuMap = Object.fromEntries(stuResults.map(r => [r.status, r.total]));
 
