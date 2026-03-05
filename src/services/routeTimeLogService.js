@@ -28,6 +28,53 @@ export const getRouteTimeLogs = async (filters = {}) => {
 };
 
 /**
+ * Obtener todos los registros de tiempos que coincidan con los filtros (iterativo)
+ * Usa paginación interna para recolectar todos los elementos y devolverlos como un array plano
+ * @param {Object} filters
+ * @param {number} perPage - tamaño de página para solicitar al backend (por defecto 1000)
+ */
+export const getAllRouteTimeLogs = async (filters = {}, perPage = 1000) => {
+    try {
+        const collected = [];
+        let page = 1;
+        let total = null;
+
+        while (true) {
+            const params = new URLSearchParams();
+            const merged = { ...filters, page, limit: perPage };
+            Object.keys(merged).forEach(key => {
+                if (merged[key] !== undefined && merged[key] !== null && merged[key] !== '') {
+                    params.append(key, merged[key]);
+                }
+            });
+
+            const response = await api.get(`/monitora/route-times?${params.toString()}`);
+            const data = response.data || {};
+            const pageItems = data.timeLogs || data.data || [];
+
+            if (Array.isArray(pageItems) && pageItems.length > 0) {
+                collected.push(...pageItems);
+            }
+
+            // total puede venir en data.total
+            if (total === null) total = data.total ?? null;
+
+            // si no hay total, usar heurística por length < perPage
+            const fetchedCount = pageItems.length;
+            if ((total !== null && collected.length >= Number(total)) || fetchedCount < perPage) {
+                break;
+            }
+
+            page += 1;
+        }
+
+        return collected;
+    } catch (err) {
+        throw err;
+    }
+};
+
+/**
  * Obtener un registro específico por ID
  * @param {number} id - ID del registro
  */
