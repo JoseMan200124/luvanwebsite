@@ -67,11 +67,14 @@ const SERVICE_STATES = {
     }
 };
 
-// Transiciones válidas entre estados
+// Transiciones válidas entre estados.
+// SUSPENDED → ACTIVE está bloqueado intencionalmente en el frontend:
+// la activación directa no tiene sentido si la familia aún tiene mora o no ha firmado contrato.
+// El backend igualmente lo intercepta y asigna SUSPENDED de forma automática.
 const VALID_TRANSITIONS = {
     'ACTIVE': ['PAUSED', 'SUSPENDED', 'INACTIVE'],
     'PAUSED': ['ACTIVE', 'SUSPENDED', 'INACTIVE'],
-    'SUSPENDED': ['ACTIVE', 'INACTIVE'],
+    'SUSPENDED': ['PAUSED', 'INACTIVE'],
     'INACTIVE': ['ACTIVE']
 };
 
@@ -273,6 +276,27 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
                 )}
 
                 <Divider sx={{ my: 3 }} />
+
+                {/* Aviso cuando el estado actual es SUSPENDED */}
+                {currentStatus === 'SUSPENDED' && userType === 'FAMILY' && (
+                    <Alert severity="warning" sx={{ mb: 3 }}>
+                        <Typography variant="body2" fontWeight={600} gutterBottom>
+                            La familia está Suspendida
+                        </Typography>
+                        <Typography variant="caption" component="div">
+                            No se puede cambiar directamente a <strong>Activo</strong> desde este estado.
+                            <br />
+                            <br />
+                            Para que el sistema active el servicio de forma automática, se debe cumplir con los siguientes requisitos:
+                            <br />
+                            • Tener contrato firmado
+                            <br />
+                            • No se deben tener períodos vencidos
+                            <br />
+                            • No se debe tener mora acumulada
+                        </Typography>
+                    </Alert>
+                )}
 
                 {/* Selección de nuevo estado */}
                 <FormControl fullWidth sx={{ mb: 3 }}>
