@@ -53,7 +53,7 @@ function App() {
                         key={submodule.path}
                         path={submodule.path}
                         element={
-                            <ProtectedRoute 
+                            <ProtectedRoute
                                 roles={submodule.roles}
                                 moduleKey={submodule.key}
                             >
@@ -104,7 +104,6 @@ function App() {
                         }
                     />
 
-                    {/* Inscripción colegios (pública) */}
                     <Route path="/schools/enroll/:schoolId" element={<SchoolEnrollmentPage />} />
 
                     {/* Inscripción corporaciones (pública) */}
