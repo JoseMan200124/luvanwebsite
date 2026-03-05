@@ -1861,6 +1861,15 @@ const SchoolPaymentsPage = () => {
         if (paymentMoment.isSameOrAfter(today)) {
             return null;
         }
+
+        // Si existe una fecha de congelamiento, no permitir retroactivo para fechas iguales o posteriores a la fecha de congelamiento.
+        const freezeDateStr = registerPaymentTarget?.penaltyFrozenAt || registerPaymentTarget?.penaltyFrozenUntil || null;
+        if (freezeDateStr) {
+            const freezeMoment = moment(freezeDateStr).startOf('day');
+            if (!paymentMoment.isBefore(freezeMoment)) {
+                return null;
+            }
+        }
         
         // Si la fecha de pago es antes del inicio de mora, no hay mora
         if (paymentMoment.isBefore(penaltyStart)) {
