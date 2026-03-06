@@ -1,5 +1,5 @@
 // src/pages/ParentPaymentPage.jsx
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useContext, useEffect } from 'react';
 import {
     Box, Typography, Button, Card, CardContent,
     Snackbar, Alert, CircularProgress, Container, Modal
@@ -8,6 +8,7 @@ import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
 import Webcam from 'react-webcam';
 import api from '../utils/axiosConfig';
+import { AuthContext } from '../context/AuthProvider';
 
 /* ---------- estilos auxiliares ---------- */
 const HiddenInput = styled.input`display:none;`;
@@ -22,11 +23,30 @@ const WebcamWrapper = styled(Box)`
 const videoConstraints = { width: 600, height: 400, facingMode: 'environment' };
 
 const ParentPaymentPage = () => {
+    const { auth } = useContext(AuthContext);
+    const isSuspended = auth?.user?.serviceStatus === 'SUSPENDED';
+
     const [file, setFile]       = useState(null);
     const [preview, setPreview] = useState(null);
     const [loading, setLoading] = useState(false);
     const [snackbar,setSnackbar]= useState({ open:false, msg:'', sev:'success' });
     const [openCam, setOpenCam] = useState(false);
+
+    // Determinar si la suspensión es por falta de contrato
+    const [isSuspendedForNoContract, setIsSuspendedForNoContract] = useState(false);
+
+    useEffect(() => {
+        if (!isSuspended) return;
+        const userId = auth?.user?.id;
+        if (!userId) return;
+        api.get(`/parents/${userId}/filled-contracts`)
+            .then(res => {
+                const filled = Array.isArray(res.data?.filledContracts) ? res.data.filledContracts : [];
+                setIsSuspendedForNoContract(filled.length === 0);
+            })
+            .catch(() => setIsSuspendedForNoContract(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isSuspended, auth?.user?.id]);
 
     const webcamRef = useRef(null);
 
@@ -79,6 +99,37 @@ const ParentPaymentPage = () => {
     };
 
     /* ------------ render ------------ */
+    if (isSuspendedForNoContract) {
+        return (
+            <>
+                <ParentNavbar />
+                <Container maxWidth="sm" sx={{ py: 6 }}>
+                    <Card elevation={3}>
+                        <Box sx={{ backgroundColor: '#d32f2f', color: '#FFF', p: 2, borderRadius: '8px 8px 0 0' }}>
+                            <Typography variant="h6" align="center">Cargar Boleta de Pago</Typography>
+                        </Box>
+                        <CardContent sx={{ textAlign: 'center', py: 4 }}>
+                            <Typography variant="h6" color="error" gutterBottom>
+                                Servicio suspendido
+                            </Typography>
+                            <Typography variant="body1" sx={{ mb: 3 }}>
+                                No puedes subir boletas de pago porque <strong>aún no has firmado el contrato</strong>.
+                                Regresa al inicio y firma el contrato para activar tu servicio.
+                            </Typography>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                onClick={() => { window.location.href = '/parent/dashboard'; }}
+                            >
+                                Ir a Firmar Contrato
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </Container>
+            </>
+        );
+    }
+
     return (
         <>
             <ParentNavbar />

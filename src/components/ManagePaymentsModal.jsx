@@ -268,10 +268,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             });
         }
         if (name === 'suspend' || name === 'activate') {
-            const desiredStatus = name === 'suspend' ? 'INACTIVO' : 'ACTIVO';
             setLocalPayment(prev => {
                 if (!prev) return prev;
-                return { ...prev, status: desiredStatus };
+                return { ...prev, serviceStatus: name === 'suspend' ? 'INACTIVE' : 'ACTIVE' };
             });
         }
 
@@ -291,9 +290,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
         // Update local state for suspend/activate actions
         if (name === 'suspend') {
-            setLocalPayment(prev => ({ ...prev, status: 'INACTIVO', finalStatus: 'INACTIVO' }));
+            setLocalPayment(prev => ({ ...prev, serviceStatus: 'INACTIVE' }));
         } else if (name === 'activate') {
-            setLocalPayment(prev => ({ ...prev, status: 'ACTIVO' }));
+            setLocalPayment(prev => ({ ...prev, serviceStatus: 'ACTIVE' }));
         }
 
         onAction(name, { payment: localPayment || payment, ...payload });
@@ -389,9 +388,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         </Box>
                                     </Box>
                                 ) : (() => {
-                                    // Check payment status (ACTIVO, PENDIENTE, etc.) - not INACTIVO means active
-                                    const paymentStatus = (localPayment || payment)?.status;
-                                    const isActive = paymentStatus && paymentStatus !== 'INACTIVO';
+                                    // Check service status - INACTIVE means suspended
+                                    const svcStatus = (localPayment || payment)?.serviceStatus;
+                                    const isActive = svcStatus !== 'INACTIVE';
                                     return (
                                         <Box component="span" sx={{ ml: 1 }}>
                                             <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, bgcolor: isActive ? 'success.main' : 'error.main', color: 'white', fontSize: 12 }}>
@@ -472,7 +471,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         {localPayment?.penaltyFrozenAt ? 'Reanudar Mora' : 'Congelar Mora'}
                     </Button>
                     {/* Suspend/Activate: toggle based on payment status */}
-                    <Button variant="outlined" startIcon={(localPayment || payment)?.status !== 'INACTIVO' ? <BlockIcon /> : <CheckCircleIcon />} onClick={() => { if (!isDeleted) handleAction((localPayment || payment)?.status !== 'INACTIVO' ? 'suspend' : 'activate'); }} disabled={isDeleted}>{(localPayment || payment)?.status !== 'INACTIVO' ? 'Suspender' : 'Activar'}</Button>
+                    <Button variant="outlined" startIcon={(localPayment || payment)?.serviceStatus !== 'INACTIVE' ? <BlockIcon /> : <CheckCircleIcon />} onClick={() => { if (!isDeleted) handleAction((localPayment || payment)?.serviceStatus !== 'INACTIVE' ? 'suspend' : 'activate'); }} disabled={isDeleted}>{(localPayment || payment)?.serviceStatus !== 'INACTIVE' ? 'Suspender' : 'Activar'}</Button>
                     {/* Delete/Revert payment */}
                     <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) setOpenDeleteDialog(true); }} disabled={isDeleted}>Revertir pago</Button>
                 </Box>

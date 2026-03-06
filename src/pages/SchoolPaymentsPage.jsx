@@ -28,7 +28,9 @@ import {
     Tabs,
     Tab,
     Switch,
-    Tooltip
+    Tooltip,
+    ToggleButton,
+    ToggleButtonGroup
 } from '@mui/material';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
@@ -119,7 +121,9 @@ const SchoolPaymentsPage = () => {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [autoDebitFilter, setAutoDebitFilter] = useState('');
+    const [serviceStatusFilter, setServiceStatusFilter] = useState('');
     const [showDeleted, setShowDeleted] = useState(false);
+    const [countersView, setCountersView] = useState('payment'); // 'payment' o 'service'
     useEffect(() => {
         if (statusFilter) setShowDeleted(false);
     }, [statusFilter]);
@@ -143,7 +147,8 @@ const SchoolPaymentsPage = () => {
 
     // Indicators derived from analysisData/combinedEarnings
     // IMPORTANTE: Solo contar usuarios activos (state !== 0)
-    // V2: Estados son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO, INACTIVO
+    // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO
+    // El estado INACTIVO es exclusivo del serviceStatus (estado del servicio), no del pago
     const confirmadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'CONFIRMADO')?.count || 0;
     const adelantadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ADELANTADO')?.count || 0;
     const pagadoCount = confirmadoCount + adelantadoCount; // CONFIRMADO + ADELANTADO = pagos al día
@@ -151,7 +156,7 @@ const SchoolPaymentsPage = () => {
     const atrasadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ATRASADO')?.count || 0;
     const enProcesoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'EN_PROCESO')?.count || 0;
     const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
-    const inactivoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'INACTIVO')?.count || 0;
+    const inactivoCount = paymentsAll.filter(p => (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE').length;
     const eliminadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ELIMINADO')?.count || 0;
     const currentMonthEarnings = combinedEarnings.find(item =>
         item.year === moment().year() && item.month === (moment().month() + 1)
@@ -178,6 +183,24 @@ const SchoolPaymentsPage = () => {
     // Eficiencia de cobro: (Ingreso Real / Ingreso Potencial) * 100
     const ingresoPotencial = Number(analysisData?.totals?.netMonthlyFee || 0) * (combinedEarnings.filter(i => i.total > 0).length || 1);
     const eficienciaCobro = ingresoPotencial > 0 ? ((ingresoTotal / ingresoPotencial) * 100).toFixed(1) : 0;
+    
+    // Contadores de estado del servicio (calculados desde paymentsAll)
+    const serviceActiveCount = paymentsAll.filter(p => {
+        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+        return serviceStatus === 'ACTIVE';
+    }).length;
+    const servicePausedCount = paymentsAll.filter(p => {
+        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+        return serviceStatus === 'PAUSED';
+    }).length;
+    const serviceSuspendedCount = paymentsAll.filter(p => {
+        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+        return serviceStatus === 'SUSPENDED';
+    }).length;
+    const serviceInactiveCount = paymentsAll.filter(p => {
+        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+        return serviceStatus === 'INACTIVE';
+    }).length;
     
     // Tendencia (comparar mes actual vs mes anterior)
     const currentMonth = moment().month() + 1;
@@ -253,7 +276,13 @@ const SchoolPaymentsPage = () => {
             const st = status ? String(status).toUpperCase().trim() : '';
             const qq = q ? String(q).trim() : '';
             const params = { schoolId, schoolYear, page: 1, limit: 10000 };
-            if (st) params.status = st;
+
+            // MORA y PENDIENTE son valores de finalStatus → filtrar en el servidor.
+            // PAGADO (= CONFIRMADO + ADELANTADO) e INACTIVO (= serviceStatus INACTIVE)
+            // se manejan solo en cliente porque no son un único valor de columna.
+            const SERVER_FINAL_STATUS = new Set(['MORA', 'PENDIENTE', 'EN_PROCESO', 'ATRASADO', 'CONFIRMADO', 'ADELANTADO', 'ELIMINADO']);
+            if (st && SERVER_FINAL_STATUS.has(st)) params.finalStatus = st;
+            // PAGADO e INACTIVO: no enviar filtro al servidor, el cliente filtra
             if (qq) params.search = qq;
             // include auto-debit filter if set: 'yes'|'no'
             if (autoDebitFilter === 'yes') params.autoDebit = true;
@@ -270,7 +299,8 @@ const SchoolPaymentsPage = () => {
                 const pages = Math.ceil(Number(total) / per);
                 const all = [];
                 for (let p = 0; p < pages; p++) {
-                    const r = await api.get('/payments', { params: { schoolId, schoolYear, page: p + 1, limit: per, ...(st ? { status: st } : {}), ...(qq ? { search: qq } : {}) } });
+                    const serverFilter = st && SERVER_FINAL_STATUS.has(st) ? { finalStatus: st } : {};
+                    const r = await api.get('/payments', { params: { schoolId, schoolYear, page: p + 1, limit: per, ...serverFilter, ...(qq ? { search: qq } : {}) } });
                     const part = r.data.payments || r.data.rows || [];
                     if (Array.isArray(part) && part.length > 0) all.push(...part);
                 }
@@ -310,28 +340,27 @@ const SchoolPaymentsPage = () => {
             const res = await api.get('/payments/analysis', { params: { schoolId: schId, schoolYear, excludeInactive: true } });
             // expected shape: { statusDistribution: [...], monthlyEarnings: [...] }
             const data = res.data || null;
-            // Exclude families marked as deleted from the "Distribución de Familias".
-            // If the backend included an ELIMINADO bucket, remove it and adjust totalPayments accordingly.
+            // Keep ELIMINADO in statusDistribution so the counter chip reads the correct value.
+            // Only exclude it from totalPayments (active-family count).
             const originalDist = Array.isArray(data?.statusDistribution) ? data.statusDistribution : [];
             const eliminatedEntry = originalDist.find(s => (s.finalStatus || '').toUpperCase() === 'ELIMINADO');
             const eliminatedCount = eliminatedEntry?.count || 0;
-            const filteredDist = originalDist.filter(s => (s.finalStatus || '').toUpperCase() !== 'ELIMINADO');
             const sanitized = {
                 ...data,
-                statusDistribution: filteredDist,
+                statusDistribution: originalDist,
                 totalPayments: Math.max(0, (data?.totalPayments || 0) - eliminatedCount)
             };
             setAnalysisData(sanitized);
             setCombinedEarnings(Array.isArray(data?.monthlyEarnings) ? data.monthlyEarnings : []);
     } catch (e) {
             // fallback: derive from current payments (best-effort)
-            // IMPORTANTE: Excluir usuarios inactivos de los conteos de PAGADO/MORA/PENDIENTE
+            // IMPORTANTE: Separar familias con servicio inactivo (serviceStatus=INACTIVE)
             try {
-                const isUserActive = (p) => Number(p.User?.state) !== 0;
-                const activePayments = (paymentsAll || []).filter(isUserActive);
-                const inactivePayments = (paymentsAll || []).filter(p => !isUserActive(p));
+                const isServiceInactive = (p) => (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE';
+                const activePayments = (paymentsAll || []).filter(p => !isServiceInactive(p));
+                const inactivePayments = (paymentsAll || []).filter(isServiceInactive);
                 
-                // V2: Estados son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO, INACTIVO
+                // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO
                 const confirmado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'CONFIRMADO').length;
                 const adelantado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'ADELANTADO').length;
                 const mora = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'MORA').length;
@@ -429,20 +458,20 @@ const SchoolPaymentsPage = () => {
             const st = statusFilter ? String(statusFilter).toUpperCase().trim() : '';
             const qq = search ? String(search).toLowerCase().trim() : '';
             const arr = (paymentsAll || []).filter(p => {
-                // Determinar si el usuario está inactivo (state = 0)
-                const isUserInactive = Number(p.User?.state) === 0;
+                // Determinar si la familia tiene servicio inactivo (serviceStatus = INACTIVE)
+                const isServiceInactive = (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE';
                 const isDeleted = !!p.User?.FamilyDetail?.deleted;
 
                 if (st) {
                     if (st === 'INACTIVO') {
-                        // Filtrar solo usuarios inactivos
-                        if (!isUserInactive) return false;
+                        // Filtrar solo familias con servicio inactivo
+                        if (!isServiceInactive) return false;
                     } else if (st === 'ELIMINADO') {
                         // Filtrar solo eliminados
                         if (!isDeleted) return false;
                     } else {
-                        // Para otros estados, excluir usuarios inactivos y filtrar por finalStatus
-                        if (isUserInactive) return false;
+                        // Para otros estados, excluir familias con servicio inactivo y filtrar por finalStatus
+                        if (isServiceInactive) return false;
                         if (isDeleted && !showDeleted) return false;
                         const s = (p.finalStatus || p.status || '').toUpperCase();
                         
@@ -456,11 +485,10 @@ const SchoolPaymentsPage = () => {
                 } else {
                     // No se seleccionó estado: aplicar reglas por defecto
                     if (isDeleted && !showDeleted) return false;
-                    if (isUserInactive) return false;
 
                     const s = (p.finalStatus || p.status || '').toUpperCase();
                     const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
-                    if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO'))) return false;
+                    if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO') || isServiceInactive)) return false;
                 }
                 if (qq) {
                     const familyLast = (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toLowerCase();
@@ -473,6 +501,11 @@ const SchoolPaymentsPage = () => {
                     const auto = !!(p.automaticDebit || p.User?.FamilyDetail?.automaticDebit || p.User?.FamilyDetail?.autoDebit);
                     if (auto) return false;
                 }
+                // Filtrado por estado del servicio
+                if (serviceStatusFilter) {
+                    const paymentServiceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
+                    if (paymentServiceStatus !== serviceStatusFilter) return false;
+                }
                 return true;
             });
             setFiltered(arr);
@@ -481,7 +514,7 @@ const SchoolPaymentsPage = () => {
             console.error('filtering error', e);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted]);
+    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, serviceStatusFilter]);
 
     const handleBack = () => {
         navigate(`/admin/escuelas/${schoolYear || ''}/${schoolId}`, { state: { school, schoolYear } });
@@ -506,6 +539,7 @@ const SchoolPaymentsPage = () => {
             if (key === 'discount') return Number(p.User?.FamilyDetail?.specialFee ?? p.specialFee ?? 0) || 0;
             if (key === 'invoice') return !!(p.User?.FamilyDetail?.requiresInvoice || p.requiresInvoice) ? 1 : 0;
             if (key === 'status') return (p.finalStatus || '').toString().toLowerCase();
+            if (key === 'serviceStatus') return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
         } catch (e) {
             return '';
         }
@@ -985,6 +1019,15 @@ const SchoolPaymentsPage = () => {
                 return;
             }
 
+            // Intentar traer el detalle completo del pago (incluye `periods`) para construir la tabla por MES.
+            let paymentDetail = null;
+            try {
+                const detailRes = await api.get(`/payments/by-user/${userId}`);
+                paymentDetail = detailRes?.data?.payment || null;
+            } catch (e) {
+                paymentDetail = null;
+            }
+
             const attemptFetch = async (params) => {
                 try {
                     const r = await api.get('/payments/paymenthistory', { params: { ...params, schoolYear } });
@@ -999,6 +1042,7 @@ const SchoolPaymentsPage = () => {
             let res;
             let transactions = [];
             let histories = []; // Declarar la variable histories
+            let noTransactions = false;
             
             try {
                 // Primero intentar con el endpoint V2 de transacciones
@@ -1041,20 +1085,32 @@ const SchoolPaymentsPage = () => {
                         try {
                             const res2 = await attemptFetch({ paymentId, page: 0, limit: 1000 });
                             const fallbackHist = res2.data.histories || res2.data || [];
-                            if (Array.isArray(fallbackHist) && fallbackHist.length > 0) {
-                                histories = fallbackHist;
-                            } else {
-                                setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
-                                return;
-                            }
+                                        if (Array.isArray(fallbackHist) && fallbackHist.length > 0) {
+                                            histories = fallbackHist;
+                                        } else {
+                                            // No hay historial encontrado: continuar y generar PDF indicando ausencia de transacciones
+                                            histories = [];
+                                            noTransactions = true;
+                                        }
                         } catch (e) {
                             console.error('[handleDownloadHistory] fallback fetch error', e && e.response ? e.response.data || e.response : e);
-                            setSnackbar({ open: true, message: 'Error consultando historial (fallback)', severity: 'error' });
-                            return;
+                            const status = e && e.response && e.response.status;
+                            const respData = e && e.response && e.response.data;
+                            // If API indicates not found or no content, treat as no transactions
+                            if (status === 404 || status === 204 || (respData && typeof respData === 'string' && /not found|no history|no transactions/i.test(respData))) {
+                                // Treat as no transactions and continue to generate a PDF with a placeholder
+                                histories = [];
+                                noTransactions = true;
+                            } else {
+                                // Otherwise, generic error when generating PDF
+                                setSnackbar({ open: true, message: 'No es posible generar el PDF por un error consultando historial', severity: 'error' });
+                                return;
+                            }
                         }
                     } else {
-                        setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
-                        return;
+                        // No paymentId available: treat as no transactions and continue
+                        histories = [];
+                        noTransactions = true;
                     }
                 }
             }
@@ -1077,244 +1133,389 @@ const SchoolPaymentsPage = () => {
 
             // Build PDF
             const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-            
-            let cursorY = 40;
+            const pageWidth = doc.internal.pageSize.width;
+
+            // Colores
+            const GREEN = [146, 208, 80];
+            const GRID = [0, 0, 0];
+
+            const familyPayment = payment || {};
+            const periodsPayment = paymentDetail || payment || {};
 
             // Try to load logo from public folder
             const logoUrl = '/logo.png';
             const logoData = await fetchImageDataUrl(logoUrl);
-            const logoWidth = 80;
-            const logoHeight = 80;
+            const headerTopY = 36;
+            let logoDrawnH = 0;
+            let logoDrawnW = 0;
             if (logoData) {
-                doc.addImage(logoData, 'PNG', 40, cursorY, logoWidth, logoHeight);
+                const maxLogoW = 120;
+                const maxLogoH = 80;
+                try {
+                    const props = doc.getImageProperties(logoData);
+                    const imgW = Number(props?.width || 0) || 1;
+                    const imgH = Number(props?.height || 0) || 1;
+                    const scale = Math.min(maxLogoW / imgW, maxLogoH / imgH);
+                    const drawW = imgW * scale;
+                    const drawH = imgH * scale;
+                    logoDrawnH = drawH;
+                    logoDrawnW = drawW;
+                    doc.addImage(logoData, props?.fileType || 'PNG', 40, headerTopY, drawW, drawH);
+                } catch (e) {
+                    // Fallback: draw without distortion by using a rectangular box closer to typical logo proportions
+                    const fallbackW = 120;
+                    const fallbackH = 60;
+                    logoDrawnH = fallbackH;
+                    logoDrawnW = fallbackW;
+                    doc.addImage(logoData, 'PNG', 40, headerTopY, fallbackW, fallbackH);
+                }
             }
 
-            // Título de la tabla según si tenemos transacciones V2 o historial antiguo
-            const isV2Data = transactions.length > 0;
-            
-            // Header text con indicador de versión
-            doc.setFontSize(18);
+            // Header center X: center text within the available space to the right of the logo
+            const headerLeftX = 40;
+            const headerRightX = pageWidth - 40;
+            const headerContentLeftX = logoDrawnW > 0 ? (headerLeftX + logoDrawnW + 14) : headerLeftX;
+            const headerCenterX = (headerContentLeftX + headerRightX) / 2;
+
+            // Title centered
+            doc.setFontSize(16);
             doc.setFont(undefined, 'bold');
-            const title = `Estado de Cuenta - Historial de ${isV2Data ? 'Transacciones (V2)' : 'Pagos'}`;
-            const titleX = logoData ? 40 + logoWidth + 20 : 40;
-            doc.text(title, titleX, cursorY + 24);
-            doc.setFontSize(10);
+            doc.text('Estado de cuentas- Historial de Transacciones', headerCenterX, headerTopY + 30, { align: 'center' });
+            doc.setFontSize(9);
             doc.setFont(undefined, 'normal');
-            doc.text(`Generado: ${moment().format('YYYY-MM-DD HH:mm')}`, titleX, cursorY + 42);
-            
-            if (isV2Data) {
-                doc.setFontSize(8);
-                doc.setFont(undefined, 'italic');
-                doc.text('Sistema V2 - Detalle completo de transacciones', titleX, cursorY + 54);
-            }
+            doc.text(`Generado: ${moment().format('YYYY-MM-DD HH:mm')}`, headerCenterX, headerTopY + 46, { align: 'center' });
 
-            // increase vertical spacing between logo and the family summary block
-            cursorY += Math.max(logoHeight, 60) + 18;
+            // Summary block
+            let cursorY = headerTopY + Math.max(logoDrawnH || 0, 60) + 20;
 
-            // Family / summary block
-            const familyLastName = payment?.User?.FamilyDetail?.familyLastName || payment?.User?.familyLastName || '';
-            const studentsArr = Array.isArray(payment?.User?.FamilyDetail?.Students) ? payment.User.FamilyDetail.Students : [];
-            const studentCount = studentsArr.length || payment?.studentCount || 0;
-            const routeType = payment?.User?.FamilyDetail?.routeType || '';
-            const tarifa = Number(payment?.netMonthlyFee || 0);
-            const descuento = Number(payment?.User?.FamilyDetail?.specialFee ?? payment?.specialFee ?? 0);
-            const leftover = Number(payment?.balanceDue || 0);
+            const familyLastName = familyPayment?.User?.FamilyDetail?.familyLastName
+                || familyPayment?.User?.familyLastName
+                || familyPayment?.user?.FamilyDetail?.familyLastName
+                || paymentDetail?.User?.FamilyDetail?.familyLastName
+                || paymentDetail?.User?.familyLastName
+                || paymentDetail?.user?.FamilyDetail?.familyLastName
+                || '';
 
+            const studentsArr = Array.isArray(familyPayment?.User?.FamilyDetail?.Students)
+                ? familyPayment.User.FamilyDetail.Students
+                : (Array.isArray(familyPayment?.user?.FamilyDetail?.Students) ? familyPayment.user.FamilyDetail.Students : []);
+
+            const studentCount = studentsArr.length
+                || Number(familyPayment?.User?.FamilyDetail?.studentsCount || familyPayment?.user?.FamilyDetail?.studentsCount || 0)
+                || Number(familyPayment?.studentCount || 0)
+                || 0;
+
+            const routeType = familyPayment?.User?.FamilyDetail?.routeType
+                || familyPayment?.user?.FamilyDetail?.routeType
+                || '';
+
+            // Tarifa / descuento: preferir valores del payment; fallback a primer período si existe
+            const periodsRaw = Array.isArray(periodsPayment?.periods)
+                ? periodsPayment.periods
+                : [];
+
+            const firstPeriod = periodsRaw && periodsRaw.length > 0 ? periodsRaw.slice().sort((a, b) => String(a?.period || '').localeCompare(String(b?.period || '')))[0] : null;
+
+            const monthlyTariff = Number(periodsPayment?.monthlyFee ?? periodsPayment?.monthlyFeeAmount ?? firstPeriod?.originalAmount ?? 0) || 0;
+            const familyDiscount = Number(
+                familyPayment?.User?.FamilyDetail?.specialFee
+                || familyPayment?.user?.FamilyDetail?.specialFee
+                || periodsPayment?.specialDiscount
+                || periodsPayment?.specialFee
+                || firstPeriod?.discountApplied
+                || 0
+            ) || 0;
+
+            const monthlyNet = Number(periodsPayment?.netMonthlyFee ?? (monthlyTariff - familyDiscount)) || 0;
+
+            // Tarifa base (por estudiante) para el tipo de ruta.
+            // Preferir derivarla desde el total mensual / cant. estudiantes; fallback a tarifas de School si están disponibles.
+            const safeStudentCount = Math.max(1, Number(studentCount || 1));
+            const schoolObj = familyPayment?.School || familyPayment?.school || periodsPayment?.School || periodsPayment?.school || null;
+            const routeUpper = String(routeType || '').toUpperCase().trim();
+            const schoolBaseFee = (() => {
+                const complete = Number(schoolObj?.transportFeeComplete ?? 0) || 0;
+                const half = Number(schoolObj?.transportFeeHalf ?? 0) || 0;
+                if (!complete && !half) return 0;
+                if (routeUpper.includes('COMPLETA') || routeUpper.includes('COMPLETO')) return complete;
+                return half || complete;
+            })();
+            const baseTariff = (monthlyTariff > 0 && safeStudentCount > 0)
+                ? (monthlyTariff / safeStudentCount)
+                : (schoolBaseFee || 0);
+
+            const rawServiceStatus = (
+                familyPayment?.serviceStatus
+                || familyPayment?.User?.FamilyDetail?.serviceStatus
+                || familyPayment?.user?.FamilyDetail?.serviceStatus
+                || ''
+            ).toString().toUpperCase().trim();
+
+            const serviceStatusLabel = {
+                ACTIVE: 'ACTIVO',
+                PAUSED: 'PAUSADO',
+                SUSPENDED: 'SUSPENDIDO',
+                INACTIVE: 'INACTIVO',
+                DELETED: 'ELIMINADO'
+            }[rawServiceStatus] || (rawServiceStatus || '-');
+
+            const rawFinalStatus = (familyPayment?.finalStatus || '').toString().toUpperCase().trim();
+            const paymentStatusLabel = ['CONFIRMADO', 'ADELANTADO'].includes(rawFinalStatus)
+                ? 'PAGADO'
+                : (rawFinalStatus || '-');
+
+            // Left summary
             doc.setFontSize(11);
             doc.setFont(undefined, 'bold');
-            doc.text('Apellidos Familia:', 40, cursorY);
+            doc.text('Apellidos de Familia:', 40, cursorY);
             doc.setFont(undefined, 'normal');
             doc.text(String(familyLastName || '-'), 160, cursorY);
 
             doc.setFont(undefined, 'bold');
-            doc.text('Cant. Hijos:', 40, cursorY + 16);
+            doc.text('Cant. Hijos:', 40, cursorY + 18);
             doc.setFont(undefined, 'normal');
-            doc.text(String(studentCount), 160, cursorY + 16);
+            doc.text(String(studentCount || 0), 160, cursorY + 18);
 
-            // Keep a reference to top of this summary block for right-side alignment
-            // Align right-side summary to the same Y as 'Apellidos Familia'
-            const summaryTopY = cursorY;
+            // Right summary as a table (distinct style; no title/header)
+            const rightLabelX = 340;
+            const rightStartY = cursorY;
+            const discountPct = (monthlyTariff > 0 && familyDiscount > 0)
+                ? Math.round((familyDiscount / monthlyTariff) * 100)
+                : 0;
+            const discountLabel = discountPct > 0 ? `Descuento (${discountPct}%)` : 'Descuento:';
+            const summaryRows = [
+                ['Tipo de Ruta:', String(routeType || '-')],
+                ['Tarifa base:', `Q${baseTariff.toFixed(2)}`],
+                [`Tarifa (${studentCount || 0} ${Number(studentCount || 0) === 1 ? 'estudiante' : 'estudiantes'}):`, `Q${monthlyTariff.toFixed(2)}`],
+                [discountLabel, `Q${familyDiscount.toFixed(2)}`],
+                ['Cuota mensual:', `Q${monthlyNet.toFixed(2)}`],
+                ['Estado de Pago:', String(paymentStatusLabel || '-')],
+                ['Estado del Servicio:', String(serviceStatusLabel || '-')],
+            ];
 
-            // Small table for children: first row is a centered title 'Hijos', then header Nombre | Grado
+            let summaryTableFinalY = rightStartY;
+            autoTable(doc, {
+                startY: rightStartY - 2,
+                margin: { left: rightLabelX, right: 40 },
+                body: summaryRows,
+                showHead: 'never',
+                theme: 'grid',
+                styles: { fontSize: 10, textColor: 0, cellPadding: 3.2, lineColor: GRID, lineWidth: 0.8 },
+                columnStyles: {
+                    0: { fontStyle: 'bold', fillColor: [245, 245, 245], cellWidth: 120 },
+                    1: { halign: 'right', cellWidth: 95 }
+                }
+            });
+            summaryTableFinalY = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY !== 'undefined')
+                ? doc.lastAutoTable.finalY
+                : summaryTableFinalY;
+
+            // Children table (verde)
             const childTableBody = (studentsArr || []).map(s => {
-                const name = (s.fullName || s.firstName || s.name || '').toString().trim();
-                const last = (s.lastName || '').toString().trim();
-                const full = name && last ? `${name} ${last}` : (name || last || '-');
+                const full = (s.fullName || s.name || '').toString().trim() || '-';
                 const grade = (s.grade || s.gradeName || s.level || '').toString().trim() || '-';
                 return [full, grade];
             });
 
-            if (childTableBody.length > 0) {
-                autoTable(doc, {
-                    startY: cursorY + 36,
-                    margin: { left: 40 },
-                    head: [
-                        [ { content: 'Hijos', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold', fontSize: 11, textColor: 255, fillColor: [68,114,196] } } ],
-                        ['Nombre', 'Grado']
-                    ],
-                    body: childTableBody,
-                    styles: { fontSize: 9, cellPadding: 4, lineColor: [200,200,200], lineWidth: 0.5 },
-                    headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center' },
-                    columnStyles: { 0: { cellWidth: 160 }, 1: { cellWidth: 60, halign: 'center' } },
-                    tableWidth: 'auto',
-                    theme: 'grid',
-                });
-                // move cursorY to after the child table (use lastAutoTable.finalY when available)
-                cursorY = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY !== 'undefined') ? doc.lastAutoTable.finalY + 10 : cursorY + 80;
-            } else {
-                // still render a small table with title + empty row
-                autoTable(doc, {
-                    startY: cursorY + 36,
-                    margin: { left: 40 },
-                    head: [ [ { content: 'Hijos', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold', fontSize: 11, textColor: 255, fillColor: [68,114,196] } } ], ['Nombre', 'Grado'] ],
-                    body: [['-', '-']],
-                    styles: { fontSize: 9, cellPadding: 4, lineColor: [200,200,200], lineWidth: 0.5 },
-                    headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center' },
-                    columnStyles: { 0: { cellWidth: 160 }, 1: { cellWidth: 60, halign: 'center' } },
-                    tableWidth: 'auto',
-                    theme: 'grid',
-                });
-                cursorY = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY !== 'undefined') ? doc.lastAutoTable.finalY + 10 : cursorY + 80;
+            autoTable(doc, {
+                startY: cursorY + 36,
+                margin: { left: 40 },
+                head: [
+                    [{ content: 'HIJOS', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold', fontSize: 10, textColor: 0, fillColor: GREEN, lineColor: GRID, lineWidth: 1 } }],
+                    ['Nombre', 'Grado']
+                ],
+                body: childTableBody.length > 0 ? childTableBody : [['-', '-']],
+                styles: { fontSize: 9, textColor: 0, cellPadding: 4, lineColor: GRID, lineWidth: 1 },
+                headStyles: { fillColor: GREEN, textColor: 0, halign: 'center', lineColor: GRID, lineWidth: 1 },
+                columnStyles: { 0: { cellWidth: 170 }, 1: { cellWidth: 70, halign: 'center' } },
+                tableWidth: 'auto',
+                theme: 'grid',
+            });
+
+            const childrenTableFinalY = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY !== 'undefined')
+                ? doc.lastAutoTable.finalY
+                : cursorY + 120;
+
+            // Start the periods table below both summary + children tables
+            cursorY = Math.max(summaryTableFinalY, childrenTableFinalY) + 28;
+
+            // Periods table: construir desde `periods` si está disponible; fallback a unpaidPeriods (solo pendientes)
+            const normalizePeriod = (p) => {
+                const periodKey = (p?.period || '').toString().slice(0, 7);
+                const originalAmount = Number(p?.originalAmount || p?.monthlyFee || 0) || 0;
+                const discountApplied = Number(p?.discountApplied || p?.discount || 0) || 0;
+                const netAmount = Number(p?.netAmount || (originalAmount - discountApplied)) || 0;
+                const amountPaid = Number(p?.amountPaid || 0) || 0;
+                const amountDue = Number(p?.amountDue || p?.amount || 0) || 0;
+                const status = (p?.status || '').toString().toUpperCase().trim();
+                return { period: periodKey, originalAmount, discountApplied, netAmount, amountPaid, amountDue, status };
+            };
+
+            const periods = (() => {
+                if (Array.isArray(periodsRaw) && periodsRaw.length > 0) return periodsRaw.map(normalizePeriod);
+                try {
+                    const raw = periodsPayment?.unpaidPeriods
+                        ? (typeof periodsPayment.unpaidPeriods === 'string'
+                            ? JSON.parse(periodsPayment.unpaidPeriods)
+                            : periodsPayment.unpaidPeriods)
+                        : [];
+                    return (Array.isArray(raw) ? raw : []).map(normalizePeriod);
+                } catch (e) {
+                    return [];
+                }
+            })();
+
+            periods.sort((a, b) => String(a.period || '').localeCompare(String(b.period || '')));
+
+            let noPeriods = false;
+            if (!Array.isArray(periods) || periods.length === 0) {
+                // No periods available: mark flag so we render a placeholder table instead of aborting
+                noPeriods = true;
             }
 
-            // Right-side summary (Tipo de Ruta / Tarifa / Descuento) aligned to top of summary block
-            const rightLabelX = 400;
-            const rightValueX = 480;
-
-            doc.setFont(undefined, 'bold');
-            // Right column labels aligned with Apellidos Familia (same baseline)
-            const rightStartY = summaryTopY;
-            doc.text('Tipo de Ruta:', rightLabelX, rightStartY + 0);
-            doc.setFont(undefined, 'normal');
-            doc.text(String(routeType || '-'), rightValueX, rightStartY + 0);
-
-            doc.setFont(undefined, 'bold');
-            doc.text('Tarifa:', rightLabelX, rightStartY + 16);
-            doc.setFont(undefined, 'normal');
-            doc.text(`Q ${tarifa.toFixed(2)}`, rightValueX, rightStartY + 16);
-
-            doc.setFont(undefined, 'bold');
-            doc.text('Descuento:', rightLabelX, rightStartY + 32);
-            doc.setFont(undefined, 'normal');
-            doc.text(`Q ${descuento.toFixed(2)}`, rightValueX, rightStartY + 32);
-
-            doc.setFont(undefined, 'bold');
-            doc.text('Saldo pendiente:', rightLabelX, rightStartY + 48);
-            doc.setFont(undefined, 'normal');
-            doc.text(`Q ${leftover.toFixed(2)}`, rightValueX + 15, rightStartY + 48);
-
-            // Construcción de la tabla según el tipo de datos
-            let tableHeaders, tableBody, tableColumnStyles;
-            
-            if (isV2Data && transactions.length > 0) {
-                // Tabla V2 con transacciones detalladas
-                tableHeaders = ['Fecha', 'Tipo', 'Monto', 'Fuente', 'N° Boleta', 'Notas'];
-                tableColumnStyles = {
-                    0: { halign: 'center', cellWidth: 60 },  // Fecha
-                    1: { halign: 'center', cellWidth: 80 },  // Tipo
-                    2: { halign: 'right', cellWidth: 60 },   // Monto
-                    3: { halign: 'center', cellWidth: 70 },  // Fuente
-                    4: { halign: 'center', cellWidth: 70 },  // Boleta
-                    5: { halign: 'left', cellWidth: 175 }    // Notas
-                };
-                
-                tableBody = transactions.map(tx => {
-                    const fecha = tx.realPaymentDate || tx.createdAt 
-                        ? moment.parseZone(tx.realPaymentDate || tx.createdAt).format('DD/MM/YY')
-                        : '—';
-                    
-                    // Mapeo de tipos para el PDF
-                    let tipoLabel = tx.type || 'Otro';
-                    switch((tx.type || '').toUpperCase()) {
-                        case 'PAYMENT': tipoLabel = 'Pago Tarifa'; break;
-                        case 'PENALTY_PAYMENT': tipoLabel = 'Pago Mora'; break;
-                        case 'PENALTY_EXONERATION': tipoLabel = 'Exoneración'; break;
-                        case 'PENALTY_DISCOUNT': tipoLabel = 'Desc. Mora'; break;
-                        case 'ADJUSTMENT': tipoLabel = 'Ajuste'; break;
-                        case 'REVERSAL': tipoLabel = 'Reversión'; break;
-                    }
-                    
-                    // Mapeo de fuentes
-                    let fuenteLabel = tx.source || 'Otro';
-                    switch((tx.source || '').toUpperCase()) {
-                        case 'MANUAL': fuenteLabel = 'Manual'; break;
-                        case 'AUTO_DEBIT': fuenteLabel = 'Débito Auto'; break;
-                        case 'ONLINE': fuenteLabel = 'En Línea'; break;
-                        case 'BANK': fuenteLabel = 'Banco'; break;
-                    }
-                    
-                    const monto = Number(tx.amount || 0).toFixed(2);
-                    const boleta = tx.receiptNumber || '—';
-                    const notas = (tx.notes || '').substring(0, 80); // Limitar longitud de notas
-                    
-                    return [fecha, tipoLabel, `Q ${monto}`, fuenteLabel, boleta, notas];
+            // Simular asignación de pagos a períodos para llenar FECHA/MONTO/BOLETA (best-effort)
+            const txs = Array.isArray(transactions) ? transactions : [];
+            const tariffLikeTx = txs
+                .filter(t => {
+                    const tt = String(t?.type || '').toUpperCase().trim();
+                    return tt === 'TARIFA' || tt === 'CREDITO' || tt === 'CREDIT' || tt === 'PAYMENT';
+                })
+                .slice()
+                .sort((a, b) => {
+                    const da = moment.parseZone(a?.realPaymentDate || a?.createdAt || a?.registeredAt || 0).valueOf();
+                    const db = moment.parseZone(b?.realPaymentDate || b?.createdAt || b?.registeredAt || 0).valueOf();
+                    return da - db;
                 });
-            } else {
-                // Tabla antigua con historial de pagos
-                tableHeaders = ['Fecha', 'Tarifa', 'Desc. Fam.', 'Desc. Extra', 'Mora', 'Total Pagar', 'Pago Reg.', 'Crédito'];
-                tableColumnStyles = {
-                    0: { halign: 'center', cellWidth: 55 },
-                    1: { halign: 'center', cellWidth: 50 },
-                    2: { halign: 'center', cellWidth: 50 },
-                    3: { halign: 'center', cellWidth: 50 },
-                    4: { halign: 'center', cellWidth: 50 },
-                    5: { halign: 'center', cellWidth: 60 },
-                    6: { halign: 'center', cellWidth: 55 },
-                    7: { halign: 'center', cellWidth: 55 }
-                };
-                
-                tableBody = (histories || []).map(h => {
-                    const fecha = h.paymentDate ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '—';
-                    const tarifaHist = Number(typeof h.tarif !== 'undefined' ? h.tarif : 0);
-                    const descuentoFamilia = Number(typeof h.familyDiscount !== 'undefined' ? h.familyDiscount : 0);
-                    const descuentoExtra = Number(typeof h.extraordinaryDiscount !== 'undefined' ? h.extraordinaryDiscount : 0);
-                    const penaltyBefore = Number(typeof h.penaltyBefore !== 'undefined' ? h.penaltyBefore : 0);
-                    const totalDueBefore = Number(typeof h.totalDueBefore !== 'undefined' ? h.totalDueBefore : 0);
-                    const totalToPay = totalDueBefore - descuentoExtra - descuentoFamilia;
-                    const pagoRegistrado = Number(typeof h.amountPaid !== 'undefined' ? h.amountPaid : 0);
-                    const credito = Number(typeof h.creditBalanceAfter !== 'undefined' ? h.creditBalanceAfter : 0);
 
-                    return [
-                        fecha,
-                        `Q ${tarifaHist.toFixed(2)}`,
-                        `Q ${descuentoFamilia.toFixed(2)}`,
-                        `Q ${descuentoExtra.toFixed(2)}`,
-                        `Q ${penaltyBefore.toFixed(2)}`,
-                        `Q ${totalToPay.toFixed(2)}`,
-                        `Q ${pagoRegistrado.toFixed(2)}`,
-                        `Q ${credito.toFixed(2)}`
-                    ];
-                });
+            const periodAlloc = periods.map(p => ({
+                ...p,
+                remainingDueSim: Math.max(0, Number(p.netAmount || 0)),
+                appliedSim: 0,
+                paidAt: null,
+                receiptNumber: '',
+                notes: ''
+            }));
+
+            for (const tx of tariffLikeTx) {
+                let txRemaining = Math.max(0, Number(tx?.amount || 0));
+                if (txRemaining <= 0) continue;
+
+                while (txRemaining > 0) {
+                    const idx = periodAlloc.findIndex(pp => Number(pp.remainingDueSim || 0) > 0);
+                    if (idx === -1) break;
+
+                    const due = Number(periodAlloc[idx].remainingDueSim || 0);
+                    const apply = Math.min(txRemaining, due);
+                    if (apply <= 0) break;
+
+                    periodAlloc[idx].remainingDueSim = Math.max(0, due - apply);
+                    periodAlloc[idx].appliedSim = Number(periodAlloc[idx].appliedSim || 0) + apply;
+
+                    // Guardar el último comprobante/fecha asociado a este período
+                    periodAlloc[idx].paidAt = tx?.realPaymentDate || tx?.createdAt || tx?.registeredAt || null;
+                    periodAlloc[idx].receiptNumber = String(tx?.receiptNumber || '').trim();
+                    periodAlloc[idx].notes = String(tx?.notes || '').trim();
+
+                    txRemaining -= apply;
+                }
             }
 
-            // Add table with autoTable
+            const monthNamesUpper = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+            const monthAbbrLower = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+            const formatPaidDate = (d) => {
+                if (!d) return '';
+                const m = moment.parseZone(d);
+                if (!m.isValid()) return '';
+                const day = m.date();
+                const abbr = monthAbbrLower[m.month()] || '';
+                return abbr ? `${day}-${abbr}` : String(day);
+            };
+
+            const money = (v) => {
+                const num = Number(v || 0);
+                return `Q ${num.toFixed(2)}`;
+            };
+
+            let totalTarifa = 0;
+            let totalDesc = 0;
+            let totalFaltante = 0;
+
+            let bodyRows = [];
+
+            if (!noTransactions && !noPeriods) {
+                bodyRows = periodAlloc.map(p => {
+                const mm = moment(`${p.period}-01`, 'YYYY-MM-DD');
+                const mes = mm.isValid() ? (monthNamesUpper[mm.month()] || p.period) : (p.period || '');
+
+                const tarifaV = Number(p.originalAmount || 0);
+                const descV = Number(p.discountApplied || 0);
+                const faltanteV = Number(p.amountDue || 0);
+
+                totalTarifa += tarifaV;
+                totalDesc += descV;
+                totalFaltante += faltanteV;
+
+                const hasPayment = Number(p.amountPaid || 0) > 0 || Number(p.appliedSim || 0) > 0;
+                const fecha = (hasPayment && p.paidAt) ? formatPaidDate(p.paidAt) : '';
+                const montoRaw = Number(p.amountPaid || 0) > 0 ? Number(p.amountPaid || 0) : Number(p.appliedSim || 0);
+                const monto = hasPayment ? money(montoRaw) : '';
+                const boleta = (hasPayment && p.receiptNumber) ? (p.receiptNumber || '') : '';
+                const faltante = faltanteV > 0 ? money(faltanteV) : '-';
+
+                return [mes, money(tarifaV), money(descV), fecha, monto, boleta, faltante];
+                });
+
+                // TOTAL row
+                bodyRows.push(['TOTAL', money(totalTarifa), money(totalDesc), '', '', '', money(totalFaltante)]);
+            } else if (noTransactions) {
+                bodyRows = [[{ content: 'No hay transacciones registradas.', colSpan: 7, styles: { halign: 'center' } }]];
+            } else {
+                bodyRows = [[{ content: 'No se encontraron períodos para mostrar', colSpan: 7, styles: { halign: 'center' } }]];
+            }
+
+            // Main periods table
             autoTable(doc, {
                 startY: cursorY,
-                head: [tableHeaders],
-                body: tableBody,
-                styles: { 
-                    fontSize: isV2Data ? 8 : 9, 
-                    cellPadding: isV2Data ? 5 : 6, 
-                    lineColor: [200,200,200], 
-                    lineWidth: 0.5,
-                    overflow: 'linebreak'
+                margin: { left: 40, right: 40 },
+                head: [[ 'MES', 'TARIFA', 'DESCUENTOS', 'FECHA', 'MONTO', 'BOLETA', 'FALTANTE' ]],
+                body: bodyRows,
+                styles: { fontSize: 8.5, textColor: 0, cellPadding: 4, lineColor: GRID, lineWidth: 1, overflow: 'linebreak' },
+                headStyles: { fillColor: GREEN, textColor: 0, halign: 'center', fontStyle: 'bold', lineColor: GRID, lineWidth: 1 },
+                columnStyles: {
+                    0: { halign: 'left', cellWidth: 98 },
+                    1: { halign: 'right', cellWidth: 64 },
+                    2: { halign: 'right', cellWidth: 72 },
+                    3: { halign: 'center', cellWidth: 52 },
+                    4: { halign: 'right', cellWidth: 58 },
+                    5: { halign: 'center', cellWidth: 84 },
+                    6: { halign: 'right', cellWidth: 70 }
                 },
-                headStyles: { fillColor: [68,114,196], textColor: 255, halign: 'center', fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [245,245,245] },
-                columnStyles: tableColumnStyles,
                 theme: 'grid',
+                didParseCell: (data) => {
+                    // Resaltar total faltante en rojo
+                    const isTotalRow = data.row && data.row.index === bodyRows.length - 1;
+                    if (isTotalRow && data.column && data.column.index === 6) {
+                        data.cell.styles.textColor = [244, 67, 54];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                    if (isTotalRow) {
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                },
                 didDrawPage: (data) => {
-                    // Footer con número de página
                     const pageCount = doc.internal.getNumberOfPages();
                     doc.setFontSize(8);
                     doc.setTextColor(150);
-                    doc.text(`Página ${data.pageNumber} de ${pageCount}`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 20, { align: 'center' });
+                    doc.text(`Página ${data.pageNumber} de ${pageCount}`, pageWidth / 2, doc.internal.pageSize.height - 18, { align: 'center' });
+                    doc.setTextColor(0, 0, 0);
                 }
             });
 
             // finalize and save
-            // Build the requested filename: "Reporte Historial de Pagos ApellidosFamilia.pdf"
-            const familyForName = (familyLastName && String(familyLastName).trim()) ? String(familyLastName).replace(/\s+/g, '_') : 'Familia';
+            const familyForName = (familyLastName && String(familyLastName).trim())
+                ? String(familyLastName).replace(/\s+/g, '_')
+                : 'Familia';
             const fileName = `Reporte Historial de Pagos Familia ${familyForName}.pdf`;
             doc.save(fileName);
             setSnackbar({ open: true, message: 'Descarga iniciada', severity: 'success' });
@@ -1501,15 +1702,36 @@ const SchoolPaymentsPage = () => {
     // --- Export by status UI state ---
     const [openExportStatusDialog, setOpenExportStatusDialog] = useState(false);
     // Export dialog additional filters: separate month and year selectors
-    const [exportMonth, setExportMonth] = useState(''); // '' or '01'..'12'
+    const [exportMonth, setExportMonth] = useState('TODOS'); // 'TODOS' or '01'..'12'
     // Final status selector for export (MORA, PENDIENTE, PAGADO)
-    const [exportFinalStatus, setExportFinalStatus] = useState('MORA');
-    // Lock year to 2025 as requested
-    const exportYear = '2025';
+    const [exportFinalStatus, setExportFinalStatus] = useState('TODOS');
+    // Service status selector for export (ACTIVE, PAUSED, SUSPENDED, INACTIVE, ALL)
+    const [exportServiceStatus, setExportServiceStatus] = useState('TODOS'); 
+    // Año seleccionable para exportación
+    const [exportYear, setExportYear] = useState(String(moment().year()));
+    const exportYearOptions = React.useMemo(() => {
+        const currentYear = moment().year();
+        const baseYear = Number(schoolYear);
+        const startYear = Number.isFinite(baseYear) ? baseYear : currentYear;
+
+        const years = [];
+        for (let y = startYear; y <= currentYear; y++) years.push(String(y));
+        // Mostrar descendente (más reciente primero)
+        return years.reverse();
+    }, [schoolYear]);
+
+    // Si cambia schoolYear y el exportYear ya no está en el rango, ajustarlo.
+    useEffect(() => {
+        if (!exportYearOptions || exportYearOptions.length === 0) return;
+        if (!exportYearOptions.includes(exportYear)) {
+            setExportYear(exportYearOptions[0]);
+        }
+    }, [exportYearOptions]);
 
     // --- Export by estado (new) ---
     const [openExportByStateDialog, setOpenExportByStateDialog] = useState(false);
-    const [exportByStateValue, setExportByStateValue] = useState(''); // '' means all
+    const [exportByStateValue, setExportByStateValue] = useState('TODOS');
+    const [exportByStateServiceStatus, setExportByStateServiceStatus] = useState('TODOS');
 
 
     // Export payments filtered by status and build Excel
@@ -1518,8 +1740,13 @@ const SchoolPaymentsPage = () => {
             // Use new backend endpoint to fetch all PaymentHistory rows for payments
             // matching the selected final status. Backend will JOIN PaymentHistory -> Payment.
             // If 'GENERAL' is selected, omit the finalstatus param so backend returns all statuses.
-            const params = { schoolId, page: 1, limit: 10000 };
-            if (exportFinalStatus && String(exportFinalStatus).toUpperCase() !== 'GENERAL') params.finalstatus = exportFinalStatus;
+            const selectedYear = String(year || exportYear || moment().year());
+            const params = { schoolId, schoolYear: selectedYear, page: 1, limit: 10000 };
+            // Manejar agrupación de estados: PAGADO incluye CONFIRMADO y ADELANTADO
+            if (exportFinalStatus && String(exportFinalStatus).toUpperCase() === 'PAGADO') {
+            } else if (exportFinalStatus && exportFinalStatus !== 'TODOS') {
+                params.finalstatus = exportFinalStatus;
+            }
             setOpenExportStatusDialog(false);
             setSnackbar({ open: true, message: 'Preparando descarga...', severity: 'info' });
 
@@ -1537,7 +1764,8 @@ const SchoolPaymentsPage = () => {
 
             const headers = [
                 'Apellidos Familia',
-                'Estado',
+                'Estado de Pago',
+                'Estado del Servicio',
                 'Fecha Pago',
                 'Crédito/Saldo',
                 'Tarifa',
@@ -1553,52 +1781,167 @@ const SchoolPaymentsPage = () => {
 
             // historiesAll contains PaymentHistory rows for all matching payments.
             // Apply month/year filter and write rows directly (assume each history row includes familyLastName)
-            const yearToUse = year ? Number(year) : moment().year();
-            const monthStrPad = month ? String(month).padStart(2, '0') : null;
+            const yearToUse = selectedYear ? Number(selectedYear) : moment().year();
+            const monthStrPad = (month && month !== 'TODOS') ? String(month).padStart(2, '0') : null;
+
+            const normalizeUpper = (val) => (val == null ? '' : String(val)).trim().toUpperCase();
+            const getHistoryUserId = (h) => (
+                h?.userId ||
+                h?.User?.id ||
+                h?.Payment?.userId ||
+                h?.Payment?.User?.id ||
+                h?.payment?.userId ||
+                h?.payment?.User?.id ||
+                null
+            );
+
+            const buildServiceStatusMap = (paymentsArr) => new Map(
+                (Array.isArray(paymentsArr) ? paymentsArr : []).map(p => {
+                    const id = p?.userId || p?.User?.id || null;
+                    const st = p?.serviceStatus || p?.User?.FamilyDetail?.serviceStatus || '';
+                    return [id, normalizeUpper(st)];
+                }).filter(([id]) => Boolean(id))
+            );
+
+            const buildFamilyDiscountMap = (paymentsArr) => new Map(
+                (Array.isArray(paymentsArr) ? paymentsArr : []).map(p => {
+                    const id = p?.userId || p?.User?.id || null;
+                    const disc = p?.User?.FamilyDetail?.specialFee ?? p?.specialFee ?? 0;
+                    return [id, Number(disc || 0)];
+                }).filter(([id]) => Boolean(id))
+            );
+
+            // Build a map of current serviceStatus by userId. Prefer a fresh unfiltered /payments fetch
+            // so this works even if the current UI has status/search filters applied.
+            let serviceStatusByUserId = buildServiceStatusMap(paymentsAll);
+            let familyDiscountByUserId = buildFamilyDiscountMap(paymentsAll);
+            if (schoolId && schoolYear) {
+                try {
+                    const yearsToFetch = Array.from(new Set([
+                        String(exportYear || schoolYear),
+                        String(schoolYear)
+                    ].filter(Boolean)));
+
+                    const mergedServiceStatusMap = new Map(serviceStatusByUserId);
+                    const mergedFamilyDiscountMap = new Map(familyDiscountByUserId);
+
+                    for (const yr of yearsToFetch) {
+                        try {
+                            const resPayments = await api.get('/payments', { params: { schoolId, schoolYear: yr, page: 1, limit: 10000 } });
+                            const allPayments = resPayments.data.payments || resPayments.data.rows || [];
+
+                            const partialServiceMap = buildServiceStatusMap(allPayments);
+                            partialServiceMap.forEach((v, k) => mergedServiceStatusMap.set(k, v));
+
+                            const partialDiscMap = buildFamilyDiscountMap(allPayments);
+                            partialDiscMap.forEach((v, k) => mergedFamilyDiscountMap.set(k, v));
+                        } catch (eYr) {
+                            console.warn(`[export] Could not fetch /payments for schoolYear=${yr}:`, eYr);
+                        }
+                    }
+
+                    if (mergedServiceStatusMap.size > 0) serviceStatusByUserId = mergedServiceStatusMap;
+                    if (mergedFamilyDiscountMap.size > 0) familyDiscountByUserId = mergedFamilyDiscountMap;
+                } catch (e) {
+                    // If this fails, fall back to paymentsAll-based maps.
+                    console.warn('[export] Could not build /payments maps:', e);
+                }
+            }
 
             historiesAll.forEach(h => {
-                // Determinar si el usuario está inactivo (state = 0)
-                const userState = h.User?.state ?? h.Payment?.User?.state ?? 1;
-                const isUserInactive = Number(userState) === 0;
+                const historyUserId = getHistoryUserId(h);
+
+                // Determinar estado del servicio (preferir lo que venga en el historial, y si no, usar paymentsAll)
+                const serviceStatus = normalizeUpper(
+                    h?.serviceStatus ||
+                    h?.User?.FamilyDetail?.serviceStatus ||
+                    h?.Payment?.User?.FamilyDetail?.serviceStatus ||
+                    (historyUserId ? serviceStatusByUserId.get(historyUserId) : '') ||
+                    ''
+                );
                 
-                // Si el filtro es INACTIVO, solo incluir usuarios inactivos
-                // Si el filtro es otro estado, excluir usuarios inactivos
-                if (exportFinalStatus === 'INACTIVO') {
-                    if (!isUserInactive) return; // Solo usuarios inactivos
-                } else if (exportFinalStatus && exportFinalStatus !== 'GENERAL') {
-                    if (isUserInactive) return; // Excluir usuarios inactivos
-                } else {
-                    // GENERAL: incluir todos excepto inactivos
-                    if (isUserInactive) return;
+                // Filtrar por estado del servicio
+                if (exportServiceStatus && exportServiceStatus !== 'TODOS') {
+                    if (serviceStatus !== normalizeUpper(exportServiceStatus)) return;
                 }
                 
                 const familyLast = h.familyLastName || h.familyLast || h.familyLastname || h.User?.FamilyDetail?.familyLastName || h.User?.familyLastName || '';
                 // Use only finalStatus (as required). Fallback to Payment.finalStatus if the snapshot doesn't include it.
                 const estado = h.finalStatus || (h.Payment && h.Payment.finalStatus) || '';
+                const estadoUpper = normalizeUpper(estado);
+                
+                // Filtrar por estado de pago
+                if (exportFinalStatus && exportFinalStatus !== 'TODOS') {
+                    const filtroUpper = normalizeUpper(exportFinalStatus);
+                    
+                    // PAGADO incluye CONFIRMADO y ADELANTADO
+                    if (filtroUpper === 'PAGADO') {
+                        if (!['CONFIRMADO', 'ADELANTADO'].includes(estadoUpper)) return;
+                    } else {
+                        if (estadoUpper !== filtroUpper) return;
+                    }
+                }
+
+                // Mostrar estado de pago en formato UI
+                const estadoPagoText = (['CONFIRMADO', 'ADELANTADO'].includes(estadoUpper))
+                    ? 'PAGADO'
+                    : (estadoUpper || '');
+                
+                // Mapear estado del servicio a texto legible
+                const serviceStatusText = {
+                    'ACTIVE': 'ACTIVO',
+                    'PAUSED': 'PAUSADO',
+                    'SUSPENDED': 'SUSPENDIDO',
+                    'INACTIVE': 'INACTIVO'
+                }[serviceStatus] || serviceStatus || 'NO ESPECIFICADO';
+                
+                // Filtrar por fecha (mes y año)
                 const pd = h.paymentDate || h.lastPaymentDate || h.snapshotDate || null;
                 if (!pd) return;
                 const mm = moment.parseZone(pd);
+                
+                // Si hay mes específico seleccionado, filtrar por mes y año exactos
                 if (monthStrPad) {
                     if (mm.format('YYYY-MM') !== `${yearToUse}-${monthStrPad}`) return;
-                } else {
+                }
+                // Si no hay mes (TODOS), filtrar únicamente por el año seleccionado
+                else if (year && year !== 'TODOS') {
                     if (mm.year() !== yearToUse) return;
                 }
 
                 const fecha = (typeof h.paymentDate !== 'undefined' && h.paymentDate !== null && h.paymentDate !== '') ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '0';
                 const creditoSaldo = Number(h.creditBalanceBefore ?? 0);
                 const tarifa = Number(h.tarif ?? 0);
-                const descuentoFam = Number(h.familyDiscount ?? 0);
-                const descExtra = Number(h.extraordinaryDiscount ?? 0);
+                const descuentoFamFromHistory = Number(
+                    h.familyDiscount ||
+                    h.family_discount ||
+                    h?.metadata?.familyDiscount ||
+                    0
+                );
+                const descuentoFamFromFamily = historyUserId ? Number(familyDiscountByUserId.get(historyUserId) || 0) : 0;
+                const descuentoFam = descuentoFamFromHistory > 0 ? descuentoFamFromHistory : descuentoFamFromFamily;
+
+                const descExtra = Number(
+                    h.extraordinaryDiscount ||
+                    h.extraordinary_discount ||
+                    h.discountAmount ||
+                    0
+                );
                 const mora = Number(h.penaltyBefore ?? 0);
                 const totalDueBefore = Number(h.totalDueBefore ?? 0);
-                const totalAPagar = Number(totalDueBefore - creditoSaldo - descExtra - descuentoFam);
+                const totalAPagar = Number(totalDueBefore - creditoSaldo - descExtra);
                 const monto = Number(h.amountPaid ?? 0);
                 const totalPendiente = Number(h.totalDueAfter ?? 0);
                 const creditoDisponible = Number(h.creditBalanceAfter ?? 0);
 
-                // Insert Estado as the second column
-                sheet.addRow([familyLast, estado, fecha, creditoSaldo, tarifa, descuentoFam, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible]);
+                // Insert Estado de Pago y Estado del Servicio
+                sheet.addRow([familyLast, estadoPagoText, serviceStatusText, fecha, creditoSaldo, tarifa, descuentoFam, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible]);
             });
+
+            if (sheet.rowCount <= 1) {
+                setSnackbar({ open: true, message: 'No se encontraron registros con los filtros seleccionados', severity: 'info' });
+                return;
+            }
 
             // Styling header (match historial style)
             sheet.getRow(1).eachCell((cell, colNumber) => {
@@ -1617,8 +1960,8 @@ const SchoolPaymentsPage = () => {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
                     // center by default for text/date columns
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    // Numeric columns start at column 4 now (Crédito/Saldo). Right-align and format numbers for columns >= 4
-                    if (colNumber >= 4) {
+                    // Numeric columns start at column 5 now (Crédito/Saldo). Right-align and format numbers for columns >= 5
+                    if (colNumber >= 5) {
                         cell.numFmt = '0.00';
                         cell.alignment = { horizontal: 'right', vertical: 'middle' };
                     }
@@ -1662,7 +2005,7 @@ const SchoolPaymentsPage = () => {
             // Build filename in requested format:
             // "Historial Pagos estadoFinal nombreColegio Mes Año"
             const periodYear = year || exportYear || moment().year();
-            const monthPadded = month ? String(month).padStart(2, '0') : '';
+            const monthPadded = (month && String(month).toUpperCase() !== 'TODOS') ? String(month).padStart(2, '0') : '';
             const monthName = monthPadded ? (monthNames[monthPadded] || monthPadded) : '';
             // sanitize school name for filenames (remove newlines/slashes, collapse spaces)
             const rawSchoolName = school?.name ? String(school.name) : String(schoolId || '');
@@ -1687,7 +2030,7 @@ const SchoolPaymentsPage = () => {
             console.error('handleDownloadPaymentsByStatus', err);
             setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
         }
-    }, [schoolId, school, exportYear, exportFinalStatus]);
+    }, [schoolId, schoolYear, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus]);
 
     // Export payments filtered by estado using client-side dataset (paymentsAll)
     const handleDownloadByState = useCallback(async (estado) => {
@@ -1695,30 +2038,42 @@ const SchoolPaymentsPage = () => {
             setOpenExportByStateDialog(false);
             setSnackbar({ open: true, message: 'Preparando descarga...', severity: 'info' });
 
-            const estadoNorm = estado ? String(estado).toUpperCase().trim() : '';
+            const estadoNorm = estado ? String(estado).toUpperCase().trim() : 'TODOS';
             const arr = Array.isArray(paymentsAll) ? paymentsAll : [];
+            const serviceFilter = String(exportByStateServiceStatus || 'TODOS').toUpperCase().trim();
+
+            const toServiceText = (stRaw) => {
+                const st = String(stRaw || '').toUpperCase().trim();
+                return {
+                    ACTIVE: 'ACTIVO',
+                    PAUSED: 'PAUSADO',
+                    SUSPENDED: 'SUSPENDIDO',
+                    INACTIVE: 'INACTIVO'
+                }[st] || (st ? st : 'NO ESPECIFICADO');
+            };
+
+            const toEstadoPagoText = (stRaw) => {
+                const s = String(stRaw || '').toUpperCase().trim();
+                return ['CONFIRMADO', 'ADELANTADO'].includes(s) ? 'PAGADO' : s;
+            };
+
             const filteredRows = arr.filter(p => {
-                // Determinar si el usuario está inactivo (state = 0)
-                const userState = p.User?.state ?? 1;
-                const isUserInactive = Number(userState) === 0;
                 // Determinar si la familia/usuario está marcado como eliminado (deleted)
                 const isDeleted = !!p.User?.FamilyDetail?.deleted;
 
                 // Siempre ignorar registros marcados como deleted
                 if (isDeleted) return false;
 
-                if (estadoNorm === 'INACTIVO') {
-                    // Filtrar solo usuarios inactivos
-                    return isUserInactive;
-                } else if (estadoNorm) {
-                    // Para otros estados, excluir usuarios inactivos y filtrar por finalStatus
-                    if (isUserInactive) return false;
-                    const s = (p.finalStatus || p.status || '').toString().toUpperCase();
-                    return s === estadoNorm;
-                } else {
-                    // Sin filtro de estado: excluir usuarios inactivos
-                    return !isUserInactive;
+                const paymentServiceStatus = String(p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toUpperCase().trim();
+                if (serviceFilter && serviceFilter !== 'TODOS') {
+                    if (paymentServiceStatus !== serviceFilter) return false;
                 }
+
+                const s = (p.finalStatus || p.status || '').toString().toUpperCase();
+
+                if (!estadoNorm || estadoNorm === 'TODOS') return true;
+                if (estadoNorm === 'PAGADO') return ['CONFIRMADO', 'ADELANTADO'].includes(s);
+                return s === estadoNorm;
             });
 
             if (!filteredRows || filteredRows.length === 0) {
@@ -1729,11 +2084,12 @@ const SchoolPaymentsPage = () => {
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Datos');
 
-            const headers = ['Estado','Apellidos Familia','Débito Automático','Cant. Estudiantes','Tipo Ruta','Fecha Último Pago','Descuento','Envío Factura'];
+            const headers = ['Estado del Servicio','Estado de Pago','Apellidos Familia','Débito Automático','Cant. Estudiantes','Tipo Ruta','Fecha Último Pago','Descuento','Envío Factura'];
             sheet.addRow(headers);
 
             filteredRows.forEach(p => {
-                const estadoVal = (p.finalStatus || p.status || '') ? String((p.finalStatus || p.status)).toUpperCase() : '';
+                const estadoVal = toEstadoPagoText(p.finalStatus || p.status || '');
+                const serviceText = toServiceText(p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '');
                 const familyLast = p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '';
                 const autoDebit = !!(p.automaticDebit || p.User?.FamilyDetail?.automaticDebit || p.User?.FamilyDetail?.autoDebit);
                 const autoStr = autoDebit ? 'Sí' : 'No';
@@ -1747,7 +2103,7 @@ const SchoolPaymentsPage = () => {
                 const invoiceStr = invoiceSent ? 'Sí' : 'No';
 
                 // Add row: for Fecha Último Pago we add a Date object (or empty string if missing) so Excel recognizes it as date
-                sheet.addRow([estadoVal, familyLast, autoStr, studentsInt, routeType, lastPaymentDate || '', discount, invoiceStr]);
+                sheet.addRow([serviceText, estadoVal, familyLast, autoStr, studentsInt, routeType, lastPaymentDate || '', discount, invoiceStr]);
             });
 
             // Styling header (match historial style)
@@ -1764,23 +2120,23 @@ const SchoolPaymentsPage = () => {
                 const isEven = rowIndex % 2 === 0;
                 row.eachCell((cell, colNumber) => {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
-                    // Apellidos Familia (col 2) left-aligned; numeric fields right-aligned; dates centered; others centered
-                    if (colNumber === 2) {
+                    // Apellidos Familia (col 3) left-aligned; numeric fields right-aligned; dates centered; others centered
+                    if (colNumber === 3) {
                         cell.alignment = { horizontal: 'left', vertical: 'middle' };
                     } else {
                         cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     }
-                    // Numeric columns: Cant. Estudiantes (col 4) integer, Descuento (col 7) two decimals
-                    if (colNumber === 4) {
+                    // Numeric columns: Cant. Estudiantes (col 5) integer, Descuento (col 8) two decimals
+                    if (colNumber === 5) {
                         cell.numFmt = '0';
                         cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     }
-                    if (colNumber === 7) {
+                    if (colNumber === 8) {
                         cell.numFmt = '0.00';
                         cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     }
-                    // Fecha Último Pago (col 6) should be date dd/mm/yyyy
-                    if (colNumber === 6) {
+                    // Fecha Último Pago (col 7) should be date dd/mm/yyyy
+                    if (colNumber === 7) {
                         cell.numFmt = 'dd/mm/yyyy';
                         cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     }
@@ -1816,7 +2172,7 @@ const SchoolPaymentsPage = () => {
 
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const fileName = `Pagos_por_estado_${(estado || 'TODOS')}_${school?.name ? school.name.replace(/[^a-z0-9]/gi,'_') : schoolId}.xlsx`;
+            const fileName = `Pagos_por_estado_${(estadoNorm || 'TODOS')}_servicio_${(serviceFilter || 'TODOS')}_${school?.name ? school.name.replace(/[^a-z0-9]/gi,'_') : schoolId}.xlsx`;
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -1831,7 +2187,7 @@ const SchoolPaymentsPage = () => {
             console.error('handleDownloadByState', err);
             setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
         }
-    }, [paymentsAll, school, schoolId]);
+    }, [paymentsAll, exportByStateServiceStatus, school, schoolId]);
 
     // Legacy discount-save flow removed.
     // The new retroactive discount flow is applied via POST /payments/v2/:id/apply-family-discount.
@@ -2370,12 +2726,35 @@ const SchoolPaymentsPage = () => {
                 </Grid>
                 <Grid item xs={12}>
                     <ChipsRow>
-                        <Chip label={`Activos: ${familiasActivas}`} sx={{ backgroundColor: '#4caf50', color: 'white' }} />
-                        <Chip label={`Inactivos: ${totalInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
-                        <Chip label={`Pagados: ${totalPaidCount}`} color="success" />
-                        <Chip label={`Pendientes: ${totalPendingCount}`} color="warning" />
-                        <Chip label={`En Mora: ${totalMoraCount}`} color="error" />
-                        <Chip label={`Eliminados: ${eliminadoCount}`} sx={{ backgroundColor: '#000000', color: 'white' }} />
+                        <ToggleButtonGroup
+                            value={countersView}
+                            exclusive
+                            onChange={(e, newView) => {
+                                if (newView !== null) setCountersView(newView);
+                            }}
+                            size="small"
+                            sx={{ mr: 2 }}
+                        >
+                            <ToggleButton value="payment">Estado de Pago</ToggleButton>
+                            <ToggleButton value="service">Estado del Servicio</ToggleButton>
+                        </ToggleButtonGroup>
+                        
+                        {countersView === 'payment' ? (
+                            <>
+                                <Chip label={`Pagados: ${totalPaidCount}`} color="success" />
+                                <Chip label={`Pendientes: ${totalPendingCount}`} color="warning" />
+                                <Chip label={`En Mora: ${totalMoraCount}`} color="error" />
+                                <Chip label={`Eliminados: ${eliminadoCount}`} sx={{ backgroundColor: '#000000', color: 'white' }} />
+                            </>
+                        ) : (
+                            <>
+                                <Chip label={`Activos: ${serviceActiveCount}`} color="success" />
+                                <Chip label={`Pausados: ${servicePausedCount}`} color="warning" />
+                                <Chip label={`Suspendidos: ${serviceSuspendedCount}`} color="error" />
+                                <Chip label={`Inactivos: ${serviceInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
+                            </>
+                        )}
+                        
                         <Box sx={{ flex: 1 }} />
                     </ChipsRow>
                 </Grid>
@@ -2383,7 +2762,18 @@ const SchoolPaymentsPage = () => {
                 <Grid item xs={12}>
                     <Paper sx={{ p: 2 }}>
                         <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
-                            <PaymentFilters search={search} onSearchChange={setSearch} status={statusFilter} onStatusChange={setStatusFilter} autoDebit={autoDebitFilter} onAutoDebitChange={setAutoDebitFilter} showDeleted={showDeleted} onShowDeletedChange={setShowDeleted} />
+                            <PaymentFilters 
+                                search={search} 
+                                onSearchChange={setSearch} 
+                                status={statusFilter} 
+                                onStatusChange={setStatusFilter} 
+                                autoDebit={autoDebitFilter} 
+                                onAutoDebitChange={setAutoDebitFilter} 
+                                showDeleted={showDeleted} 
+                                onShowDeletedChange={setShowDeleted}
+                                serviceStatus={serviceStatusFilter}
+                                onServiceStatusChange={setServiceStatusFilter}
+                            />
                             <Box sx={{ flex: 1 }} />
                             <Button startIcon={<DownloadIcon />} size="small" onClick={() => setOpenExportStatusDialog(true)} sx={{ textTransform: 'none', mr: 1 }}>
                                 Descargar Historial
@@ -2432,35 +2822,78 @@ const SchoolPaymentsPage = () => {
                         />
 
                         {/* Dialog: Exportar pagos por periodo */}
-                        <Dialog open={openExportStatusDialog} onClose={() => setOpenExportStatusDialog(false)} fullWidth maxWidth="xs">
-                            <DialogTitle>Exportar historial de pagos - seleccionar periodo</DialogTitle>
-                            <DialogContent>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                                    <FormControl fullWidth>
-                                        <InputLabel id="export-finalstatus-label">Estado Final</InputLabel>
+                        <Dialog
+                            open={openExportStatusDialog}
+                            onClose={() => setOpenExportStatusDialog(false)}
+                            maxWidth="xs"
+                            PaperProps={{
+                                sx: {
+                                    borderRadius: 2,
+                                    overflow: 'visible',
+                                    width: 380,
+                                    maxWidth: 'calc(100% - 32px)'
+                                }
+                            }}
+                        >
+                            <DialogTitle sx={{ pb: 2 }}>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                                        Exportar historial de pagos
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Selecciona período y filtros para el reporte en excel.
+                                    </Typography>
+                                </Box>
+                            </DialogTitle>
+                            <DialogContent sx={{ pt: 2.5, overflow: 'visible' }}>
+                                <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                                    <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel id="export-finalstatus-label">Estado de Pago</InputLabel>
                                         <Select
                                             labelId="export-finalstatus-label"
-                                            label="Estado Final"
+                                            label="Estado de Pago"
                                             value={exportFinalStatus}
                                             onChange={(e) => setExportFinalStatus(e.target.value)}
                                         >
-                                            <MenuItem value="GENERAL">GENERAL</MenuItem>
+                                            <MenuItem value="TODOS">Todos los estados</MenuItem>
                                             <MenuItem value="PAGADO">PAGADO</MenuItem>
                                             <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
                                             <MenuItem value="MORA">MORA</MenuItem>
-                                            <MenuItem value="INACTIVO">INACTIVO</MenuItem>
+                                            <MenuItem value="ELIMINADO">ELIMINADO</MenuItem>
                                         </Select>
                                     </FormControl>
-                                    <FormControl fullWidth>
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel id="export-servicestatus-label">Estado del Servicio</InputLabel>
+                                        <Select
+                                            labelId="export-servicestatus-label"
+                                            label="Estado del Servicio"
+                                            value={exportServiceStatus}
+                                            onChange={(e) => setExportServiceStatus(e.target.value)}
+                                        >
+                                            <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                            <MenuItem value="ACTIVE">ACTIVO</MenuItem>
+                                            <MenuItem value="PAUSED">PAUSADO</MenuItem>
+                                            <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
+                                            <MenuItem value="INACTIVE">INACTIVO</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                    <FormControl fullWidth size="small">
                                         <InputLabel id="export-month-label">Mes</InputLabel>
                                         <Select
                                             labelId="export-month-label"
                                             label="Mes"
                                             value={exportMonth}
                                             onChange={(e) => setExportMonth(e.target.value)}
-                                            displayEmpty
+                                            MenuProps={{
+                                                PaperProps: {
+                                                    sx: {
+                                                        maxHeight: 220
+                                                    }
+                                                }
+                                            }}
                                         >
-                                            <MenuItem value="">(Todos los meses)</MenuItem>
+                                            <MenuItem value="TODOS">Todos los meses</MenuItem>
                                             <MenuItem value="01">Enero</MenuItem>
                                             <MenuItem value="02">Febrero</MenuItem>
                                             <MenuItem value="03">Marzo</MenuItem>
@@ -2475,50 +2908,107 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="12">Diciembre</MenuItem>
                                         </Select>
                                     </FormControl>
-                                    <FormControl fullWidth>
+                                    <FormControl fullWidth size="small">
                                         <InputLabel id="export-year-label">Año</InputLabel>
                                         <Select
                                             labelId="export-year-label"
                                             label="Año"
                                             value={exportYear}
-                                            disabled
+                                            onChange={(e) => setExportYear(e.target.value)}
+                                            MenuProps={{
+                                                PaperProps: {
+                                                    sx: {
+                                                        maxHeight: 220
+                                                    }
+                                                }
+                                            }}
                                         >
-                                            <MenuItem value={exportYear}>{exportYear}</MenuItem>
+                                            {exportYearOptions.map((y) => (
+                                                <MenuItem key={y} value={y}>{y}</MenuItem>
+                                            ))}
                                         </Select>
                                     </FormControl>
+                                    </Box>
                                 </Box>
                             </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenExportStatusDialog(false)}>Cancelar</Button>
-                                <Button variant="contained" onClick={() => handleDownloadPaymentsByStatus(exportMonth, exportYear)}>Descargar</Button>
+                            <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
+                                <Button onClick={() => setOpenExportStatusDialog(false)}>
+                                    Cancelar
+                                </Button>
+                                <Button variant="contained" onClick={() => handleDownloadPaymentsByStatus(exportMonth, exportYear)}>
+                                    Descargar
+                                </Button>
                             </DialogActions>
                         </Dialog>
 
                         {/* Dialog: Exportar por Estado (nuevo) */}
-                        <Dialog open={openExportByStateDialog} onClose={() => setOpenExportByStateDialog(false)} fullWidth maxWidth="xs">
-                            <DialogTitle>Exportar pagos - seleccionar Estado</DialogTitle>
-                            <DialogContent>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                                    <FormControl fullWidth>
-                                        <InputLabel id="export-by-state-label">Estado</InputLabel>
+                        <Dialog
+                            open={openExportByStateDialog}
+                            onClose={() => setOpenExportByStateDialog(false)}
+                            maxWidth="xs"
+                            PaperProps={{
+                                sx: {
+                                    borderRadius: 2,
+                                    overflow: 'visible',
+                                    width: 380,
+                                    maxWidth: 'calc(100% - 32px)'
+                                }
+                            }}
+                        >
+                            <DialogTitle sx={{ pb: 2 }}>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                                        Exportar pagos
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Selecciona el estado de pago y el estado del servicio.
+                                    </Typography>
+                                </Box>
+                            </DialogTitle>
+                            <DialogContent sx={{ pt: 2.5, overflow: 'visible' }}>
+                                <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                                    <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel id="export-by-state-label">Estado de Pago</InputLabel>
                                         <Select
                                             labelId="export-by-state-label"
-                                            label="Estado"
+                                            label="Estado de Pago"
                                             value={exportByStateValue}
                                             onChange={(e) => setExportByStateValue(e.target.value)}
                                         >
-                                            <MenuItem value="">(Todos)</MenuItem>
+                                            <MenuItem value="TODOS">Todos los estados</MenuItem>
                                             <MenuItem value="PAGADO">PAGADO</MenuItem>
                                             <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
                                             <MenuItem value="MORA">MORA</MenuItem>
-                                            <MenuItem value="INACTIVO">INACTIVO</MenuItem>
+                                            <MenuItem value="ELIMINADO">ELIMINADO</MenuItem>
                                         </Select>
                                     </FormControl>
+
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel id="export-by-state-servicestatus-label">Estado del Servicio</InputLabel>
+                                        <Select
+                                            labelId="export-by-state-servicestatus-label"
+                                            label="Estado del Servicio"
+                                            value={exportByStateServiceStatus}
+                                            onChange={(e) => setExportByStateServiceStatus(e.target.value)}
+                                        >
+                                            <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                            <MenuItem value="ACTIVE">ACTIVO</MenuItem>
+                                            <MenuItem value="PAUSED">PAUSADO</MenuItem>
+                                            <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
+                                            <MenuItem value="INACTIVE">INACTIVO</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                    </Box>
                                 </Box>
                             </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenExportByStateDialog(false)}>Cancelar</Button>
-                                <Button variant="contained" onClick={() => handleDownloadByState(exportByStateValue)}>Descargar</Button>
+                            <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
+                                <Button onClick={() => setOpenExportByStateDialog(false)}>
+                                    Cancelar
+                                </Button>
+                                <Button variant="contained" onClick={() => handleDownloadByState(exportByStateValue)}>
+                                    Descargar
+                                </Button>
                             </DialogActions>
                         </Dialog>
 

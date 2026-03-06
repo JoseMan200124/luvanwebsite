@@ -65,6 +65,7 @@ import ExcelJS from 'exceljs';
 import moment from 'moment-timezone';
 import { normalizeKey } from '../utils/stringHelpers';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
+import UserServiceStatusModal from '../components/UserServiceStatusModal';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -140,6 +141,7 @@ const ColaboradoresPage = () => {
     const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [serviceStatusFilter, setServiceStatusFilter] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [selectedColaborador, setSelectedColaborador] = useState(null);
@@ -154,6 +156,7 @@ const ColaboradoresPage = () => {
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
     const [openCircularDialog, setOpenCircularDialog] = useState(false);
+    const [openServiceStatusModal, setOpenServiceStatusModal] = useState(false);
     // Dialogo unificado para descargas (Nuevos / Todos)
     const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
     const [downloadChoice, setDownloadChoice] = useState('new'); // 'new' | 'all'
@@ -408,9 +411,14 @@ const ColaboradoresPage = () => {
                 filtered = filtered.filter(col => getColaboradorStatus(col) === statusFilter);
             }
         }
+
+        // Filtro por estado de servicio
+        if (serviceStatusFilter) {
+            filtered = filtered.filter(col => col.colaboradorServiceStatus?.status === serviceStatusFilter);
+        }
         
         setFilteredColaboradores(filtered);
-    }, [colaboradores, searchQuery, statusFilter, getColaboradorStatus]);
+    }, [colaboradores, searchQuery, statusFilter, serviceStatusFilter, getColaboradorStatus]);
 
     const handleBackToDashboard = () => {
         navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}`, {
@@ -440,6 +448,7 @@ const ColaboradoresPage = () => {
         setSearchInput('');
         setSearchQuery('');
         setStatusFilter('');
+        setServiceStatusFilter('');
         setPage(0);
     };
 
@@ -584,6 +593,18 @@ const ColaboradoresPage = () => {
     const handleOpenToggleStateDialog = (colaborador) => {
         setSelectedColaborador(colaborador);
         setOpenToggleStateDialog(true);
+    };
+
+    const handleServiceStatusClick = (colaborador) => {
+        if (!colaborador) return;
+        setSelectedColaborador(colaborador);
+        setOpenServiceStatusModal(true);
+    };
+
+    const handleServiceStatusSuccess = () => {
+        setSnackbar({ open: true, message: 'Estado del servicio actualizado correctamente', severity: 'success' });
+        setSelectedColaborador(null);
+        fetchColaboradores();
     };
 
     const handleOpenScheduleDialog = (colaborador) => {
@@ -1537,6 +1558,10 @@ const ColaboradoresPage = () => {
                     va = getColaboradorStatus(a);
                     vb = getColaboradorStatus(b);
                     break;
+                case 'serviceStatus':
+                    va = a.colaboradorServiceStatus?.status || '';
+                    vb = b.colaboradorServiceStatus?.status || '';
+                    break;
                 default:
                     va = '';
                     vb = '';
@@ -1901,7 +1926,7 @@ const ColaboradoresPage = () => {
                                 Buscar
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={3}>
+                        <Grid item xs={12} md={2}>
                             <FormControl fullWidth variant="outlined">
                                 <InputLabel>Estado</InputLabel>
                                 <Select
@@ -1921,6 +1946,22 @@ const ColaboradoresPage = () => {
                             </FormControl>
                         </Grid>
                         <Grid item xs={12} md={2}>
+                            <FormControl fullWidth variant="outlined">
+                                <InputLabel>Estado de Servicio</InputLabel>
+                                <Select
+                                    value={serviceStatusFilter}
+                                    onChange={(e) => setServiceStatusFilter(e.target.value)}
+                                    label="Estado de Servicio"
+                                    startAdornment={<FilterList />}
+                                >
+                                    <MenuItem value="">Todos</MenuItem>
+                                    <MenuItem value="ACTIVE">Activo</MenuItem>
+                                    <MenuItem value="PAUSED">Pausado</MenuItem>
+                                    <MenuItem value="INACTIVE">Inactivo</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={12} md={1}>
                             <Button
                                 variant="outlined"
                                 fullWidth
@@ -2053,6 +2094,15 @@ const ColaboradoresPage = () => {
                                         <TableRow>
                                             <TableCell>
                                                 <TableSortLabel
+                                                    active={sortBy === 'serviceStatus'}
+                                                    direction={sortBy === 'serviceStatus' ? sortOrder : 'asc'}
+                                                    onClick={() => handleSortChange('serviceStatus')}
+                                                >
+                                                    Estado del Servicio
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell>
+                                                <TableSortLabel
                                                     active={sortBy === 'name'}
                                                     direction={sortBy === 'name' ? sortOrder : 'asc'}
                                                     onClick={() => handleSortChange('name')}
@@ -2094,6 +2144,16 @@ const ColaboradoresPage = () => {
                                     <TableBody>
                                         {paginatedColaboradores.map((colaborador) => (
                                             <TableRow key={colaborador.id} hover>
+                                                <TableCell align="center">
+                                                    {(() => {
+                                                        const svc = colaborador.colaboradorServiceStatus?.status;
+                                                        if (svc === 'ACTIVE') return <Chip label="Activo" size="small" color="success" />;
+                                                        if (svc === 'PAUSED') return <Chip label="Pausado" size="small" color="warning" />;
+                                                        if (svc === 'SUSPENDED') return <Chip label="Suspendido" size="small" color="error" />;
+                                                        if (svc === 'INACTIVE') return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
+                                                        return <Chip label="-" size="small" />;
+                                                    })()}
+                                                </TableCell>
                                                 <TableCell>
                                                     <Typography variant="subtitle2" fontWeight="bold">
                                                         {colaborador.name}
@@ -2196,11 +2256,11 @@ const ColaboradoresPage = () => {
                                                             );
                                                         })()}
                                                         
-                                                        <IconButton 
-                                                            size="small" 
-                                                            onClick={() => handleOpenToggleStateDialog(colaborador)}
-                                                            title={Number(colaborador.state) === 1 ? 'Desactivar' : 'Activar'}
-                                                            color={Number(colaborador.state) === 1 ? 'warning' : 'success'}
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={() => handleServiceStatusClick(colaborador)}
+                                                            title="Gestionar estado del servicio"
+                                                            color="primary"
                                                         >
                                                             {Number(colaborador.state) === 1 ? <ToggleOn fontSize="small" /> : <ToggleOff fontSize="small" />}
                                                         </IconButton>
@@ -2214,7 +2274,7 @@ const ColaboradoresPage = () => {
 
                                         {paginatedColaboradores.length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                                                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                                                     <Typography variant="body1" color="textSecondary">
                                                         No se encontraron colaboradores con los filtros aplicados
                                                     </Typography>
@@ -2418,6 +2478,20 @@ const ColaboradoresPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Modal de estado del servicio */}
+            <UserServiceStatusModal
+                open={openServiceStatusModal}
+                onClose={() => {
+                    setOpenServiceStatusModal(false);
+                    setSelectedColaborador(null);
+                }}
+                user={selectedColaborador}
+                userType="COLABORADOR"
+                corporationId={corporationId}
+                fiscalYear={fiscalYear}
+                onSuccess={handleServiceStatusSuccess}
+            />
 
             {/* Snackbar */}
             <Snackbar
