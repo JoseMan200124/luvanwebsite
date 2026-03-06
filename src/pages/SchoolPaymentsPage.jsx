@@ -1042,6 +1042,7 @@ const SchoolPaymentsPage = () => {
             let res;
             let transactions = [];
             let histories = []; // Declarar la variable histories
+            let noTransactions = false;
             
             try {
                 // Primero intentar con el endpoint V2 de transacciones
@@ -1084,28 +1085,32 @@ const SchoolPaymentsPage = () => {
                         try {
                             const res2 = await attemptFetch({ paymentId, page: 0, limit: 1000 });
                             const fallbackHist = res2.data.histories || res2.data || [];
-                            if (Array.isArray(fallbackHist) && fallbackHist.length > 0) {
-                                histories = fallbackHist;
-                            } else {
-                                setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
-                                return;
-                            }
+                                        if (Array.isArray(fallbackHist) && fallbackHist.length > 0) {
+                                            histories = fallbackHist;
+                                        } else {
+                                            // No hay historial encontrado: continuar y generar PDF indicando ausencia de transacciones
+                                            histories = [];
+                                            noTransactions = true;
+                                        }
                         } catch (e) {
                             console.error('[handleDownloadHistory] fallback fetch error', e && e.response ? e.response.data || e.response : e);
                             const status = e && e.response && e.response.status;
                             const respData = e && e.response && e.response.data;
                             // If API indicates not found or no content, treat as no transactions
                             if (status === 404 || status === 204 || (respData && typeof respData === 'string' && /not found|no history|no transactions/i.test(respData))) {
-                                setSnackbar({ open: true, message: 'No hay transacciones ni historial de pago para esta familia', severity: 'info' });
+                                // Treat as no transactions and continue to generate a PDF with a placeholder
+                                histories = [];
+                                noTransactions = true;
+                            } else {
+                                // Otherwise, generic error when generating PDF
+                                setSnackbar({ open: true, message: 'No es posible generar el PDF por un error consultando historial', severity: 'error' });
                                 return;
                             }
-                            // Otherwise, generic error when generating PDF
-                            setSnackbar({ open: true, message: 'No es posible generar el PDF por un error consultando historial', severity: 'error' });
-                            return;
                         }
                     } else {
-                        setSnackbar({ open: true, message: 'No se encontró historial para este usuario', severity: 'info' });
-                        return;
+                        // No paymentId available: treat as no transactions and continue
+                        histories = [];
+                        noTransactions = true;
                     }
                 }
             }
@@ -1362,9 +1367,10 @@ const SchoolPaymentsPage = () => {
 
             periods.sort((a, b) => String(a.period || '').localeCompare(String(b.period || '')));
 
+            let noPeriods = false;
             if (!Array.isArray(periods) || periods.length === 0) {
-                setSnackbar({ open: true, message: 'No se encontraron períodos para generar el reporte', severity: 'info' });
-                return;
+                // No periods available: mark flag so we render a placeholder table instead of aborting
+                noPeriods = true;
             }
 
             // Simular asignación de pagos a períodos para llenar FECHA/MONTO/BOLETA (best-effort)
@@ -1435,7 +1441,10 @@ const SchoolPaymentsPage = () => {
             let totalDesc = 0;
             let totalFaltante = 0;
 
-            const bodyRows = periodAlloc.map(p => {
+            let bodyRows = [];
+
+            if (!noTransactions && !noPeriods) {
+                bodyRows = periodAlloc.map(p => {
                 const mm = moment(`${p.period}-01`, 'YYYY-MM-DD');
                 const mes = mm.isValid() ? (monthNamesUpper[mm.month()] || p.period) : (p.period || '');
 
@@ -1455,10 +1464,15 @@ const SchoolPaymentsPage = () => {
                 const faltante = faltanteV > 0 ? money(faltanteV) : '-';
 
                 return [mes, money(tarifaV), money(descV), fecha, monto, boleta, faltante];
-            });
+                });
 
-            // TOTAL row
-            bodyRows.push(['TOTAL', money(totalTarifa), money(totalDesc), '', '', '', money(totalFaltante)]);
+                // TOTAL row
+                bodyRows.push(['TOTAL', money(totalTarifa), money(totalDesc), '', '', '', money(totalFaltante)]);
+            } else if (noTransactions) {
+                bodyRows = [[{ content: 'No hay transacciones registradas.', colSpan: 7, styles: { halign: 'center' } }]];
+            } else {
+                bodyRows = [[{ content: 'No se encontraron períodos para mostrar', colSpan: 7, styles: { halign: 'center' } }]];
+            }
 
             // Main periods table
             autoTable(doc, {
