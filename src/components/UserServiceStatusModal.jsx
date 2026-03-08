@@ -18,6 +18,8 @@ import {
     Divider,
     Paper
 } from '@mui/material';
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import {
     CheckCircle,
     Pause,
@@ -83,6 +85,7 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
     const [currentStatus, setCurrentStatus] = useState(null);
     const [selectedStatus, setSelectedStatus] = useState('');
     const [reason, setReason] = useState('');
+    const [resumeDate, setResumeDate] = useState(null);
     const [error, setError] = useState(null);
     const [loadingStatus, setLoadingStatus] = useState(false);
 
@@ -104,6 +107,7 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
         if (open) {
             setReason('');
             setSelectedStatus('');
+            setResumeDate(null);
             setError(null);
         }
     }, [open]);
@@ -186,6 +190,16 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
             } else {
                 body.schoolId = schoolId;
                 body.schoolYear = schoolYear;
+            }
+            // Incluir resumeDate si se seleccionó (opcional)
+            if (selectedStatus === 'PAUSED' && resumeDate) {
+                try {
+                    const formatted = resumeDate.format ? resumeDate.format('YYYY-MM-DD') : String(resumeDate);
+                    body.resumeDate = formatted;
+                } catch (e) {
+                    // si falla el formateo, enviar como string por seguridad
+                    body.resumeDate = String(resumeDate);
+                }
             }
             await api.post(`/service-status/${user.id}/${endpoint}`, body);
 
@@ -347,6 +361,23 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
                             )}
                         </Box>
                     </Alert>
+                )}
+
+                {/* Selector de fecha opcional para PAUSED */}
+                {selectedStatus === 'PAUSED' && (
+                    <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Fecha opcional de reanudación
+                        </Typography>
+                        <LocalizationProvider dateAdapter={AdapterMoment}>
+                            <DatePicker
+                                value={resumeDate}
+                                onChange={(newVal) => setResumeDate(newVal)}
+                                slotProps={{ textField: { fullWidth: true, helperText: 'Opcional — si se deja vacío, la reactivación será manual' } }}
+                                format="YYYY-MM-DD"
+                            />
+                        </LocalizationProvider>
+                    </Box>
                 )}
 
                 {/* Razón del cambio */}
