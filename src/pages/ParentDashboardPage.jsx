@@ -696,12 +696,13 @@ const ParentDashboardPage = () => {
                       severity="error"
                       sx={{ mt: 2 }}
                     >
-                      <strong>Tu servicio está suspendido porque aún no has firmado el contrato.</strong>{' '}
-                      Firma el contrato para activar el servicio y tener acceso completo.
+                      <strong>El servicio está suspendido porque aún no se ha firmado el contrato.</strong>
+                      <br />
+                      Por favor, firma el contrato para activar el servicio y tener acceso completo.
                     </Alert>
                   ) : (
                     <Alert severity="warning" sx={{ mt: 2 }}>
-                      Tu servicio está suspendido por mora pendiente. Puedes subir tu boleta de pago para regularizar tu situación.
+                      Cuenta suspendida por mora. Si no ha subido su boleta, por favor subirla; si ya fue subida, su pago se encuentra en revisión.
                     </Alert>
                   )
                 )}
