@@ -175,25 +175,18 @@ const RouteHistoryPage = () => {
             const selectedClientId = (selectedClient && (selectedClient.id || selectedClient.value || selectedClient._id)) || clientId || null;
             const selectedClientType = selectedClient?.type || null;
 
-            // Require a selected client (or clientId param) before fetching
-            if (!selectedClientId) {
-                setLoading(false);
-                setError('Seleccione un cliente antes de aplicar los filtros.');
-                return;
-            }
-
+            // Build client params only when a specific client is selected. If 'all' or no client, perform global search by placa/piloto.
             const clientParam = {};
-            if (selectedClientType === 'school') {
+            if (selectedClientId && selectedClientType === 'school') {
                 clientParam.schoolId = selectedClientId;
-            } else if (selectedClientType === 'corporation') {
+            } else if (selectedClientId && selectedClientType === 'corporation') {
                 clientParam.corporationId = selectedClientId;
-            } else {
-                clientParam.schoolId = selectedClientId;
             }
 
             const params = {
                 ...clientParam,
-                routeNumber: routeNumber,
+                // Incluir routeNumber solo cuando el cliente es específico.
+                routeNumber: (selectedClientType === 'school' || selectedClientType === 'corporation') ? routeNumber : undefined,
                 page,
                 pageSize,
                 ...opts
@@ -269,11 +262,14 @@ const RouteHistoryPage = () => {
                         (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
                         (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
 
-                        setClients(combined);
+                        // Añadir opcion "Todos los clientes" para que los usuarios puedan buscar globalmente
+                        const allOption = { id: 'ALL', name: 'Todos los clientes', type: 'all', group: 'Todos' };
+                        const clientsWithAll = [allOption, ...combined];
+                        setClients(clientsWithAll);
 
-                        // select default: if clientId provided try to find it, otherwise default to first client
-                        const found = clientId ? combined.find(s => String(s.id) === String(clientId)) : null;
-                        setSelectedClient(found || (combined.length > 0 ? combined[0] : null));
+                        // select default: if clientId provided try to find it, otherwise default to "Todos los clientes"
+                        const found = clientId ? clientsWithAll.find(s => String(s.id) === String(clientId)) : null;
+                        setSelectedClient(found || allOption);
 
                         // Estadísticas: cliente independiente (sin selección por defecto)
                         setStatsSelectedClient(null);
@@ -302,7 +298,7 @@ const RouteHistoryPage = () => {
             return;
         }
 
-        const cacheKey = `${selectedClient.type}:${selectedClient.id}:` + pilotInput;
+        const cacheKey = `${selectedClient.type}:${selectedClient.id || 'ALL'}:` + pilotInput;
         if (pilotsCacheRef.current.has(cacheKey)) {
             setAvailablePilots(pilotsCacheRef.current.get(cacheKey));
             return;
@@ -312,8 +308,9 @@ const RouteHistoryPage = () => {
             setLoadingPilots(true);
             try {
                 let url = `/users/pilots?query=${encodeURIComponent(pilotInput)}`;
+                // only add client filters when a specific client is selected
                 if (selectedClient.type === 'school') url += `&schoolId=${selectedClient.id}`;
-                if (selectedClient.type === 'corporation') url += `&corporationId=${selectedClient.id}`;
+                else if (selectedClient.type === 'corporation') url += `&corporationId=${selectedClient.id}`;
                 const resp = await api.get(url);
                 const pilots = Array.isArray(resp.data?.users) ? resp.data.users : (resp.data || []);
                 const pilotsOpts = pilots.map(p => ({ id: p.id || p._id, name: p.name || p.fullName || p.nombre }));
@@ -344,7 +341,7 @@ const RouteHistoryPage = () => {
             return;
         }
 
-        const cacheKey = `${selectedClient.type}:${selectedClient.id}:` + busInput;
+        const cacheKey = `${selectedClient.type}:${selectedClient.id || 'ALL'}:` + busInput;
         if (busesCacheRef.current.has(cacheKey)) {
             setAvailableBuses(busesCacheRef.current.get(cacheKey));
             return;
@@ -354,8 +351,9 @@ const RouteHistoryPage = () => {
             setLoadingBuses(true);
             try {
                 let url = `/buses?query=${encodeURIComponent(busInput)}`;
+                // only add client filters when a specific client is selected
                 if (selectedClient.type === 'school') url += `&schoolId=${selectedClient.id}`;
-                if (selectedClient.type === 'corporation') url += `&corporationId=${selectedClient.id}`;
+                else if (selectedClient.type === 'corporation') url += `&corporationId=${selectedClient.id}`;
                 const resp = await api.get(url);
                 const busesList = resp.data?.buses || resp.data || [];
                 const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
@@ -416,7 +414,8 @@ const RouteHistoryPage = () => {
 
     // Load route numbers for selected client (no debounce; small payload)
     useEffect(() => {
-        if (!selectedClient) {
+        // do not load route numbers when no specific client is selected (global search)
+        if (!selectedClient || selectedClient.type === 'all') {
             setAvailableRoutesList([]);
             return;
         }
@@ -1045,7 +1044,7 @@ const RouteHistoryPage = () => {
                                 <Grid item xs={12} md={2}>
                                     <Autocomplete
                                         size="small"
-                                        options={clients}
+                                        options={clients.filter(c => c.type !== 'all')}
                                         groupBy={(option) => option.group || ''}
                                         getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
                                         value={statsSelectedClient}
@@ -1725,7 +1724,7 @@ const RouteHistoryPage = () => {
                         />
                     </Grid>
 
-                        <Grid item xs={12} md={3}>
+                        <Grid item xs={12} md={1}>
                         <TextField size="small" variant="outlined" label="Estado" select fullWidth InputLabelProps={{ shrink: true }} SelectProps={{ native: true }} value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)} sx={ statusFilter ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} }>
                             <option value="">Todos</option>
                             <option value="inprogress">En progreso</option>
@@ -1733,7 +1732,7 @@ const RouteHistoryPage = () => {
                         </TextField>
                     </Grid>
 
-                    <Grid item xs={12} md={4}>
+                        <Grid item xs={12} md={2}>
                         <TextField
                             size="small"
                             variant="outlined"
@@ -1803,7 +1802,7 @@ const RouteHistoryPage = () => {
                     <Grid item xs={12}>
                         <Collapse in={showAdvanced} timeout="auto" unmountOnExit>
                             <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
-                                <Grid item xs={12} sm={6} md={2}>
+                                <Grid item xs={12} sm={6} md={1.5}>
                                     <Autocomplete
                                         size="small"
                                         options={availablePilots}
@@ -1821,7 +1820,7 @@ const RouteHistoryPage = () => {
                                         selectOnFocus
                                     />
                                 </Grid>
-                                        <Grid item xs={12} sm={6} md={2}>
+                                        <Grid item xs={12} sm={6} md={0.8}>
                                     <Autocomplete
                                         size="small"
                                         options={availableRoutesList}
@@ -1829,6 +1828,7 @@ const RouteHistoryPage = () => {
                                         value={routeSelected}
                                         onChange={(e, newVal) => { setRouteSelected(newVal); setRouteNumber(newVal ? (newVal.number || String(newVal)) : ''); }}
                                         loading={loadingRoutes}
+                                        disabled={!selectedClient || selectedClient.type === 'all'}
                                         renderInput={(params) => (
                                             <TextField {...params} label="Número de ruta" placeholder="Número de ruta" fullWidth InputProps={{ ...params.InputProps, startAdornment: (<InputAdornment position="start"><Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>#</Box></InputAdornment>), endAdornment: (loadingRoutes ? <CircularProgress color="inherit" size={16} /> : params.InputProps.endAdornment) }} sx={ routeNumber ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
                                         )}
@@ -1837,7 +1837,7 @@ const RouteHistoryPage = () => {
                                         selectOnFocus
                                     />
                                 </Grid>
-                                <Grid item xs={12} sm={6} md={2}>
+                                <Grid item xs={12} sm={6} md={1.3}>
                                     <Autocomplete
                                         size="small"
                                         options={availableBuses}
@@ -1855,10 +1855,10 @@ const RouteHistoryPage = () => {
                                         selectOnFocus
                                     />
                                 </Grid>
-                                <Grid item xs={12} sm={6} md={3}>
+                                <Grid item xs={12} sm={6} md={1}>
                                     <TextField size="small" label="Hora inicio" type="time" fullWidth InputLabelProps={{ shrink:true }} value={startHour} onChange={(e)=>setStartHour(e.target.value)} sx={ startHour ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
                                 </Grid>
-                                <Grid item xs={12} sm={6} md={3}>
+                                <Grid item xs={12} sm={6} md={1}>
                                     <TextField size="small" label="Hora fin" type="time" fullWidth InputLabelProps={{ shrink:true }} value={endHour} onChange={(e)=>setEndHour(e.target.value)} sx={ endHour ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
                                 </Grid>
                             </Grid>
