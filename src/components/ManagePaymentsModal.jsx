@@ -239,7 +239,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     const handleAction = (name, payload = {}) => {
         // Prevent mutating actions for deleted families
-        const mutating = ['exoneratePenalty', 'addTransaction', 'updateReceiptNumber', 'updatePayment', 'toggleRequiresInvoice', 'toggleAutoDebit', 'toggleFreezePenalty', 'suspend', 'activate'];
+        const mutating = ['exoneratePenalty', 'addTransaction', 'updateReceiptNumber', 'updatePayment', 'toggleRequiresInvoice', 'toggleAutoDebit', 'toggleFreezePenalty'];
         if (isDeleted && mutating.includes(name)) {
             // silently ignore or optionally show a client-side message
             return;
@@ -267,12 +267,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 return { ...prev, penaltyFrozen: !prev.penaltyFrozen };
             });
         }
-        if (name === 'suspend' || name === 'activate') {
-            setLocalPayment(prev => {
-                if (!prev) return prev;
-                return { ...prev, serviceStatus: name === 'suspend' ? 'INACTIVE' : 'ACTIVE' };
-            });
-        }
 
         // Special-case receipts: open receipts dialog and fetch receipts
         if (name === 'receipts') {
@@ -286,13 +280,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 setOpenReceiptsDialog(true);
             })();
             return;
-        }
-
-        // Update local state for suspend/activate actions
-        if (name === 'suspend') {
-            setLocalPayment(prev => ({ ...prev, serviceStatus: 'INACTIVE' }));
-        } else if (name === 'activate') {
-            setLocalPayment(prev => ({ ...prev, serviceStatus: 'ACTIVE' }));
         }
 
         onAction(name, { payment: localPayment || payment, ...payload });
@@ -388,16 +375,56 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         </Box>
                                     </Box>
                                 ) : (() => {
-                                    // Check service status - INACTIVE means suspended
-                                    const svcStatus = (localPayment || payment)?.serviceStatus;
-                                    const isActive = svcStatus !== 'INACTIVE';
-                                    return (
-                                        <Box component="span" sx={{ ml: 1 }}>
-                                            <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, bgcolor: isActive ? 'success.main' : 'error.main', color: 'white', fontSize: 12 }}>
-                                                {isActive ? 'Activo' : 'Inactivo'}
+                                    // Check service status and render badge for multiple states
+                                    const svcStatus = (localPayment || payment)?.serviceStatus || (payment?.User?.familyServiceStatus?.status) || 'ACTIVE';
+                                    const resumeAt = (localPayment || payment)?.resumeDate || payment?.User?.familyServiceStatus?.resumeAt || payment?.User?.FamilyDetail?.resumeAt;
+
+                                    const renderBadge = () => {
+                                        let label = '-';
+                                        let sx = { display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, color: 'white', fontSize: 12 };
+
+                                        if (svcStatus === 'ACTIVE') {
+                                            label = 'Activo';
+                                            sx = { ...sx, bgcolor: 'success.main' };
+                                        } else if (svcStatus === 'PAUSED') {
+                                            label = 'Pausado';
+                                            sx = { ...sx, bgcolor: 'warning.main' };
+                                        } else if (svcStatus === 'SUSPENDED') {
+                                            label = 'Suspendido';
+                                            sx = { ...sx, bgcolor: 'error.main' };
+                                        } else if (svcStatus === 'INACTIVE') {
+                                            label = 'Inactivo';
+                                            sx = { ...sx, bgcolor: '#9e9e9e' };
+                                        } else {
+                                            label = svcStatus;
+                                            sx = { ...sx, bgcolor: '#757575' };
+                                        }
+
+                                        const content = (
+                                            <Box component="span" sx={{ ml: 1 }}>
+                                                <Box sx={sx}>{label}</Box>
                                             </Box>
-                                        </Box>
-                                    );
+                                        );
+
+                                        if (svcStatus === 'PAUSED' && resumeAt) {
+                                            const formatted = (() => {
+                                                try {
+                                                    return moment.parseZone(resumeAt).format('DD/MM/YYYY');
+                                                } catch (e) {
+                                                    return String(resumeAt);
+                                                }
+                                            })();
+                                            return (
+                                                <Tooltip title={`Se reactivará automáticamente el ${formatted}`}>
+                                                    <span>{content}</span>
+                                                </Tooltip>
+                                            );
+                                        }
+
+                                        return content;
+                                    };
+
+                                    return renderBadge();
                                 })()}
                             </Box>
 
@@ -470,8 +497,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     >
                         {localPayment?.penaltyFrozenAt ? 'Reanudar Mora' : 'Congelar Mora'}
                     </Button>
-                    {/* Suspend/Activate: toggle based on payment status */}
-                    <Button variant="outlined" startIcon={(localPayment || payment)?.serviceStatus !== 'INACTIVE' ? <BlockIcon /> : <CheckCircleIcon />} onClick={() => { if (!isDeleted) handleAction((localPayment || payment)?.serviceStatus !== 'INACTIVE' ? 'suspend' : 'activate'); }} disabled={isDeleted}>{(localPayment || payment)?.serviceStatus !== 'INACTIVE' ? 'Suspender' : 'Activar'}</Button>
+                    {/* State changes handled elsewhere; action buttons removed */}
                     {/* Delete/Revert payment */}
                     <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) setOpenDeleteDialog(true); }} disabled={isDeleted}>Revertir pago</Button>
                 </Box>
