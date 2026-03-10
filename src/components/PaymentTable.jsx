@@ -1,5 +1,6 @@
 // src/components/PaymentTable.jsx
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Table, TableHead, TableRow, TableCell, TableBody, IconButton, TableContainer, Paper, Box, Chip, TableSortLabel } from '@mui/material';
 import { Payment as PaymentIcon, CheckCircle as CheckCircleIcon, Close as CloseIcon, NoteAlt as NoteAltIcon, Download as DownloadIcon, ManageAccounts as ManageAccountsIcon, CalendarMonth as CalendarMonthIcon } from '@mui/icons-material';
 import moment from 'moment';
@@ -17,26 +18,47 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
     const status = (p.finalStatus || '').toUpperCase();
     const isDeleted = status === 'ELIMINADO' || !!family.deleted;
     
-    // V2: Mapeo de colores para estados
-    let statusColor = 'orange'; // PENDIENTE por defecto
-    if (status === 'CONFIRMADO' || status === 'ADELANTADO') {
-        statusColor = 'green'; // Al día
-    } else if (status === 'MORA' || status === 'ATRASADO') {
-        statusColor = 'red'; // Deudas/mora
-    } else if (status === 'EN_PROCESO') {
-        statusColor = '#ff9800'; // Amarillo/naranja (parcial)
-    } else if (status === 'INACTIVO') {
-        statusColor = '#9e9e9e'; // Gris
-    } else if (status === 'ELIMINADO') {
-        statusColor = '#000000'; // Negro para familias eliminadas
-    }
+    const serviceStatus = p.serviceStatus || family.serviceStatus || 'ACTIVE';
+    
+    // Mapeo de chips para estado de pago
+    const getPaymentStatusChip = () => {
+        if (status === 'CONFIRMADO' || status === 'ADELANTADO') {
+            return <Chip label="Pagado" size="small" color="success" />;
+        } else if (status === 'MORA' || status === 'ATRASADO') {
+            return <Chip label="Mora" size="small" color="error" />;
+        } else if (status === 'PENDIENTE') {
+            return <Chip label="Pendiente" size="small" color="warning" />;
+        } else if (status === 'EN_PROCESO') {
+            return <Chip label="En Proceso" size="small" color="warning" />;
+        } else if (status === 'ELIMINADO') {
+            return <Chip label="Eliminado" size="small" sx={{ backgroundColor: '#000000', color: 'white' }} />;
+        }
+        return <Chip label={status || '-'} size="small" />;
+    };
+    
+    // Mapeo de chips para estado del servicio
+    const getServiceStatusChip = () => {
+        if (serviceStatus === 'ACTIVE') {
+            return <Chip label="Activo" size="small" color="success" />;
+        } else if (serviceStatus === 'PAUSED') {
+            return <Chip label="Pausado" size="small" color="warning" />;
+        } else if (serviceStatus === 'SUSPENDED') {
+            return <Chip label="Suspendido" size="small" color="error" />;
+        } else if (serviceStatus === 'INACTIVE') {
+            return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
+        } else if (serviceStatus === 'DELETED') {
+            return <Chip label="Eliminado" size="small" sx={{ backgroundColor: '#000000', color: 'white' }} />;
+        }
+        return <Chip label="-" size="small" />;
+    };
 
     return (
         <TableRow key={p.id} hover>
-            <TableCell align="center">
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: statusColor }} aria-label={`estado-${status || 'unknown'}`} />
-                </Box>
+            <TableCell align="center" sx={{ borderLeft: '3px solid #2196F3', borderRight: '3px solid #E0E0E0' }}>
+                {getServiceStatusChip()}
+            </TableCell>
+            <TableCell align="center" sx={{ borderLeft: '3px solid #E0E0E0', borderRight: '3px solid #4CAF50' }}>
+                {getPaymentStatusChip()}
             </TableCell>
             <TableCell align="center">
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
@@ -76,6 +98,40 @@ const PaymentRow = React.memo(({ p, onRegisterClick, onReceiptClick, onEmailClic
     );
 });
 
+PaymentRow.propTypes = {
+    p: PropTypes.shape({
+        id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+        User: PropTypes.shape({
+            FamilyDetail: PropTypes.shape({
+                familyLastName: PropTypes.string,
+                Students: PropTypes.array,
+                routeType: PropTypes.string,
+                specialFee: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+                discount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+                requiresInvoice: PropTypes.bool,
+                automaticDebit: PropTypes.bool,
+                autoDebit: PropTypes.bool,
+                serviceStatus: PropTypes.string,
+                deleted: PropTypes.bool,
+            }),
+        }),
+        automaticDebit: PropTypes.bool,
+        lastPaymentDate: PropTypes.string,
+        lastPaidDate: PropTypes.string,
+        lastPayment: PropTypes.string,
+        requiresInvoice: PropTypes.bool,
+        finalStatus: PropTypes.string,
+        serviceStatus: PropTypes.string,
+    }),
+    onRegisterClick: PropTypes.func,
+    onReceiptClick: PropTypes.func,
+    onEmailClick: PropTypes.func,
+    onManageClick: PropTypes.func,
+    onNotesClick: PropTypes.func,
+    onDownloadHistory: PropTypes.func,
+    onManagePeriodsClick: PropTypes.func,
+};
+
 const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick, order, orderBy, onRequestSort }) => {
     // This component is now a controlled renderer: sorting is performed by the parent.
     // It receives `order` ('asc'|'desc'), `orderBy` (key), and `onRequestSort(property)` to toggle sorting.
@@ -85,12 +141,29 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
             <Table size="small">
                 <TableHead>
                     <TableRow>
-                        <TableCell align="center">Estado</TableCell>
+                        <TableCell align="center" sx={{ borderLeft: '3px solid #2196F3', borderRight: '3px solid #E0E0E0', fontWeight: 'bold' }}>
+                            <TableSortLabel
+                                active={orderBy === 'serviceStatus'}
+                                direction={orderBy === 'serviceStatus' ? order : 'asc'}
+                                onClick={() => onRequestSort?.('serviceStatus')}
+                            >
+                                Estado del Servicio
+                            </TableSortLabel>
+                        </TableCell>
+                        <TableCell align="center" sx={{ borderLeft: '3px solid #E0E0E0', borderRight: '3px solid #4CAF50', fontWeight: 'bold' }}>
+                            <TableSortLabel
+                                active={orderBy === 'status'}
+                                direction={orderBy === 'status' ? order : 'asc'}
+                                onClick={() => onRequestSort?.('status')}
+                            >
+                                Estado de Pago
+                            </TableSortLabel>
+                        </TableCell>
                         <TableCell align="center">
                             <TableSortLabel
                                 active={orderBy === 'familyLastName'}
                                 direction={orderBy === 'familyLastName' ? order : 'asc'}
-                                onClick={() => onRequestSort && onRequestSort('familyLastName')}
+                                onClick={() => onRequestSort?.('familyLastName')}
                             >
                                 Apellidos Familia
                             </TableSortLabel>
@@ -99,7 +172,7 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
                             <TableSortLabel
                                 active={orderBy === 'students'}
                                 direction={orderBy === 'students' ? order : 'asc'}
-                                onClick={() => onRequestSort && onRequestSort('students')}
+                                onClick={() => onRequestSort?.('students')}
                             >
                                 Cant. Estudiantes
                             </TableSortLabel>
@@ -108,7 +181,7 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
                             <TableSortLabel
                                 active={orderBy === 'routeType'}
                                 direction={orderBy === 'routeType' ? order : 'asc'}
-                                onClick={() => onRequestSort && onRequestSort('routeType')}
+                                onClick={() => onRequestSort?.('routeType')}
                             >
                                 Tipo de Ruta
                             </TableSortLabel>
@@ -117,7 +190,7 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
                             <TableSortLabel
                                 active={orderBy === 'lastPayment'}
                                 direction={orderBy === 'lastPayment' ? order : 'asc'}
-                                onClick={() => onRequestSort && onRequestSort('lastPayment')}
+                                onClick={() => onRequestSort?.('lastPayment')}
                             >
                                 Fecha último pago
                             </TableSortLabel>
@@ -126,7 +199,7 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
                             <TableSortLabel
                                 active={orderBy === 'discount'}
                                 direction={orderBy === 'discount' ? order : 'asc'}
-                                onClick={() => onRequestSort && onRequestSort('discount')}
+                                onClick={() => onRequestSort?.('discount')}
                             >
                                 Descuento
                             </TableSortLabel>
@@ -135,7 +208,7 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
                             <TableSortLabel
                                 active={orderBy === 'invoice'}
                                 direction={orderBy === 'invoice' ? order : 'asc'}
-                                onClick={() => onRequestSort && onRequestSort('invoice')}
+                                onClick={() => onRequestSort?.('invoice')}
                             >
                                 Envío Factura
                             </TableSortLabel>
@@ -161,6 +234,20 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
             </Table>
         </TableContainer>
     );
+};
+
+PaymentTable.propTypes = {
+    payments: PropTypes.array,
+    onRegisterClick: PropTypes.func,
+    onReceiptClick: PropTypes.func,
+    onEmailClick: PropTypes.func,
+    onManageClick: PropTypes.func,
+    onNotesClick: PropTypes.func,
+    onDownloadHistory: PropTypes.func,
+    onManagePeriodsClick: PropTypes.func,
+    order: PropTypes.oneOf(['asc', 'desc']),
+    orderBy: PropTypes.string,
+    onRequestSort: PropTypes.func,
 };
 
 export default React.memo(PaymentTable);

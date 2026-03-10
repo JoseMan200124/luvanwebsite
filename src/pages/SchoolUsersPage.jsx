@@ -68,6 +68,7 @@ import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import BulkScheduleModal from '../components/modals/BulkScheduleModal';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
+import UserServiceStatusModal from '../components/UserServiceStatusModal';
 
 // Opciones de roles disponibles en esta vista: Padre solamente
 const roleOptions = [
@@ -106,6 +107,7 @@ const SchoolUsersPage = () => {
     const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [serviceStatusFilter, setServiceStatusFilter] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [selectedUser, setSelectedUser] = useState(null);
@@ -116,12 +118,9 @@ const SchoolUsersPage = () => {
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
     const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
-    const [openActivateConfirm, setOpenActivateConfirm] = useState(false);
-    const [openSuspendConfirm, setOpenSuspendConfirm] = useState(false);
+    const [openServiceStatusModal, setOpenServiceStatusModal] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openRouteTypeModal, setOpenRouteTypeModal] = useState(false);
-    const [activateLoading, setActivateLoading] = useState(false);
-    const [suspendLoading, setSuspendLoading] = useState(false);
     const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
     const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
@@ -1125,12 +1124,12 @@ const SchoolUsersPage = () => {
     };
 
     const getUserStatus = useCallback((user) => {
-        // If user has explicit state flag (DB uses 0/1), consider 0 as Inactivo
-        if (user && (user.state === 0 || user.state === '0' || user.state === false)) return 'Inactivo';
+        // Estados ahora son: Nuevo, Duplicado, Actualizado
+        // Inactivo/Activo se manejan en el estado del servicio
         if (isUserNew(user)) return 'Nuevo';
         if (isFamilyLastNameDuplicated(user, users)) return 'Duplicado';
         if (user.FamilyDetail && user.FamilyDetail.hasUpdatedData) return 'Actualizado';
-        return 'Activo';
+        return '-'; // Sin estado especial
     }, [users]);
 
     const getStatusColor = (status) => {
@@ -1244,11 +1243,12 @@ const SchoolUsersPage = () => {
         setLoading(true);
         try {
             // Fetch only parents from the backend endpoint
+            const currentSchoolYear = schoolYear || stateSchoolYear;
             const response = await api.get('/users/parents', {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: { schoolId }
+                params: { schoolId, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}) }
             });
 
             const usersData = response.data.users || [];
@@ -1279,7 +1279,7 @@ const SchoolUsersPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [auth.token, schoolId]);
+    }, [auth.token, schoolId, schoolYear, stateSchoolYear]);
 
     useEffect(() => {
         if (auth.token && schoolId) {
@@ -1353,11 +1353,7 @@ const SchoolUsersPage = () => {
 
         // Filtrar por estado
         if (statusFilter) {
-            if (statusFilter === 'Activo') {
-                filtered = filtered.filter(user => !(user && (user.state === 0 || user.state === '0' || user.state === false)));
-            } else if (statusFilter === 'Inactivo') {
-                filtered = filtered.filter(user => (user && (user.state === 0 || user.state === '0' || user.state === false)));
-            } else if (statusFilter === 'Sin asignaciones') {
+            if (statusFilter === 'Sin asignaciones') {
                 // Show families that do NOT have all their students assigned (partial or none)
                 filtered = filtered.filter(user => getBusAssignStatus(user) !== 'all');
             } else {
@@ -1368,9 +1364,17 @@ const SchoolUsersPage = () => {
             }
         }
 
+        // Filtrar por estado del servicio
+        if (serviceStatusFilter) {
+            filtered = filtered.filter(user => {
+                const userServiceStatus = user.familyServiceStatus?.status;
+                return userServiceStatus === serviceStatusFilter;
+            });
+        }
+
         setFilteredUsers(filtered);
         setPage(0); // Reset page when filters change
-    }, [users, searchQuery, statusFilter, getUserStatus]);
+    }, [users, searchQuery, statusFilter, serviceStatusFilter, getUserStatus]);
 
     const handleBackToDashboard = () => {
         navigate(`/admin/escuelas/${schoolYear || stateSchoolYear}/${schoolId}`, {
@@ -1492,93 +1496,19 @@ const SchoolUsersPage = () => {
     const handleActivateClick = (user) => {
         if (!user) return;
         setSelectedUser(user);
-        setOpenActivateConfirm(true);
+        setOpenServiceStatusModal(true);
     };
 
     const handleSuspendClick = (user) => {
         if (!user) return;
         setSelectedUser(user);
-        setOpenSuspendConfirm(true);
+        setOpenServiceStatusModal(true);
     };
 
-    const handleCancelSuspend = () => {
+    const handleServiceStatusSuccess = () => {
+        setSnackbar({ open: true, message: 'Estado del servicio actualizado correctamente', severity: 'success' });
         setSelectedUser(null);
-        setOpenSuspendConfirm(false);
-    };
-
-    const handleConfirmSuspend = async () => {
-        if (!selectedUser || !selectedUser.id) return;
-        try {
-            setSuspendLoading(true);
-
-            // Obtener payment directamente por userId (no requiere schoolId/schoolYear)
-            const res = await api.get(`/payments/by-user/${selectedUser.id}`);
-            const payment = res.data.payment || res.data || null;
-
-            if (!payment || !payment.id) {
-                setSnackbar({ open: true, message: 'No se encontró un pago asociado para esta familia', severity: 'error' });
-                return;
-            }
-
-            await api.post(`/payments/v2/${payment.id}/suspend`);
-            setSnackbar({ open: true, message: 'Familia suspendida', severity: 'success' });
-            setOpenSuspendConfirm(false);
-            setSelectedUser(null);
-            // Refresh users list (suspend endpoint also updates user state)
-            fetchUsers();
-        } catch (err) {
-            console.error('Error suspending family from users page:', err);
-            const message = err?.response?.data?.message || 'Error suspendiendo la familia';
-            setSnackbar({ open: true, message, severity: 'error' });
-        } finally {
-            setSuspendLoading(false);
-        }
-    };
-
-    const handleCancelActivate = () => {
-        setSelectedUser(null);
-        setOpenActivateConfirm(false);
-    };
-
-    const handleConfirmActivate = async () => {
-        if (!selectedUser || !selectedUser.id) return;
-        try {
-            setActivateLoading(true);
-            // Prefer using payments v2 activate endpoint when possible (keeps payment and user status in sync)
-            const sId = stateSchool?.id || schoolId;
-            const sYear = schoolYear || stateSchoolYear;
-
-            if (sId && sYear) {
-                try {
-                    const res = await api.get('/payments', { params: { schoolId: sId, schoolYear: sYear, page: 1, limit: 200 } });
-                    const payments = res.data.payments || res.data || [];
-                    const payment = payments.find(p => (p.User && p.User.id) === selectedUser.id || p.userId === selectedUser.id);
-                    if (payment && payment.id) {
-                        await api.post(`/payments/v2/${payment.id}/activate`);
-                        setSnackbar({ open: true, message: 'Familia activada', severity: 'success' });
-                        setOpenActivateConfirm(false);
-                        setSelectedUser(null);
-                        fetchUsers();
-                        return;
-                    }
-                } catch (err) {
-                    console.warn('No se pudo activar vía payments v2, fallback a usuario:', err?.response?.data || err.message);
-                    // continue to fallback
-                }
-            }
-
-            // Fallback: activar usuario directamente
-            await api.patch(`/users/${selectedUser.id}/state`, { state: 1 });
-            setSnackbar({ open: true, message: 'Usuario activado correctamente', severity: 'success' });
-            setOpenActivateConfirm(false);
-            setSelectedUser(null);
-            fetchUsers();
-        } catch (err) {
-            console.error('Error activating user:', err);
-            setSnackbar({ open: true, message: 'Error activando el usuario', severity: 'error' });
-        } finally {
-            setActivateLoading(false);
-        }
+        fetchUsers();
     };
 
     const handleDeleteClick = (userOrId) => {
@@ -2039,6 +1969,10 @@ const SchoolUsersPage = () => {
                     va = String(getStudentsCount(a));
                     vb = String(getStudentsCount(b));
                     break;
+                case 'serviceStatus':
+                    va = a.familyServiceStatus?.status || '';
+                    vb = b.familyServiceStatus?.status || '';
+                    break;
                 default:
                     va = '';
                     vb = '';
@@ -2156,7 +2090,7 @@ const SchoolUsersPage = () => {
                                 Buscar
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={3}>
+                        <Grid item xs={12} md={2}>
                             <FormControl fullWidth variant="outlined">
                                 <InputLabel>Estado</InputLabel>
                                 <Select
@@ -2169,9 +2103,24 @@ const SchoolUsersPage = () => {
                                     <MenuItem value="Nuevo">Nuevo</MenuItem>
                                     <MenuItem value="Duplicado">Duplicado</MenuItem>
                                     <MenuItem value="Actualizado">Actualizado</MenuItem>
-                                    <MenuItem value="Activo">Activo</MenuItem>
-                                    <MenuItem value="Inactivo">Inactivo</MenuItem>
                                     <MenuItem value="Sin asignaciones">Sin asignaciones</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                            <FormControl fullWidth variant="outlined">
+                                <InputLabel>Estado del Servicio</InputLabel>
+                                <Select
+                                    value={serviceStatusFilter}
+                                    onChange={(e) => setServiceStatusFilter(e.target.value)}
+                                    label="Estado del Servicio"
+                                    startAdornment={<FilterList />}
+                                >
+                                    <MenuItem value="">Todos</MenuItem>
+                                    <MenuItem value="ACTIVE">Activo</MenuItem>
+                                    <MenuItem value="PAUSED">Pausado</MenuItem>
+                                    <MenuItem value="SUSPENDED">Suspendido</MenuItem>
+                                    <MenuItem value="INACTIVE">Inactivo</MenuItem>
                                 </Select>
                             </FormControl>
                         </Grid>
@@ -2302,6 +2251,15 @@ const SchoolUsersPage = () => {
                                 <Table stickyHeader>
                                     <TableHead>
                                         <TableRow>
+                                            <TableCell align="center">
+                                                <TableSortLabel
+                                                    active={sortBy === 'serviceStatus'}
+                                                    direction={sortBy === 'serviceStatus' ? sortOrder : 'asc'}
+                                                    onClick={() => handleSortChange('serviceStatus')}
+                                                >
+                                                    Estado del Servicio
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell>
                                                 <TableSortLabel
                                                     active={sortBy === 'familyLastName'}
@@ -2353,8 +2311,26 @@ const SchoolUsersPage = () => {
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {paginatedUsers.map((user) => (
+                                        {paginatedUsers.map((user) => {
+                                            const serviceStatus = user.familyServiceStatus?.status || 'ACTIVE';
+                                            const getServiceStatusChip = () => {
+                                                if (serviceStatus === 'ACTIVE') {
+                                                    return <Chip label="Activo" size="small" color="success" />;
+                                                } else if (serviceStatus === 'PAUSED') {
+                                                    return <Chip label="Pausado" size="small" color="warning" />;
+                                                } else if (serviceStatus === 'SUSPENDED') {
+                                                    return <Chip label="Suspendido" size="small" color="error" />;
+                                                } else if (serviceStatus === 'INACTIVE') {
+                                                    return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
+                                                }
+                                                return <Chip label="-" size="small" />;
+                                            };
+                                            
+                                            return (
                                             <TableRow key={user.id} hover>
+                                                <TableCell align="center">
+                                                    {getServiceStatusChip()}
+                                                </TableCell>
                                                 <TableCell>
                                                     <Typography variant="subtitle2" fontWeight="bold">
                                                         {user.FamilyDetail?.familyLastName || user.familyLastName || '-'}
@@ -2387,16 +2363,8 @@ const SchoolUsersPage = () => {
                                                     </Typography>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {getUserStatus(user) === 'Activo' ? (
+                                                    {getUserStatus(user) === '-' ? (
                                                         <Typography variant="body2" color="textSecondary">-</Typography>
-                                                    ) : getUserStatus(user) === 'Inactivo' ? (
-                                                        <Chip
-                                                            label={getUserStatus(user)}
-                                                            color={getStatusColor(getUserStatus(user))}
-                                                            size="small"
-                                                            clickable
-                                                            onClick={() => handleActivateClick(user)}
-                                                        />
                                                     ) : (
                                                         <Chip
                                                             label={getUserStatus(user)}
@@ -2473,11 +2441,12 @@ const SchoolUsersPage = () => {
                                                     </Box>
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
+                                            );
+                                        })}
 
                                         {paginatedUsers.length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                                                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                                                     <Typography variant="body1" color="textSecondary">
                                                         No se encontraron usuarios con los filtros aplicados
                                                     </Typography>
@@ -2577,37 +2546,18 @@ const SchoolUsersPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Diálogo de confirmación para activar familia */}
-            <Dialog open={openActivateConfirm} onClose={handleCancelActivate} maxWidth="xs" fullWidth>
-                <DialogTitle>Activar Familia</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Deseas activar a la familia <strong>{selectedUser?.FamilyDetail?.familyLastName || selectedUser?.familyLastName || selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>?
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCancelActivate}>Cancelar</Button>
-                    <Button variant="contained" color="success" onClick={handleConfirmActivate} disabled={activateLoading}>
-                        {activateLoading ? 'Activando...' : 'Activar'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Diálogo de confirmación para suspender familia (usa la misma lógica que el modal de pagos) */}
-            <Dialog open={openSuspendConfirm} onClose={handleCancelSuspend} maxWidth="xs" fullWidth>
-                <DialogTitle>Suspender Familia</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Deseas suspender a la familia <strong>{selectedUser?.FamilyDetail?.familyLastName || selectedUser?.familyLastName || selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>?
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCancelSuspend}>Cancelar</Button>
-                    <Button variant="contained" color="error" onClick={handleConfirmSuspend} disabled={suspendLoading}>
-                        {suspendLoading ? 'Suspendiendo...' : 'Suspender'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            {/* Modal de gestión de estados del servicio (reemplaza activar/suspender) */}
+            <UserServiceStatusModal
+                open={openServiceStatusModal}
+                onClose={() => {
+                    setOpenServiceStatusModal(false);
+                    setSelectedUser(null);
+                }}
+                user={selectedUser}
+                schoolId={stateSchool?.id || schoolId}
+                schoolYear={schoolYear || stateSchoolYear}
+                onSuccess={handleServiceStatusSuccess}
+            />
 
             {/* Modal de confirmación para descargas */}
             <Dialog open={openSchoolSelectDialog} onClose={() => setOpenSchoolSelectDialog(false)} maxWidth="sm" fullWidth>

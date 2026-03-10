@@ -1,6 +1,6 @@
 // src/pages/SchoolDashboardPage.jsx
 
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import {
     Typography,
     Box,
@@ -27,7 +27,8 @@ import {
     FormControl,
     InputLabel,
     Select,
-    MenuItem
+    MenuItem,
+    IconButton
 } from '@mui/material';
 import { 
     School as SchoolIcon, 
@@ -39,7 +40,9 @@ import {
     People,
     Description as ContractIcon,
     Payment as PaymentIcon,
-    Policy as ProtocolIcon
+    Policy as ProtocolIcon,
+    ChevronLeft,
+    ChevronRight
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
@@ -76,6 +79,14 @@ const SummaryCard = styled(Card)`
     }
 `;
 
+// Estados de servicio disponibles en el carrusel de contadores
+const CAROUSEL_STATUSES = [
+    { key: 'ACTIVE',    label: 'Servicio Activo',      textColor: 'primary.main' },
+    { key: 'SUSPENDED', label: 'Servicio Suspendido',   textColor: 'error.main' },
+    { key: 'PAUSED',    label: 'Servicio Pausado',      textColor: 'warning.main' },
+    { key: 'INACTIVE',  label: 'Servicio Inactivo',     textColor: 'text.secondary' }
+];
+
 const SchoolDashboardPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -107,6 +118,20 @@ const SchoolDashboardPage = () => {
     // Estado para el filtro de día (default Lunes)
     const [selectedDay, setSelectedDay] = useState('monday');
     const weekdays = ['monday','tuesday','wednesday','thursday','friday'];
+
+    // Estado para el carrusel de estado del servicio en los contadores
+    const [statusSlideIndex, setStatusSlideIndex] = useState(0);
+    // Ref para leer siempre el slide actual dentro de callbacks sin añadir dependencias extra
+    const statusSlideIndexRef = useRef(0);
+    useEffect(() => { statusSlideIndexRef.current = statusSlideIndex; }, [statusSlideIndex]);
+
+    // Estado para el bloque de "utilizan / no utilizan el servicio"
+    const [serviceUsageSummary, setServiceUsageSummary] = useState({
+        familiesUsing: 0,
+        familiesNotUsing: 0,
+        studentsUsing: 0,
+        studentsNotUsing: 0
+    });
 
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
@@ -158,7 +183,7 @@ const SchoolDashboardPage = () => {
         }
     }, [auth.token, schoolId, schoolYear, selectedDay]);
 
-    const fetchUserSummary = useCallback(async () => {
+    const fetchUserSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!schoolId) return;
         
         try {
@@ -166,38 +191,23 @@ const SchoolDashboardPage = () => {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: {
-                    schoolYear: schoolYear
-                }
+                params: { schoolYear: schoolYear, serviceStatus }
             });
             
             const summary = response.data.summary || {};
-            const inactiveCount = summary.inactive ?? summary.inactivos ?? 0;
             setUserSummary({
                 completa: summary.completa || 0,
                 mediaAM: summary.mediaAM || 0,
                 mediaPM: summary.mediaPM || 0,
-                // total activos: solo familias activas por tipo de ruta (excluye inactivos)
-                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0),
-                // support varios nombres que la API podría retornar para inactivos
-                inactive: inactiveCount,
-                inactivos: inactiveCount,
-                inactiveMediaAM: summary.inactiveMediaAM ?? 0,
-                inactiveMediaPM: summary.inactiveMediaPM ?? 0
+                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0)
             });
         } catch (err) {
             console.error('Error fetching user summary:', err);
-            // Por ahora usamos datos de ejemplo
-            setUserSummary({
-                completa: 45,
-                mediaAM: 23,
-                mediaPM: 18,
-                total: 86
-            });
+            setUserSummary({ completa: 0, mediaAM: 0, mediaPM: 0, total: 0 });
         }
     }, [auth.token, schoolId, schoolYear]);
 
-    const fetchStudentSummary = useCallback(async () => {
+    const fetchStudentSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!schoolId) return;
         
         try {
@@ -205,31 +215,68 @@ const SchoolDashboardPage = () => {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: {
-                    schoolYear: schoolYear
-                }
+                params: { schoolYear: schoolYear, serviceStatus }
             });
             
             const summary = response.data.summary || {};
-            const inactiveStudents = summary.inactive ?? summary.inactivos ?? 0;
+            const completa = summary.completa || 0;
+            const mediaAM = summary.mediaAM || 0;
+            const mediaPM = summary.mediaPM || 0;
+            const inactive = summary.inactive || 0;
+            // The backend returns `summary.total` as the sum of route-type counters.
+            // Prefer that value; fall back to the sum of route-types (exclude inactive)
+            const total = typeof summary.total === 'number' ? summary.total : (completa + mediaAM + mediaPM);
             setStudentSummary({
-                completa: summary.completa || 0,
-                mediaAM: summary.mediaAM || 0,
-                mediaPM: summary.mediaPM || 0,
-                inactive: inactiveStudents,
-                // total activos: solo estudiantes activos por tipo de ruta (excluye inactivos)
-                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0)
+                completa,
+                mediaAM,
+                mediaPM,
+                inactive,
+                total
             });
         } catch (err) {
             console.error('Error fetching student summary:', err);
-            // Por ahora usamos datos de ejemplo
-            setStudentSummary({
-                completa: 120,
-                mediaAM: 45,
-                mediaPM: 38,
-                inactive: 12,
-                total: 203
+            setStudentSummary({ completa: 0, mediaAM: 0, mediaPM: 0, inactive: 0, total: 0 });
+        }
+    }, [auth.token, schoolId, schoolYear]);
+
+    // Obtiene contadores globales: cuántas familias/estudiantes usan vs no usan el servicio
+    const fetchServiceUsageSummary = useCallback(async () => {
+        if (!schoolId) return;
+        const USING     = ['ACTIVE', 'SUSPENDED'];
+        const NOT_USING = ['PAUSED', 'INACTIVE'];
+        const allStatuses = [...USING, ...NOT_USING];
+
+        try {
+            const [famResults, stuResults] = await Promise.all([
+                Promise.all(allStatuses.map(s =>
+                    api.get(`/parents/summary/${schoolId}`, {
+                        headers: { Authorization: `Bearer ${auth.token}` },
+                        params: { schoolYear, serviceStatus: s }
+                    }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
+                    .catch(() => ({ status: s, total: 0, inactive: 0 }))
+                )),
+                Promise.all(allStatuses.map(s =>
+                    api.get(`/students/summary/${schoolId}`, {
+                        headers: { Authorization: `Bearer ${auth.token}` },
+                        params: { schoolYear, serviceStatus: s }
+                    }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
+                    .catch(() => ({ status: s, total: 0, inactive: 0 }))
+                ))
+            ]);
+
+            // The API's per-status `total` already counts students/families for that status
+            // (route-type counters include those users), so use `total` directly to avoid double-counting.
+            const famMap = Object.fromEntries(famResults.map(r => [r.status, r.total]));
+            const stuMap = Object.fromEntries(stuResults.map(r => [r.status, r.total]));
+
+            setServiceUsageSummary({
+                familiesUsing:    USING.reduce((acc, s) => acc + (famMap[s] || 0), 0),
+                familiesNotUsing: NOT_USING.reduce((acc, s) => acc + (famMap[s] || 0), 0),
+                studentsUsing:    USING.reduce((acc, s) => acc + (stuMap[s] || 0), 0),
+                studentsNotUsing: NOT_USING.reduce((acc, s) => acc + (stuMap[s] || 0), 0)
             });
+        } catch (err) {
+            console.error('Error fetching service usage summary:', err);
         }
     }, [auth.token, schoolId, schoolYear]);
 
@@ -239,22 +286,24 @@ const SchoolDashboardPage = () => {
             Promise.all([
                 fetchSchoolData(),
                 fetchRouteOccupancy(),
-                fetchUserSummary(),
-                fetchStudentSummary()
+                fetchUserSummary(CAROUSEL_STATUSES[statusSlideIndexRef.current].key),
+                fetchStudentSummary(CAROUSEL_STATUSES[statusSlideIndexRef.current].key),
+                fetchServiceUsageSummary()
             ]).finally(() => {
                 setLoading(false);
             });
         }
-    }, [auth.token, schoolId, fetchSchoolData, fetchRouteOccupancy, fetchUserSummary, fetchStudentSummary]);
+    }, [auth.token, schoolId, fetchSchoolData, fetchRouteOccupancy, fetchUserSummary, fetchStudentSummary, fetchServiceUsageSummary]);
 
     useRegisterPageRefresh(async () => {
         setLoading(true);
+        const currentStatus = CAROUSEL_STATUSES[statusSlideIndexRef.current].key;
         try {
-            await Promise.all([fetchSchoolData(), fetchRouteOccupancy(), fetchUserSummary(), fetchStudentSummary()]);
+            await Promise.all([fetchSchoolData(), fetchRouteOccupancy(), fetchUserSummary(currentStatus), fetchStudentSummary(currentStatus), fetchServiceUsageSummary()]);
         } finally {
             setLoading(false);
         }
-    }, [fetchSchoolData, fetchRouteOccupancy, fetchUserSummary, fetchStudentSummary]);
+    }, [fetchSchoolData, fetchRouteOccupancy, fetchUserSummary, fetchStudentSummary, fetchServiceUsageSummary]);
 
     const handleBackToSelection = () => {
         navigate('/admin/escuelas');
@@ -314,6 +363,17 @@ const SchoolDashboardPage = () => {
         setModalOpen(false);
         setSelectedRoute({ routeNumber: '', scheduleCode: '' });
     };
+
+    // Carrusel: navegar entre estados de servicio y refrescar ambos contadores
+    const handleSlideChange = (delta) => {
+        const newIndex = (statusSlideIndex + delta + CAROUSEL_STATUSES.length) % CAROUSEL_STATUSES.length;
+        setStatusSlideIndex(newIndex);
+        const newStatus = CAROUSEL_STATUSES[newIndex].key;
+        fetchUserSummary(newStatus);
+        fetchStudentSummary(newStatus);
+    };
+
+    const activeCarouselStatus = CAROUSEL_STATUSES[statusSlideIndex];
 
     const getDayLabel = (day) => {
         const dayLabels = {
@@ -659,10 +719,99 @@ const SchoolDashboardPage = () => {
                 {/* Sección B: Resumen de usuarios y acciones */}
                 <Grid item xs={12} lg={4}>
                     <Grid container spacing={3}>
-                        {/* Sub-sección 1: Resumen de familias y estudiantes registrados */}
+                        {/* Sub-sección 1: Uso del Servicio */}
+                        <Grid item xs={12}>
+                            <SummaryCard>
+                                <CardContent>
+                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                        Uso del Servicio
+                                    </Typography>
+                                    <Divider sx={{ mb: 2 }} />
+                                    <Grid container spacing={2}>
+                                        {/* Utilizan el servicio */}
+                                        <Grid item xs={6}>
+                                            <Box sx={{
+                                                p: 1.5,
+                                                borderRadius: 2,
+                                                bgcolor: 'success.50',
+                                                border: '1px solid',
+                                                borderColor: 'success.200',
+                                                textAlign: 'center'
+                                            }}>
+                                                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                                    Utilizan el servicio
+                                                </Typography>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-around', mt: 0.5 }}>
+                                                    <Box>
+                                                        <Typography variant="h5" color="success.main" fontWeight="bold">
+                                                            {serviceUsageSummary.familiesUsing}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Familias
+                                                        </Typography>
+                                                    </Box>
+                                                    <Divider orientation="vertical" flexItem />
+                                                    <Box>
+                                                        <Typography variant="h5" color="success.main" fontWeight="bold">
+                                                            {serviceUsageSummary.studentsUsing}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Estudiantes
+                                                        </Typography>
+                                                    </Box>
+                                                </Box>
+                                                <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.75 }}>
+                                                    Activo + Suspendido
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+
+                                        {/* No utilizan el servicio */}
+                                        <Grid item xs={6}>
+                                            <Box sx={{
+                                                p: 1.5,
+                                                borderRadius: 2,
+                                                bgcolor: 'grey.50',
+                                                border: '1px solid',
+                                                borderColor: 'grey.300',
+                                                textAlign: 'center'
+                                            }}>
+                                                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                                    No utilizan el servicio
+                                                </Typography>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-around', mt: 0.5 }}>
+                                                    <Box>
+                                                        <Typography variant="h5" color="text.secondary" fontWeight="bold">
+                                                            {serviceUsageSummary.familiesNotUsing}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Familias
+                                                        </Typography>
+                                                    </Box>
+                                                    <Divider orientation="vertical" flexItem />
+                                                    <Box>
+                                                        <Typography variant="h5" color="text.secondary" fontWeight="bold">
+                                                            {serviceUsageSummary.studentsNotUsing}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Estudiantes
+                                                        </Typography>
+                                                    </Box>
+                                                </Box>
+                                                <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.75 }}>
+                                                    Pausado + Inactivo
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+                                    </Grid>
+                                </CardContent>
+                            </SummaryCard>
+                        </Grid>
+
+                        {/* Sub-sección 2: Resumen de familias y estudiantes registrados */}
                         <Grid item xs={12}>
                             <Grid container spacing={2}>
-                                {/* Familias Registradas */}
+                                {/* Familias - carrusel por estado del servicio */}
                                 <Grid item xs={12} md={6}>
                                     <SummaryCard>
                                         <CardContent>
@@ -671,79 +820,65 @@ const SchoolDashboardPage = () => {
                                                 Familias
                                             </Typography>
                                             <Divider sx={{ mb: 2 }} />
-                                            
-                                            <Box sx={{ textAlign: 'center', mb: 2 }}>
-                                                <Typography variant="h3" color="primary" fontWeight="bold">
-                                                    {userSummary.total}
-                                                </Typography>
-                                                <Typography variant="body2" color="textSecondary">
-                                                    Activos
-                                                </Typography>
+
+                                            {/* Carrusel: flechas + contador grande */}
+                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mb: 0.5 }}>
+                                                <IconButton size="small" onClick={() => handleSlideChange(-1)} aria-label="Estado anterior">
+                                                    <ChevronLeft />
+                                                </IconButton>
+                                                <Box sx={{ textAlign: 'center', minWidth: 130 }}>
+                                                    <Typography variant="h3" sx={{ color: activeCarouselStatus.textColor }} fontWeight="bold">
+                                                        {userSummary.total}
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary" noWrap>
+                                                        {activeCarouselStatus.label}
+                                                    </Typography>
+                                                </Box>
+                                                <IconButton size="small" onClick={() => handleSlideChange(1)} aria-label="Estado siguiente">
+                                                    <ChevronRight />
+                                                </IconButton>
+                                            </Box>
+
+                                            {/* Indicadores de posición */}
+                                            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.75, mb: 1.5 }}>
+                                                {CAROUSEL_STATUSES.map((s, i) => (
+                                                    <Box
+                                                        key={s.key}
+                                                        onClick={() => { setStatusSlideIndex(i); fetchUserSummary(s.key); fetchStudentSummary(s.key); }}
+                                                        sx={{
+                                                            width: 6, height: 6, borderRadius: '50%', cursor: 'pointer',
+                                                            backgroundColor: i === statusSlideIndex ? 'primary.main' : 'grey.300',
+                                                            transition: 'background-color 0.2s'
+                                                        }}
+                                                    />
+                                                ))}
                                             </Box>
 
                                             <List dense>
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <Box sx={{ 
-                                                            width: 12, 
-                                                            height: 12, 
-                                                            borderRadius: '50%', 
-                                                            backgroundColor: 'success.main' 
-                                                        }} />
+                                                <ListItem disableGutters>
+                                                    <ListItemIcon sx={{ minWidth: 28 }}>
+                                                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: 'success.main' }} />
                                                     </ListItemIcon>
-                                                    <ListItemText 
-                                                        primary="Completa" 
-                                                        secondary={`${userSummary.completa}`}
-                                                    />
+                                                    <ListItemText primary="Completa" secondary={`${userSummary.completa}`} />
                                                 </ListItem>
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <Box sx={{ 
-                                                            width: 12, 
-                                                            height: 12, 
-                                                            borderRadius: '50%', 
-                                                            backgroundColor: 'warning.main' 
-                                                        }} />
+                                                <ListItem disableGutters>
+                                                    <ListItemIcon sx={{ minWidth: 28 }}>
+                                                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: 'warning.main' }} />
                                                     </ListItemIcon>
-                                                    <ListItemText 
-                                                        primary="Media AM" 
-                                                        secondary={`${userSummary.mediaAM}`}
-                                                    />
+                                                    <ListItemText primary="Media AM" secondary={`${userSummary.mediaAM}`} />
                                                 </ListItem>
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <Box sx={{ 
-                                                            width: 12, 
-                                                            height: 12, 
-                                                            borderRadius: '50%', 
-                                                            backgroundColor: 'info.main' 
-                                                        }} />
+                                                <ListItem disableGutters>
+                                                    <ListItemIcon sx={{ minWidth: 28 }}>
+                                                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: 'info.main' }} />
                                                     </ListItemIcon>
-                                                    <ListItemText 
-                                                        primary="Media PM" 
-                                                        secondary={`${userSummary.mediaPM}`}
-                                                    />
-                                                </ListItem>
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <Box sx={{ 
-                                                            width: 12, 
-                                                            height: 12, 
-                                                            borderRadius: '50%', 
-                                                            backgroundColor: 'grey.500' 
-                                                        }} />
-                                                    </ListItemIcon>
-                                                    <ListItemText 
-                                                        primary="Inactivos" 
-                                                        secondary={`${userSummary.inactive || 0}`}
-                                                    />
+                                                    <ListItemText primary="Media PM" secondary={`${userSummary.mediaPM}`} />
                                                 </ListItem>
                                             </List>
                                         </CardContent>
                                     </SummaryCard>
                                 </Grid>
 
-                                {/* Estudiantes Registrados */}
+                                {/* Estudiantes - carrusel por estado del servicio (sincronizado con Familias) */}
                                 <Grid item xs={12} md={6}>
                                     <SummaryCard>
                                         <CardContent>
@@ -752,72 +887,50 @@ const SchoolDashboardPage = () => {
                                                 Estudiantes
                                             </Typography>
                                             <Divider sx={{ mb: 2 }} />
-                                            
-                                            <Box sx={{ textAlign: 'center', mb: 2 }}>
-                                                <Typography variant="h3" color="primary" fontWeight="bold">
+
+                                            {/* Carrusel: mismo estado que Familias */}
+                                            <Box sx={{ textAlign: 'center', mb: 0.5 }}>
+                                                <Typography variant="h3" sx={{ color: activeCarouselStatus.textColor }} fontWeight="bold">
                                                     {studentSummary.total}
                                                 </Typography>
-                                                <Typography variant="body2" color="textSecondary">
-                                                    Activos
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {activeCarouselStatus.label}
                                                 </Typography>
                                             </Box>
 
+                                            {/* Indicadores de posición */}
+                                            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.75, mb: 1.5 }}>
+                                                {CAROUSEL_STATUSES.map((s, i) => (
+                                                    <Box
+                                                        key={s.key}
+                                                        onClick={() => { setStatusSlideIndex(i); fetchUserSummary(s.key); fetchStudentSummary(s.key); }}
+                                                        sx={{
+                                                            width: 6, height: 6, borderRadius: '50%', cursor: 'pointer',
+                                                            backgroundColor: i === statusSlideIndex ? 'primary.main' : 'grey.300',
+                                                            transition: 'background-color 0.2s'
+                                                        }}
+                                                    />
+                                                ))}
+                                            </Box>
+
                                             <List dense>
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <Box sx={{ 
-                                                            width: 12, 
-                                                            height: 12, 
-                                                            borderRadius: '50%', 
-                                                            backgroundColor: 'success.main' 
-                                                        }} />
+                                                <ListItem disableGutters>
+                                                    <ListItemIcon sx={{ minWidth: 28 }}>
+                                                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: 'success.main' }} />
                                                     </ListItemIcon>
-                                                    <ListItemText 
-                                                        primary="Completa" 
-                                                        secondary={`${studentSummary.completa}`}
-                                                    />
+                                                    <ListItemText primary="Completa" secondary={`${studentSummary.completa}`} />
                                                 </ListItem>
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <Box sx={{ 
-                                                            width: 12, 
-                                                            height: 12, 
-                                                            borderRadius: '50%', 
-                                                            backgroundColor: 'warning.main' 
-                                                        }} />
+                                                <ListItem disableGutters>
+                                                    <ListItemIcon sx={{ minWidth: 28 }}>
+                                                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: 'warning.main' }} />
                                                     </ListItemIcon>
-                                                    <ListItemText 
-                                                        primary="Media AM" 
-                                                        secondary={`${studentSummary.mediaAM}`}
-                                                    />
+                                                    <ListItemText primary="Media AM" secondary={`${studentSummary.mediaAM}`} />
                                                 </ListItem>
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <Box sx={{ 
-                                                            width: 12, 
-                                                            height: 12, 
-                                                            borderRadius: '50%', 
-                                                            backgroundColor: 'info.main' 
-                                                        }} />
+                                                <ListItem disableGutters>
+                                                    <ListItemIcon sx={{ minWidth: 28 }}>
+                                                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: 'info.main' }} />
                                                     </ListItemIcon>
-                                                    <ListItemText 
-                                                        primary="Media PM" 
-                                                        secondary={`${studentSummary.mediaPM}`}
-                                                    />
-                                                </ListItem>
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <Box sx={{ 
-                                                            width: 12, 
-                                                            height: 12, 
-                                                            borderRadius: '50%', 
-                                                            backgroundColor: 'grey.500' 
-                                                        }} />
-                                                    </ListItemIcon>
-                                                    <ListItemText 
-                                                        primary="Inactivos" 
-                                                        secondary={`${studentSummary.inactive}`}
-                                                    />
+                                                    <ListItemText primary="Media PM" secondary={`${studentSummary.mediaPM}`} />
                                                 </ListItem>
                                             </List>
                                         </CardContent>
@@ -826,145 +939,152 @@ const SchoolDashboardPage = () => {
                             </Grid>
                         </Grid>
 
-                        {/* Sub-sección 2: Botón de usuarios */}
-                        <PermissionGuard permission="colegios-familias">
-                            <Grid item xs={12}>
-                                <SummaryCard>
-                                    <CardContent sx={{ textAlign: 'center' }}>
-                                        <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                        <Typography variant="h6" gutterBottom>
-                                            Gestión de Familias
-                                        </Typography>
-                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                            Ver y gestionar todas las familias registradas en este colegio
-                                        </Typography>
-                                        <Button
-                                            variant="contained"
-                                            color="primary"
-                                            size="large"
-                                            startIcon={<Group />}
-                                            onClick={handleViewUsers}
-                                            fullWidth
-                                            sx={{ borderRadius: 2 }}
-                                        >
-                                            Ver Familias
-                                        </Button>
-                                    </CardContent>
-                                </SummaryCard>
-                            </Grid>
-                        </PermissionGuard>
+                        {/* Compact: mostrar 2 tarjetas visibles y el resto en un contenedor scrollable */}
+                        <Grid item xs={12}>
+                            <Box sx={{ maxHeight: 220, overflowY: 'auto', pr: 1 }}>
+                                <Grid container spacing={2}>
+                                    {/* Sub-sección 3: Botón de usuarios */}
+                                    <PermissionGuard permission="colegios-familias">
+                                        <Grid item xs={12}>
+                                            <SummaryCard>
+                                                <CardContent sx={{ textAlign: 'center' }}>
+                                                    <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                    <Typography variant="h6" gutterBottom>
+                                                        Gestión de Familias
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                        Ver y gestionar todas las familias registradas en este colegio
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="large"
+                                                        startIcon={<Group />}
+                                                        onClick={handleViewUsers}
+                                                        fullWidth
+                                                        sx={{ borderRadius: 2 }}
+                                                    >
+                                                        Ver Familias
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    </PermissionGuard>
 
-                        {/* Sub-sección 3: Botón de pagos */}
-                        <PermissionGuard permission="colegios-pagos">
-                            <Grid item xs={12}>
-                                <SummaryCard>
-                                    <CardContent sx={{ textAlign: 'center' }}>
-                                        <PaymentIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                        <Typography variant="h6" gutterBottom>
-                                            Gestión de Pagos
-                                        </Typography>
-                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                            Accede al panel de pagos y cobros específico de este colegio
-                                        </Typography>
-                                        <Button
-                                            variant="contained"
-                                            color="primary"
-                                            size="large"
-                                            startIcon={<PaymentIcon />}
-                                            onClick={handleViewPayments}
-                                            fullWidth
-                                            sx={{ borderRadius: 2 }}
-                                        >
-                                            Ver Pagos
-                                        </Button>
-                                    </CardContent>
-                                </SummaryCard>
-                            </Grid>
-                        </PermissionGuard>
+                                    {/* Sub-sección 3: Botón de pagos */}
+                                    <PermissionGuard permission="colegios-pagos">
+                                        <Grid item xs={12}>
+                                            <SummaryCard>
+                                                <CardContent sx={{ textAlign: 'center' }}>
+                                                    <PaymentIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                    <Typography variant="h6" gutterBottom>
+                                                        Gestión de Pagos
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                        Accede al panel de pagos y cobros específico de este colegio
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="large"
+                                                        startIcon={<PaymentIcon />}
+                                                        onClick={handleViewPayments}
+                                                        fullWidth
+                                                        sx={{ borderRadius: 2 }}
+                                                    >
+                                                        Ver Pagos
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    </PermissionGuard>
 
-                        {/* Sub-sección 4: Botón de buses */}
-                        <PermissionGuard permission="colegios-gestion-buses">
-                            <Grid item xs={12}>
-                                <SummaryCard>
-                                    <CardContent sx={{ textAlign: 'center' }}>
-                                        <DirectionsBus sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                        <Typography variant="h6" gutterBottom>
-                                            Gestión de Buses
-                                        </Typography>
-                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                            Ver y gestionar los buses asignados a este colegio
-                                        </Typography>
-                                        <Button
-                                            variant="contained"
-                                            color="primary"
-                                            size="large"
-                                            startIcon={<DirectionsBus />}
-                                            onClick={handleViewBuses}
-                                            fullWidth
-                                            sx={{ borderRadius: 2 }}
-                                        >
-                                            Ver Buses
-                                        </Button>
-                                    </CardContent>
-                                </SummaryCard>
-                            </Grid>
-                        </PermissionGuard>
+                                    {/* Sub-sección 4: Botón de buses */}
+                                    <PermissionGuard permission="colegios-gestion-buses">
+                                        <Grid item xs={12}>
+                                            <SummaryCard>
+                                                <CardContent sx={{ textAlign: 'center' }}>
+                                                    <DirectionsBus sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                    <Typography variant="h6" gutterBottom>
+                                                        Gestión de Buses
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                        Ver y gestionar los buses asignados a este colegio
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="large"
+                                                        startIcon={<DirectionsBus />}
+                                                        onClick={handleViewBuses}
+                                                        fullWidth
+                                                        sx={{ borderRadius: 2 }}
+                                                    >
+                                                        Ver Buses
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    </PermissionGuard>
 
-                        {/* Sub-sección 5: Botón de contratos */}
-                        <PermissionGuard permission="colegios-contratos">
-                            <Grid item xs={12}>
-                                <SummaryCard>
-                                    <CardContent sx={{ textAlign: 'center' }}>
-                                        <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                        <Typography variant="h6" gutterBottom>
-                                            Gestión de Contratos
-                                        </Typography>
-                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                            Ver y gestionar los contratos específicos de este colegio
-                                        </Typography>
-                                        <Button
-                                            variant="contained"
-                                            color="primary"
-                                            size="large"
-                                            startIcon={<ContractIcon />}
-                                            onClick={handleViewContracts}
-                                            fullWidth
-                                            sx={{ borderRadius: 2 }}
-                                        >
-                                            Ver Contratos
-                                        </Button>
-                                    </CardContent>
-                                </SummaryCard>
-                            </Grid>
-                        </PermissionGuard>
+                                    {/* Sub-sección 5: Botón de contratos */}
+                                    <PermissionGuard permission="colegios-contratos">
+                                        <Grid item xs={12}>
+                                            <SummaryCard>
+                                                <CardContent sx={{ textAlign: 'center' }}>
+                                                    <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                    <Typography variant="h6" gutterBottom>
+                                                        Gestión de Contratos
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                        Ver y gestionar los contratos específicos de este colegio
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="large"
+                                                        startIcon={<ContractIcon />}
+                                                        onClick={handleViewContracts}
+                                                        fullWidth
+                                                        sx={{ borderRadius: 2 }}
+                                                    >
+                                                        Ver Contratos
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    </PermissionGuard>
 
-                        {/* Sub-sección 6: Botón de protocolos */}
-                        <PermissionGuard permission="colegios-protocolos-reglamentos">
-                            <Grid item xs={12}>
-                                <SummaryCard>
-                                    <CardContent sx={{ textAlign: 'center' }}>
-                                        <ProtocolIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                        <Typography variant="h6" gutterBottom>
-                                            Protocolos y Reglamentos
-                                        </Typography>
-                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                            Ver y gestionar protocolos y reglamentos de este colegio
-                                        </Typography>
-                                        <Button
-                                            variant="contained"
-                                            color="primary"
-                                            size="large"
-                                            startIcon={<ProtocolIcon />}
-                                            onClick={handleViewProtocols}
-                                            fullWidth
-                                            sx={{ borderRadius: 2 }}
-                                        >
-                                            Ver Protocolos
-                                        </Button>
-                                    </CardContent>
-                                </SummaryCard>
-                            </Grid>
-                        </PermissionGuard>
+                                    {/* Sub-sección 6: Botón de protocolos */}
+                                    <PermissionGuard permission="colegios-protocolos-reglamentos">
+                                        <Grid item xs={12}>
+                                            <SummaryCard>
+                                                <CardContent sx={{ textAlign: 'center' }}>
+                                                    <ProtocolIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                    <Typography variant="h6" gutterBottom>
+                                                        Protocolos y Reglamentos
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                        Ver y gestionar protocolos y reglamentos de este colegio
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="large"
+                                                        startIcon={<ProtocolIcon />}
+                                                        onClick={handleViewProtocols}
+                                                        fullWidth
+                                                        sx={{ borderRadius: 2 }}
+                                                    >
+                                                        Ver Protocolos
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    </PermissionGuard>
+                                </Grid>
+                            </Box>
+                        </Grid>
                     </Grid>
                 </Grid>
             </Grid>

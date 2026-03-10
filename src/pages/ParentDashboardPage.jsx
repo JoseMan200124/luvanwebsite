@@ -179,6 +179,9 @@ const tagSlotsByDay = (slotsForDay) => {
 const ParentDashboardPage = () => {
   const { auth } = useContext(AuthContext);
 
+  // Detectar si el usuario tiene estado SUSPENDED
+  const isSuspended = auth?.user?.serviceStatus === 'SUSPENDED';
+
   const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({ open: false, sev: 'success', msg: '' });
 
@@ -207,6 +210,11 @@ const ParentDashboardPage = () => {
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [updateDialogData, setUpdateDialogData] = useState({});
 
+  // null = verificando, true/false = resultado conocido
+  const [hasSignedContract, setHasSignedContract] = useState(null);
+  // Suspendido específicamente por falta de contrato (sin mora)
+  const isSuspendedForNoContract = isSuspended && hasSignedContract === false;
+
   // Llama /parents/:id/route-info y, si hay estudiantes con id, trae sus slots
   const loadAll = async () => {
     setLoading(true);
@@ -219,10 +227,16 @@ const ParentDashboardPage = () => {
         return;
       }
 
-      // 1) Resumen de padre/familia
-      const res = await api.get(`/parents/${userId}/route-info`);
+      // 1) Resumen de padre/familia + contratos firmados (en paralelo)
+      const [res, filledRes] = await Promise.all([
+        api.get(`/parents/${userId}/route-info`),
+        api.get(`/parents/${userId}/filled-contracts`).catch(() => ({ data: { filledContracts: [] } }))
+      ]);
       const info = normalizeParentInfo(res?.data?.data);
       setParentInfo(info);
+
+      const filledList = Array.isArray(filledRes.data?.filledContracts) ? filledRes.data.filledContracts : [];
+      setHasSignedContract(filledList.length > 0);
 
       // 2) Si tengo ids de estudiantes, cargo sus scheduleSlots (accesible a "Padre")
       const studentIds = info.students.map((s) => s.id).filter(Boolean);
@@ -661,6 +675,7 @@ const ParentDashboardPage = () => {
                   color="primary"
                   fullWidth
                   onClick={handleOpenUpdateDialog}
+                  disabled={isSuspended}
                 >
                   Actualizar Mis Datos
                 </Button>
@@ -674,6 +689,23 @@ const ParentDashboardPage = () => {
                     Firmar Contrato
                   </Button>
                 </div>
+
+                {isSuspended && (
+                  isSuspendedForNoContract ? (
+                    <Alert
+                      severity="error"
+                      sx={{ mt: 2 }}
+                    >
+                      <strong>El servicio está suspendido porque aún no se ha firmado el contrato.</strong>
+                      <br />
+                      Por favor, firma el contrato para activar el servicio y tener acceso completo.
+                    </Alert>
+                  ) : (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      Cuenta suspendida por mora. Si no ha subido su boleta, por favor subirla; si ya fue subida, su pago se encuentra en revisión.
+                    </Alert>
+                  )
+                )}
               </CardContent>
             </SectionCard>
           </Grid>
@@ -729,14 +761,25 @@ const ParentDashboardPage = () => {
 
                   {/* ---------------- Acción de pagos ---------------- */}
                   <Grid item xs={12} textAlign="center">
-                    <Button
-                      variant="contained"
-                      size="small"
-                      sx={{ backgroundColor: '#007BFF' }}
-                      onClick={() => { window.location.href = '/parent/payment'; }}
-                    >
-                      Subir Boleta de Pago
-                    </Button>
+                    {isSuspendedForNoContract ? (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        disabled
+                        sx={{ backgroundColor: '#9e9e9e !important', color: '#fff !important' }}
+                      >
+                        Subir Boleta de Pago
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        sx={{ backgroundColor: '#007BFF' }}
+                        onClick={() => { window.location.href = '/parent/payment'; }}
+                      >
+                        Subir Boleta de Pago
+                      </Button>
+                    )}
                   </Grid>
                 </Grid>
 
@@ -841,19 +884,20 @@ const ParentDashboardPage = () => {
           </Grid>
 
           {/* ---------------- Horarios por estudiante (tipo "asignar buses") ---------------- */}
-          <Grid item xs={12}>
-            <SectionCard elevation={3}>
-              <CardContent>
-                <Stack
-                  direction={{ xs: 'column', md: 'row' }}
-                  spacing={2}
-                  alignItems={{ xs: 'stretch', md: 'center' }}
-                  justifyContent="space-between"
-                  sx={{ mb: 2 }}
-                >
-                  {/* Filtro por día */}
-                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <Typography variant="h6" sx={{ mr: 1 }}>Horarios de Parada</Typography>
+          {!isSuspended && (
+            <Grid item xs={12}>
+              <SectionCard elevation={3}>
+                <CardContent>
+                  <Stack
+                    direction={{ xs: 'column', md: 'row' }}
+                    spacing={2}
+                    alignItems={{ xs: 'stretch', md: 'center' }}
+                    justifyContent="space-between"
+                    sx={{ mb: 2 }}
+                  >
+                    {/* Filtro por día */}
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <Typography variant="h6" sx={{ mr: 1 }}>Horarios de Parada</Typography>
                     <ToggleButtonGroup
                       exclusive
                       value={selectedDay}
@@ -991,6 +1035,7 @@ const ParentDashboardPage = () => {
               </CardContent>
             </SectionCard>
           </Grid>
+          )}
         </Grid>
       </Container>
 
