@@ -1,6 +1,6 @@
 // src/pages/CorporateDashboardPage.jsx
 
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import {
     Typography,
     Box,
@@ -27,7 +27,8 @@ import {
     FormControl,
     InputLabel,
     Select,
-    MenuItem
+    MenuItem,
+    IconButton
 } from '@mui/material';
 import { 
     Business as CorporationIcon, 
@@ -38,7 +39,9 @@ import {
     TrendingUp,
     People,
     Description as ContractIcon,
-    Work as DepartmentIcon
+    Work as DepartmentIcon,
+    ChevronLeft,
+    ChevronRight
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
@@ -74,6 +77,13 @@ const SummaryCard = styled(Card)`
     }
 `;
 
+// Estados de servicio disponibles en el carrusel de contadores
+const CAROUSEL_STATUSES = [
+    { key: 'ACTIVE',    label: 'Servicio Activo',      textColor: 'primary.main' },
+    { key: 'PAUSED',    label: 'Servicio Pausado',      textColor: 'warning.main' },
+    { key: 'INACTIVE',  label: 'Servicio Inactivo',     textColor: 'text.secondary' }
+];
+
 const CorporateDashboardPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -93,6 +103,21 @@ const CorporateDashboardPage = () => {
     // Estado para el filtro de día (default Lunes)
     const [selectedDay, setSelectedDay] = useState('monday');
     
+    // Estado para el carrusel de estado del servicio en los contadores
+    const [statusSlideIndex, setStatusSlideIndex] = useState(0);
+    // Ref para leer siempre el slide actual dentro de callbacks sin añadir dependencias extra
+    const statusSlideIndexRef = useRef(0);
+    useEffect(() => { statusSlideIndexRef.current = statusSlideIndex; }, [statusSlideIndex]);
+
+    // Resumen de colaboradores por estado de servicio (para el carrusel)
+    const [colaboradorStatusSummary, setColaboradorStatusSummary] = useState({ total: 0 });
+
+    // Estado para el bloque de "utilizan / no utilizan el servicio"
+    const [serviceUsageSummary, setServiceUsageSummary] = useState({
+        colaboradoresUsing: 0,
+        colaboradoresNotUsing: 0
+    });
+
     // Estado para el modal de colaboradores por ruta
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedRoute, setSelectedRoute] = useState({
@@ -232,27 +257,77 @@ const CorporateDashboardPage = () => {
         }
     }, [auth.token, corporationId, fiscalYear]);
 
+    const fetchColaboradorStatusSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
+        if (!corporationId) return;
+        try {
+            const response = await api.get(`/corporations/${corporationId}/colaboradores/status-summary`, {
+                headers: { Authorization: `Bearer ${auth.token}` },
+                params: { fiscalYear, serviceStatus }
+            });
+            const summary = response.data.summary || {};
+            setColaboradorStatusSummary({ total: summary.total || 0 });
+        } catch (err) {
+            console.error('Error fetching colaborador status summary:', err);
+            setColaboradorStatusSummary({ total: 0 });
+        }
+    }, [auth.token, corporationId, fiscalYear]);
+
+    // Obtiene contadores globales: cuántos colaboradores usan vs no usan el servicio
+    const fetchColaboradorUsageSummary = useCallback(async () => {
+        if (!corporationId) return;
+        const USING     = ['ACTIVE', 'SUSPENDED'];
+        const NOT_USING = ['PAUSED', 'INACTIVE'];
+        const allStatuses = [...USING, ...NOT_USING];
+        try {
+            const results = await Promise.all(
+                allStatuses.map(s =>
+                    api.get(`/corporations/${corporationId}/colaboradores/status-summary`, {
+                        headers: { Authorization: `Bearer ${auth.token}` },
+                        params: { fiscalYear, serviceStatus: s }
+                    }).then(r => ({ status: s, total: r.data.summary?.total || 0 }))
+                    .catch(() => ({ status: s, total: 0 }))
+                )
+            );
+            const countMap = Object.fromEntries(results.map(r => [r.status, r.total]));
+            setServiceUsageSummary({
+                colaboradoresUsing:    USING.reduce((acc, s) => acc + (countMap[s] || 0), 0),
+                colaboradoresNotUsing: NOT_USING.reduce((acc, s) => acc + (countMap[s] || 0), 0)
+            });
+        } catch (err) {
+            console.error('Error fetching colaborador usage summary:', err);
+        }
+    }, [auth.token, corporationId, fiscalYear]);
+
     useEffect(() => {
         if (auth.token && corporationId) {
             setLoading(true);
             Promise.all([
                 fetchCorporationData(),
                 fetchRouteOccupancy(),
-                fetchColaboradorSummary()
+                fetchColaboradorSummary(),
+                fetchColaboradorStatusSummary(CAROUSEL_STATUSES[statusSlideIndexRef.current].key),
+                fetchColaboradorUsageSummary()
             ]).finally(() => {
                 setLoading(false);
             });
         }
-    }, [auth.token, corporationId, fetchCorporationData, fetchRouteOccupancy, fetchColaboradorSummary]);
+    }, [auth.token, corporationId, fetchCorporationData, fetchRouteOccupancy, fetchColaboradorSummary, fetchColaboradorStatusSummary, fetchColaboradorUsageSummary]);
 
     useRegisterPageRefresh(async () => {
         setLoading(true);
+        const currentStatus = CAROUSEL_STATUSES[statusSlideIndexRef.current].key;
         try {
-            await Promise.all([fetchCorporationData(), fetchRouteOccupancy(), fetchColaboradorSummary()]);
+            await Promise.all([
+                fetchCorporationData(),
+                fetchRouteOccupancy(),
+                fetchColaboradorSummary(),
+                fetchColaboradorStatusSummary(currentStatus),
+                fetchColaboradorUsageSummary()
+            ]);
         } finally {
             setLoading(false);
         }
-    }, [fetchCorporationData, fetchRouteOccupancy, fetchColaboradorSummary]);
+    }, [fetchCorporationData, fetchRouteOccupancy, fetchColaboradorSummary, fetchColaboradorStatusSummary, fetchColaboradorUsageSummary]);
 
     const handleBackToSelection = () => {
         navigate('/admin/corporaciones');
@@ -376,6 +451,15 @@ const CorporateDashboardPage = () => {
         };
         return dayLabels[day] || day;
     };
+
+    // Carrusel: navegar entre estados de servicio y refrescar el contador
+    const handleSlideChange = (delta) => {
+        const newIndex = (statusSlideIndex + delta + CAROUSEL_STATUSES.length) % CAROUSEL_STATUSES.length;
+        setStatusSlideIndex(newIndex);
+        fetchColaboradorStatusSummary(CAROUSEL_STATUSES[newIndex].key);
+    };
+
+    const activeCarouselStatus = CAROUSEL_STATUSES[statusSlideIndex];
 
     const currentCorporation = corporationData || stateCorporation;
     const currentFiscalYear = fiscalYear || stateFiscalYear;
@@ -657,69 +741,135 @@ const CorporateDashboardPage = () => {
                 {/* Sección B: Right column with summary and actions */}
                 <Grid item xs={12} lg={4}>
                     <Grid container spacing={3}>
-                        {/* Resumen de colaboradores */}
+                        {/* Uso del Servicio */}
+                        <Grid item xs={12}>
+                            <SummaryCard>
+                                <CardContent>
+                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                        Uso del Servicio
+                                    </Typography>
+                                    <Divider sx={{ mb: 2 }} />
+                                    <Grid container spacing={2}>
+                                        {/* Utilizan el servicio */}
+                                        <Grid item xs={6}>
+                                            <Box sx={{
+                                                p: 1.5,
+                                                borderRadius: 2,
+                                                bgcolor: 'success.50',
+                                                border: '1px solid',
+                                                borderColor: 'success.200',
+                                                textAlign: 'center'
+                                            }}>
+                                                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                                    Utilizan el servicio
+                                                </Typography>
+                                                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5 }}>
+                                                    <Box>
+                                                        <Typography variant="h5" color="success.main" fontWeight="bold">
+                                                            {serviceUsageSummary.colaboradoresUsing}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Colaboradores
+                                                        </Typography>
+                                                    </Box>
+                                                </Box>
+                                                <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.75 }}>
+                                                    Activo
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+
+                                        {/* No utilizan el servicio */}
+                                        <Grid item xs={6}>
+                                            <Box sx={{
+                                                p: 1.5,
+                                                borderRadius: 2,
+                                                bgcolor: 'grey.50',
+                                                border: '1px solid',
+                                                borderColor: 'grey.300',
+                                                textAlign: 'center'
+                                            }}>
+                                                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                                    No utilizan el servicio
+                                                </Typography>
+                                                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5 }}>
+                                                    <Box>
+                                                        <Typography variant="h5" color="text.secondary" fontWeight="bold">
+                                                            {serviceUsageSummary.colaboradoresNotUsing}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Colaboradores
+                                                        </Typography>
+                                                    </Box>
+                                                </Box>
+                                                <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.75 }}>
+                                                    Pausado + Inactivo
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+                                    </Grid>
+                                </CardContent>
+                            </SummaryCard>
+                        </Grid>
+
+                        {/* Colaboradores - carrusel por estado del servicio */}
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent>
                                     <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <TrendingUp color="primary" />
-                                        Colaboradores Registrados
+                                        Colaboradores
                                     </Typography>
                                     <Divider sx={{ mb: 2 }} />
-                                    
-                                    <Box sx={{ textAlign: 'center', mb: 2 }}>
-                                        <Typography variant="h3" color="primary" fontWeight="bold">
-                                            {colaboradorSummary.total}
-                                        </Typography>
-                                        <Typography variant="body2" color="textSecondary">
-                                            Total de colaboradores
-                                        </Typography>
+
+                                    {/* Carrusel: flechas + contador grande */}
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mb: 0.5 }}>
+                                        <IconButton size="small" onClick={() => handleSlideChange(-1)} aria-label="Estado anterior">
+                                            <ChevronLeft />
+                                        </IconButton>
+                                        <Box sx={{ textAlign: 'center', minWidth: 130 }}>
+                                            <Typography variant="h3" sx={{ color: activeCarouselStatus.textColor }} fontWeight="bold">
+                                                {colaboradorStatusSummary.total}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary" noWrap>
+                                                {activeCarouselStatus.label}
+                                            </Typography>
+                                        </Box>
+                                        <IconButton size="small" onClick={() => handleSlideChange(1)} aria-label="Estado siguiente">
+                                            <ChevronRight />
+                                        </IconButton>
                                     </Box>
 
-                                    <List dense>
-                                        <ListItem>
-                                            <ListItemIcon>
-                                                <Box sx={{ 
-                                                    width: 12, 
-                                                    height: 12, 
-                                                    borderRadius: '50%', 
-                                                    backgroundColor: 'success.main' 
-                                                }} />
-                                            </ListItemIcon>
-                                            <ListItemText 
-                                                primary="Activos" 
-                                                secondary={`${colaboradorSummary.active} colaboradores`}
+                                    {/* Indicadores de posición */}
+                                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.75, mb: 1.5 }}>
+                                        {CAROUSEL_STATUSES.map((s, i) => (
+                                            <Box
+                                                key={s.key}
+                                                onClick={() => { setStatusSlideIndex(i); fetchColaboradorStatusSummary(s.key); }}
+                                                sx={{
+                                                    width: 6, height: 6, borderRadius: '50%', cursor: 'pointer',
+                                                    backgroundColor: i === statusSlideIndex ? 'primary.main' : 'grey.300',
+                                                    transition: 'background-color 0.2s'
+                                                }}
                                             />
-                                        </ListItem>
-                                        <ListItem>
-                                            <ListItemIcon>
-                                                <Box sx={{ 
-                                                    width: 12, 
-                                                    height: 12, 
-                                                    borderRadius: '50%', 
-                                                    backgroundColor: 'grey.500' 
-                                                }} />
-                                            </ListItemIcon>
-                                            <ListItemText 
-                                                primary="Inactivos" 
-                                                secondary={`${colaboradorSummary.total - colaboradorSummary.active} colaboradores`}
-                                            />
-                                        </ListItem>
-                                    </List>
+                                        ))}
+                                    </Box>
+
+                                    <Divider sx={{ my: 1 }} />
 
                                     {colaboradorSummary.byDepartment.length > 0 && (
                                         <>
-                                            <Divider sx={{ my: 2 }} />
+                                            <Divider sx={{ my: 1 }} />
                                             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
                                                 Por Departamento:
                                             </Typography>
                                             <List dense>
                                                 {colaboradorSummary.byDepartment.map((dept, idx) => (
-                                                    <ListItem key={idx}>
-                                                        <ListItemIcon>
+                                                    <ListItem key={idx} disableGutters>
+                                                        <ListItemIcon sx={{ minWidth: 28 }}>
                                                             <DepartmentIcon fontSize="small" />
                                                         </ListItemIcon>
-                                                        <ListItemText 
+                                                        <ListItemText
                                                             primary={dept.name}
                                                             secondary={`${dept.count} colaboradores`}
                                                         />
@@ -728,86 +878,93 @@ const CorporateDashboardPage = () => {
                                             </List>
                                         </>
                                     )}
-                            </CardContent>
-                        </SummaryCard>
-                        </Grid>
-
-                        {/* Gestión de Colaboradores */}
-                        <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Gestión de Colaboradores
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar todos los colaboradores registrados en esta corporación
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<Group />}
-                                        onClick={handleViewColaboradores}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Colaboradores
-                                    </Button>
                                 </CardContent>
                             </SummaryCard>
                         </Grid>
 
-                        {/* Gestión de Buses */}
+                        {/* Action cards */}
                         <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <DirectionsBus sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Gestión de Buses
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar los buses asignados a esta corporación
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<DirectionsBus />}
-                                        onClick={handleViewBuses}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Buses
-                                    </Button>
-                                </CardContent>
-                            </SummaryCard>
-                        </Grid>
-                        
-                        {/* Gestión de Protocolos y Reglamentos */}
-                        <Grid item xs={12}>
-                            <SummaryCard>
-                                <CardContent sx={{ textAlign: 'center' }}>
-                                    <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Protocolos y Reglamentos
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                        Ver y gestionar los protocolos y reglamentos de esta corporación
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="large"
-                                        startIcon={<ContractIcon />}
-                                        onClick={handleViewProtocols}
-                                        fullWidth
-                                        sx={{ borderRadius: 2 }}
-                                    >
-                                        Ver Protocolos
-                                    </Button>
-                                </CardContent>
-                            </SummaryCard>
+                            <Box sx={{ maxHeight: 220, overflowY: 'auto', pr: 1 }}>
+                                <Grid container spacing={2}>
+                                    {/* Gestión de Colaboradores */}
+                                    <Grid item xs={12}>
+                                        <SummaryCard>
+                                            <CardContent sx={{ textAlign: 'center' }}>
+                                                <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                <Typography variant="h6" gutterBottom>
+                                                    Gestión de Colaboradores
+                                                </Typography>
+                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                    Ver y gestionar todos los colaboradores registrados en esta corporación
+                                                </Typography>
+                                                <Button
+                                                    variant="contained"
+                                                    color="primary"
+                                                    size="large"
+                                                    startIcon={<Group />}
+                                                    onClick={handleViewColaboradores}
+                                                    fullWidth
+                                                    sx={{ borderRadius: 2 }}
+                                                >
+                                                    Ver Colaboradores
+                                                </Button>
+                                            </CardContent>
+                                        </SummaryCard>
+                                    </Grid>
+
+                                    {/* Gestión de Buses */}
+                                    <Grid item xs={12}>
+                                        <SummaryCard>
+                                            <CardContent sx={{ textAlign: 'center' }}>
+                                                <DirectionsBus sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                <Typography variant="h6" gutterBottom>
+                                                    Gestión de Buses
+                                                </Typography>
+                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                    Ver y gestionar los buses asignados a esta corporación
+                                                </Typography>
+                                                <Button
+                                                    variant="contained"
+                                                    color="primary"
+                                                    size="large"
+                                                    startIcon={<DirectionsBus />}
+                                                    onClick={handleViewBuses}
+                                                    fullWidth
+                                                    sx={{ borderRadius: 2 }}
+                                                >
+                                                    Ver Buses
+                                                </Button>
+                                            </CardContent>
+                                        </SummaryCard>
+                                    </Grid>
+
+                                    {/* Gestión de Protocolos y Reglamentos */}
+                                    <Grid item xs={12}>
+                                        <SummaryCard>
+                                            <CardContent sx={{ textAlign: 'center' }}>
+                                                <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                <Typography variant="h6" gutterBottom>
+                                                    Protocolos y Reglamentos
+                                                </Typography>
+                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                    Ver y gestionar los protocolos y reglamentos de esta corporación
+                                                </Typography>
+                                                <Button
+                                                    variant="contained"
+                                                    color="primary"
+                                                    size="large"
+                                                    startIcon={<ContractIcon />}
+                                                    onClick={handleViewProtocols}
+                                                    fullWidth
+                                                    sx={{ borderRadius: 2 }}
+                                                >
+                                                    Ver Protocolos
+                                                </Button>
+                                            </CardContent>
+                                        </SummaryCard>
+                                    </Grid>
+                                </Grid>
+                            </Box>
                         </Grid>
                     </Grid>
                 </Grid>
