@@ -1,5 +1,6 @@
 // src/pages/ColaboradorDashboardPage.jsx
 import React, { useEffect, useState, useContext, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -34,6 +35,15 @@ import {
   ListItemSecondaryAction,
   Tooltip
 } from '@mui/material';
+import {
+  Call as CallIcon,
+  Close as CloseIcon,
+  Assignment as AssignmentIcon,
+  Info as InfoIcon,
+  Description as DescriptionIcon,
+  Email as EmailIcon,
+  WhatsApp as WhatsAppIcon,
+} from '@mui/icons-material';
 import { styled } from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -72,6 +82,7 @@ const tagSlotsByDay = (slotsForDay) => {
 const ColaboradorDashboardPage = () => {
   const { auth } = useContext(AuthContext);
   const theme = useTheme();
+  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({ open:false, sev:'success', msg:'' });
@@ -79,6 +90,7 @@ const ColaboradorDashboardPage = () => {
   const [colaboradorInfo, setColaboradorInfo] = useState(null);
   const [schedules, setSchedules] = useState([]);
   const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [openContactDialog, setOpenContactDialog] = useState(false);
 
   // Requests (mis solicitudes)
   const [requests, setRequests] = useState([]);
@@ -150,6 +162,30 @@ const ColaboradorDashboardPage = () => {
       completed: '#9E9E9E'
     };
     return colors[status] || '#9E9E9E';
+  };
+
+  const cleanPhoneDigits = (phone) => {
+    if (!phone) return '';
+    return String(phone).replace(/[^0-9]/g, '');
+  };
+
+  const openPhone = (phone) => {
+    const digits = cleanPhoneDigits(phone);
+    if (!digits) return;
+    window.location.href = `tel:${digits}`;
+  };
+
+  const openEmail = (email) => {
+    const e = safeStr(email);
+    if (!e) return;
+    window.location.href = `mailto:${encodeURIComponent(e)}`;
+  };
+
+  const openWhatsApp = (whatsappLink, fallbackPhone) => {
+    const direct = safeStr(whatsappLink);
+    const url = direct || (cleanPhoneDigits(fallbackPhone) ? `https://wa.me/${cleanPhoneDigits(fallbackPhone)}` : '');
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const loadAll = async () => {
@@ -301,11 +337,69 @@ const ColaboradorDashboardPage = () => {
 
   // Helper: initials for avatar
   const initials = (colaboradorInfo?.name || '').split(' ').map(s => s[0]).slice(0,2).join('').toUpperCase() || 'C';
+  const corp = colaboradorInfo?.corporation || {};
+  const corpName = safeStr(corp?.name) || 'Contacto de la Empresa';
+  const contactPhone = safeStr(corp?.contactPhone || colaboradorInfo?.contactPhone);
+  const contactEmail = safeStr(corp?.contactEmail || colaboradorInfo?.contactEmail);
+  const whatsappLink = safeStr(corp?.whatsappLink || colaboradorInfo?.whatsappLink);
 
   return (
     <>
       <ParentNavbar />
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        {/* Acciones principales (como en app móvil) */}
+        <Box sx={{ mb: 3 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                size="large"
+                variant="contained"
+                color="secondary"
+                startIcon={<AssignmentIcon />}
+                sx={{ height: 56 }}
+                onClick={async () => {
+                  await loadRequests();
+                  setOpenRequestsModal(true);
+                }}
+              >
+                Mis Solicitudes
+              </Button>
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                size="large"
+                variant="contained"
+                color="primary"
+                startIcon={<DescriptionIcon />}
+                sx={{ height: 56 }}
+                onClick={() => navigate('/colaborador/protocolos')}
+              >
+                Protocolos y Reglamentos
+              </Button>
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                size="large"
+                variant="contained"
+                startIcon={<InfoIcon />}
+                sx={{
+                  height: 56,
+                  bgcolor: 'info.dark',
+                  '&:hover': { bgcolor: 'info.main' },
+                }}
+                onClick={() => setOpenContactDialog(true)}
+              >
+                Contáctanos
+              </Button>
+            </Grid>
+          </Grid>
+        </Box>
+
         <Grid container spacing={3}>
           <Grid item xs={12} md={4}>
             <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
@@ -362,10 +456,9 @@ const ColaboradorDashboardPage = () => {
                   </Grid>
 
                   <Grid item xs={12} sx={{ mt: 2, textAlign: 'center' }}>
-                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-                      <Button variant="contained" color="primary" size="small" onClick={() => setOpenEditDialog(true)}>Editar mis datos</Button>
-                      <Button variant="outlined" size="small" onClick={async () => { await loadRequests(); setOpenRequestsModal(true); }}>Mis Solicitudes</Button>
-                    </Box>
+                    <Button variant="contained" color="primary" size="small" onClick={() => setOpenEditDialog(true)}>
+                      Editar mis datos
+                    </Button>
                   </Grid>
                 </Grid>
               </CardContent>
@@ -431,6 +524,57 @@ const ColaboradorDashboardPage = () => {
         initialData={colaboradorInfo || {}}
         onSaved={() => { setOpenEditDialog(false); loadAll(); setSnackbar({ open:true, sev:'success', msg: 'Datos actualizados correctamente.' }); }}
       />
+
+      {/* Dialog: Contáctanos */}
+      <Dialog open={openContactDialog} onClose={() => setOpenContactDialog(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>{corpName} — Contacto</Typography>
+            <Typography variant="caption" color="text.secondary">Elige un medio para comunicarte</Typography>
+          </Box>
+          <IconButton onClick={() => setOpenContactDialog(false)} aria-label="Cerrar">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <Button
+              fullWidth
+              variant="contained"
+              startIcon={<CallIcon />}
+              onClick={() => openPhone(contactPhone)}
+              disabled={!contactPhone}
+            >
+              {contactPhone || 'Llamar'}
+            </Button>
+
+            <Button
+              fullWidth
+              variant="contained"
+              color="secondary"
+              startIcon={<EmailIcon />}
+              onClick={() => openEmail(contactEmail)}
+              disabled={!contactEmail}
+            >
+              {contactEmail || 'Correo'}
+            </Button>
+
+            <Button
+              fullWidth
+              variant="contained"
+              color="success"
+              startIcon={<WhatsAppIcon />}
+              onClick={() => openWhatsApp(whatsappLink, contactPhone)}
+              disabled={!whatsappLink && !contactPhone}
+            >
+              WhatsApp
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenContactDialog(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog: Mis Solicitudes (lista + acciones) */}
       <Dialog open={openRequestsModal} onClose={() => setOpenRequestsModal(false)} fullWidth maxWidth="md">

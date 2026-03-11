@@ -6,7 +6,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { PermissionsContext } from '../context/PermissionsProvider';
 import { CircularProgress } from '@mui/material';
 
-const ProtectedRoute = ({ children, roles = [], moduleKey = null }) => {
+const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '/admin/dashboard' }) => {
     const { auth, initialLoad } = useContext(AuthContext);
     const { hasPermission, permissionsLoaded, loading } = useContext(PermissionsContext);
 
@@ -40,24 +40,22 @@ const ProtectedRoute = ({ children, roles = [], moduleKey = null }) => {
     }
 
     const userRoleName = auth.user?.role || 'Desconocido';
+    const userRoleId = auth.user?.roleId;
 
-    // 4) NUEVA VALIDACIÓN: Si se proporciona moduleKey, verificar permisos de BD
-    if (moduleKey && permissionsLoaded) {
-        // Verificar si tiene el permiso en la base de datos
-        if (!hasPermission(moduleKey)) {
-            // No tiene permiso para este módulo, redirigir
-            return <Navigate to="/admin/dashboard" replace />;
+    // 4) Si se proporciona moduleKey, verificar permisos en BD
+    // Nota: el provider muestra loading mientras carga, así que aquí normalmente ya estará cargado.
+    if (moduleKey) {
+        if (!permissionsLoaded || !hasPermission(moduleKey)) {
+            return <Navigate to={redirectTo} replace />;
         }
         // Si tiene el permiso en BD, permitir acceso (no verificar roles hardcodeados)
         return children;
     }
 
-    // 5) Si se requiere verificar roles (validación adicional, solo si NO hay moduleKey):
+    // 5) Si se requiere verificar roles (solo si NO hay moduleKey):
     if (roles.length > 0) {
-        // Si el rol del usuario no está en la lista => redirect a dashboard (o donde prefieras)
-        if (!roles.includes(userRoleName)) {
-            return <Navigate to="/admin/dashboard" replace />;
-        }
+        const allowed = roles.some((r) => r === userRoleName || (userRoleId != null && r === userRoleId));
+        if (!allowed) return <Navigate to={redirectTo} replace />;
     }
 
     // 6) Si pasa todas las condiciones, renderiza la ruta protegida
