@@ -24,6 +24,7 @@ import DefaultAdminRoute from './components/DefaultAdminRoute';
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
+import ParentProtocolsPage from './pages/ParentProtocolsPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
 import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
 import SchoolDashboardPage from './pages/SchoolDashboardPage';
@@ -37,6 +38,7 @@ import CorporateBusesPage from './pages/CorporateBusesPage';
 import CorporateProtocolsPage from './pages/CorporateProtocolsPage';
 import ColaboradoresPage from './pages/ColaboradoresPage';
 import ColaboradorDashboardPage from './pages/ColaboradorDashboardPage';
+import ColaboradorProtocolsPage from './pages/ColaboradorProtocolsPage';
 import { modules } from './modules';
 import AdminAuditHidden from './pages/AdminAuditHidden';
 
@@ -262,7 +264,10 @@ function App() {
                     <Route
                         path="/parent/dashboard"
                         element={
-                            <ProtectedRoute roles={['Padre','PadreFamilia',3]}>
+                            <ProtectedRoute 
+                                moduleKey={'padre-dashboard'} 
+                                redirectTo="/login"
+                            >
                                 <ParentDashboardPage />
                             </ProtectedRoute>
                         }
@@ -270,8 +275,23 @@ function App() {
                     <Route
                         path="/parent/payment"
                         element={
-                            <ProtectedRoute roles={['Padre','PadreFamilia',3]}>
+                            <ProtectedRoute 
+                                moduleKey={'padre-pagos-boletas'} 
+                                redirectTo="/parent/dashboard"
+                            >
                                 <ParentPaymentPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/parent/protocolos"
+                        element={
+                            <ProtectedRoute 
+                                moduleKey={'padre-protocolos-reglamentos'} 
+                                redirectTo="/parent/dashboard"
+                            >
+                                <ParentProtocolsPage />
                             </ProtectedRoute>
                         }
                     />
@@ -280,8 +300,23 @@ function App() {
                     <Route
                         path="/colaborador/dashboard"
                         element={
-                            <ProtectedRoute roles={['Colaborador', 8]}>
+                            <ProtectedRoute
+                                moduleKey={'colaborador-dashboard'}
+                                redirectTo="/login"
+                            >
                                 <ColaboradorDashboardPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/colaborador/protocolos"
+                        element={
+                            <ProtectedRoute
+                                moduleKey={'colaborador-protocolos-reglamentos'}
+                                redirectTo="/colaborador/dashboard"
+                            >
+                                <ColaboradorProtocolsPage />
                             </ProtectedRoute>
                         }
                     />

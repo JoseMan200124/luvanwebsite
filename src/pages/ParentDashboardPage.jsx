@@ -1,5 +1,6 @@
 // src/pages/ParentDashboardPage.jsx
-import React, { useEffect, useMemo, useState, useContext } from 'react';
+import React, { useEffect, useMemo, useState, useContext, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box as MuiBox,
   Card,
@@ -14,8 +15,7 @@ import {
   Container,
   Chip,
   Stack,
-  Link,
-  Tooltip,
+  
   ToggleButtonGroup,
   ToggleButton,
   FormControl,
@@ -28,7 +28,27 @@ import {
   DialogActions,
   List,
   ListItem,
+  Avatar,
+  Paper,
+  Collapse,
+  useTheme,
+  IconButton,
 } from '@mui/material';
+import {
+  Edit as EditIcon,
+  Description as DescriptionIcon,
+  CloudUpload as CloudUploadIcon,
+  MenuBook as MenuBookIcon,
+  Info as InfoIcon,
+  Call as CallIcon,
+  Email as EmailIcon,
+  WhatsApp as WhatsAppIcon,
+  Close as CloseIcon,
+  ExpandMore as ExpandMoreIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+} from '@mui/icons-material';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
 import UpdateParentInfoDialog from '../components/UpdateParentInfoDialog';
@@ -63,6 +83,21 @@ const timeToMinutes = (t) => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
   if (!m) return Number.POSITIVE_INFINITY;
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+};
+
+// Formatea HH:mm -> h:mm AM/PM (si ya viene con AM/PM, lo deja)
+const formatTime12 = (timeStr) => {
+  if (!timeStr) return '';
+  const s = String(timeStr).trim();
+  if (/\b(am|pm)\b/i.test(s)) return s;
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!m) return s;
+  let h = parseInt(m[1], 10);
+  const min = m[2];
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${min} ${ampm}`;
 };
 
 // Normaliza lo que devuelve /parents/:id/route-info (si existe)
@@ -163,6 +198,17 @@ const fetchSlotsByStudentIds = async (ids) => {
 // Deduce etiqueta (Entrada/Salida) por día usando la heurística de hora
 const tagSlotsByDay = (slotsForDay) => {
   const sorted = [...slotsForDay].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
+
+  // If the API already provides a semantic `type` (pickup/dropoff), prefer it
+  const hasType = sorted.some((s) => s && s.type);
+  if (hasType) {
+    return sorted.map((s) => {
+      const t = (s && s.type) || '';
+      const lbl = t === 'pickup' ? 'Entrada' : t === 'dropoff' ? 'Salida' : (s && s._label) || 'Parada';
+      return { ...s, _label: lbl };
+    });
+  }
+
   if (sorted.length >= 2) {
     const first = { ...sorted[0], _label: 'Entrada' };
     const last  = { ...sorted[sorted.length - 1], _label: 'Salida' };
@@ -177,10 +223,20 @@ const tagSlotsByDay = (slotsForDay) => {
 
 // ---------- Componente ----------
 const ParentDashboardPage = () => {
-  const { auth } = useContext(AuthContext);
+  const { auth, verifyToken } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const theme = useTheme();
 
-  // Detectar si el usuario tiene estado SUSPENDED
-  const isSuspended = auth?.user?.serviceStatus === 'SUSPENDED';
+  // Estado de servicio (preferir lo que devuelva backend para reflejar cambios sin relogin)
+  const [serviceStatus, setServiceStatus] = useState(() => auth?.user?.serviceStatus || '');
+  const isSuspended = serviceStatus === 'SUSPENDED';
+
+  // Mantenerlo en sync con AuthContext cuando llegue un verifyToken()
+  useEffect(() => {
+    setServiceStatus(auth?.user?.serviceStatus || '');
+  }, [auth?.user?.serviceStatus]);
+
+  const lastRefreshRef = useRef(0);
 
   const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({ open: false, sev: 'success', msg: '' });
@@ -201,19 +257,53 @@ const ParentDashboardPage = () => {
 
   const [parentInfo, setParentInfo] = useState(() => normalizeParentInfo({}));
   const [slotsByStudent, setSlotsByStudent] = useState({}); // { [studentId]: Slot[] }
+  const [plateMap, setPlateMap] = useState({});
 
   // Filtros
   const [selectedDay, setSelectedDay] = useState('all'); // 'all' | monday | ... | friday
   const [selectedStudent, setSelectedStudent] = useState('all'); // 'all' | <id>
 
+  // Carrusel (solo para Semana + Todos)
+  const [carouselIndex, setCarouselIndex] = useState(0);
+
   // Estado para el diálogo de actualización de datos
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [updateDialogData, setUpdateDialogData] = useState({});
+
+  const [openContactDialog, setOpenContactDialog] = useState(false);
+
+  // Control de filas expandidas: { [slotKey]: true }
+  const [expandedSlots, setExpandedSlots] = useState({});
+  const toggleSlot = (k) => setExpandedSlots((p) => ({ ...p, [k]: !p[k] }));
 
   // null = verificando, true/false = resultado conocido
   const [hasSignedContract, setHasSignedContract] = useState(null);
   // Suspendido específicamente por falta de contrato (sin mora)
   const isSuspendedForNoContract = isSuspended && hasSignedContract === false;
+
+  const cleanPhoneDigits = (phone) => {
+    if (!phone) return '';
+    return String(phone).replace(/[^0-9]/g, '');
+  };
+
+  const openPhone = (phone) => {
+    const digits = cleanPhoneDigits(phone);
+    if (!digits) return;
+    window.location.href = `tel:${digits}`;
+  };
+
+  const openEmail = (email) => {
+    const e = safeStr(email);
+    if (!e) return;
+    window.location.href = `mailto:${encodeURIComponent(e)}`;
+  };
+
+  const openWhatsApp = (whatsappLink, fallbackPhone) => {
+    const direct = safeStr(whatsappLink);
+    const url = direct || (cleanPhoneDigits(fallbackPhone) ? `https://wa.me/${cleanPhoneDigits(fallbackPhone)}` : '');
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   // Llama /parents/:id/route-info y, si hay estudiantes con id, trae sus slots
   const loadAll = async () => {
@@ -232,8 +322,13 @@ const ParentDashboardPage = () => {
         api.get(`/parents/${userId}/route-info`),
         api.get(`/parents/${userId}/filled-contracts`).catch(() => ({ data: { filledContracts: [] } }))
       ]);
-      const info = normalizeParentInfo(res?.data?.data);
+      const rawData = res?.data?.data || {};
+      const info = normalizeParentInfo(rawData);
       setParentInfo(info);
+
+      const backendServiceStatus = rawData?.serviceStatus || rawData?.parent?.serviceStatus || rawData?.user?.serviceStatus || '';
+      setServiceStatus(backendServiceStatus || auth?.user?.serviceStatus || '');
+      const backendSchoolId = rawData.schoolId ?? rawData.school?.id ?? null;
 
       const filledList = Array.isArray(filledRes.data?.filledContracts) ? filledRes.data.filledContracts : [];
       setHasSignedContract(filledList.length > 0);
@@ -243,6 +338,33 @@ const ParentDashboardPage = () => {
       if (studentIds.length > 0) {
         const byId = await fetchSlotsByStudentIds(studentIds);
         setSlotsByStudent(byId);
+        // Además, pedir placas de buses para las rutas encontradas (igual que la app móvil)
+        try {
+          const routeSet = new Set();
+          Object.values(byId).forEach((arr) => {
+            (arr || []).forEach((s) => { if (s && s.routeNumber) routeSet.add(String(s.routeNumber)); });
+          });
+          // incluir rutas definidas en parentInfo.routes también
+          (info.routes || []).forEach((r) => { if (r && r.routeNumber) routeSet.add(String(r.routeNumber)); });
+          const routesArr = Array.from(routeSet).filter(Boolean);
+          if (routesArr.length > 0) {
+            const q = encodeURIComponent(routesArr.join(','));
+            const schoolId = backendSchoolId ? encodeURIComponent(backendSchoolId) : null;
+            const url = schoolId ? `/buses/plates?routeNumbers=${q}&schoolId=${schoolId}` : `/buses/plates?routeNumbers=${q}`;
+            const platesRes = await api.get(url).catch(() => ({ data: { data: [] } }));
+            const busesArr = platesRes.data?.data ?? platesRes.data ?? [];
+            const pmap = {};
+            if (Array.isArray(busesArr)) {
+              busesArr.forEach((b) => { if (b && b.routeNumber != null && b.plate != null) pmap[String(b.routeNumber)] = b.plate; });
+            }
+            setPlateMap(pmap);
+          } else {
+            setPlateMap({});
+          }
+        } catch (e) {
+          console.warn('[ParentDashboard] Error cargando placas:', e);
+          setPlateMap({});
+        }
       } else {
         setSlotsByStudent({});
       }
@@ -256,10 +378,32 @@ const ParentDashboardPage = () => {
     }
   };
 
+  const refreshDashboard = useCallback(async () => {
+    try {
+      if (verifyToken) {
+        await verifyToken();
+      }
+    } catch (e) {
+      // verifyToken ya hace logout si aplica; aquí evitamos romper el flujo
+    }
+    await loadAll();
+  }, [verifyToken, auth?.user?.id]);
+
   useEffect(() => {
-    loadAll();
+    refreshDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.user?.id]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < 1500) return;
+      lastRefreshRef.current = now;
+      refreshDashboard();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshDashboard]);
 
   // Función para abrir el diálogo de actualización
   const handleOpenUpdateDialog = async () => {
@@ -591,6 +735,7 @@ const ParentDashboardPage = () => {
         setFilledContractsList(Array.isArray(filledRes.data?.filledContracts) ? filledRes.data.filledContracts : []);
       }
       setSigningDialogOpen(false);
+      loadAll();
     } catch (err) {
       console.error('Error submitting filled contract:', err);
       setSnackbar({ open: true, sev: 'error', msg: 'Ocurrió un error al enviar el contrato.' });
@@ -609,11 +754,37 @@ const ParentDashboardPage = () => {
     return parentInfo.students.filter((s) => s.id === id);
   }, [parentInfo.students, selectedStudent]);
 
+  const isCarouselMode = useMemo(() => {
+    return selectedStudent === 'all' && parentInfo.students.length > 1;
+  }, [parentInfo.students.length, selectedStudent]);
+
+  useEffect(() => {
+    // Reset carrusel al cambiar filtros o lista de estudiantes
+    setCarouselIndex(0);
+  }, [selectedDay, selectedStudent, parentInfo.students.length]);
+
+  const carouselStudent = isCarouselMode ? (parentInfo.students[carouselIndex] || parentInfo.students[0]) : null;
+  const studentsListForSchedule = isCarouselMode ? (carouselStudent ? [carouselStudent] : []) : studentsToRender;
+
+  const handlePrevStudent = () => {
+    const n = parentInfo.students.length;
+    if (n <= 1) return;
+    setCarouselIndex((prev) => (prev - 1 + n) % n);
+  };
+
+  const handleNextStudent = () => {
+    const n = parentInfo.students.length;
+    if (n <= 1) return;
+    setCarouselIndex((prev) => (prev + 1) % n);
+  };
+
   // Días filtrados
   const daysToRender = useMemo(() => {
     if (selectedDay === 'all') return DAYS;
     return DAYS.filter((d) => d.key === selectedDay);
   }, [selectedDay]);
+
+  const isSingleDayView = selectedDay !== 'all';
 
   // ---------- Render ----------
   if (loading) {
@@ -630,264 +801,232 @@ const ParentDashboardPage = () => {
       <ParentNavbar />
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        {/* Acciones principales (mismo estilo que Colaborador) */}
+        <MuiBox sx={{ mb: 3 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                size="large"
+                variant="contained"
+                color="secondary"
+                startIcon={<DescriptionIcon />}
+                sx={{ height: 56 }}
+                onClick={handleOpenContractsDialog}
+              >
+                Contratos
+              </Button>
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                size="large"
+                variant="contained"
+                color="primary"
+                startIcon={<DescriptionIcon />}
+                sx={{ height: 56 }}
+                onClick={() => navigate('/parent/protocolos')}
+                disabled={isSuspended}
+              >
+                Protocolos y Reglamentos
+              </Button>
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                size="large"
+                variant="contained"
+                startIcon={<InfoIcon />}
+                sx={{
+                  height: 56,
+                  bgcolor: 'info.dark',
+                  '&:hover': { bgcolor: 'info.main' },
+                }}
+                onClick={() => setOpenContactDialog(true)}
+              >
+                Contáctanos
+              </Button>
+            </Grid>
+          </Grid>
+        </MuiBox>
+
         <Grid container spacing={3}>
-
-          {/* ---------------- Perfil familiar ---------------- */}
-          <Grid item xs={12} md={6}>
-            <SectionCard elevation={3}>
-              <CardContent>
-                <Typography variant="h5" gutterBottom>Perfil Familiar</Typography>
-
-                <Grid container columnSpacing={2} rowSpacing={1}>
-                  {nonEmpty(parentInfo.familyLastName) && (
-                    <>
-                      <Grid item xs={6}><b>Apellidos familia:</b></Grid>
-                      <Grid item xs={6}>{parentInfo.familyLastName}</Grid>
-                    </>
+          {/* Columna izquierda: perfil (estilo Colaborador) */}
+          <Grid item xs={12} md={4}>
+            <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+              <MuiBox
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  p: 3,
+                  background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                  color: '#fff',
+                }}
+              >
+                <Avatar sx={{ width: 72, height: 72, bgcolor: theme.palette.secondary.main }}>
+                  {(
+                    safeStr(auth?.user?.name || auth?.user?.fullName || auth?.user?.email || parentInfo.familyLastName || 'P')
+                      .split(' ')
+                      .map((s) => s[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase() || 'P'
                   )}
-
-                  {nonEmpty(parentInfo.serviceAddress) && (
-                    <>
-                      <Grid item xs={6}><b>Dirección servicio:</b></Grid>
-                      <Grid item xs={6}>{parentInfo.serviceAddress}</Grid>
-                    </>
-                  )}
-
-                  {nonEmpty(parentInfo.zoneOrSector) && (
-                    <>
-                      <Grid item xs={6}><b>Zona/Sector:</b></Grid>
-                      <Grid item xs={6}>{parentInfo.zoneOrSector}</Grid>
-                    </>
-                  )}
-
-                  {nonEmpty(parentInfo.routeType) && (
-                    <>
-                      <Grid item xs={6}><b>Tipo ruta:</b></Grid>
-                      <Grid item xs={6}>{parentInfo.routeType}</Grid>
-                    </>
-                  )}
-                </Grid>
-
-                <Divider sx={{ my: 2 }} />
-
-                <Button
-                  variant="outlined"
-                  color="primary"
-                  fullWidth
-                  onClick={handleOpenUpdateDialog}
-                  disabled={isSuspended}
-                >
-                  Actualizar Mis Datos
-                </Button>
-                <div style={{ marginTop: 8 }}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    fullWidth
-                    onClick={handleOpenContractsDialog}
-                  >
-                    Firmar Contrato
-                  </Button>
-                </div>
-
-                {isSuspended && (
-                  isSuspendedForNoContract ? (
-                    <Alert
-                      severity="error"
-                      sx={{ mt: 2 }}
-                    >
-                      <strong>El servicio está suspendido porque aún no se ha firmado el contrato.</strong>
-                      <br />
-                      Por favor, firma el contrato para activar el servicio y tener acceso completo.
-                    </Alert>
-                  ) : (
-                    <Alert severity="warning" sx={{ mt: 2 }}>
-                      Cuenta suspendida por mora. Si no ha subido su boleta, por favor subirla; si ya fue subida, su pago se encuentra en revisión.
-                    </Alert>
-                  )
-                )}
-              </CardContent>
-            </SectionCard>
-          </Grid>
-
-          {/* ---------------- Colegio & Pago ---------------- */}
-          <Grid item xs={12} md={6}>
-            <SectionCard elevation={3}>
-              <CardContent>
-                <Typography variant="h5" gutterBottom>Colegio & Pago</Typography>
-
-                <Grid container columnSpacing={2} rowSpacing={1}>
+                </Avatar>
+                <MuiBox>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    {safeStr(auth?.user?.name || auth?.user?.fullName || 'Padre/Madre')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                    Padre
+                  </Typography>
                   {nonEmpty(parentInfo.schoolName) && (
-                    <>
-                      <Grid item xs={6}><b>Colegio:</b></Grid>
-                      <Grid item xs={6}>{parentInfo.schoolName}</Grid>
-                    </>
+                    <Chip
+                      size="small"
+                      label={parentInfo.schoolName}
+                      sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
+                    />
                   )}
+                </MuiBox>
+              </MuiBox>
 
-                  {nonEmpty(parentInfo.bankName) && (
-                    <>
-                      <Grid item xs={6}><b>Banco:</b></Grid>
-                      <Grid item xs={6}>{parentInfo.bankName}</Grid>
-                    </>
-                  )}
-
-                  {nonEmpty(parentInfo.bankAccount) && (
-                    <>
-                      <Grid item xs={6}><b>Cuenta:</b></Grid>
-                      <Grid item xs={6}>{parentInfo.bankAccount}</Grid>
-                    </>
-                  )}
-
-                  {nonEmpty(parentInfo.duePaymentDay) && (
-                    <>
-                      <Grid item xs={6}><b>Fecha Máxima de Pago:</b></Grid>
-                      <Grid item xs={6}>{parentInfo.duePaymentDay} de cada mes</Grid>
-                    </>
-                  )}
-
-                  {nonEmpty(parentInfo.transportFeeComplete) && (
-                    <>
-                      <Grid item xs={6}><b>Cuota de Transporte Completa (Q):</b></Grid>
-                      <Grid item xs={6}>{parentInfo.transportFeeComplete}</Grid>
-                    </>
-                  )}
-
-                  {nonEmpty(parentInfo.transportFeeHalf) && (
-                    <>
-                      <Grid item xs={6}><b>Cuota de Transporte Media (Q):</b></Grid>
-                      <Grid item xs={6}>{parentInfo.transportFeeHalf}</Grid>
-                    </>
-                  )}
-
-                  {/* ---------------- Acción de pagos ---------------- */}
-                  <Grid item xs={12} textAlign="center">
-                    {isSuspendedForNoContract ? (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        disabled
-                        sx={{ backgroundColor: '#9e9e9e !important', color: '#fff !important' }}
-                      >
-                        Subir Boleta de Pago
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        sx={{ backgroundColor: '#007BFF' }}
-                        onClick={() => { window.location.href = '/parent/payment'; }}
-                      >
-                        Subir Boleta de Pago
-                      </Button>
-                    )}
-                  </Grid>
-                </Grid>
-
-                {(nonEmpty(parentInfo.emergencyContact) ||
-                  nonEmpty(parentInfo.emergencyRelation) ||
-                  nonEmpty(parentInfo.emergencyPhone)) && (
-                  <>
-                    <Divider sx={{ my: 2 }} />
-                    <Typography variant="h6" sx={{ mb: 1 }}>Contacto de Emergencia</Typography>
-                    <Grid container columnSpacing={2} rowSpacing={1}>
-                      {nonEmpty(parentInfo.emergencyContact) && (
-                        <>
-                          <Grid item xs={6}><b>Nombre:</b></Grid>
-                          <Grid item xs={6}>{parentInfo.emergencyContact}</Grid>
-                        </>
-                      )}
-                      {nonEmpty(parentInfo.emergencyRelation) && (
-                        <>
-                          <Grid item xs={6}><b>Parentesco:</b></Grid>
-                          <Grid item xs={6}>{parentInfo.emergencyRelation}</Grid>
-                        </>
-                      )}
-                      {nonEmpty(parentInfo.emergencyPhone) && (
-                        <>
-                          <Grid item xs={6}><b>Teléfono:</b></Grid>
-                          <Grid item xs={6}>{parentInfo.emergencyPhone}</Grid>
-                        </>
-                      )}
-                    </Grid>
-                  </>
-                )}
-
-                {(nonEmpty(parentInfo.contactPhone) ||
-                  nonEmpty(parentInfo.contactEmail) ||
-                  nonEmpty(parentInfo.whatsappLink)) && (
-                  <>
-                    <Divider sx={{ my: 2 }} />
-                    <Typography variant="h6" sx={{ mb: 1 }}>Contáctanos</Typography>
-                    <Grid container columnSpacing={2} rowSpacing={1}>
-                      {nonEmpty(parentInfo.contactPhone) && (
-                        <>
-                          <Grid item xs={6}><b>Teléfono:</b></Grid>
-                          <Grid item xs={6}>{parentInfo.contactPhone}</Grid>
-                        </>
-                      )}
-                      {nonEmpty(parentInfo.contactEmail) && (
-                        <>
-                          <Grid item xs={6}><b>Email:</b></Grid>
-                          <Grid item xs={6}>{parentInfo.contactEmail}</Grid>
-                        </>
-                      )}
-                      {nonEmpty(parentInfo.whatsappLink) && (
-                        <>
-                          <Grid item xs={6}><b>WhatsApp:</b></Grid>
-                          <Grid item xs={6}>
-                            <Link
-                              href={parentInfo.whatsappLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              sx={{ color: 'primary.main', textDecoration: 'underline' }}
-                            >
-                              {parentInfo.whatsappLink}
-                            </Link>
-                          </Grid>
-                        </>
-                      )}
-                    </Grid>
-                  </>
-                )}
-              </CardContent>
-            </SectionCard>
-          </Grid>
-
-          {/* ---------------- Estudiantes ---------------- */}
-          <Grid item xs={12}>
-            <SectionCard elevation={3}>
               <CardContent>
-                <Typography variant="h5" gutterBottom>Mis Estudiantes</Typography>
-
-                {parentInfo.students.length === 0 ? (
-                  <Typography fontStyle="italic">Sin estudiantes registrados.</Typography>
-                ) : (
-                  <Grid container spacing={2}>
-                    {parentInfo.students.map((st, idx) => (
-                      <Grid key={`st-${st.id ?? idx}`} item xs={12} md={6} lg={4}>
-                        <Card variant="outlined">
-                          <CardContent>
-                            <Typography variant="h6">{st.fullName || 'Sin nombre'}</Typography>
-                            {nonEmpty(st.grade) && (
-                              <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-                                Grado: {st.grade}
-                              </Typography>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    ))}
+                <Grid container spacing={1}>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" sx={{ color: 'primary.main', fontWeight: 700 }}>Perfil Familiar</Typography>
                   </Grid>
-                )}
-              </CardContent>
-            </SectionCard>
+
+                  {nonEmpty(parentInfo.familyLastName) && (
+                    <Grid item xs={12}>
+                      <Typography variant="body2"><strong>Apellidos familia:</strong> {parentInfo.familyLastName}</Typography>
+                    </Grid>
+                  )}
+                  {nonEmpty(parentInfo.serviceAddress) && (
+                    <Grid item xs={12}>
+                      <Typography variant="body2"><strong>Dirección servicio:</strong> {parentInfo.serviceAddress}</Typography>
+                    </Grid>
+                  )}
+                  {nonEmpty(parentInfo.zoneOrSector) && (
+                    <Grid item xs={12}>
+                      <Typography variant="body2"><strong>Zona/Sector:</strong> {parentInfo.zoneOrSector}</Typography>
+                    </Grid>
+                  )}
+                  {nonEmpty(parentInfo.routeType) && (
+                    <Grid item xs={12}>
+                      <Typography variant="body2"><strong>Tipo ruta:</strong> {parentInfo.routeType}</Typography>
+                    </Grid>
+                  )}
+
+                  
+
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" sx={{ color: 'primary.main', fontWeight: 700 }}>Mis Hijos</Typography>
+                  </Grid>
+                  {parentInfo.students.length === 0 ? (
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary" fontStyle="italic">Sin estudiantes registrados.</Typography>
+                    </Grid>
+                  ) : (
+                    parentInfo.students.map((st, idx) => (
+                      <Grid item xs={12} key={`st-left-${st.id ?? idx}`}>
+                        <Typography variant="body2">
+                          <strong>{st.fullName || 'Sin nombre'}</strong>
+                          {nonEmpty(st.grade) ? ` — ${st.grade}` : ''}
+                        </Typography>
+                      </Grid>
+                    ))
+                  )}
+
+                      <Grid item xs={12} sx={{ mt: 1 }}>
+                        <Button
+                          variant="outlined"
+                          color="primary"
+                          fullWidth
+                          startIcon={<EditIcon />}
+                          onClick={handleOpenUpdateDialog}
+                          disabled={isSuspended}
+                        >
+                          Actualizar Mis Datos
+                        </Button>
+                      </Grid>
+                      <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="subtitle2" sx={{ color: 'primary.main', fontWeight: 700 }}>Información de Depósito</Typography>
+                      </Grid>
+
+                      {nonEmpty(parentInfo.bankName) && (
+                        <Grid item xs={12}>
+                          <Typography variant="body2"><strong>Banco:</strong> {parentInfo.bankName}</Typography>
+                        </Grid>
+                      )}
+                      {nonEmpty(parentInfo.bankAccount) && (
+                        <Grid item xs={12}>
+                          <Typography variant="body2"><strong>Cuenta Bancaria:</strong> {parentInfo.bankAccount}</Typography>
+                        </Grid>
+                      )}
+                      {nonEmpty(parentInfo.duePaymentDay) && (
+                        <Grid item xs={12}>
+                          <Typography variant="body2"><strong>Fecha Máxima de Pago:</strong> {parentInfo.duePaymentDay} de cada mes</Typography>
+                        </Grid>
+                      )}
+                      {nonEmpty(parentInfo.transportFeeComplete) && (
+                        <Grid item xs={12}>
+                          <Typography variant="body2"><strong>Cuota de Transporte Completa (Q):</strong> {parentInfo.transportFeeComplete}</Typography>
+                        </Grid>
+                      )}
+                      {nonEmpty(parentInfo.transportFeeHalf) && (
+                        <Grid item xs={12}>
+                          <Typography variant="body2"><strong>Cuota de Transporte Media (Q):</strong> {parentInfo.transportFeeHalf}</Typography>
+                        </Grid>
+                      )}
+
+                      <Grid item xs={12} sx={{ mt: 1, textAlign: 'center' }}>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<CloudUploadIcon />}
+                          onClick={() => navigate('/parent/payment')}
+                          disabled={isSuspendedForNoContract}
+                        >
+                          Subir Boleta de Pago
+                        </Button>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Paper>
           </Grid>
 
-          {/* ---------------- Horarios por estudiante (tipo "asignar buses") ---------------- */}
-          {!isSuspended && (
-            <Grid item xs={12}>
-              <SectionCard elevation={3}>
-                <CardContent>
+          {/* Columna derecha: horarios + estudiantes */}
+          <Grid item xs={12} md={8}>
+            <Grid container spacing={3}>
+              {isSuspended && (
+                <Grid item xs={12}>
+                  <SectionCard elevation={3}>
+                    <CardContent>
+                      {isSuspendedForNoContract ? (
+                        <Alert severity="error">
+                          <strong>El servicio está suspendido porque aún no se ha firmado el contrato.</strong>
+                          <br />
+                          Por favor, firma el contrato para activar el servicio y tener acceso completo.
+                        </Alert>
+                      ) : (
+                        <Alert severity="warning">
+                          Cuenta suspendida por mora. Si no ha subido su boleta, por favor subirla; si ya fue subida, su pago se encuentra en revisión.
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </SectionCard>
+                </Grid>
+              )}
+
+              {/* Horarios por estudiante */}
+              {!isSuspended && (
+                <Grid item xs={12}>
+                  <SectionCard elevation={3}>
+                    <CardContent>
                   <Stack
                     direction={{ xs: 'column', md: 'row' }}
                     spacing={2}
@@ -897,7 +1036,7 @@ const ParentDashboardPage = () => {
                   >
                     {/* Filtro por día */}
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                      <Typography variant="h6" sx={{ mr: 1 }}>Horarios de Parada</Typography>
+                      <Typography variant="h6" sx={{ mr: 1 }}>Horarios y Paradas</Typography>
                     <ToggleButtonGroup
                       exclusive
                       value={selectedDay}
@@ -937,7 +1076,31 @@ const ParentDashboardPage = () => {
                 {studentsToRender.length === 0 ? (
                   <Typography fontStyle="italic">No hay estudiantes para mostrar horarios.</Typography>
                 ) : (
-                  studentsToRender.map((st, idx) => {
+                  <>
+                    {isCarouselMode && (
+                      <Paper elevation={0} sx={{ p: 1.5, mb: 2, borderRadius: 2, bgcolor: 'background.paper' }}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+                          <IconButton onClick={handlePrevStudent} aria-label="Anterior estudiante">
+                            <ChevronLeftIcon />
+                          </IconButton>
+
+                          <MuiBox sx={{ textAlign: 'center', flex: 1 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                              {safeStr(carouselStudent?.fullName || 'Estudiante')}{nonEmpty(carouselStudent?.grade) ? ` — ${carouselStudent.grade}` : ''}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {carouselIndex + 1} / {parentInfo.students.length}
+                            </Typography>
+                          </MuiBox>
+
+                          <IconButton onClick={handleNextStudent} aria-label="Siguiente estudiante">
+                            <ChevronRightIcon />
+                          </IconButton>
+                        </Stack>
+                      </Paper>
+                    )}
+
+                    {studentsListForSchedule.map((st, idx) => {
                     const slots = st.id ? toArray(slotsByStudent[st.id]) : [];
                     const hasAny = slots.length > 0;
 
@@ -955,93 +1118,274 @@ const ParentDashboardPage = () => {
                     });
 
                     return (
-                      <MuiBox key={`sched-${st.id ?? idx}`} sx={{ mb: idx < studentsToRender.length - 1 ? 3 : 0 }}>
-                        <Typography variant="h6" sx={{ mb: 1 }}>
-                          {st.fullName || 'Estudiante'}{nonEmpty(st.grade) ? ` — ${st.grade}` : ''}
-                        </Typography>
+                      <MuiBox key={`sched-${st.id ?? idx}`} sx={{ mb: idx < studentsListForSchedule.length - 1 ? 3 : 0 }}>
+                        {!isCarouselMode && (
+                          <Typography variant="h6" sx={{ mb: 1 }}>
+                            {st.fullName || 'Estudiante'}{nonEmpty(st.grade) ? ` — ${st.grade}` : ''}
+                          </Typography>
+                        )}
 
                         {!hasAny ? (
                           <Typography fontStyle="italic" sx={{ mb: 2 }}>
                             Sin horarios registrados para este estudiante.
                           </Typography>
                         ) : (
-                          <MuiBox sx={{ overflowX: 'auto' }}>
-                            <Stack direction="row" spacing={2} sx={{ minHeight: 1, pb: 1 }}>
+                          <MuiBox sx={{ overflowX: isSingleDayView ? 'visible' : 'auto' }}>
+                            <Stack
+                              direction={isSingleDayView ? 'column' : 'row'}
+                              spacing={2}
+                              sx={{ minHeight: 1, pb: 1, width: '100%' }}
+                            >
                               {daysToRender.map(({ key, label }) => {
                                 const items = byDay[key];
                                 return (
-                                  <DayCol key={key}>
-                                    <Typography variant="subtitle1" sx={{ mb: 1 }}>{label}</Typography>
+                                  <Paper
+                                    key={key}
+                                    sx={
+                                      isSingleDayView
+                                        ? { display: 'block', width: '100%', p: 1, borderRadius: 2 }
+                                        : { display: 'inline-block', p: 1, borderRadius: 2, verticalAlign: 'top' }
+                                    }
+                                    elevation={0}
+                                  >
+                                    <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>{label}</Typography>
 
                                     {items.length === 0 ? (
-                                      <Card variant="outlined" sx={{ mb: 1, opacity: 0.6 }}>
-                                        <CardContent>
-                                          <Typography fontStyle="italic" variant="body2">Sin paradas</Typography>
-                                        </CardContent>
-                                      </Card>
+                                      <MuiBox sx={{ p: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">Sin paradas</Typography>
+                                      </MuiBox>
                                     ) : (
-                                      items.map((slot, i2) => {
-                                        const bus = slot.bus || {};
-                                        return (
-                                          <Card key={`${key}-${i2}`} variant="outlined" sx={{ mb: 1 }}>
-                                            <CardContent>
-                                              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                                                <Chip size="small" label={"Hora parada"} />
-                                                {nonEmpty(slot.time) && (
-                                                  <Tooltip title="Hora en punto de parada">
-                                                    <Chip size="small" variant="outlined" label={slot.time} />
-                                                  </Tooltip>
-                                                )}
-                                              </Stack>
+                                      isSingleDayView ? (
+                                        <Grid container spacing={2}>
+                                          {items.map((slot, i2) => {
+                                            const slotKey = `${st.id ?? 'noid'}-${key}-${i2}-${slot.id ?? i2}`;
+                                            const isExpanded = !!expandedSlots[slotKey];
+                                            return (
+                                              <Grid item xs={12} sm={6} key={slotKey}>
+                                                <Paper
+                                                  sx={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'stretch', p: 2, width: '100%', boxSizing: 'border-box', borderRadius: 2 }}
+                                                  elevation={1}
+                                                >
+                                            <IconButton
+                                              onClick={() => toggleSlot(slotKey)}
+                                              aria-label={isExpanded ? 'Contraer' : 'Expandir'}
+                                              sx={{ position: 'absolute', right: 8, top: 8, transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                                            >
+                                              <ExpandMoreIcon />
+                                            </IconButton>
 
-                                              <Grid container spacing={0.5}>
-                                                {nonEmpty(slot.routeNumber) && (
-                                                  <>
-                                                    <Grid item xs={6}><Typography variant="body2"><b>Ruta:</b></Typography></Grid>
-                                                    <Grid item xs={6}><Typography variant="body2">{slot.routeNumber}</Typography></Grid>
-                                                  </>
-                                                )}
+                                            <MuiBox sx={{ mb: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
+                                              <Chip
+                                                label={slot._label || 'Parada'}
+                                                size="small"
+                                                color={slot._label === 'Entrada' ? 'success' : slot._label === 'Salida' ? 'error' : 'default'}
+                                                sx={{ mb: 1 }}
+                                              />
+                                              <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <AccessTimeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                                                <strong>Hora en parada:</strong>&nbsp;
+                                                <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatTime12(slot.time) || safeStr(slot.time)}</MuiBox>
+                                              </Typography>
+                                            </MuiBox>
 
-                                                {nonEmpty(slot.note) && (
-                                                  <>
-                                                    <Grid item xs={6}><Typography variant="body2"><b>Nota parada:</b></Typography></Grid>
-                                                    <Grid item xs={6}><Typography variant="body2">{slot.note}</Typography></Grid>
-                                                  </>
-                                                )}
+                                            <MuiBox sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                              {safeStr(slot.routeNumber) && (() => {
+                                                const rn = safeStr(slot.routeNumber);
+                                                const plate = slot?.bus?.plate || plateMap[String(rn)] || (parentInfo?.routes?.find(r => safeStr(r.routeNumber) === rn)?.plate) || '';
+                                                return (
+                                                  <MuiBox sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: 'nowrap' }}>
+                                                    <Typography variant="body2" sx={{ flex: '0 0 auto' }}><strong>Número de ruta:</strong></Typography>
+                                                    <MuiBox component="span" sx={{ whiteSpace: 'nowrap', display: 'inline-block', color: 'text.primary', fontWeight: 600 }}>{slot.routeNumber}{plate ? ` (Placa: ${plate})` : ''}</MuiBox>
+                                                  </MuiBox>
+                                                );
+                                              })()}
 
-                                                {nonEmpty(slot.schoolSchedule) && (
-                                                  <>
-                                                    <Grid item xs={6}><Typography variant="body2"><b>Hora colegio:</b></Typography></Grid>
-                                                    <Grid item xs={6}><Typography variant="body2">{slot.schoolSchedule}</Typography></Grid>
-                                                  </>
-                                                )}
+                                              {safeStr(slot.schoolSchedule) && (
+                                                <Typography variant="body2"><strong>{(slot && (slot._label === 'Entrada' || slot.type === 'pickup')) ? 'Hora entrada' : (slot && (slot._label === 'Salida' || slot.type === 'dropoff')) ? 'Hora salida' : 'Hora colegio'}:</strong> {formatTime12(slot.schoolSchedule) || safeStr(slot.schoolSchedule)}</Typography>
+                                              )}
+
+                                              {safeStr(slot.note) && (
+                                                <Typography variant="body2"><strong>Parada:</strong> {slot.note}</Typography>
+                                              )}
+
+                                              <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                                {(() => {
+                                                  const rn = safeStr(slot.routeNumber);
+                                                  const routeObj = parentInfo?.routes?.find(r => safeStr(r.routeNumber) === rn);
+                                                  if (routeObj && (routeObj.monitoraName || routeObj.monitoraContact)) {
+                                                    return (
+                                                      <>
+                                                        {safeStr(routeObj.monitoraName) && <Typography variant="body2" sx={{ mt: 0.5 }}><strong>Monitora:</strong> {routeObj.monitoraName}</Typography>}
+                                                        {safeStr(routeObj.monitoraContact) && <Typography variant="body2" sx={{ mt: 0.5 }}><strong>Teléfono:</strong> {routeObj.monitoraContact}</Typography>}
+                                                      </>
+                                                    );
+                                                  }
+                                                  return (
+                                                    <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary' }}>Sin información adicional</Typography>
+                                                  );
+                                                })()}
+                                              </Collapse>
+                                            </MuiBox>
+                                                </Paper>
                                               </Grid>
-                                            </CardContent>
-                                          </Card>
-                                        );
-                                      })
+                                            );
+                                          })}
+                                        </Grid>
+                                      ) : (
+                                        items.map((slot, i2) => {
+                                          const slotKey = `${st.id ?? 'noid'}-${key}-${i2}-${slot.id ?? i2}`;
+                                          const isExpanded = !!expandedSlots[slotKey];
+                                          return (
+                                            <Paper
+                                              key={`${key}-${i2}`}
+                                              sx={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'stretch', p: 2, mb: 2, width: 'max-content', maxWidth: '80vw', boxSizing: 'border-box', borderRadius: 2 }}
+                                              elevation={1}
+                                            >
+                                              <IconButton
+                                                onClick={() => toggleSlot(slotKey)}
+                                                aria-label={isExpanded ? 'Contraer' : 'Expandir'}
+                                                sx={{ position: 'absolute', right: 8, top: 8, transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                                              >
+                                                <ExpandMoreIcon />
+                                              </IconButton>
+
+                                              <MuiBox sx={{ mb: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+                                                <Chip
+                                                    label={slot._label || 'Parada'}
+                                                    size="small"
+                                                    color={slot._label === 'Entrada' ? 'success' : slot._label === 'Salida' ? 'error' : 'default'}
+                                                    sx={{ mb: 1 }}
+                                                  />
+                                                  <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    <AccessTimeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                                                    <strong>Hora en parada:</strong>&nbsp;
+                                                    <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatTime12(slot.time) || safeStr(slot.time)}</MuiBox>
+                                                  </Typography>
+                                              </MuiBox>
+
+                                              <MuiBox sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                {safeStr(slot.routeNumber) && (() => {
+                                                  const rn = safeStr(slot.routeNumber);
+                                                  const plate = slot?.bus?.plate || plateMap[String(rn)] || (parentInfo?.routes?.find(r => safeStr(r.routeNumber) === rn)?.plate) || '';
+                                                  return (
+                                                    <MuiBox sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: 'nowrap' }}>
+                                                      <Typography variant="body2" sx={{ flex: '0 0 auto' }}><strong>Número de ruta:</strong></Typography>
+                                                      <MuiBox component="span" sx={{ whiteSpace: 'nowrap', display: 'inline-block', color: 'text.primary', fontWeight: 600 }}>{slot.routeNumber}{plate ? ` (Placa: ${plate})` : ''}</MuiBox>
+                                                    </MuiBox>
+                                                  );
+                                                })()}
+
+                                                {safeStr(slot.schoolSchedule) && (
+                                                  <Typography variant="body2"><strong>{(slot && (slot._label === 'Entrada' || slot.type === 'pickup')) ? 'Hora entrada' : (slot && (slot._label === 'Salida' || slot.type === 'dropoff')) ? 'Hora salida' : 'Hora colegio'}:</strong> {formatTime12(slot.schoolSchedule) || safeStr(slot.schoolSchedule)}</Typography>
+                                                )}
+
+                                                {safeStr(slot.note) && (
+                                                  <Typography variant="body2"><strong>Parada:</strong> {slot.note}</Typography>
+                                                )}
+
+                                                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                                  {(() => {
+                                                    const rn = safeStr(slot.routeNumber);
+                                                    const routeObj = parentInfo?.routes?.find(r => safeStr(r.routeNumber) === rn);
+                                                    if (routeObj && (routeObj.monitoraName || routeObj.monitoraContact)) {
+                                                      return (
+                                                        <>
+                                                          {safeStr(routeObj.monitoraName) && <Typography variant="body2" sx={{ mt: 0.5 }}><strong>Monitora:</strong> {routeObj.monitoraName}</Typography>}
+                                                          {safeStr(routeObj.monitoraContact) && <Typography variant="body2" sx={{ mt: 0.5 }}><strong>Teléfono:</strong> {routeObj.monitoraContact}</Typography>}
+                                                        </>
+                                                      );
+                                                    }
+                                                    return (
+                                                      <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary' }}>Sin información adicional</Typography>
+                                                    );
+                                                  })()}
+                                                </Collapse>
+                                              </MuiBox>
+                                            </Paper>
+                                          );
+                                        })
+                                      )
                                     )}
-                                  </DayCol>
+                                  </Paper>
                                 );
                               })}
                             </Stack>
                           </MuiBox>
                         )}
-                        {idx < studentsToRender.length - 1 && <Divider sx={{ mt: 2 }} />}
+                        {idx < studentsListForSchedule.length - 1 && <Divider sx={{ mt: 2 }} />}
                       </MuiBox>
                     );
-                  })
+                  })}
+                  </>
                 )}
               </CardContent>
             </SectionCard>
+                </Grid>
+              )}
+
+              {/* Estudiantes */}
+              
+            </Grid>
           </Grid>
-          )}
         </Grid>
       </Container>
 
+      {/* Dialog: Contáctanos */}
+      <Dialog open={openContactDialog} onClose={() => setOpenContactDialog(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <MuiBox>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              {safeStr(parentInfo.schoolName) || 'Contacto'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">Elige un medio para comunicarte</Typography>
+          </MuiBox>
+          <IconButton onClick={() => setOpenContactDialog(false)} aria-label="Cerrar">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <MuiBox sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <Button
+              fullWidth
+              variant="contained"
+              startIcon={<CallIcon />}
+              onClick={() => openPhone(parentInfo.contactPhone)}
+              disabled={!safeStr(parentInfo.contactPhone)}
+            >
+              {safeStr(parentInfo.contactPhone) || 'Llamar'}
+            </Button>
+
+            <Button
+              fullWidth
+              variant="contained"
+              color="secondary"
+              startIcon={<EmailIcon />}
+              onClick={() => openEmail(parentInfo.contactEmail)}
+              disabled={!safeStr(parentInfo.contactEmail)}
+            >
+              {safeStr(parentInfo.contactEmail) || 'Correo'}
+            </Button>
+
+            <Button
+              fullWidth
+              variant="contained"
+              color="success"
+              startIcon={<WhatsAppIcon />}
+              onClick={() => openWhatsApp(parentInfo.whatsappLink, parentInfo.contactPhone)}
+              disabled={!safeStr(parentInfo.whatsappLink) && !safeStr(parentInfo.contactPhone)}
+            >
+              WhatsApp
+            </Button>
+          </MuiBox>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenContactDialog(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Diálogo para listar contratos y abrir link de firma */}
       <Dialog open={contractsDialogOpen} onClose={handleCloseContractsDialog} fullWidth maxWidth="sm">
-        <DialogTitle>Firmar Contrato</DialogTitle>
+        <DialogTitle>Contratos</DialogTitle>
         <DialogContent dividers>
           {contractsLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
