@@ -266,7 +266,7 @@ function App() {
                         element={
                             <ProtectedRoute 
                                 moduleKey={'padre-dashboard'} 
-                                redirectTo="/parent/dashboard"
+                                redirectTo="/login"
                             >
                                 <ParentDashboardPage />
                             </ProtectedRoute>
@@ -302,7 +302,7 @@ function App() {
                         element={
                             <ProtectedRoute
                                 moduleKey={'colaborador-dashboard'}
-                                redirectTo="/colaborador/dashboard"
+                                redirectTo="/login"
                             >
                                 <ColaboradorDashboardPage />
                             </ProtectedRoute>
