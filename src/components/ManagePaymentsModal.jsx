@@ -431,7 +431,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
                                 <Box>
                                     <Typography variant="caption" color="text.secondary">Cant. Hijos</Typography>
-                                    <Typography variant="body1">{ (family.Students || []).length || 0 }</Typography>
+                                    <Typography variant="body1">{family.studentsCount || 0}</Typography>
                                 </Box>
                                 <Box>
                                     <Typography variant="caption" color="text.secondary">Tipo de Ruta</Typography>

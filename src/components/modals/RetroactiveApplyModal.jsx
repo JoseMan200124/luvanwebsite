@@ -332,7 +332,7 @@ const RetroactiveApplyModal = ({
                                             const net = Number(p.netAmount ?? p.net ?? p.amount ?? 0);
 
                                             const studentCountFromFamily = Number(
-                                                familyFromDetail?.Students?.length || familyFromDetail?.studentsCount || effectivePayment?.studentCount || 1
+                                                familyFromDetail?.studentsCount || effectivePayment?.studentCount || 1
                                             );
                                             const studentCount = Math.max(1, studentCountFromFamily || 1);
 

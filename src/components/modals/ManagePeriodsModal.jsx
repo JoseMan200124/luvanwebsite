@@ -78,7 +78,6 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
 
     const studentCountFromFamily = useMemo(() => {
         const n = Number(
-            familyFromDetail?.Students?.length ||
             familyFromDetail?.studentsCount ||
             serverPayment?.studentCount ||
             1
