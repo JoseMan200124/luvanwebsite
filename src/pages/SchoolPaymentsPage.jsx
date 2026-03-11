@@ -533,7 +533,7 @@ const SchoolPaymentsPage = () => {
     const getValueForKey = (p, key) => {
         try {
             if (key === 'familyLastName') return (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toString().toLowerCase();
-            if (key === 'students') return (p.User?.FamilyDetail?.Students || []).length || (p.studentCount || 0);
+            if (key === 'students') return p.User?.FamilyDetail?.studentsCount || p.studentCount || 0;
             if (key === 'routeType') return (p.User?.FamilyDetail?.routeType || '').toString().toLowerCase();
             if (key === 'lastPayment') return p.lastPaymentDate || p.lastPaidDate || p.lastPayment || '';
             if (key === 'discount') return Number(p.User?.FamilyDetail?.specialFee ?? p.specialFee ?? 0) || 0;
@@ -1196,14 +1196,19 @@ const SchoolPaymentsPage = () => {
                 || paymentDetail?.user?.FamilyDetail?.familyLastName
                 || '';
 
-            const studentsArr = Array.isArray(familyPayment?.User?.FamilyDetail?.Students)
-                ? familyPayment.User.FamilyDetail.Students
-                : (Array.isArray(familyPayment?.user?.FamilyDetail?.Students) ? familyPayment.user.FamilyDetail.Students : []);
+            const studentCount = Number(
+                familyPayment?.User?.FamilyDetail?.studentsCount
+                || familyPayment?.user?.FamilyDetail?.studentsCount
+                || familyPayment?.studentCount
+                || 0
+            );
 
-            const studentCount = studentsArr.length
-                || Number(familyPayment?.User?.FamilyDetail?.studentsCount || familyPayment?.user?.FamilyDetail?.studentsCount || 0)
-                || Number(familyPayment?.studentCount || 0)
-                || 0;
+            // Prefer paymentDetail (by-user endpoint) which returns Students filtered to active only
+            const studentsArr = Array.isArray(periodsPayment?.User?.FamilyDetail?.Students)
+                ? periodsPayment.User.FamilyDetail.Students
+                : (Array.isArray(periodsPayment?.user?.FamilyDetail?.Students)
+                    ? periodsPayment.user.FamilyDetail.Students
+                    : []);
 
             const routeType = familyPayment?.User?.FamilyDetail?.routeType
                 || familyPayment?.user?.FamilyDetail?.routeType
