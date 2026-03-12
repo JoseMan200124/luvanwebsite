@@ -484,10 +484,11 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
 
                                     const original = Number(p.originalAmount ?? 0);
                                     const net = Number(p.netAmount ?? amountDue ?? 0);
-                                    const baseFee = (original && studentCountFromFamily) ? (original / studentCountFromFamily) : 0;
+                                    const periodStudentsCount = Math.max(1, Number(p.studentsCount || studentCountFromFamily || 1));
+                                    const baseFee = (original && periodStudentsCount) ? (original / periodStudentsCount) : 0;
                                     const discount = Math.max(0, original - net) || Number(p.discountApplied ?? 0);
 
-                                    const studentsLabel = `${studentCountFromFamily} estudiante${studentCountFromFamily === 1 ? '' : 's'}`;
+                                    const studentsLabel = `${periodStudentsCount} estudiante${periodStudentsCount === 1 ? '' : 's'}`;
                                     const baseLabel = `Tarifa base${routeTypeForLabel ? ` (${routeTypeForLabel})` : ''}`;
                                     const monthlyLabel = `Tarifa mensual (${studentsLabel})`;
 
