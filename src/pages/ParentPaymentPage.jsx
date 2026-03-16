@@ -39,10 +39,18 @@ const ParentPaymentPage = () => {
         if (!isSuspended) return;
         const userId = auth?.user?.id;
         if (!userId) return;
-        api.get(`/parents/${userId}/filled-contracts`)
+        // Preferimos usar route-info que ahora incluye flags de contrato
+        api.get(`/parents/${userId}/route-info`)
             .then(res => {
-                const filled = Array.isArray(res.data?.filledContracts) ? res.data.filledContracts : [];
-                setIsSuspendedForNoContract(filled.length === 0);
+                const data = res?.data?.data || {};
+                const schoolHasContracts = Boolean(data.schoolHasContracts);
+                const parentHasSignedContract = Boolean(data.parentHasSignedContract);
+                if (!schoolHasContracts) {
+                    // Escuela sin contratos configurados: no consideramos falta de firma como motivo
+                    setIsSuspendedForNoContract(false);
+                } else {
+                    setIsSuspendedForNoContract(!parentHasSignedContract);
+                }
             })
             .catch(() => setIsSuspendedForNoContract(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
