@@ -255,6 +255,12 @@ const ParentDashboardPage = () => {
   const fieldRefs = React.useRef({});
   const [submittingSignature, setSubmittingSignature] = useState(false);
 
+  // Estado para ver contrato firmado embebido
+  const [viewFilledOpen, setViewFilledOpen] = useState(false);
+  const [viewFilledUuid, setViewFilledUuid] = useState('');
+  const [viewFilledData, setViewFilledData] = useState(null);
+  const [viewFilledLoading, setViewFilledLoading] = useState(false);
+
   const [parentInfo, setParentInfo] = useState(() => normalizeParentInfo({}));
   const [slotsByStudent, setSlotsByStudent] = useState({}); // { [studentId]: Slot[] }
   const [plateMap, setPlateMap] = useState({});
@@ -317,11 +323,8 @@ const ParentDashboardPage = () => {
         return;
       }
 
-      // 1) Resumen de padre/familia + contratos firmados (en paralelo)
-      const [res, filledRes] = await Promise.all([
-        api.get(`/parents/${userId}/route-info`),
-        api.get(`/parents/${userId}/filled-contracts`).catch(() => ({ data: { filledContracts: [] } }))
-      ]);
+      // 1) Resumen de padre/familia (route-info ahora incluye conteos de contratos)
+      const res = await api.get(`/parents/${userId}/route-info`);
       const rawData = res?.data?.data || {};
       const info = normalizeParentInfo(rawData);
       setParentInfo(info);
@@ -330,8 +333,16 @@ const ParentDashboardPage = () => {
       setServiceStatus(backendServiceStatus || auth?.user?.serviceStatus || '');
       const backendSchoolId = rawData.schoolId ?? rawData.school?.id ?? null;
 
-      const filledList = Array.isArray(filledRes.data?.filledContracts) ? filledRes.data.filledContracts : [];
-      setHasSignedContract(filledList.length > 0);
+      // Use the flags returned by the backend to decide contract state.
+      const schoolHasContracts = Boolean(rawData.schoolHasContracts);
+      const parentHasSignedContract = Boolean(rawData.parentHasSignedContract);
+
+      if (!schoolHasContracts) {
+        // Escuela sin contratos configurados: no tratamos la falta de firma como motivo de suspensión
+        setHasSignedContract(null);
+      } else {
+        setHasSignedContract(parentHasSignedContract);
+      }
 
       // 2) Si tengo ids de estudiantes, cargo sus scheduleSlots (accesible a "Padre")
       const studentIds = info.students.map((s) => s.id).filter(Boolean);
@@ -394,16 +405,19 @@ const ParentDashboardPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.user?.id]);
 
+  // Refresh únicamente cuando un modal pase de abierto -> cerrado
+  const prevModalOpenRef = useRef(false);
   useEffect(() => {
-    const onFocus = () => {
-      const now = Date.now();
-      if (now - lastRefreshRef.current < 1500) return;
-      lastRefreshRef.current = now;
+    const currentlyOpen = !!(
+      contractsDialogOpen || signingDialogOpen || updateDialogOpen || viewFilledOpen
+    );
+    if (prevModalOpenRef.current && !currentlyOpen) {
+      // modal cerrado -> refrescar
       refreshDashboard();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [refreshDashboard]);
+    }
+    prevModalOpenRef.current = currentlyOpen;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contractsDialogOpen, signingDialogOpen, updateDialogOpen, viewFilledOpen]);
 
   // Función para abrir el diálogo de actualización
   const handleOpenUpdateDialog = async () => {
@@ -491,11 +505,15 @@ const ParentDashboardPage = () => {
     }).finally(() => setViewFilledLoading(false));
   };
 
-  // Estado para ver contrato firmado embebido
-  const [viewFilledOpen, setViewFilledOpen] = useState(false);
-  const [viewFilledUuid, setViewFilledUuid] = useState('');
-  const [viewFilledData, setViewFilledData] = useState(null);
-  const [viewFilledLoading, setViewFilledLoading] = useState(false);
+  // Ref para indicar si hay algún modal/dialog abierto — usado por el listener de focus
+  const isModalOpenRef = useRef(false);
+
+  // Mantener el ref actualizado cuando cambian los flags de los diálogos
+  useEffect(() => {
+    isModalOpenRef.current = !!(
+      contractsDialogOpen || signingDialogOpen || updateDialogOpen || viewFilledOpen
+    );
+  }, [contractsDialogOpen, signingDialogOpen, updateDialogOpen, viewFilledOpen]);
 
   // Helpers for signing modal
   const extractPlaceholders = (content) => {
