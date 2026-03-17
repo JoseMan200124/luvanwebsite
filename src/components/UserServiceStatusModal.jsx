@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import {
     Dialog,
     DialogTitle,
@@ -16,7 +17,9 @@ import {
     Chip,
     CircularProgress,
     Divider,
-    Paper
+    Paper,
+    Checkbox,
+    FormControlLabel
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -70,24 +73,81 @@ const SERVICE_STATES = {
 };
 
 // Transiciones válidas entre estados.
-// SUSPENDED → ACTIVE está bloqueado intencionalmente en el frontend:
-// la activación directa no tiene sentido si la familia aún tiene mora o no ha firmado contrato.
-// El backend igualmente lo intercepta y asigna SUSPENDED de forma automática.
+// Para familias, SUSPENDED → ACTIVE se permite y el backend decide si la activación
+// procede o si debe mantenerse SUSPENDED según la política manual configurada.
 const VALID_TRANSITIONS = {
     'ACTIVE': ['PAUSED', 'SUSPENDED', 'INACTIVE'],
     'PAUSED': ['ACTIVE', 'SUSPENDED', 'INACTIVE'],
-    'SUSPENDED': ['PAUSED', 'INACTIVE'],
+    'SUSPENDED': ['ACTIVE', 'PAUSED', 'INACTIVE'],
     'INACTIVE': ['ACTIVE']
+};
+
+const inferStatusFromUser = (user) => (
+    user?.familyServiceStatus?.status ||
+    (user?.state === 1 ? 'ACTIVE' : 'INACTIVE')
+);
+
+const hasManualPolicyChanges = (
+    userType,
+    currentStatusRecord,
+    ignoreMissingContractForAutoSuspension,
+    ignoreMoraForAutoSuspension
+) => {
+    if (userType !== 'FAMILY') {
+        return false;
+    }
+
+    return (
+        ignoreMissingContractForAutoSuspension !== Boolean(currentStatusRecord?.ignoreMissingContractForAutoSuspension) ||
+        ignoreMoraForAutoSuspension !== Boolean(currentStatusRecord?.ignoreMoraForAutoSuspension)
+    );
+};
+
+const buildRequestBody = ({
+    reason,
+    userType,
+    corporationId,
+    fiscalYear,
+    schoolId,
+    schoolYear,
+    ignoreMissingContractForAutoSuspension,
+    ignoreMoraForAutoSuspension,
+    selectedStatus,
+    resumeDate
+}) => {
+    const body = { reason: reason.trim(), userType };
+
+    if (userType === 'COLABORADOR') {
+        body.corporationId = corporationId;
+        if (fiscalYear) {
+            body.fiscalYear = fiscalYear;
+        }
+        return body;
+    }
+
+    body.schoolId = schoolId;
+    body.schoolYear = schoolYear;
+    body.ignoreMissingContractForAutoSuspension = ignoreMissingContractForAutoSuspension;
+    body.ignoreMoraForAutoSuspension = ignoreMoraForAutoSuspension;
+
+    if (selectedStatus === 'PAUSED' && resumeDate) {
+        body.resumeDate = resumeDate.format ? resumeDate.format('YYYY-MM-DD') : String(resumeDate);
+    }
+
+    return body;
 };
 
 const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onSuccess, userType = 'FAMILY', corporationId = null, fiscalYear = null }) => {
     const [loading, setLoading] = useState(false);
     const [currentStatus, setCurrentStatus] = useState(null);
+    const [currentStatusRecord, setCurrentStatusRecord] = useState(null);
     const [selectedStatus, setSelectedStatus] = useState('');
     const [reason, setReason] = useState('');
     const [resumeDate, setResumeDate] = useState(null);
     const [error, setError] = useState(null);
     const [loadingStatus, setLoadingStatus] = useState(false);
+    const [ignoreMissingContractForAutoSuspension, setIgnoreMissingContractForAutoSuspension] = useState(false);
+    const [ignoreMoraForAutoSuspension, setIgnoreMoraForAutoSuspension] = useState(false);
 
     // Obtener estado actual cuando se abre el modal
     useEffect(() => {
@@ -109,6 +169,9 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
             setSelectedStatus('');
             setResumeDate(null);
             setError(null);
+            setCurrentStatusRecord(null);
+            setIgnoreMissingContractForAutoSuspension(false);
+            setIgnoreMoraForAutoSuspension(false);
         }
     }, [open]);
 
@@ -124,24 +187,26 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
                 params.schoolYear = schoolYear;
             }
             const response = await api.get(`/service-status/${user.id}`, { params });
-            
-            if (response.data && response.data.status) {
-                setCurrentStatus(response.data.status.status);
+
+            const responseStatus = response.data?.status;
+
+            if (responseStatus) {
+                setCurrentStatusRecord(responseStatus);
+                setCurrentStatus(responseStatus.status);
+                setIgnoreMissingContractForAutoSuspension(Boolean(responseStatus.ignoreMissingContractForAutoSuspension));
+                setIgnoreMoraForAutoSuspension(Boolean(responseStatus.ignoreMoraForAutoSuspension));
             } else {
-                // Fallback: usar el serviceStatus del join si está disponible
-                const inferredStatus =
-                    user?.familyServiceStatus?.status ||
-                    (user?.state === 1 ? 'ACTIVE' : 'INACTIVE');
-                setCurrentStatus(inferredStatus);
+                setCurrentStatusRecord(null);
+                setCurrentStatus(inferStatusFromUser(user));
+                setIgnoreMissingContractForAutoSuspension(false);
+                setIgnoreMoraForAutoSuspension(false);
             }
         } catch (err) {
             console.error('Error fetching current status:', err);
-            // Fallback: usar el serviceStatus del join (familyServiceStatus) si está disponible,
-            // ya que es más preciso que inferir del user.state (un usuario SUSPENDED sigue teniendo state=1)
-            const inferredStatus =
-                user?.familyServiceStatus?.status ||
-                (user?.state === 1 ? 'ACTIVE' : 'INACTIVE');
-            setCurrentStatus(inferredStatus);
+            setCurrentStatusRecord(null);
+            setCurrentStatus(inferStatusFromUser(user));
+            setIgnoreMissingContractForAutoSuspension(false);
+            setIgnoreMoraForAutoSuspension(false);
         } finally {
             setLoadingStatus(false);
         }
@@ -159,8 +224,16 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
     };
 
     const handleSubmit = async () => {
-        if (!selectedStatus) {
-            setError('Debe seleccionar un nuevo estado');
+        const hasStatusChange = Boolean(selectedStatus);
+        const hasPolicyChanges = hasManualPolicyChanges(
+            userType,
+            currentStatusRecord,
+            ignoreMissingContractForAutoSuspension,
+            ignoreMoraForAutoSuspension
+        );
+
+        if (!hasStatusChange && !hasPolicyChanges) {
+            setError('Debe realizar al menos un cambio antes de guardar');
             return;
         }
 
@@ -182,26 +255,24 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
             };
 
             const endpoint = endpointMap[selectedStatus];
-            
-            const body = { reason: reason.trim(), userType };
-            if (userType === 'COLABORADOR') {
-                body.corporationId = corporationId;
-                if (fiscalYear) body.fiscalYear = fiscalYear;
+            const body = buildRequestBody({
+                reason,
+                userType,
+                corporationId,
+                fiscalYear,
+                schoolId,
+                schoolYear,
+                ignoreMissingContractForAutoSuspension,
+                ignoreMoraForAutoSuspension,
+                selectedStatus,
+                resumeDate
+            });
+
+            if (hasStatusChange) {
+                await api.post(`/service-status/${user.id}/${endpoint}`, body);
             } else {
-                body.schoolId = schoolId;
-                body.schoolYear = schoolYear;
+                await api.patch(`/service-status/${user.id}/policy`, body);
             }
-            // Incluir resumeDate si se seleccionó (opcional)
-            if (selectedStatus === 'PAUSED' && resumeDate) {
-                try {
-                    const formatted = resumeDate.format ? resumeDate.format('YYYY-MM-DD') : String(resumeDate);
-                    body.resumeDate = formatted;
-                } catch (e) {
-                    // si falla el formateo, enviar como string por seguridad
-                    body.resumeDate = String(resumeDate);
-                }
-            }
-            await api.post(`/service-status/${user.id}/${endpoint}`, body);
 
             if (onSuccess) {
                 onSuccess();
@@ -236,6 +307,20 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
     };
 
     const allowedStates = getAllowedStates();
+    const hasPolicyChanges = hasManualPolicyChanges(
+        userType,
+        currentStatusRecord,
+        ignoreMissingContractForAutoSuspension,
+        ignoreMoraForAutoSuspension
+    );
+    const hasStatusChange = Boolean(selectedStatus);
+    const canSubmit = !loading && !loadingStatus && reason.trim() && (hasStatusChange || hasPolicyChanges);
+    let submitLabel = 'Guardar Configuración';
+    if (loading) {
+        submitLabel = 'Guardando...';
+    } else if (hasStatusChange) {
+        submitLabel = 'Cambiar Estado';
+    }
 
     return (
         <Dialog 
@@ -291,25 +376,37 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
 
                 <Divider sx={{ my: 3 }} />
 
-                {/* Aviso cuando el estado actual es SUSPENDED */}
-                {currentStatus === 'SUSPENDED' && userType === 'FAMILY' && (
-                    <Alert severity="warning" sx={{ mb: 3 }}>
-                        <Typography variant="body2" fontWeight={600} gutterBottom>
-                            La familia está Suspendida
+                {userType === 'FAMILY' && (
+                    <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Política manual para cambios automáticos a estado Suspendido
                         </Typography>
-                        <Typography variant="caption" component="div">
-                            No se puede cambiar directamente a <strong>Activo</strong> desde este estado.
-                            <br />
-                            <br />
-                            Para que el sistema active el servicio de forma automática, se debe cumplir con los siguientes requisitos:
-                            <br />
-                            • Tener contrato firmado
-                            <br />
-                            • No se deben tener períodos vencidos
-                            <br />
-                            • No se debe tener mora acumulada
-                        </Typography>
-                    </Alert>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', border: theme => `1px solid ${theme.palette.divider}` }}>
+                            <FormControlLabel
+                                control={(
+                                    <Checkbox
+                                        checked={ignoreMissingContractForAutoSuspension}
+                                        onChange={(e) => setIgnoreMissingContractForAutoSuspension(e.target.checked)}
+                                        disabled={loading || loadingStatus}
+                                    />
+                                )}
+                                label="Ignorar falta de contrato firmado"
+                            />
+                            <FormControlLabel
+                                control={(
+                                    <Checkbox
+                                        checked={ignoreMoraForAutoSuspension}
+                                        onChange={(e) => setIgnoreMoraForAutoSuspension(e.target.checked)}
+                                        disabled={loading || loadingStatus}
+                                    />
+                                )}
+                                label="Ignorar mora"
+                            />
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                Esta configuración le indica al sistema cómo manejar los cambios automáticos al estado Suspendido.
+                            </Typography>
+                        </Paper>
+                    </Box>
                 )}
 
                 {/* Selección de nuevo estado */}
@@ -420,10 +517,10 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
                 <Button
                     onClick={handleSubmit}
                     variant="contained"
-                    disabled={loading || !selectedStatus || !reason.trim() || loadingStatus}
+                    disabled={!canSubmit}
                     startIcon={loading && <CircularProgress size={20} />}
                 >
-                    {loading ? 'Cambiando...' : 'Cambiar Estado'}
+                    {submitLabel}
                 </Button>
             </DialogActions>
         </Dialog>
@@ -431,3 +528,23 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
 };
 
 export default UserServiceStatusModal;
+
+UserServiceStatusModal.propTypes = {
+    open: PropTypes.bool.isRequired,
+    onClose: PropTypes.func.isRequired,
+    onSuccess: PropTypes.func,
+    schoolId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    schoolYear: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    userType: PropTypes.oneOf(['FAMILY', 'COLABORADOR']),
+    corporationId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    fiscalYear: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    user: PropTypes.shape({
+        id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+        name: PropTypes.string,
+        email: PropTypes.string,
+        state: PropTypes.oneOfType([PropTypes.number, PropTypes.bool]),
+        familyServiceStatus: PropTypes.shape({
+            status: PropTypes.string
+        })
+    })
+};
