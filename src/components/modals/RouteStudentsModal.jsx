@@ -25,6 +25,7 @@ import {
 import { Close as CloseIcon, DirectionsBus } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
+import { getScheduleLabel } from '../../utils/scheduleConfig';
 
 const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId, schoolYear, selectedDay }) => {
     const { auth } = useContext(AuthContext);
@@ -127,13 +128,7 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
     };
 
     const getScheduleCodeLabel = (code) => {
-        const labels = {
-            'AM': 'Mañana',
-            'PM': 'Tarde',
-            'MD': 'Medio Día',
-            'EX': 'Extra'
-        };
-        return labels[code] || code;
+        return getScheduleLabel(code);
     };
 
     // compute visible rows based on active filters and sorting

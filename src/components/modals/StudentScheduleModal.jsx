@@ -66,14 +66,64 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     const str = String(s).trim();
     const timeMatch = str.match(/(\d{1,2}:\d{2})/);
     const time = timeMatch ? timeMatch[1] : null;
-    // try to extract code (AM/MD/PM/EX) after the time
+    // Extract code dynamically from configured school schedules.
     let code = null;
     if (time) {
       const after = str.slice(str.indexOf(time) + time.length).trim().toUpperCase();
-      const m = after.match(/\b(AM|PM|MD|EX)\b/);
-      if (m) code = m[1];
+      const candidateCodes = Array.from(new Set((schoolSchedules || [])
+        .map((entry) => {
+          if (!entry || typeof entry === 'string') return null;
+          return entry.code ? String(entry.code).trim().toUpperCase() : null;
+        })
+        .filter(Boolean)))
+        .sort((a, b) => b.length - a.length);
+      const found = candidateCodes.find((c) => new RegExp(`\\b${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(after));
+      if (found) code = found;
     }
     return { time, code };
+  }
+
+  function getScheduleTime(entry) {
+    if (!entry) return '';
+    if (typeof entry === 'string') return String(entry).trim();
+    const times = Array.isArray(entry.times) ? entry.times : (entry.times ? [entry.times] : []);
+    return times[0] ? String(times[0]).trim() : '';
+  }
+
+  function getScheduleCode(entry) {
+    if (!entry || typeof entry === 'string' || !entry.code) return '';
+    return String(entry.code).trim().toUpperCase();
+  }
+
+  function buildScheduleSelectValue(entry) {
+    const time = getScheduleTime(entry);
+    const code = getScheduleCode(entry);
+    if (!time) return '';
+    return `${code || 'NO_CODE'}::${time}`;
+  }
+
+  function parseScheduleSelectValue(value) {
+    if (!value) return { code: null, time: '' };
+    const sep = String(value).indexOf('::');
+    if (sep === -1) return { code: null, time: String(value).trim() };
+    const rawCode = String(value).slice(0, sep).trim();
+    const time = String(value).slice(sep + 2).trim();
+    const code = rawCode && rawCode !== 'NO_CODE' ? rawCode.toUpperCase() : null;
+    return { code, time };
+  }
+
+  function findScheduleBySelectValue(value, list) {
+    if (!value || !Array.isArray(list)) return null;
+    const parsed = parseScheduleSelectValue(value);
+    if (parsed.code) {
+      const exact = list.find((s) => {
+        const code = getScheduleCode(s);
+        const time = getScheduleTime(s);
+        return code === parsed.code && time === parsed.time;
+      });
+      if (exact) return exact;
+    }
+    return list.find((s) => getScheduleTime(s) === parsed.time) || null;
   }
 
   // week day labels (UI labels are defined inline where needed)
@@ -133,9 +183,15 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       const ss = slot.schoolSchedule || parsed.schoolSchedule || '';
       const parsedSS = parseSchoolScheduleString(ss);
       const ssTime = parsedSS.time || '';
+      const matchedFromStore = (Array.isArray(schoolSchedules) ? schoolSchedules : []).find((s) => {
+        const code = getScheduleCode(s);
+        const time = getScheduleTime(s);
+        if (!time || time !== ssTime) return false;
+        if (parsedSS.code) return code === parsedSS.code;
+        return true;
+      });
       setAssignForm({
-        // keep select values as time-only so existing option values still match
-        schoolSchedule: ssTime,
+        schoolSchedule: matchedFromStore ? buildScheduleSelectValue(matchedFromStore) : (ssTime ? `NO_CODE::${ssTime}` : ''),
         // prefer routeNumber stored on slot
         routeId: slot.routeNumber ? String(slot.routeNumber) : '',
         paradaTime: slot.time || '',
@@ -145,7 +201,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       // load routes for the time-only value and intersect with canonical routeNumbers
       if (ssTime) {
         try {
-          const timeRoutes = await loadRoutesByTime(schoolId, ssTime);
+          const timeRoutes = await loadRoutesByTime(schoolId, null, parsedSS.code || null);
           // If we already have canonical routeNumbers loaded, prefer those and intersect
           const canonicalRNs = Array.isArray(assignRoutesOptions) && assignRoutesOptions.length > 0 ? assignRoutesOptions.map(x => String(x.routeNumber)) : [];
           if (canonicalRNs.length > 0) {
@@ -171,15 +227,27 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     setAssignOpen(true);
   }
 
-  async function handleAssignScheduleSelect(timeVal) {
+  async function handleAssignScheduleSelect(selectedValue) {
+    const { time: timeVal, code: codeVal } = parseScheduleSelectValue(selectedValue);
     // fetch routes for selected schedule
-    setAssignForm(f => ({ ...f, schoolSchedule: timeVal }));
-    console.log('[StudentScheduleModal] schedule selected=', timeVal);
+    setAssignForm(f => {
+      // Find the schedule entry by code+time to avoid collisions (e.g. MD 12:00 vs LUNES 12:00)
+      const matchedSch = findScheduleBySelectValue(selectedValue, schoolSchedules || []);
+      const schDays = (matchedSch && Array.isArray(matchedSch.days) && matchedSch.days.length > 0)
+        ? matchedSch.days
+        : null; // null means all days allowed
+      // Clear any currently selected days that are not allowed by the new schedule
+      const filteredDays = schDays
+        ? (f.days || []).filter(d => schDays.includes(d))
+        : f.days;
+      return { ...f, schoolSchedule: selectedValue, days: filteredDays };
+    });
+    console.log('[StudentScheduleModal] schedule selected=', selectedValue, 'time=', timeVal);
     if (!timeVal) return setAssignRoutesOptions([]);
     try {
-      const r = await loadRoutesByTime(schoolId, timeVal);
+      const r = await loadRoutesByTime(schoolId, null, codeVal || null);
       setAssignRoutesOptions(r || []);
-      console.log('[StudentScheduleModal] routes loaded for time=', timeVal, r);
+      console.log('[StudentScheduleModal] routes loaded for code=', codeVal, r);
     } catch (err) {
       console.error(err);
       setAssignRoutesOptions([]);
@@ -196,13 +264,13 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   // validate time format and conflicts
   const validation = validateAssign({ time: paradaTime, days }, assignEditing);
   if (!validation.ok) return alert(validation.message);
-    // Build schoolSchedule string including code (AM/MD/PM/EX) when possible
-    const matchedSchedule = (schoolSchedules || []).find(s => {
-      const times = Array.isArray(s && s.times) ? s.times : (s && s.times ? [s.times] : []);
-      return times.includes(schoolSchedule);
-    });
+    // Build schoolSchedule string including selected dynamic code when possible
+    const selectedSchedule = parseScheduleSelectValue(schoolSchedule);
+    const matchedSchedule = findScheduleBySelectValue(schoolSchedule, schoolSchedules || []);
     const matchedCode = matchedSchedule && matchedSchedule.code ? String(matchedSchedule.code).toUpperCase() : null;
-    const schoolScheduleOut = schoolSchedule ? (matchedCode ? `${schoolSchedule} ${matchedCode}` : schoolSchedule) : null;
+    const schoolScheduleOut = selectedSchedule.time
+      ? (matchedCode ? `${selectedSchedule.time} ${matchedCode}` : selectedSchedule.time)
+      : null;
 
     // build payload: routeId represents the routeNumber. Send only routeNumber.
     const payload = {
@@ -481,7 +549,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                       {schoolSchedules.map((s, i) => {
                         const isStr = typeof s === 'string';
                         const times = isStr ? [s] : (Array.isArray(s.times) ? s.times : (s && s.times ? [s.times] : []));
-                        const val = times[0] || '';
+                        const val = buildScheduleSelectValue(s);
                         const label = isStr ? s : `${s.name || 'Horario'} — ${times.join(', ')}`;
                         return <option key={i} value={val}>{label}</option>;
                       })}
@@ -514,24 +582,46 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                   </div>
                   <div style={{ gridColumn: '1 / span 2' }}>
                     <label style={{ fontSize: 13 }}>Días</label>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      {/* Select all / deselect all button */}
-                      <button
-                        type='button'
-                        onClick={() => {
-                          const allSelected = DAYS.every(d => Array.isArray(assignForm.days) && assignForm.days.includes(d));
-                          setAssignForm(f => ({ ...f, days: allSelected ? [] : [...DAYS] }));
-                        }}
-                        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: (Array.isArray(assignForm.days) && assignForm.days.length === DAYS.length) ? '#2563EB' : '#fff', color: (Array.isArray(assignForm.days) && assignForm.days.length === DAYS.length) ? '#fff' : '#374151' }}
-                      >
-                        Todos
-                      </button>
-                      {DAYS.map(day => (
-                        <button key={day} type='button' onClick={()=>{
-                          setAssignForm(f=>({ ...f, days: f.days.includes(day) ? f.days.filter(d=>d!==day) : [...f.days, day] }));
-                        }} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: assignForm.days.includes(day)?'#2563EB':'#fff', color: assignForm.days.includes(day)?'#fff':'#374151' }}>{day.substring(0,3)}</button>
-                      ))}
-                    </div>
+                    {(() => {
+                      // Compute allowed days based on the selected schedule's days restriction
+                      const matchedSch = assignForm.schoolSchedule
+                        ? findScheduleBySelectValue(assignForm.schoolSchedule, schoolSchedules || [])
+                        : null;
+                      const schDays = (matchedSch && Array.isArray(matchedSch.days) && matchedSch.days.length > 0)
+                        ? matchedSch.days
+                        : null; // null = all days allowed
+                      const allowedDays = schDays
+                        ? DAYS.filter(d => schDays.includes(d))
+                        : DAYS;
+                      const dayLabelMap = { monday: 'Lun', tuesday: 'Mar', wednesday: 'Mié', thursday: 'Jue', friday: 'Vie' };
+                      return (
+                        <>
+                          {schDays && (
+                            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4, marginBottom: 2 }}>
+                              Este horario solo aplica: {allowedDays.map(d => dayLabelMap[d] || d).join(', ')}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                            {/* Select all / deselect all button */}
+                            <button
+                              type='button'
+                              onClick={() => {
+                                const allSelected = allowedDays.every(d => Array.isArray(assignForm.days) && assignForm.days.includes(d));
+                                setAssignForm(f => ({ ...f, days: allSelected ? [] : [...allowedDays] }));
+                              }}
+                              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: (Array.isArray(assignForm.days) && assignForm.days.length === allowedDays.length && allowedDays.length > 0) ? '#2563EB' : '#fff', color: (Array.isArray(assignForm.days) && assignForm.days.length === allowedDays.length && allowedDays.length > 0) ? '#fff' : '#374151' }}
+                            >
+                              Todos
+                            </button>
+                            {allowedDays.map(day => (
+                              <button key={day} type='button' onClick={()=>{
+                                setAssignForm(f=>({ ...f, days: f.days.includes(day) ? f.days.filter(d=>d!==day) : [...f.days, day] }));
+                              }} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: assignForm.days.includes(day)?'#2563EB':'#fff', color: assignForm.days.includes(day)?'#fff':'#374151' }}>{dayLabelMap[day] || day.substring(0,3)}</button>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>

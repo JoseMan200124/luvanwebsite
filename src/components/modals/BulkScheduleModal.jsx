@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Checkbox, CircularProgress, TextField } from '@mui/material';
 import ExcelJS from 'exceljs';
 import api from '../../utils/axiosConfig';
+import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../../utils/scheduleConfig';
 
 export default function BulkScheduleModal({ open, onClose, schoolId }) {
   const [families, setFamilies] = useState([]);
@@ -14,7 +15,9 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
   const DAYS = ['Lunes','Martes','Miercoles','Jueves','Viernes'];
-  const FRANJAS = ['AM','MD','PM','EX'];
+  // FRANJAS will be derived dynamically from school schedules in generateTemplate;
+  // default fallback is used for initial state only.
+  const FRANJAS_DEFAULT = DEFAULT_SCHEDULE_CODES;
 
     useEffect(() => {
     if (!open) return;
@@ -110,6 +113,11 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
       } catch (err) {
         console.warn('Could not fetch school schedules:', err && err.response ? err.response.status : err);
       }
+
+      // Derive FRANJAS dynamically from fetched school schedules (or fallback to defaults)
+      const FRANJAS = Object.keys(schoolScheduleMap).length > 0
+        ? Object.keys(schoolScheduleMap)
+        : FRANJAS_DEFAULT;
 
       // Freeze first row and first column
       sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
