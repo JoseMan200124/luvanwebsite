@@ -58,8 +58,8 @@ const StudentIncidentsPage = () => {
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedIncidentType, setSelectedIncidentType] = useState('');
     const [selectedScheduleType, setSelectedScheduleType] = useState('');
-    const [startDate, setStartDate] = useState(moment().subtract(30, 'days'));
-    const [endDate, setEndDate] = useState(moment());
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
 
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -131,13 +131,13 @@ const StudentIncidentsPage = () => {
                 limit: rowsPerPage,
             };
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedIncidentType) filters.incidentType = selectedIncidentType;
-            if (selectedScheduleType) filters.scheduleType = selectedScheduleType;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+                if (selectedSchool) filters.schoolId = selectedSchool;
+                if (selectedPlate) filters.plate = selectedPlate;
+                if (selectedRoute) filters.routeNumber = selectedRoute;
+                if (selectedIncidentType) filters.incidentType = selectedIncidentType;
+                if (selectedScheduleType) filters.scheduleType = selectedScheduleType;
+                if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
+                if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
 
             const data = await getAllStudentIncidents(filters);
             
@@ -145,25 +145,26 @@ const StudentIncidentsPage = () => {
             setIncidents(incidentList);
             setTotalCount(data.total || 0);
 
-            // Calcular estadísticas
-            if (incidentList.length > 0) {
-                const byType = {};
-                const bySchedule = {};
+            // Calcular estadísticas 
+            const byType = data.countsByType !== undefined ? data.countsByType : (incidentList.reduce((acc, incident) => {
+                const t = incident.incidentType || 'unknown';
+                acc[t] = (acc[t] || 0) + 1;
+                return acc;
+            }, {}));
 
-                incidentList.forEach(incident => {
-                    const type = incident.incidentType;
-                    const schedule = incident.scheduleType;
+            const bySchedule = data.countsBySchedule !== undefined ? data.countsBySchedule : (incidentList.reduce((acc, incident) => {
+                const s = incident.scheduleType || 'unknown';
+                acc[s] = (acc[s] || 0) + 1;
+                return acc;
+            }, {}));
 
-                    byType[type] = (byType[type] || 0) + 1;
-                    bySchedule[schedule] = (bySchedule[schedule] || 0) + 1;
-                });
+            const total = data.totalIncidents !== undefined ? data.totalIncidents : (data.total || incidentList.length);
 
-                setStatistics({
-                    total: incidentList.length,
-                    byType,
-                    bySchedule,
-                });
-            }
+            setStatistics({
+                total,
+                byType,
+                bySchedule,
+            });
         } catch (error) {
             console.error('Error al cargar incidentes:', error);
         } finally {
@@ -291,6 +292,11 @@ const StudentIncidentsPage = () => {
                                         setSelectedRoute('');
                                     }}
                                     label="Colegio"
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {schools.map((school) => (
@@ -301,7 +307,7 @@ const StudentIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.3}>
                             <FormControl fullWidth>
                                 <InputLabel>Placa</InputLabel>
                                 <Select
@@ -309,6 +315,11 @@ const StudentIncidentsPage = () => {
                                     onChange={(e) => setSelectedPlate(e.target.value)}
                                     label="Placa"
                                     disabled={!selectedSchool}
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {[...new Set(buses.map(b => b.plate))].map((plate) => (
@@ -319,7 +330,7 @@ const StudentIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Ruta</InputLabel>
                                 <Select
@@ -327,6 +338,11 @@ const StudentIncidentsPage = () => {
                                     onChange={(e) => setSelectedRoute(e.target.value)}
                                     label="Ruta"
                                     disabled={!selectedSchool}
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
@@ -342,13 +358,18 @@ const StudentIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid item xs={12} sm={6} md={2}>
                             <FormControl fullWidth>
                                 <InputLabel>Tipo de Incidente</InputLabel>
                                 <Select
                                     value={selectedIncidentType}
                                     onChange={(e) => setSelectedIncidentType(e.target.value)}
                                     label="Tipo de Incidente"
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {Object.entries(INCIDENT_TYPES).map(([key, label]) => (
@@ -359,13 +380,18 @@ const StudentIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Horario</InputLabel>
                                 <Select
                                     value={selectedScheduleType}
                                     onChange={(e) => setSelectedScheduleType(e.target.value)}
                                     label="Horario"
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     <MenuItem value="AM">Mañana</MenuItem>
@@ -375,19 +401,23 @@ const StudentIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <DatePicker
-                                label="Fecha Inicio"
-                                value={startDate}
-                                onChange={(newValue) => setStartDate(newValue)}
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <DatePicker
-                                label="Fecha Fin"
-                                value={endDate}
-                                onChange={(newValue) => setEndDate(newValue)}
-                            />
+                        <Grid item xs={12} sm={6} md={4}>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}>
+                                    <DatePicker
+                                        label="Fecha Inicio"
+                                        value={startDate}
+                                        onChange={(newValue) => setStartDate(newValue)}
+                                    />
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <DatePicker
+                                        label="Fecha Fin"
+                                        value={endDate}
+                                        onChange={(newValue) => setEndDate(newValue)}
+                                    />
+                                </Grid>
+                            </Grid>
                         </Grid>
                         {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
                     </Grid>

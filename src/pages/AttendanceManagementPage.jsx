@@ -74,8 +74,8 @@ const AttendanceManagementPage = () => {
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedSchedule, setSelectedSchedule] = useState('');
-    const [startDate, setStartDate] = useState(moment().subtract(7, 'days'));
-    const [endDate, setEndDate] = useState(moment());
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
 
     // Estadísticas
     const [statistics, setStatistics] = useState({
@@ -156,20 +156,16 @@ const AttendanceManagementPage = () => {
             setAttendances(data.attendances || data.data || []);
             setTotalCount(data.total || 0);
 
-            // Calcular estadísticas
-            const attendanceList = data.attendances || data.data || [];
-            if (attendanceList.length > 0) {
-                const totalStudents = attendanceList.reduce((sum, att) => sum + (att.totalAlumnos || 0), 0);
-                const totalPresent = attendanceList.reduce((sum, att) => sum + (att.alumnosPresentes || 0), 0);
-                const avgAttendance = totalStudents > 0 ? ((totalPresent / totalStudents) * 100).toFixed(2) : 0;
+            const totalStudents = data.totalStudents !== undefined ? data.totalStudents : (data.attendances || []).reduce((sum, att) => sum + (att.totalAlumnos || 0), 0);
+            const totalPresent = data.totalPresent !== undefined ? data.totalPresent : (data.attendances || []).reduce((sum, att) => sum + (att.alumnosPresentes || 0), 0);
+            const avgAttendance = data.averageAttendance !== undefined ? data.averageAttendance : (totalStudents > 0 ? ((totalPresent / totalStudents) * 100).toFixed(2) : 0);
 
-                setStatistics({
-                    total: attendanceList.length,
-                    averageAttendance: avgAttendance,
-                    totalStudents,
-                    totalPresent,
-                });
-            }
+            setStatistics({
+                total: data.total || (data.attendances || []).length,
+                averageAttendance: Number(avgAttendance),
+                totalStudents,
+                totalPresent,
+            });
         } catch (error) {
             console.error('Error al cargar asistencias:', error);
         } finally {
@@ -335,6 +331,11 @@ const AttendanceManagementPage = () => {
                                     onChange={(e) => setSelectedPlate(e.target.value)}
                                     label="Placa"
                                     disabled={!selectedSchool}
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {[...new Set(buses.map(b => b.plate))].map((plate) => (
@@ -345,7 +346,7 @@ const AttendanceManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Ruta</InputLabel>
                                 <Select
@@ -353,6 +354,11 @@ const AttendanceManagementPage = () => {
                                     onChange={(e) => setSelectedRoute(e.target.value)}
                                     label="Ruta"
                                     disabled={!selectedSchool}
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
@@ -368,7 +374,7 @@ const AttendanceManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Horario</InputLabel>
                                 <Select
@@ -384,19 +390,23 @@ const AttendanceManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
-                            <DatePicker
-                                label="Fecha Inicio"
-                                value={startDate}
-                                onChange={(newValue) => setStartDate(newValue)}
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
-                            <DatePicker
-                                label="Fecha Fin"
-                                value={endDate}
-                                onChange={(newValue) => setEndDate(newValue)}
-                            />
+                        <Grid item xs={12} sm={6} md={4}>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}>
+                                    <DatePicker
+                                        label="Fecha Inicio"
+                                        value={startDate}
+                                        onChange={(newValue) => setStartDate(newValue)}
+                                    />
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <DatePicker
+                                        label="Fecha Fin"
+                                        value={endDate}
+                                        onChange={(newValue) => setEndDate(newValue)}
+                                    />
+                                </Grid>
+                            </Grid>
                         </Grid>
                         {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
                     </Grid>
