@@ -37,20 +37,21 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
   const ALL_DAY_KEYS = DAY_OPTIONS.map(d => d.key);
 
   useEffect(() => {
-    if (open) {
-      const scheduleArray = Array.isArray(school?.schedules)
-        ? school.schedules.map(s => ({
-          code: s?.code || '',
-          name: s?.name || '',
-          times: Array.isArray(s?.times) ? s.times : ['N/A'],
-          days: Array.isArray(s?.days) ? s.days : []
-        }))
-        : [];
-      setSchedules(scheduleArray);
-      setError(null);
-      setSuccess(null);
-    }
-  }, [open, school]);
+    if (!open) return;
+
+    const scheduleArray = Array.isArray(school?.schedules)
+      ? school.schedules.map(s => ({
+        code: s?.code || '',
+        name: s?.name || '',
+        times: Array.isArray(s?.times) ? s.times : ['N/A'],
+        days: Array.isArray(s?.days) ? s.days : []
+      }))
+      : [];
+
+    setSchedules(scheduleArray);
+    setError(null);
+    setSuccess(null);
+  }, [open, school?.id]);
 
   const isAllDaysSelected = (days) => {
     if (!Array.isArray(days) || days.length === 0) return true;
