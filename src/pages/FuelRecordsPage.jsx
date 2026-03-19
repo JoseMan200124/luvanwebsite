@@ -153,7 +153,7 @@ const FuelRecordsPage = () => {
     const fetchBusesBySchool = async (schoolId) => {
         try {
             // Si no se pasa schoolId, traemos todos los buses para permitir seleccionar placa independientemente.
-            const url = schoolId ? `/buses/school/${schoolId}` : '/buses';
+            const url = schoolId ? `/buses/school/${schoolId}` : '/buses/simple';
             const response = await api.get(url);
             const busesData = Array.isArray(response.data) ? response.data : (response.data?.buses || []);
             setBuses(busesData);
@@ -176,7 +176,7 @@ const FuelRecordsPage = () => {
 
     const fetchBusesByCorporation = async (corporationId) => {
         try {
-            const url = corporationId ? `/buses/corporation/${corporationId}` : '/buses';
+            const url = corporationId ? `/buses/corporation/${corporationId}` : '/buses/simple';
             const response = await api.get(url);
             const busesData = Array.isArray(response.data) ? response.data : (response.data?.buses || []);
             setBuses(busesData);
