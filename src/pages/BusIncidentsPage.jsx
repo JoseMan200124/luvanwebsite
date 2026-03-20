@@ -205,40 +205,50 @@ const BusIncidentsPage = () => {
             filters.order = order;
 
             const data = await getAllBusIncidents(filters);
-            
+
             const incidentList = data.incidents || data.data || [];
             setIncidents(incidentList);
-            setTotalCount(data.total || 0);
+            setTotalCount(data.total || data.totalIncidents || 0);
 
             // Calcular estadísticas
-            if (incidentList.length > 0) {
-                const byTipoFalla = {};
-                const byTipo = {};
-                let withImpact = 0;
-
-                incidentList.forEach(incident => {
-                    const tipoFalla = incident.tipoFalla || 'sin_falla';
-                    const tipo = incident.tipo || 'incidente';
-
-                    byTipoFalla[tipoFalla] = (byTipoFalla[tipoFalla] || 0) + 1;
-                    byTipo[tipo] = (byTipo[tipo] || 0) + 1;
-
-                    if (incident.impacto) withImpact++;
-                });
-
+            if (data.countsByTipoFalla || data.countsByTipo || data.withImpact !== undefined) {
                 setStatistics({
-                    total: incidentList.length,
-                    byTipoFalla,
-                    byTipo,
-                    withImpact,
+                    total: Number(data.totalIncidents || data.total || incidentList.length),
+                    byTipoFalla: data.countsByTipoFalla || {},
+                    byTipo: data.countsByTipo || {},
+                    withImpact: Number(data.withImpact || 0),
                 });
             } else {
-                setStatistics({
-                    total: 0,
-                    byTipoFalla: {},
-                    byTipo: {},
-                    withImpact: 0,
-                });
+                // Fallback: calcular desde la página
+                if (incidentList.length > 0) {
+                    const byTipoFalla = {};
+                    const byTipo = {};
+                    let withImpact = 0;
+
+                    incidentList.forEach(incident => {
+                        const tipoFalla = incident.tipoFalla || 'sin_falla';
+                        const tipo = incident.tipo || 'incidente';
+
+                        byTipoFalla[tipoFalla] = (byTipoFalla[tipoFalla] || 0) + 1;
+                        byTipo[tipo] = (byTipo[tipo] || 0) + 1;
+
+                        if (incident.impacto) withImpact++;
+                    });
+
+                    setStatistics({
+                        total: data.total || incidentList.length,
+                        byTipoFalla,
+                        byTipo,
+                        withImpact,
+                    });
+                } else {
+                    setStatistics({
+                        total: 0,
+                        byTipoFalla: {},
+                        byTipo: {},
+                        withImpact: 0,
+                    });
+                }
             }
         } catch (error) {
             console.error('Error al cargar incidentes:', error);
@@ -376,7 +386,7 @@ const BusIncidentsPage = () => {
                         <Card>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
-                                    Falla Más Común
+                                    Tipo de Falla Más Común
                                 </Typography>
                                 <Typography variant="h6">
                                     {Object.keys(statistics.byTipoFalla).length > 0
@@ -429,6 +439,7 @@ const BusIncidentsPage = () => {
                                         setSelectedRoute('');
                                     }}
                                     label="Colegio"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {schools.map((school) => (
@@ -451,6 +462,7 @@ const BusIncidentsPage = () => {
                                         setSelectedRoute('');
                                     }}
                                     label="Corporación"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {corporations.map((corp) => (
@@ -461,13 +473,14 @@ const BusIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.3}>
                             <FormControl fullWidth>
                                 <InputLabel>Placa</InputLabel>
                                 <Select
                                     value={selectedPlate}
                                     onChange={(e) => setSelectedPlate(e.target.value)}
                                     label="Placa"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                     disabled={!selectedSchool && !selectedCorporation}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
@@ -479,13 +492,14 @@ const BusIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Ruta</InputLabel>
                                 <Select
                                     value={selectedRoute}
                                     onChange={(e) => setSelectedRoute(e.target.value)}
                                     label="Ruta"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                     disabled={!selectedSchool && !selectedCorporation}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
@@ -502,13 +516,14 @@ const BusIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Tipo de Falla</InputLabel>
                                 <Select
                                     value={selectedTipoFalla}
                                     onChange={(e) => setSelectedTipoFalla(e.target.value)}
                                     label="Tipo de Falla"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {Object.entries(FAILURE_TYPES).map(([key, label]) => (
@@ -519,13 +534,14 @@ const BusIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Tipo</InputLabel>
                                 <Select
                                     value={selectedTipo}
                                     onChange={(e) => setSelectedTipo(e.target.value)}
                                     label="Tipo"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {Object.entries(INCIDENT_EVENT_TYPES).map(([key, label]) => (
@@ -536,7 +552,7 @@ const BusIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid item xs={12} sm={6} md={1.5}>
                             <DatePicker
                                 label="Fecha Inicio"
                                 value={startDate}
@@ -544,7 +560,7 @@ const BusIncidentsPage = () => {
                                 slotProps={{ textField: { fullWidth: true } }}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid item xs={12} sm={6} md={1.5}>
                             <DatePicker
                                 label="Fecha Fin"
                                 value={endDate}

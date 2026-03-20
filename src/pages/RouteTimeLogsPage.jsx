@@ -76,8 +76,8 @@ const RouteTimeLogsPage = () => {
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedSchedule, setSelectedSchedule] = useState('');
     const [selectedDay, setSelectedDay] = useState('');
-    const [startDate, setStartDate] = useState(moment().subtract(7, 'days'));
-    const [endDate, setEndDate] = useState(moment());
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
 
     // Estadísticas
     const [statistics, setStatistics] = useState({
@@ -167,20 +167,28 @@ const RouteTimeLogsPage = () => {
 
             const logsList = data.timeLogs || data.data || [];
             setTimeLogs(logsList);
-            setTotalCount(data.total || 0);
+
+            const totalFromServer = data.total ?? data.totalTimeLogs ?? data.totalRecords ?? (data.pagination && data.pagination.total) ?? 0;
+            setTotalCount(totalFromServer || 0);
 
             // Calcular estadísticas
-            if (logsList.length > 0) {
+            const serverAvg = data.averageDuration ?? data.averageTripDuration ?? (data.statistics && data.statistics.averageDuration);
+            if (totalFromServer && serverAvg !== undefined) {
+                setStatistics({
+                    total: totalFromServer,
+                    averageDuration: parseFloat(serverAvg).toFixed(2),
+                });
+            } else if (logsList.length > 0) {
                 const totalDuration = logsList.reduce((sum, log) => sum + (log.tripDuration || 0), 0);
                 const avgDuration = totalDuration / logsList.length;
 
                 setStatistics({
-                    total: logsList.length,
+                    total: totalFromServer || logsList.length,
                     averageDuration: avgDuration.toFixed(2),
                 });
             } else {
                 setStatistics({
-                    total: 0,
+                    total: totalFromServer || 0,
                     averageDuration: 0,
                 });
             }
@@ -479,7 +487,7 @@ const RouteTimeLogsPage = () => {
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid item xs={12} sm={6} md={2}>
                             <FormControl fullWidth>
                                 <InputLabel>Colegio</InputLabel>
                                 <Select
@@ -490,6 +498,7 @@ const RouteTimeLogsPage = () => {
                                         setSelectedRoute('');
                                     }}
                                     label="Colegio"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {schools.map((school) => (
@@ -500,7 +509,7 @@ const RouteTimeLogsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.3}>
                             <FormControl fullWidth>
                                 <InputLabel>Placa</InputLabel>
                                 <Select
@@ -558,6 +567,7 @@ const RouteTimeLogsPage = () => {
                                     value={selectedSchedule}
                                     onChange={(e) => setSelectedSchedule(e.target.value)}
                                     label="Horario"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     <MenuItem value="AM">Mañana</MenuItem>
@@ -574,6 +584,7 @@ const RouteTimeLogsPage = () => {
                                     value={selectedDay}
                                     onChange={(e) => setSelectedDay(e.target.value)}
                                     label="Día"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     <MenuItem value="monday">Lunes</MenuItem>
@@ -586,7 +597,7 @@ const RouteTimeLogsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={4}>
+                        <Grid item xs={12} sm={6} md={3}>
                             <Grid container spacing={1}>
                                 <Grid item xs={6}>
                                     <DatePicker
