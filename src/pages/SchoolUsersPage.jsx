@@ -185,6 +185,45 @@ const SchoolUsersPage = () => {
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
 
+    // Traduce el estado de servicio canónico a su etiqueta en español usada en el sistema
+    const translateServiceStatus = (status) => {
+        if (!status) return '';
+        switch ((status || '').toString()) {
+            case 'ACTIVE': return 'Activo';
+            case 'PAUSED': return 'Pausado';
+            case 'SUSPENDED': return 'Suspendido';
+            case 'INACTIVE': return 'Inactivo';
+            default: return '';
+        }
+    };
+
+    // Descargar por estado de servicio explícito (PAUSED, SUSPENDED, ACTIVE, INACTIVE)
+    const handleDownloadByServiceStatus = async (serviceStatus, schoolIdParam) => {
+        const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
+        if (!schoolIdToUse) {
+            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            return;
+        }
+
+        try {
+            setRouteReportLoading(true);
+            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, serviceStatus } });
+            const parents = resp.data.users || [];
+            if (parents.length === 0) {
+                setSnackbar({ open: true, message: `No hay padres con estado de servicio ${serviceStatus} para descargar.`, severity: 'info' });
+                return;
+            }
+
+            // Use full workbook builder to preserve complete columns
+            await buildParentsWorkbookAndDownload(parents, schoolIdToUse, `padres_${serviceStatus}`);
+        } catch (error) {
+            console.error('[handleDownloadByServiceStatus] Error:', error);
+            setSnackbar({ open: true, message: 'Error al generar el archivo de padres', severity: 'error' });
+        } finally {
+            setRouteReportLoading(false);
+        }
+    };
+
     // Generar y descargar archivo Excel con los padres NUEVOS del colegio gestionado
     const handleDownloadNewParents = async (schoolIdParam) => {
         const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
@@ -222,6 +261,7 @@ const SchoolUsersPage = () => {
             const baseHeaders = [
                 { header: 'Apellido Familia', key: 'apellidoFamilia' },
                 { header: 'Estado Familia', key: 'estadoFamilia' },
+                { header: 'Estado Servicio', key: 'estadoServicio' },
                 { header: 'Nombre', key: 'nombre' },
                 { header: 'Email', key: 'email' },
                 { header: 'Nombre Madre', key: 'madreNombre' },
@@ -285,6 +325,7 @@ const SchoolUsersPage = () => {
                 const row = [
                     fd.familyLastName || '',
                     statusText,
+                    translateServiceStatus(u.familyServiceStatus?.status || u.serviceStatus || ''),
                     u.name || '',
                     u.email || '',
                     fd.motherName || '',
@@ -431,7 +472,7 @@ const SchoolUsersPage = () => {
             const workbook = new ExcelJS.Workbook();
             // Weekday map and contact columns used by per-day sheets
             const weekdaysMap = [ { key: 'monday', label: 'Lunes' }, { key: 'tuesday', label: 'Martes' }, { key: 'wednesday', label: 'Miércoles' }, { key: 'thursday', label: 'Jueves' }, { key: 'friday', label: 'Viernes' } ];
-            const contactCols = ['Nombre Padre', 'Email Padre', 'Nombre Mamá', 'Teléfono Mamá', 'Nombre Papá', 'Teléfono Papá'];
+            const contactCols = ['Estado Servicio', 'Nombre Padre', 'Email Padre', 'Nombre Mamá', 'Teléfono Mamá', 'Nombre Papá', 'Teléfono Papá'];
 
             // Create a worksheet per weekday with per-student schedule columns for that day
             weekdaysMap.forEach((day) => {
@@ -513,6 +554,7 @@ const SchoolUsersPage = () => {
                     const motherPhone = (fd.motherCellphone && fd.motherCellphone.trim()) || '';
                     const fatherName = (fd.fatherName && fd.fatherName.trim()) || '';
                     const fatherPhone = (fd.fatherCellphone && fd.fatherCellphone.trim()) || '';
+                    row.push(translateServiceStatus(user.familyServiceStatus?.status || user.serviceStatus || ''));
                     row.push(user.name || '');
                     row.push(user.email || '');
                     row.push(motherName);
@@ -596,11 +638,22 @@ const SchoolUsersPage = () => {
 
         try {
             setRouteReportLoading(true);
-
             // Request backend for all parents for this school
             const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'all' } });
             const parents = resp.data.users || [];
+            // Reuse the full workbook builder to ensure parity
+            await buildParentsWorkbookAndDownload(parents, schoolIdToUse, 'padres');
+        } catch (error) {
+            console.error('[handleDownloadAllParents] Error:', error);
+            setSnackbar({ open: true, message: 'Error al generar el archivo de padres', severity: 'error' });
+        } finally {
+            setRouteReportLoading(false);
+        }
+    };
 
+    // Helper: build full parents workbook (same columns as previous implementation) and trigger download
+    const buildParentsWorkbookAndDownload = async (parents, schoolIdToUse, prefix) => {
+        try {
             // Determinar máximo de hijos entre las familias
             let maxStudents = 0;
             parents.forEach(u => {
@@ -609,14 +662,13 @@ const SchoolUsersPage = () => {
                 if (cnt > maxStudents) maxStudents = cnt;
             });
 
-            // Construir workbook con ExcelJS
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Padres');
 
-            // Encabezados básicos (añadimos columna Estado Familia)
             const baseHeaders = [
                 { header: 'Apellido Familia', key: 'apellidoFamilia' },
                 { header: 'Estado Familia', key: 'estadoFamilia' },
+                { header: 'Estado Servicio', key: 'estadoServicio' },
                 { header: 'Nombre', key: 'nombre' },
                 { header: 'Email', key: 'email' },
                 { header: 'Nombre Madre', key: 'madreNombre' },
@@ -634,7 +686,6 @@ const SchoolUsersPage = () => {
                 { header: 'Teléfono Emergencia', key: 'emergenciaTelefono' }
             ];
 
-            // Añadir columnas por cada hijo: Estudiante N - Nombre, Estudiante N - Grado
             const studentCols = [];
             for (let i = 1; i <= maxStudents; i++) {
                 studentCols.push({ header: `Estudiante ${i} - Nombre`, key: `est_${i}_nombre` });
@@ -644,16 +695,14 @@ const SchoolUsersPage = () => {
             const finalColumns = baseHeaders.concat(studentCols);
             sheet.columns = finalColumns.map(col => ({ header: col.header, key: col.key, width: Math.min(Math.max(col.header.length + 6, 12), 40) }));
 
-            // Formato: cabecera en negrita y relleno
             sheet.getRow(1).eachCell((cell) => {
                 cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
                 cell.alignment = { horizontal: 'center', vertical: 'middle' };
             });
 
-            // Alternar color de filas
             sheet.eachRow((row, rowIndex) => {
-                if (rowIndex === 1) return; // header
+                if (rowIndex === 1) return;
                 const isEven = rowIndex % 2 === 0;
                 row.eachCell((cell) => {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
@@ -661,7 +710,6 @@ const SchoolUsersPage = () => {
                 });
             });
 
-            // Centrar columnas de celular y todas las columnas de grado
             sheet.columns.forEach((col) => {
                 const key = col.key;
                 if (key === 'madreCelular' || key === 'padreCelular') {
@@ -672,24 +720,16 @@ const SchoolUsersPage = () => {
                 }
             });
 
-            // Auto filter
-            const lastColLetter = sheet.getRow(1).cellCount;
-            sheet.autoFilter = {
-                from: 'A1',
-                to: `${sheet.getColumn(lastColLetter).letter}1`
-            };
-
-            // Freeze first row and first column
+            sheet.autoFilter = { from: 'A1', to: `${sheet.getColumn(sheet.getRow(1).cellCount).letter}1` };
             sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
 
-            // Fill rows with parent data
             parents.forEach((u, idx) => {
                 const fd = u.FamilyDetail || {};
                 const row = [];
-                row.push(fd.familyLastName || '');
-                // Backend ya envía status, usar directamente o fallback a state
                 const statusText = u.status || (u.state === 0 ? 'Inactivo' : 'Activo');
+                row.push(fd.familyLastName || '');
                 row.push(statusText);
+                row.push(translateServiceStatus(u.familyServiceStatus?.status || u.serviceStatus || ''));
                 row.push(u.name || '');
                 row.push(u.email || '');
                 row.push(fd.motherName || '');
@@ -724,12 +764,11 @@ const SchoolUsersPage = () => {
                 });
             });
 
-            // Generar buffer y descargar
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const selectedSchool = schools.find(s => s.id === parseInt(schoolIdToUse));
             const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
-            const fileName = `padres_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
+            const fileName = `${prefix}_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -740,11 +779,9 @@ const SchoolUsersPage = () => {
             URL.revokeObjectURL(url);
 
             setSnackbar({ open: true, message: `Archivo con padres de ${schoolName} descargado.`, severity: 'success' });
-        } catch (error) {
-            console.error('[handleDownloadAllParents] Error:', error);
+        } catch (err) {
+            console.error('[buildParentsWorkbookAndDownload] Error:', err);
             setSnackbar({ open: true, message: 'Error al generar el archivo de padres', severity: 'error' });
-        } finally {
-            setRouteReportLoading(false);
         }
     };
 
@@ -776,6 +813,7 @@ const SchoolUsersPage = () => {
             const baseHeaders = [
                 { header: 'Apellido Familia', key: 'apellidoFamilia' },
                 { header: 'Estado Familia', key: 'estadoFamilia' },
+                { header: 'Estado Servicio', key: 'estadoServicio' },
                 { header: 'Nombre', key: 'nombre' },
                 { header: 'Email', key: 'email' },
                 { header: 'Nombre Madre', key: 'madreNombre' },
@@ -926,6 +964,7 @@ const SchoolUsersPage = () => {
                 const computed = (typeof getUserStatus === 'function') ? getUserStatus(u) : null;
                 const statusText = (computed === 'Duplicado') ? 'Duplicado' : (u.status || computed || (u && (u.state === 0 || u.state === '0' || u.state === false) ? 'Inactivo' : 'Activo'));
                 row.push(statusText);
+                row.push(translateServiceStatus(u.familyServiceStatus?.status || u.serviceStatus || ''));
                 row.push(u.name || '');
                 row.push(u.email || '');
                 row.push(fd.motherName || '');
@@ -2189,8 +2228,11 @@ const SchoolUsersPage = () => {
                                     >
                                         <MenuItem value="all">Todos</MenuItem>
                                         <MenuItem value="new">Nuevos</MenuItem>
-                                        <MenuItem value="active">Activos</MenuItem>
-                                        <MenuItem value="inactive">Inactivos</MenuItem>
+                                        
+                                        <MenuItem value="ACTIVE">Activos</MenuItem>
+                                        <MenuItem value="PAUSED">Pausados</MenuItem>
+                                        <MenuItem value="SUSPENDED">Suspendidos</MenuItem>
+                                        <MenuItem value="INACTIVE">Inactivos</MenuItem>
                                         <MenuItem value="report">Reporte de Paradas</MenuItem>
                                     </Select>
                                 </FormControl>
@@ -2562,21 +2604,23 @@ const SchoolUsersPage = () => {
                             if (downloadMode === 'report') {
                                 // Generar reporte de rutas para el colegio actual
                                 await handleDownloadRouteReport(currentSchool?.id || schoolId);
-                            } else if (downloadMode === 'active') {
-                                await handleDownloadActiveParents(currentSchool?.id || schoolId);
-                                setOpenSchoolSelectDialog(false);
-                            } else if (downloadMode === 'inactive') {
-                                await handleDownloadInactiveParents(currentSchool?.id || schoolId);
-                                setOpenSchoolSelectDialog(false);
-                            } else if (downloadMode === 'new') {
+                            } else {
+                                // Soporte para solicitudes explícitas por estado de servicio
+                                const upper = (downloadMode || '').toString().toUpperCase();
+                                const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
+                                if (serviceStates.includes(upper)) {
+                                    await handleDownloadByServiceStatus(upper, currentSchool?.id || schoolId);
+                                    setOpenSchoolSelectDialog(false);
+                                    } else if (downloadMode === 'new') {
                                         // Descargar usuarios nuevos del colegio actual
                                         await handleDownloadNewParents(currentSchool?.id || schoolId);
                                         setOpenSchoolSelectDialog(false);
-                            } else if (downloadMode === 'all') {
-                                await handleDownloadAllParents(currentSchool?.id || schoolId);
-                                setOpenSchoolSelectDialog(false);
-                            } else {
-                                setOpenSchoolSelectDialog(false);
+                                    } else if (downloadMode === 'all') {
+                                        await handleDownloadAllParents(currentSchool?.id || schoolId);
+                                        setOpenSchoolSelectDialog(false);
+                                    } else {
+                                        setOpenSchoolSelectDialog(false);
+                                    }
                             }
                         }}
                     >
