@@ -127,6 +127,18 @@ const formatTime12Hour = (time24) => {
     return `${hour12}:${minutes} ${ampm}`;
 };
 
+// Traduce el estado de servicio canónico a su etiqueta en español usada en el sistema
+const translateServiceStatus = (status) => {
+    if (!status) return '';
+    switch ((status || '').toString()) {
+        case 'ACTIVE': return 'Activo';
+        case 'PAUSED': return 'Pausado';
+        case 'SUSPENDED': return 'Suspendido';
+        case 'INACTIVE': return 'Inactivo';
+        default: return '';
+    }
+};
+
 const ColaboradoresPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -217,6 +229,77 @@ const ColaboradoresPage = () => {
         const minutes = String(currentDate.getMinutes()).padStart(2, '0');
         const seconds = String(currentDate.getSeconds()).padStart(2, '0');
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+    };
+
+    // Descargar colaboradores filtrados por estado de servicio explícito
+    const handleDownloadByServiceStatusColaboradores = async (serviceStatus) => {
+        try {
+            const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { serviceStatus } });
+            const list = resp.data.colaboradores || [];
+            if (list.length === 0) {
+                setSnackbar({ open: true, message: `No hay colaboradores con estado ${serviceStatus} para descargar`, severity: 'info' });
+                return;
+            }
+
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet(`Colaboradores_${serviceStatus}`);
+            worksheet.columns = [
+                { header: 'Nombre', key: 'name', width: 30 },
+                { header: 'Email', key: 'email', width: 30 },
+                { header: 'Teléfono', key: 'phone', width: 15 },
+                { header: 'Dirección Servicio', key: 'serviceAddress', width: 40 },
+                { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
+                { header: 'Tipo Ruta', key: 'routeType', width: 15 },
+                { header: 'Horario', key: 'schedule', width: 30 },
+                { header: 'Estado', key: 'status', width: 15 },
+                { header: 'Estado Servicio', key: 'serviceStatus', width: 15 },
+                { header: 'Fecha Creación', key: 'createdAt', width: 20 },
+                { header: 'Última Actualización', key: 'updatedAt', width: 20 }
+            ];
+
+            list.forEach(col => {
+                const detail = col.ColaboradorDetail || {};
+                const scheduleIndex = detail.selectedSchedule;
+                let scheduleName = 'Sin horario';
+                if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
+                    const sched = corporationData.schedules[scheduleIndex];
+                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                }
+
+                worksheet.addRow({
+                    name: col.name || '',
+                    email: col.email || '',
+                    phone: col.phoneNumber || '',
+                    serviceAddress: detail.serviceAddress || '',
+                    zoneOrSector: detail.zoneOrSector || '',
+                    routeType: detail.routeType || '',
+                    schedule: scheduleName,
+                    status: col.status || '',
+                    serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
+                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
+                    updatedAt: col.updatedAt ? moment(col.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                });
+            });
+
+            worksheet.getRow(1).font = { bold: true };
+            worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+            worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            addSchedulesSheet(workbook);
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Colaboradores_${serviceStatus}_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: 'Archivo descargado exitosamente', severity: 'success' });
+        } catch (err) {
+            console.error('Error downloading colaboradores by service status:', err);
+            setSnackbar({ open: true, message: 'Error al descargar colaboradores', severity: 'error' });
+        }
     };
 
     // Funciones auxiliares para determinar el estado de los colaboradores
@@ -825,6 +908,7 @@ const ColaboradoresPage = () => {
                 { header: 'Tipo Ruta', key: 'routeType', width: 15 },
                 { header: 'Horario', key: 'schedule', width: 30 },
                 { header: 'Estado', key: 'status', width: 15 },
+                { header: 'Estado Servicio', key: 'serviceStatus', width: 15 },
                 { header: 'Fecha Creación', key: 'createdAt', width: 20 }
             ];
             
@@ -847,6 +931,7 @@ const ColaboradoresPage = () => {
                     routeType: detail.routeType || '',
                     schedule: scheduleName,
                     status: Number(col.state) === 1 ? 'Activo' : 'Inactivo',
+                    serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
                     createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
                 });
             });
@@ -896,9 +981,22 @@ const ColaboradoresPage = () => {
                 setSnackbar({ open: true, message: 'No hay colaboradores para descargar', severity: 'warning' });
                 return;
             }
+            await buildColaboradoresWorkbookAndDownload(allCols, `Colaboradores_Todos_${currentCorporation?.name || 'Corporativo'}`);
+        } catch (err) {
+            console.error('Error downloading all colaboradores:', err);
+            setSnackbar({
+                open: true,
+                message: 'Error al descargar colaboradores',
+                severity: 'error'
+            });
+        }
+    };
+
+    // Helper: build full colaboradores workbook and download (reuse for filters)
+    const buildColaboradoresWorkbookAndDownload = async (list, filePrefix) => {
+        try {
             const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Todos los Colaboradores');
-            
+            const worksheet = workbook.addWorksheet('Colaboradores');
             worksheet.columns = [
                 { header: 'Nombre', key: 'name', width: 30 },
                 { header: 'Email', key: 'email', width: 30 },
@@ -912,20 +1010,21 @@ const ColaboradoresPage = () => {
                 { header: 'Horario', key: 'schedule', width: 30 },
                 { header: 'Paradas', key: 'stops', width: 15 },
                 { header: 'Estado', key: 'status', width: 15 },
+                { header: 'Estado Servicio', key: 'serviceStatus', width: 15 },
                 { header: 'Fecha Creación', key: 'createdAt', width: 20 },
                 { header: 'Última Actualización', key: 'updatedAt', width: 20 }
             ];
-            
-            allCols.forEach(col => {
+
+            list.forEach(col => {
                 const detail = col.ColaboradorDetail || {};
                 const scheduleIndex = detail.selectedSchedule;
                 let scheduleName = 'Sin horario';
-                
+
                 if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                     const sched = corporationData.schedules[scheduleIndex];
                     scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
                 }
-                
+
                 worksheet.addRow({
                     name: col.name || '',
                     email: col.email || '',
@@ -939,41 +1038,30 @@ const ColaboradoresPage = () => {
                     schedule: scheduleName,
                     stops: col.ScheduleSlots?.length || 0,
                     status: col.status || 'Activo',
+                    serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
                     createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
                     updatedAt: col.updatedAt ? moment(col.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
                 });
             });
-            
-            // Aplicar estilos al header
+
             worksheet.getRow(1).font = { bold: true };
-            worksheet.getRow(1).fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FF1976D2' }
-            };
+            worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
             worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            
+            addSchedulesSheet(workbook);
+
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Colaboradores_Todos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
+            a.download = `${filePrefix}_${moment().format('YYYYMMDD')}.xlsx`;
             a.click();
             window.URL.revokeObjectURL(url);
-            
-            setSnackbar({
-                open: true,
-                message: 'Archivo descargado exitosamente',
-                severity: 'success'
-            });
+
+            setSnackbar({ open: true, message: 'Archivo descargado exitosamente', severity: 'success' });
         } catch (err) {
-            console.error('Error downloading all colaboradores:', err);
-            setSnackbar({
-                open: true,
-                message: 'Error al descargar colaboradores',
-                severity: 'error'
-            });
+            console.error('Error building colaboradores workbook:', err);
+            setSnackbar({ open: true, message: 'Error al descargar colaboradores', severity: 'error' });
         }
     };
 
@@ -998,6 +1086,7 @@ const ColaboradoresPage = () => {
                 { header: 'Tipo Ruta', key: 'routeType', width: 15 },
                 { header: 'Horario', key: 'schedule', width: 30 },
                 { header: 'Estado', key: 'status', width: 15 },
+                { header: 'Estado Servicio', key: 'serviceStatus', width: 15 },
                 { header: 'Fecha Creación', key: 'createdAt', width: 20 }
             ];
 
@@ -1084,6 +1173,7 @@ const ColaboradoresPage = () => {
                     routeType: detail.routeType || '',
                     schedule: scheduleName,
                     status: col.status || 'Inactivo',
+                    serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
                     createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
                 });
             });
@@ -2049,8 +2139,11 @@ const ColaboradoresPage = () => {
                                     >
                                         <MenuItem value="all">Todos</MenuItem>
                                         <MenuItem value="new">Nuevos</MenuItem>
-                                        <MenuItem value="active">Activos</MenuItem>
-                                        <MenuItem value="inactive">Inactivos</MenuItem>
+                                        
+                                        <MenuItem value="ACTIVE">Activos</MenuItem>
+                                        <MenuItem value="PAUSED">Pausados</MenuItem>
+                                        <MenuItem value="SUSPENDED">Suspendidos</MenuItem>
+                                        <MenuItem value="INACTIVE">Inactivos</MenuItem>
                                         <MenuItem value="report">Reporte de Paradas</MenuItem>
                                     </Select>
                                 </FormControl>
@@ -2061,12 +2154,13 @@ const ColaboradoresPage = () => {
                                     variant="contained"
                                     color="primary"
                                     startIcon={<GetApp />}
-                                    onClick={() => {
-                                        if (downloadChoice === 'new') handleDownloadNewColaboradores();
-                                        else if (downloadChoice === 'all') handleDownloadAllColaboradores();
-                                        else if (downloadChoice === 'active') handleDownloadActiveColaboradores();
-                                        else if (downloadChoice === 'inactive') handleDownloadInactiveColaboradores();
-                                        else if (downloadChoice === 'report') handleDownloadRouteReport();
+                                    onClick={async () => {
+                                        const upper = (downloadChoice || '').toString().toUpperCase();
+                                        const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
+                                        if (downloadChoice === 'new') await handleDownloadNewColaboradores();
+                                        else if (downloadChoice === 'all') await handleDownloadAllColaboradores();
+                                        else if (downloadChoice === 'report') await handleDownloadRouteReport();
+                                        else if (serviceStates.includes(upper)) await handleDownloadByServiceStatusColaboradores(upper);
                                         setOpenDownloadDialog(false);
                                     }}
                                 >
