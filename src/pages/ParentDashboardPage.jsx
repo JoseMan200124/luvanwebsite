@@ -85,6 +85,20 @@ const timeToMinutes = (t) => {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 };
 
+// Extrae la parte HH:mm de un valor de schoolSchedule (ej. "15:00 PM", "12:00 MD", "07:00 AM")
+// y la devuelve siempre en formato 12h con AM/PM real, ignorando cualquier código de horario.
+const formatSchoolTime = (value) => {
+  if (!value) return '';
+  const m = String(value).match(/(\d{1,2}):(\d{2})/);
+  if (!m) return String(value).trim();
+  let h = parseInt(m[1], 10);
+  const min = m[2];
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${min} ${ampm}`;
+};
+
 // Formatea HH:mm -> h:mm AM/PM (si ya viene con AM/PM, lo deja)
 const formatTime12 = (timeStr) => {
   if (!timeStr) return '';
@@ -1219,7 +1233,7 @@ const ParentDashboardPage = () => {
                                               })()}
 
                                               {safeStr(slot.schoolSchedule) && (
-                                                <Typography variant="body2"><strong>{(slot && (slot._label === 'Entrada' || slot.type === 'pickup')) ? 'Hora entrada' : (slot && (slot._label === 'Salida' || slot.type === 'dropoff')) ? 'Hora salida' : 'Hora colegio'}:</strong> {formatTime12(slot.schoolSchedule) || safeStr(slot.schoolSchedule)}</Typography>
+                                                <Typography variant="body2"><strong>{(slot && (slot._label === 'Entrada' || slot.type === 'pickup')) ? 'Hora entrada' : (slot && (slot._label === 'Salida' || slot.type === 'dropoff')) ? 'Hora salida' : 'Hora colegio'}:</strong> {formatSchoolTime(slot.schoolSchedule)}</Typography>
                                               )}
 
                                               {safeStr(slot.note) && (
@@ -1294,7 +1308,7 @@ const ParentDashboardPage = () => {
                                                 })()}
 
                                                 {safeStr(slot.schoolSchedule) && (
-                                                  <Typography variant="body2"><strong>{(slot && (slot._label === 'Entrada' || slot.type === 'pickup')) ? 'Hora entrada' : (slot && (slot._label === 'Salida' || slot.type === 'dropoff')) ? 'Hora salida' : 'Hora colegio'}:</strong> {formatTime12(slot.schoolSchedule) || safeStr(slot.schoolSchedule)}</Typography>
+                                                  <Typography variant="body2"><strong>{(slot && (slot._label === 'Entrada' || slot.type === 'pickup')) ? 'Hora entrada' : (slot && (slot._label === 'Salida' || slot.type === 'dropoff')) ? 'Hora salida' : 'Hora colegio'}:</strong> {formatSchoolTime(slot.schoolSchedule)}</Typography>
                                                 )}
 
                                                 {safeStr(slot.note) && (

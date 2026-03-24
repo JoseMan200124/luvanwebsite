@@ -196,34 +196,42 @@ const BusEmergenciesPage = () => {
             filters.order = order;
 
             const data = await getAllBusEmergencies(filters);
-            
+
             const emergencyList = data.emergencies || data.data || [];
             setEmergencies(emergencyList);
-            setTotalCount(data.total || 0);
+            setTotalCount(data.total || data.totalIncidents || 0);
 
             // Calcular estadísticas
-            if (emergencyList.length > 0) {
-                const bySchool = {};
-                let withLocation = 0;
-
-                emergencyList.forEach(emergency => {
-                    const colegio = emergency.colegio || 'Sin Colegio';
-                    bySchool[colegio] = (bySchool[colegio] || 0) + 1;
-
-                    if (emergency.latitud && emergency.longitud) withLocation++;
-                });
-
+            if (data.countsBySchool || data.withLocation !== undefined) {
                 setStatistics({
-                    total: emergencyList.length,
-                    withLocation,
-                    bySchool,
+                    total: Number(data.totalIncidents || data.total || emergencyList.length),
+                    withLocation: Number(data.withLocation || 0),
+                    bySchool: data.countsBySchool || {}
                 });
             } else {
-                setStatistics({
-                    total: 0,
-                    withLocation: 0,
-                    bySchool: {},
-                });
+                if (emergencyList.length > 0) {
+                    const bySchool = {};
+                    let withLocation = 0;
+
+                    emergencyList.forEach(emergency => {
+                        const colegio = emergency.colegio || 'Sin Colegio';
+                        bySchool[colegio] = (bySchool[colegio] || 0) + 1;
+
+                        if (emergency.latitud && emergency.longitud) withLocation++;
+                    });
+
+                    setStatistics({
+                        total: data.total || emergencyList.length,
+                        withLocation,
+                        bySchool,
+                    });
+                } else {
+                    setStatistics({
+                        total: 0,
+                        withLocation: 0,
+                        bySchool: {},
+                    });
+                }
             }
         } catch (error) {
             console.error('Error al cargar emergencias:', error);
@@ -373,6 +381,7 @@ const BusEmergenciesPage = () => {
                                         setSelectedRoute('');
                                     }}
                                     label="Colegio"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {schools.map((school) => (
@@ -395,6 +404,7 @@ const BusEmergenciesPage = () => {
                                         setSelectedRoute('');
                                     }}
                                     label="Corporación"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {corporations.map((corp) => (
@@ -405,13 +415,14 @@ const BusEmergenciesPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.3}>
                             <FormControl fullWidth>
                                 <InputLabel>Placa</InputLabel>
                                 <Select
                                     value={selectedPlate}
                                     onChange={(e) => setSelectedPlate(e.target.value)}
                                     label="Placa"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                     disabled={!selectedSchool && !selectedCorporation}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
@@ -423,13 +434,14 @@ const BusEmergenciesPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1}>
                             <FormControl fullWidth>
                                 <InputLabel>Ruta</InputLabel>
                                 <Select
                                     value={selectedRoute}
                                     onChange={(e) => setSelectedRoute(e.target.value)}
                                     label="Ruta"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                     disabled={!selectedSchool && !selectedCorporation}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
@@ -446,7 +458,7 @@ const BusEmergenciesPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.5}>
                             <DatePicker
                                 label="Fecha Inicio"
                                 value={startDate}
@@ -454,7 +466,7 @@ const BusEmergenciesPage = () => {
                                 slotProps={{ textField: { fullWidth: true } }}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.5}>
                             <DatePicker
                                 label="Fecha Fin"
                                 value={endDate}

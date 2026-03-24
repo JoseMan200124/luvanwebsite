@@ -74,13 +74,28 @@ export function getScheduleBgColor(code) {
  * @returns {string[]} Array of uppercase schedule codes
  */
 export function getScheduleCodesFromSchool(schedules) {
+    const orderCodes = (codes, preferred = DEFAULT_SCHEDULE_CODES) => {
+        const normalized = [...new Set((codes || []).map(c => String(c || '').toUpperCase().trim()).filter(Boolean))];
+        if (normalized.length === 0) return [];
+
+        const preferredNormalized = [...new Set((preferred || []).map(c => String(c || '').toUpperCase().trim()).filter(Boolean))];
+        const preferredSet = new Set(preferredNormalized);
+        const normalizedSet = new Set(normalized);
+
+        const canonical = preferredNormalized.filter(code => normalizedSet.has(code));
+        const extras = normalized.filter(code => !preferredSet.has(code)).sort((a, b) => a.localeCompare(b));
+
+        return [...canonical, ...extras];
+    };
+
     let arr = schedules;
     if (typeof arr === 'string') {
         try { arr = JSON.parse(arr); } catch { return DEFAULT_SCHEDULE_CODES; }
     }
     if (!Array.isArray(arr) || arr.length === 0) return DEFAULT_SCHEDULE_CODES;
     const codes = arr.map(s => (s?.code || '').toUpperCase()).filter(Boolean);
-    return codes.length > 0 ? codes : DEFAULT_SCHEDULE_CODES;
+    const ordered = orderCodes(codes, DEFAULT_SCHEDULE_CODES);
+    return ordered.length > 0 ? ordered : DEFAULT_SCHEDULE_CODES;
 }
 
 /**

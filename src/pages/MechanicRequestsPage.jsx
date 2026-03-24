@@ -35,6 +35,7 @@ import {
     InputLabel,
     Select,
     Alert,
+    Autocomplete,
 } from '@mui/material';
 import {
     Visibility as VisibilityIcon,
@@ -86,24 +87,24 @@ const MechanicRequestsPage = () => {
     const [statistics, setStatistics] = useState(null);
     const [schools, setSchools] = useState([]);
     const [corporations, setCorporations] = useState([]);
+    const [plateOptions, setPlateOptions] = useState([]);
+    const [routeOptions, setRouteOptions] = useState([]);
 
     // Estados para paginación
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [totalCount, setTotalCount] = useState(0);
 
-    // Estados para filtros
-    const [filters, setFilters] = useState({
-        schoolId: '',
-        corporationId: '',
-        plate: '',
-        routeNumber: '',
-        tipoTrabajo: '',
-        estado: '',
-        urgente: '',
-        startDate: '',
-        endDate: ''
-    });
+    // Estados para filtros (separados para homogeneidad con otras páginas)
+    const [schoolId, setSchoolId] = useState('');
+    const [corporationId, setCorporationId] = useState('');
+    const [plate, setPlate] = useState('');
+    const [routeNumber, setRouteNumber] = useState('');
+    const [tipoTrabajo, setTipoTrabajo] = useState('');
+    const [estado, setEstado] = useState('');
+    const [urgente, setUrgente] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
 
     // Estados para ordenamiento
     const [sortBy, setSortBy] = useState('fechaSolicitud');
@@ -142,6 +143,44 @@ const MechanicRequestsPage = () => {
         loadFiltersData();
     }, []);
 
+    // Cargar opciones de placas y rutas cuando cambie el cliente seleccionado
+    useEffect(() => {
+        const loadPlatesAndRoutes = async () => {
+            try {
+                // Clear previous selections
+                setPlateOptions([]);
+                setRouteOptions([]);
+
+                const params = {};
+                if (schoolId) params.schoolId = schoolId;
+                if (corporationId) params.corporationId = corporationId;
+                params.limit = 200;
+
+                const resp = await api.get('/buses', { params });
+                const buses = resp.data?.buses || [];
+
+                const plates = buses.map(b => ({ id: b.id, label: b.plate }));
+                const routeNums = Array.from(new Set(buses.map(b => b.routeNumber).filter(r => r)));
+
+                setPlateOptions(plates);
+                setRouteOptions(routeNums);
+            } catch (error) {
+                console.error('Error loading plate/route options:', error);
+            }
+        };
+
+        // Only load when a client is selected
+        if (schoolId || corporationId) {
+            loadPlatesAndRoutes();
+        } else {
+            setPlateOptions([]);
+            setRouteOptions([]);
+        }
+        // reset plate/route when client changes
+        setPlate('');
+        setRouteNumber('');
+    }, [schoolId, corporationId]);
+
     // Función para cargar solicitudes
     const fetchRequests = useCallback(async () => {
         setLoading(true);
@@ -151,10 +190,17 @@ const MechanicRequestsPage = () => {
                 limit: rowsPerPage,
                 sortBy,
                 sortOrder: sortOrder.toUpperCase(),
-                ...Object.fromEntries(
-                    Object.entries(filters).filter(([_, v]) => v !== '')
-                )
             };
+
+            if (schoolId) params.schoolId = schoolId;
+            if (corporationId) params.corporationId = corporationId;
+            if (plate) params.plate = plate;
+            if (routeNumber) params.routeNumber = routeNumber;
+            if (tipoTrabajo) params.tipoTrabajo = tipoTrabajo;
+            if (estado) params.estado = estado;
+            if (urgente !== '') params.urgente = urgente;
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
 
             const response = await getAllMechanicRequests(params);
             setRequests(response.data || []);
@@ -164,23 +210,23 @@ const MechanicRequestsPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, rowsPerPage, filters, sortBy, sortOrder]);
+    }, [page, rowsPerPage, schoolId, corporationId, plate, routeNumber, tipoTrabajo, estado, urgente, startDate, endDate, sortBy, sortOrder]);
 
     // Función para cargar estadísticas
     const fetchStatistics = useCallback(async () => {
         try {
             const params = {};
-            if (filters.schoolId) params.schoolId = filters.schoolId;
-            if (filters.corporationId) params.corporationId = filters.corporationId;
-            if (filters.startDate) params.startDate = filters.startDate;
-            if (filters.endDate) params.endDate = filters.endDate;
+            if (schoolId) params.schoolId = schoolId;
+            if (corporationId) params.corporationId = corporationId;
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
 
             const stats = await getMechanicRequestStatistics(params);
             setStatistics(stats);
         } catch (error) {
             console.error('Error fetching statistics:', error);
         }
-    }, [filters.schoolId, filters.corporationId, filters.startDate, filters.endDate]);
+    }, [schoolId, corporationId, startDate, endDate]);
 
     useEffect(() => {
         fetchRequests();
@@ -195,11 +241,7 @@ const MechanicRequestsPage = () => {
         await fetchRequests();
     }, [fetchRequests]);
 
-    // Manejadores de filtros
-    const handleFilterChange = (field) => (event) => {
-        setFilters(prev => ({ ...prev, [field]: event.target.value }));
-        setPage(0);
-    };
+    // Manejadores de filtros: usamos setters individuales abajo en los inputs
 
     // Manejadores de paginación
     const handleChangePage = (event, newPage) => {
@@ -420,8 +462,9 @@ const MechanicRequestsPage = () => {
                             fullWidth
                             size="small"
                             label="Colegio"
-                            value={filters.schoolId}
-                            onChange={handleFilterChange('schoolId')}
+                            value={schoolId}
+                            onChange={(e) => { setSchoolId(e.target.value); setPage(0); setPlate(''); setRouteNumber(''); }}
+                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
                         >
                             <MenuItem value="">Todos</MenuItem>
                             {schools.map((school) => (
@@ -437,8 +480,9 @@ const MechanicRequestsPage = () => {
                             fullWidth
                             size="small"
                             label="Corporación"
-                            value={filters.corporationId}
-                            onChange={handleFilterChange('corporationId')}
+                            value={corporationId}
+                            onChange={(e) => { setCorporationId(e.target.value); setPage(0); setPlate(''); setRouteNumber(''); }}
+                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
                         >
                             <MenuItem value="">Todas</MenuItem>
                             {corporations.map((corp) => (
@@ -448,52 +492,52 @@ const MechanicRequestsPage = () => {
                             ))}
                         </TextField>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.5}>
+                    <Grid item xs={12} sm={6} md={1.3}>
                         <TextField
+                            select
                             fullWidth
                             size="small"
                             label="Placa"
-                            value={filters.plate}
-                            onChange={handleFilterChange('plate')}
-                        />
+                            value={plate}
+                            onChange={(e) => { setPlate(e.target.value); setPage(0); }}
+                            disabled={!schoolId && !corporationId}
+                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
+                        >
+                            <MenuItem value="">Todas</MenuItem>
+                            {[...new Set(plateOptions.map(p => p.label))].map((pl) => (
+                                <MenuItem key={pl} value={pl}>{pl}</MenuItem>
+                            ))}
+                        </TextField>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.5}>
+                    <Grid item xs={12} sm={6} md={1}>
                         <TextField
+                            select
                             fullWidth
                             size="small"
                             label="Ruta"
-                            value={filters.routeNumber}
-                            onChange={handleFilterChange('routeNumber')}
-                        />
+                            value={routeNumber}
+                            onChange={(e) => { setRouteNumber(e.target.value); setPage(0); }}
+                            disabled={!schoolId && !corporationId}
+                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
+                        >
+                            <MenuItem value="">Todas</MenuItem>
+                            {routeOptions.map((r) => (
+                                <MenuItem key={r} value={r}>{r}</MenuItem>
+                            ))}
+                        </TextField>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.5}>
+                    <Grid item xs={12} sm={6} md={1}>
                         <TextField
                             select
                             fullWidth
                             size="small"
                             label="Tipo Trabajo"
-                            value={filters.tipoTrabajo}
-                            onChange={handleFilterChange('tipoTrabajo')}
+                            value={tipoTrabajo}
+                            onChange={(e) => { setTipoTrabajo(e.target.value); setPage(0); }}
+                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
                         >
                             <MenuItem value="">Todos</MenuItem>
                             {Object.entries(WORK_TYPES).map(([key, label]) => (
-                                <MenuItem key={key} value={key}>
-                                    {label}
-                                </MenuItem>
-                            ))}
-                        </TextField>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={1.5}>
-                        <TextField
-                            select
-                            fullWidth
-                            size="small"
-                            label="Estado"
-                            value={filters.estado}
-                            onChange={handleFilterChange('estado')}
-                        >
-                            <MenuItem value="">Todos</MenuItem>
-                            {Object.entries(REQUEST_STATES).map(([key, label]) => (
                                 <MenuItem key={key} value={key}>
                                     {label}
                                 </MenuItem>
@@ -505,34 +549,53 @@ const MechanicRequestsPage = () => {
                             select
                             fullWidth
                             size="small"
+                            label="Estado"
+                            value={estado}
+                            onChange={(e) => { setEstado(e.target.value); setPage(0); }}
+                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
+                        >
+                            <MenuItem value="">Todos</MenuItem>
+                            {Object.entries(REQUEST_STATES).map(([key, label]) => (
+                                <MenuItem key={key} value={key}>
+                                    {label}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={0.8}>
+                        <TextField
+                            select
+                            fullWidth
+                            size="small"
                             label="Urgente"
-                            value={filters.urgente}
-                            onChange={handleFilterChange('urgente')}
+                            value={urgente}
+                            onChange={(e) => { setUrgente(e.target.value); setPage(0); }}
+                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
                         >
                             <MenuItem value="">Todos</MenuItem>
                             <MenuItem value="true">Sí</MenuItem>
                             <MenuItem value="false">No</MenuItem>
                         </TextField>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.5}>
+                    <Grid item xs={12} sm={6} md={1.3}>
                         <TextField
                             fullWidth
                             size="small"
                             type="date"
                             label="Fecha Inicio"
-                            value={filters.startDate}
-                            onChange={handleFilterChange('startDate')}
+                            value={startDate}
+                            onChange={(e) => { setStartDate(e.target.value); setPage(0); }}
                             InputLabelProps={{ shrink: true }}
                         />
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.5}>
+                    <Grid item xs={12} sm={6} md={1.3}>
                         <TextField
                             fullWidth
                             size="small"
                             type="date"
                             label="Fecha Fin"
-                            value={filters.endDate}
-                            onChange={handleFilterChange('endDate')}
+                            value={endDate}
+                            onChange={(e) => { setEndDate(e.target.value); setPage(0); }}
                             InputLabelProps={{ shrink: true }}
                         />
                     </Grid>
@@ -857,10 +920,11 @@ const MechanicRequestsPage = () => {
                             <FormControl fullWidth>
                                 <InputLabel>Estado</InputLabel>
                                 <Select
-                                    value={newStatus}
-                                    onChange={(e) => setNewStatus(e.target.value)}
-                                    label="Estado"
-                                >
+                                        value={newStatus}
+                                        onChange={(e) => setNewStatus(e.target.value)}
+                                        label="Estado"
+                                        MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+                                    >
                                     {Object.entries(REQUEST_STATES).map(([key, label]) => (
                                         <MenuItem key={key} value={key}>
                                             {label}

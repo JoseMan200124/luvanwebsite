@@ -21,26 +21,99 @@ import api from '../utils/axiosConfig';
  * @returns {Promise} - Respuesta del servidor con cambios propagados
  */
 export const updateSchoolSchedules = async (schoolId, schedules, options = {}) => {
-  const { notify = false } = options; // Notificaciones deshabilitadas
+  const {
+    notify = false,
+    confirmScheduleDeletion = false,
+    downloadAffectedStudentsExcel = false
+  } = options; // Notificaciones deshabilitadas
 
   try {
     const response = await api.patch(`/schools/${schoolId}/schedules`, {
-      schedules
+      schedules,
+      confirmScheduleDeletion,
+      downloadAffectedStudentsExcel
     });
 
     return {
       success: true,
       school: response.data.school,
       scheduleChanges: response.data.scheduleChanges,
+      schoolSchedulesSync: response.data.schoolSchedulesSync,
+      scheduleDeletionDownload: response.data.scheduleDeletionDownload || null,
       notify
     };
   } catch (error) {
+    const status = error.response?.status;
+    const data = error.response?.data;
+    if (status === 409 && data?.requiresConfirmation) {
+      const err = new Error(data?.message || 'Se requiere confirmación para eliminar horarios con paradas asociadas.');
+      err.code = 'SCHEDULE_DELETION_CONFIRMATION_REQUIRED';
+      err.confirmationData = data;
+      err.originalError = error;
+      throw err;
+    }
+
     console.error('Error updating school schedules:', error);
     const errorMessage = error.response?.data?.message || 'Error al actualizar horarios';
     const err = new Error(errorMessage);
     err.originalError = error;
     throw err;
   }
+};
+
+function getFilenameFromDisposition(contentDisposition, fallback) {
+  if (!contentDisposition) return fallback;
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  if (plainMatch?.[1]) return plainMatch[1];
+  return fallback;
+}
+
+export const downloadScheduleDeletionZip = async (token) => {
+  if (!token) {
+    throw new Error('No se recibió token de descarga.');
+  }
+
+  const response = await api.get(`/schools/schedule-deletion-download/${encodeURIComponent(token)}`, {
+    responseType: 'blob'
+  });
+
+  const contentDisposition = response.headers?.['content-disposition'] || '';
+  const fallbackName = `Estudiantes afectados eliminacion horarios ${new Date().toISOString().slice(0, 10)}.zip`;
+  const fileName = getFilenameFromDisposition(contentDisposition, fallbackName);
+  const contentType = response.headers?.['content-type'] || 'application/zip';
+  const blob = new Blob([response.data], { type: contentType });
+
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const getScheduleDeletionImpact = async (schoolId, schedulePayload) => {
+  const response = await api.post(`/schools/${schoolId}/schedules/deletion-impact`, {
+    code: schedulePayload?.code || null,
+    originalCode: schedulePayload?.originalCode || null
+  });
+
+  return response.data?.impact || {
+    scheduleCode: schedulePayload?.code || schedulePayload?.originalCode || null,
+    scheduleId: null,
+    affectedScheduleSlots: 0,
+    affectedStudents: 0,
+    affectedFamilies: 0
+  };
 };
 
 /**
@@ -160,6 +233,8 @@ export const extractScheduleCode = (schoolScheduleStr) => {
 
 const scheduleService = {
   updateSchoolSchedules,
+  getScheduleDeletionImpact,
+  downloadScheduleDeletionZip,
   getSchoolSchedules,
   getSchoolById,
   validateSchedules,

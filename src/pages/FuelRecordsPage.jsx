@@ -153,7 +153,7 @@ const FuelRecordsPage = () => {
     const fetchBusesBySchool = async (schoolId) => {
         try {
             // Si no se pasa schoolId, traemos todos los buses para permitir seleccionar placa independientemente.
-            const url = schoolId ? `/buses/school/${schoolId}` : '/buses';
+            const url = schoolId ? `/buses/school/${schoolId}` : '/buses/simple';
             const response = await api.get(url);
             const busesData = Array.isArray(response.data) ? response.data : (response.data?.buses || []);
             setBuses(busesData);
@@ -176,7 +176,7 @@ const FuelRecordsPage = () => {
 
     const fetchBusesByCorporation = async (corporationId) => {
         try {
-            const url = corporationId ? `/buses/corporation/${corporationId}` : '/buses';
+            const url = corporationId ? `/buses/corporation/${corporationId}` : '/buses/simple';
             const response = await api.get(url);
             const busesData = Array.isArray(response.data) ? response.data : (response.data?.buses || []);
             setBuses(busesData);
@@ -310,6 +310,18 @@ const FuelRecordsPage = () => {
             if (response.success && response.data) {
                 setFuelRecords(response.data);
                 setTotalCount(response.pagination?.total || 0);
+                // Preferir totales/estadísticas devueltas por el endpoint de list (si las incluye)
+                const totalsFromList = response.totals || response.statistics || response.meta;
+                if (totalsFromList) {
+                    const t = totalsFromList;
+                    setStatistics(prev => ({
+                        totalRecords: parseInt(t.totalRecords || t.total || prev.totalRecords) || 0,
+                        totalGallons: parseFloat(t.totalGallonage || t.totalGallons || prev.totalGallons) || 0,
+                        totalAmount: parseFloat(t.totalAmount || prev.totalAmount) || 0,
+                        averagePrice: parseFloat(t.avgPricePerGallon || t.averagePrice || prev.averagePrice) || 0,
+                        byReason: prev.byReason
+                    }));
+                }
             } else {
                 setFuelRecords([]);
                 setTotalCount(0);
@@ -629,6 +641,7 @@ const FuelRecordsPage = () => {
                                     }}
                                     label="Ruta"
                                     disabled={!selectedClient}
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {((selectedClient ? clientRouteNumbers : [...new Set(buses.map(b => b.routeNumber).filter(Boolean))]).map(String)).sort((a,b) => a - b).map((route) => (
@@ -661,6 +674,7 @@ const FuelRecordsPage = () => {
                                     value={selectedFuelingReason}
                                     onChange={(e) => setSelectedFuelingReason(e.target.value)}
                                     label="Razón de Abastecimiento"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
                                     {Object.entries(FUELING_REASONS).map(([key, label]) => (
@@ -679,6 +693,7 @@ const FuelRecordsPage = () => {
                                     value={selectedFuelType}
                                     onChange={(e) => setSelectedFuelType(e.target.value)}
                                     label="Tipo Combustible"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {Object.entries(FUEL_TYPES).map(([key, label]) => (
