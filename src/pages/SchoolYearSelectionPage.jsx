@@ -603,8 +603,16 @@ const SchoolYearSelectionPage = () => {
         setSchoolSchedules(normalized);
         setSelectedSchool((prev) => prev ? {
             ...prev,
-            schedules: updatedSchedules
+            schedules: updatedSchedules,
+            routeSchedules: result?.school?.routeSchedules ?? prev.routeSchedules
         } : prev);
+
+        // Sync schoolRouteSchedules state so "Guardar Cambios" doesn't revert
+        // deleted/edited schedule codes back into routeSchedules.
+        const updatedRS = result?.school?.routeSchedules;
+        if (Array.isArray(updatedRS)) {
+            setSchoolRouteSchedules(updatedRS);
+        }
 
         fetchSchoolsByYear();
     };
