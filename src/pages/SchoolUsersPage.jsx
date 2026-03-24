@@ -69,6 +69,7 @@ import CircularMasivaModal from '../components/CircularMasivaModal';
 import BulkScheduleModal from '../components/modals/BulkScheduleModal';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
+import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, resolveScheduleCodeFromSlot, slotHasScheduleData } from '../utils/scheduleConfig';
 
 // Opciones de roles disponibles en esta vista: Padre solamente
 const roleOptions = [
@@ -353,6 +354,8 @@ const SchoolUsersPage = () => {
         }
 
         setRouteReportLoading(true);
+        // Derive schedule codes from current school or use defaults
+        const SCHEDULE_CODES = getScheduleCodesFromSchool(currentSchool?.schedules);
         try {
             // Usar endpoint del backend que filtra por activos
             const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'active' } });
@@ -382,25 +385,18 @@ const SchoolUsersPage = () => {
                             routeNumber = String(slot.routeNumber);
                         }
                         if (!routeNumber) routeNumber = 'Sin Ruta';
-                        const period = (function(slot){
-                            const ss = (slot.schoolSchedule ?? '').toString();
-                            const mSS = ss.match(/\b(AM|MD|PM|EX)\b/i);
-                            if (mSS && mSS[1]) return mSS[1].toUpperCase();
-                            const t = (slot.time ?? slot.timeSlot ?? '').toString();
-                            const mT = t.match(/\b(AM|MD|PM|EX)\b/i);
-                            if (mT && mT[1]) return mT[1].toUpperCase();
-                            return null;
-                        })(slot);
+                        const period = resolveScheduleCodeFromSlot(slot, SCHEDULE_CODES);
                         if (!period) return;
                         studentRoutePeriodSet.add(`${routeNumber}::${period}`);
                     });
                     studentRoutePeriodSet.forEach(k => {
                         const [routeNumber, period] = k.split('::');
-                        if (!routeSummary[routeNumber]) routeSummary[routeNumber] = { cantAM: 0, cantPM: 0, cantMD: 0, cantEX: 0 };
-                        if (period === 'AM') routeSummary[routeNumber].cantAM++;
-                        else if (period === 'MD') routeSummary[routeNumber].cantMD++;
-                        else if (period === 'PM') routeSummary[routeNumber].cantPM++;
-                        else if (period === 'EX') routeSummary[routeNumber].cantEX++;
+                        if (!routeSummary[routeNumber]) {
+                            routeSummary[routeNumber] = Object.fromEntries(SCHEDULE_CODES.map(c => [`cant${c}`, 0]));
+                        }
+                        if (period && routeSummary[routeNumber][`cant${period}`] !== undefined) {
+                            routeSummary[routeNumber][`cant${period}`]++;
+                        }
                     });
                 });
             });
@@ -412,8 +408,8 @@ const SchoolUsersPage = () => {
                 if (!fd.Students || fd.Students.length === 0) return;
                 const hasStudentWithRoute = fd.Students.some(student => {
                     const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                    if (studentSlots.length > 0) return studentSlots.some(slot => /(.+):(.+)/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()));
-                    if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) return fd.ScheduleSlots.some(slot => /(.+):(.+)/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()));
+                    if (studentSlots.length > 0) return studentSlots.some(slotHasScheduleData);
+                    if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) return fd.ScheduleSlots.some(slotHasScheduleData);
                     return false;
                 });
                 if (hasStudentWithRoute && fd.Students.length > maxStudents) maxStudents = fd.Students.length;
@@ -424,11 +420,11 @@ const SchoolUsersPage = () => {
                 const fd = user.FamilyDetail || {};
                 if (!fd.Students || fd.Students.length === 0) return false;
                 if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
-                    if (fd.ScheduleSlots.some(slot => /(.+):(.+)/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()))) return true;
+                    if (fd.ScheduleSlots.some(slotHasScheduleData)) return true;
                 }
                 return fd.Students.some(student => {
                     const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                    return studentSlots.some(slot => /(.+):(.+)/.test((slot.schoolSchedule || slot.time || slot.timeSlot || '').toString()));
+                    return studentSlots.some(slotHasScheduleData);
                 });
             });
 
@@ -444,18 +440,11 @@ const SchoolUsersPage = () => {
                 for (let i = 1; i <= maxStudents; i++) {
                     headers.push(`Estudiante ${i} - Nombre`);
                     headers.push(`Estudiante ${i} - Grado`);
-                    headers.push(`Estudiante ${i} - Hora AM`);
-                    headers.push(`Estudiante ${i} - Ruta AM`);
-                    headers.push(`Estudiante ${i} - Nota Parada AM`);
-                    headers.push(`Estudiante ${i} - Hora MD`);
-                    headers.push(`Estudiante ${i} - Ruta MD`);
-                    headers.push(`Estudiante ${i} - Nota Parada MD`);
-                    headers.push(`Estudiante ${i} - Hora PM`);
-                    headers.push(`Estudiante ${i} - Ruta PM`);
-                    headers.push(`Estudiante ${i} - Nota Parada PM`);
-                    headers.push(`Estudiante ${i} - Hora EX`);
-                    headers.push(`Estudiante ${i} - Ruta EX`);
-                    headers.push(`Estudiante ${i} - Nota Parada EX`);
+                    for (const code of SCHEDULE_CODES) {
+                        headers.push(`Estudiante ${i} - Hora ${code}`);
+                        headers.push(`Estudiante ${i} - Ruta ${code}`);
+                        headers.push(`Estudiante ${i} - Nota Parada ${code}`);
+                    }
                 }
                 headers.push(...contactCols);
 
@@ -475,7 +464,8 @@ const SchoolUsersPage = () => {
                         row.push(student ? (student.grade || '') : '');
 
                         // prepare day-specific defaults
-                        const defaultPer = { horaAM: '', rutaAM: '', paradaAM: '', horaMD: '', rutaMD: '', paradaMD: '', horaPM: '', rutaPM: '', paradaPM: '', horaEX: '', rutaEX: '', paradaEX: '' };
+                        const defaultPer = {};
+                        SCHEDULE_CODES.forEach(c => { defaultPer[`hora${c}`] = ''; defaultPer[`ruta${c}`] = ''; defaultPer[`parada${c}`] = ''; });
                         let dataForDay = { ...defaultPer };
 
                         if (student) {
@@ -494,14 +484,11 @@ const SchoolUsersPage = () => {
                                 const note = slot.note || '';
                                 let routeLabel = '';
                                 if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') routeLabel = String(slot.routeNumber);
-                                const ss = (slot.schoolSchedule ?? '').toString();
-                                const mSS = ss.match(/\b(AM|MD|PM|EX)\b/i);
-                                const period = mSS && mSS[1] ? mSS[1].toUpperCase() : ( (slot.time||slot.timeSlot||'').toString().match(/\b(AM|MD|PM|EX)\b/i)?.[1] ?? null );
+                                const period = resolveScheduleCodeFromSlot(slot, SCHEDULE_CODES);
                                 if (!period) return;
-                                if (period === 'AM') { if (!dataForDay.horaAM) dataForDay.horaAM = displayTime; if (!dataForDay.rutaAM) dataForDay.rutaAM = routeLabel; if (!dataForDay.paradaAM) dataForDay.paradaAM = note; }
-                                else if (period === 'MD') { if (!dataForDay.horaMD) dataForDay.horaMD = displayTime; if (!dataForDay.rutaMD) dataForDay.rutaMD = routeLabel; if (!dataForDay.paradaMD) dataForDay.paradaMD = note; }
-                                else if (period === 'PM') { if (!dataForDay.horaPM) dataForDay.horaPM = displayTime; if (!dataForDay.rutaPM) dataForDay.rutaPM = routeLabel; if (!dataForDay.paradaPM) dataForDay.paradaPM = note; }
-                                else if (period === 'EX') { if (!dataForDay.horaEX) dataForDay.horaEX = displayTime; if (!dataForDay.rutaEX) dataForDay.rutaEX = routeLabel; if (!dataForDay.paradaEX) dataForDay.paradaEX = note; }
+                                if (!dataForDay[`hora${period}`]) dataForDay[`hora${period}`] = displayTime;
+                                if (!dataForDay[`ruta${period}`]) dataForDay[`ruta${period}`] = routeLabel;
+                                if (!dataForDay[`parada${period}`]) dataForDay[`parada${period}`] = note;
                             });
                         }
 
@@ -515,21 +502,11 @@ const SchoolUsersPage = () => {
                             return Number.isFinite(n) ? n : null;
                         };
 
-                        row.push(dataForDay.horaAM);
-                        row.push(parseRouteNumber(dataForDay.rutaAM));
-                        row.push(dataForDay.paradaAM);
-
-                        row.push(dataForDay.horaMD);
-                        row.push(parseRouteNumber(dataForDay.rutaMD));
-                        row.push(dataForDay.paradaMD);
-
-                        row.push(dataForDay.horaPM);
-                        row.push(parseRouteNumber(dataForDay.rutaPM));
-                        row.push(dataForDay.paradaPM);
-
-                        row.push(dataForDay.horaEX);
-                        row.push(parseRouteNumber(dataForDay.rutaEX));
-                        row.push(dataForDay.paradaEX);
+                        for (const code of SCHEDULE_CODES) {
+                            row.push(dataForDay[`hora${code}`]);
+                            row.push(parseRouteNumber(dataForDay[`ruta${code}`]));
+                            row.push(dataForDay[`parada${code}`]);
+                        }
                     }
 
                     const motherName = (fd.motherName && fd.motherName.trim()) || '';

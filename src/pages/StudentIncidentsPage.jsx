@@ -37,6 +37,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAllStudentIncidents, getStudentIncidentById, INCIDENT_TYPES } from '../services/studentIncidentService';
 import api from '../utils/axiosConfig';
+import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, SCHEDULE_LABELS } from '../utils/scheduleConfig';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -208,15 +209,6 @@ const StudentIncidentsPage = () => {
         setSelectedIncident(null);
     };
 
-    const getScheduleLabel = (schedule) => {
-        const labels = {
-            'AM': 'Mañana',
-            'MD': 'Mediodía',
-            'PM': 'Tarde',
-            'EX': 'Extracurricular',
-        };
-        return labels[schedule] || schedule;
-    };
 
     return (
         <LocalizationProvider dateAdapter={AdapterMoment}>
@@ -394,10 +386,9 @@ const StudentIncidentsPage = () => {
                                     }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="AM">Mañana</MenuItem>
-                                    <MenuItem value="MD">Mediodía</MenuItem>
-                                    <MenuItem value="PM">Tarde</MenuItem>
-                                    <MenuItem value="EX">Extracurricular</MenuItem>
+                                    {DEFAULT_SCHEDULE_CODES.map(code => (
+                                        <MenuItem key={code} value={code}>{SCHEDULE_LABELS[code] || code}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
                         </Grid>
@@ -467,11 +458,7 @@ const StudentIncidentsPage = () => {
                                                     <Chip 
                                                         label={getScheduleLabel(incident.scheduleType)} 
                                                         size="small"
-                                                        color={
-                                                            incident.scheduleType === 'AM' ? 'primary' :
-                                                            incident.scheduleType === 'MD' ? 'secondary' :
-                                                            incident.scheduleType === 'PM' ? 'warning' : 'default'
-                                                        }
+                                                        color={getScheduleColor(incident.scheduleType)}
                                                     />
                                                 </TableCell>
                                                 <TableCell>
@@ -569,11 +556,7 @@ const StudentIncidentsPage = () => {
                                     </Typography>
                                     <Chip 
                                         label={getScheduleLabel(selectedIncident.scheduleType)}
-                                        color={
-                                            selectedIncident.scheduleType === 'AM' ? 'primary' :
-                                            selectedIncident.scheduleType === 'MD' ? 'secondary' :
-                                            selectedIncident.scheduleType === 'PM' ? 'warning' : 'default'
-                                        }
+                                        color={getScheduleColor(selectedIncident.scheduleType)}
                                         sx={{ mt: 1 }}
                                     />
                                 </Grid>

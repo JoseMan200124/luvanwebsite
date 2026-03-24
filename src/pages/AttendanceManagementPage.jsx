@@ -1,9 +1,8 @@
 // src/pages/AttendanceManagementPage.jsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Typography,
-    TextField,
     Paper,
     Table,
     TableBody,
@@ -38,7 +37,6 @@ import {
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { 
-    Refresh as RefreshIcon, 
     Visibility as VisibilityIcon,
     CheckCircle as CheckCircleIcon,
     Cancel as CancelIcon,
@@ -48,6 +46,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAttendances, getAttendanceDetails } from '../services/attendanceService';
 import api from '../utils/axiosConfig';
+import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -70,6 +69,7 @@ const AttendanceManagementPage = () => {
     const [schools, setSchools] = useState([]);
     const [buses, setBuses] = useState([]);
     const [schoolRoutes, setSchoolRoutes] = useState([]);
+    const [schoolScheduleCodes, setSchoolScheduleCodes] = useState([]);
     const [selectedSchool, setSelectedSchool] = useState('');
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
@@ -93,8 +93,11 @@ const AttendanceManagementPage = () => {
         if (selectedSchool) {
             fetchBusesBySchool(selectedSchool);
             fetchRouteNumbersBySchool(selectedSchool);
+            fetchSchoolSchedules(selectedSchool);
         } else {
+            setBuses([]);
             setSchoolRoutes([]);
+            setSchoolScheduleCodes([]);
         }
     }, [selectedSchool]);
 
@@ -136,6 +139,48 @@ const AttendanceManagementPage = () => {
         }
     };
 
+    const fetchSchoolSchedules = async (schoolId) => {
+        try {
+            const response = await api.get(`/schools/${schoolId}`);
+            const school = response.data?.school || response.data;
+            setSchoolScheduleCodes(getScheduleCodesFromSchool(school?.schedules));
+        } catch (error) {
+            console.error('Error al cargar horarios del colegio:', error);
+            setSchoolScheduleCodes([]);
+        }
+    };
+
+    const availableScheduleCodes = useMemo(() => {
+        if (!selectedSchool) {
+            return [...DEFAULT_SCHEDULE_CODES];
+        }
+
+        const codes = new Set();
+
+        if (schoolScheduleCodes.length > 0) {
+            schoolScheduleCodes.forEach(code => {
+                if (code) codes.add(String(code).trim().toUpperCase());
+            });
+        }
+
+        attendances.forEach(attendance => {
+            const code = String(attendance?.schedule || '').trim().toUpperCase();
+            if (code) codes.add(code);
+        });
+
+        if (codes.size === 0) {
+            DEFAULT_SCHEDULE_CODES.forEach(code => codes.add(code));
+        }
+
+        return Array.from(codes);
+    }, [attendances, schoolScheduleCodes, selectedSchool]);
+
+    useEffect(() => {
+        if (selectedSchedule && !availableScheduleCodes.includes(selectedSchedule)) {
+            setSelectedSchedule('');
+        }
+    }, [availableScheduleCodes, selectedSchedule]);
+
     const fetchAttendances = async () => {
         setLoading(true);
         try {
@@ -147,7 +192,7 @@ const AttendanceManagementPage = () => {
             if (selectedSchool) filters.schoolId = selectedSchool;
             if (selectedPlate) filters.plate = selectedPlate;
             if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedSchedule) filters.schedule = selectedSchedule;
+            if (selectedSchedule) filters.schedule = String(selectedSchedule).trim().toUpperCase();
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
 
@@ -156,16 +201,27 @@ const AttendanceManagementPage = () => {
             setAttendances(data.attendances || data.data || []);
             setTotalCount(data.total || 0);
 
-            const totalStudents = data.totalStudents !== undefined ? data.totalStudents : (data.attendances || []).reduce((sum, att) => sum + (att.totalAlumnos || 0), 0);
-            const totalPresent = data.totalPresent !== undefined ? data.totalPresent : (data.attendances || []).reduce((sum, att) => sum + (att.alumnosPresentes || 0), 0);
-            const avgAttendance = data.averageAttendance !== undefined ? data.averageAttendance : (totalStudents > 0 ? ((totalPresent / totalStudents) * 100).toFixed(2) : 0);
+            // Calcular estadísticas
+            const attendanceList = data.attendances || data.data || [];
+            if (attendanceList.length > 0) {
+                const totalStudents = data.totalStudents !== undefined ? data.totalStudents : (data.attendances || []).reduce((sum, att) => sum + (att.totalAlumnos || 0), 0);
+                const totalPresent = data.totalPresent !== undefined ? data.totalPresent : (data.attendances || []).reduce((sum, att) => sum + (att.alumnosPresentes || 0), 0);
+                const avgAttendance = data.averageAttendance !== undefined ? data.averageAttendance : (totalStudents > 0 ? ((totalPresent / totalStudents) * 100).toFixed(2) : 0);
 
-            setStatistics({
-                total: data.total || (data.attendances || []).length,
-                averageAttendance: Number(avgAttendance),
-                totalStudents,
-                totalPresent,
-            });
+                setStatistics({
+                    total: data.total || (data.attendances || []).length,
+                    averageAttendance: Number(avgAttendance),
+                    totalStudents,
+                    totalPresent,
+                });
+            } else {
+                setStatistics({
+                    total: 0,
+                    averageAttendance: 0,
+                    totalStudents: 0,
+                    totalPresent: 0,
+                });
+            }
         } catch (error) {
             console.error('Error al cargar asistencias:', error);
         } finally {
@@ -212,15 +268,6 @@ const AttendanceManagementPage = () => {
         fetchAttendances();
     };
 
-    const getScheduleLabel = (schedule) => {
-        const labels = {
-            'AM': 'Mañana',
-            'MD': 'Mediodía',
-            'PM': 'Tarde',
-            'EX': 'Extracurricular',
-        };
-        return labels[schedule] || schedule;
-    };
 
     const getDayLabel = (day) => {
         const labels = {
@@ -311,6 +358,7 @@ const AttendanceManagementPage = () => {
                                         setSelectedSchool(e.target.value);
                                         setSelectedPlate('');
                                         setSelectedRoute('');
+                                        setSelectedSchedule('');
                                     }}
                                     label="Colegio"
                                 >
@@ -383,10 +431,9 @@ const AttendanceManagementPage = () => {
                                     label="Horario"
                                 >
                                     <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="AM">Mañana</MenuItem>
-                                    <MenuItem value="MD">Mediodía</MenuItem>
-                                    <MenuItem value="PM">Tarde</MenuItem>
-                                    <MenuItem value="EX">Extracurricular</MenuItem>
+                                    {availableScheduleCodes.map(code => (
+                                        <MenuItem key={code} value={code}>{getScheduleLabel(code)}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
                         </Grid>
@@ -453,11 +500,7 @@ const AttendanceManagementPage = () => {
                                                         <Chip 
                                                             label={getScheduleLabel(attendance.schedule)} 
                                                             size="small"
-                                                            color={
-                                                                attendance.schedule === 'AM' ? 'primary' :
-                                                                attendance.schedule === 'MD' ? 'secondary' :
-                                                                attendance.schedule === 'PM' ? 'warning' : 'default'
-                                                            }
+                                                            color={getScheduleColor(attendance.schedule)}
                                                         />
                                                     </TableCell>
                                                     <TableCell>

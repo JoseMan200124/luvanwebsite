@@ -30,17 +30,18 @@ import {
 import { FileUpload, ExpandMore } from '@mui/icons-material';
 import Autocomplete from '@mui/material/Autocomplete';
 import api from '../utils/axiosConfig';
+import { DEFAULT_SCHEDULE_CODES, getScheduleLabel, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 
-const DEFAULT_COUNTS = { AM: 0, MD: 0, PM: 0, EX: 0 };
+// Build default counts object dynamically from schedule codes
+const buildDefaultCounts = (codes = DEFAULT_SCHEDULE_CODES) =>
+    Object.fromEntries(codes.map(c => [c, 0]));
+
+const DEFAULT_COUNTS = buildDefaultCounts();
 
 const scheduleLabel = (code) => {
-    switch (code) {
-        case 'AM': return 'AM (Mañana)';
-        case 'MD': return 'MD (Mediodía)';
-        case 'PM': return 'PM (Tarde)';
-        case 'EX': return 'EX (Extra)';
-        default: return 'Horario';
-    }
+    if (!code) return 'Horario';
+    const label = getScheduleLabel(code);
+    return `${code} (${label})`;
 };
 
 const arraysEqual = (a, b) => {
@@ -215,12 +216,12 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                 if (reqId !== countsReqId.current) return;
 
                 const counts = resp.data?.scheduleCountsParents || DEFAULT_COUNTS;
-                setScheduleCounts({
-                    AM: Number(counts.AM || 0),
-                    MD: Number(counts.MD || 0),
-                    PM: Number(counts.PM || 0),
-                    EX: Number(counts.EX || 0),
+                // Dynamically map all codes from the response
+                const newCounts = {};
+                Object.keys({ ...DEFAULT_COUNTS, ...counts }).forEach(k => {
+                    newCounts[k] = Number(counts[k] || 0);
                 });
+                setScheduleCounts(newCounts);
 
                 // Si el horario actual ya no aplica (0), lo limpiamos (sin loop)
                 if (selectedSchedule && Number(counts[selectedSchedule] || 0) <= 0) {
@@ -515,33 +516,14 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                         size="small"
                                         sx={{ '& .MuiToggleButton-root': { textTransform: 'none', py: 1 } }}
                                     >
-                                        <ToggleButton value="AM" disabled={scheduleDisabled('AM')}>
-                                            <Stack spacing={0.2} alignItems="center">
-                                                <Typography variant="body2" fontWeight={700}>AM</Typography>
-                                                <Typography variant="caption" color="text.secondary">{scheduleCounts.AM} padres</Typography>
-                                            </Stack>
-                                        </ToggleButton>
-
-                                        <ToggleButton value="MD" disabled={scheduleDisabled('MD')}>
-                                            <Stack spacing={0.2} alignItems="center">
-                                                <Typography variant="body2" fontWeight={700}>MD</Typography>
-                                                <Typography variant="caption" color="text.secondary">{scheduleCounts.MD} padres</Typography>
-                                            </Stack>
-                                        </ToggleButton>
-
-                                        <ToggleButton value="PM" disabled={scheduleDisabled('PM')}>
-                                            <Stack spacing={0.2} alignItems="center">
-                                                <Typography variant="body2" fontWeight={700}>PM</Typography>
-                                                <Typography variant="caption" color="text.secondary">{scheduleCounts.PM} padres</Typography>
-                                            </Stack>
-                                        </ToggleButton>
-
-                                        <ToggleButton value="EX" disabled={scheduleDisabled('EX')}>
-                                            <Stack spacing={0.2} alignItems="center">
-                                                <Typography variant="body2" fontWeight={700}>EX</Typography>
-                                                <Typography variant="caption" color="text.secondary">{scheduleCounts.EX} padres</Typography>
-                                            </Stack>
-                                        </ToggleButton>
+                                        {Object.keys(scheduleCounts).map(code => (
+                                            <ToggleButton key={code} value={code} disabled={scheduleDisabled(code)}>
+                                                <Stack spacing={0.2} alignItems="center">
+                                                    <Typography variant="body2" fontWeight={700}>{code}</Typography>
+                                                    <Typography variant="caption" color="text.secondary">{scheduleCounts[code] || 0} padres</Typography>
+                                                </Stack>
+                                            </ToggleButton>
+                                        ))}
                                     </ToggleButtonGroup>
 
                                     {selectedRoutes.length === 0 && (

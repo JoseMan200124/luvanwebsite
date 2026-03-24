@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { DEFAULT_SCHEDULE_CODES } from './scheduleConfig';
 
 /**
  * Generate a PDF from route occupancy data and trigger download.
@@ -8,13 +9,14 @@ import 'jspdf-autotable';
  * - dayMap: an object mapping day keys to arrays of routes, e.g. { monday: [...], tuesday: [...] }
  *
  * @param {Object|Array} data - either array (routes) or map of day => routes
- * @param {Object} meta - { schoolName, schoolYear, generatedAt (Date) }
+ * @param {Object} meta - { schoolName, schoolYear, generatedAt (Date), scheduleCodes (optional) }
  */
 export function generateRouteOccupancyPDF(data = [], meta = {}) {
   const doc = new jsPDF({ orientation: 'portrait' });
   const schoolName = meta.schoolName || '';
   const schoolYear = meta.schoolYear || '';
   const generatedAt = meta.generatedAt ? new Date(meta.generatedAt) : new Date();
+  const scheduleCodes = meta.scheduleCodes || DEFAULT_SCHEDULE_CODES;
 
   const timestamp = generatedAt.toLocaleString();
   const title = `Resumen de Ocupación por Ruta`;
@@ -35,26 +37,21 @@ export function generateRouteOccupancyPDF(data = [], meta = {}) {
     doc.setFontSize(12);
     doc.text(`${title} ${dayLabel ? `- ${dayLabel}` : ''}`, 14, 36);
 
-    const head = [['Número de Ruta', 'Horario AM', 'Horario MD', 'Horario PM', 'Horario EX', 'Total']];
+    const head = [['Número de Ruta', ...scheduleCodes.map(c => `Horario ${c}`), 'Total']];
 
     const rows = routes.map(r => {
-      const am = Number(r.AM) || 0;
-      const md = Number(r.MD) || 0;
-      const pm = Number(r.PM) || 0;
-      const ex = Number(r.EX) || 0;
-      const total = am + md + pm + ex;
-      return [`Ruta ${r.routeNumber}`, am, md, pm, ex, total];
+      const values = scheduleCodes.map(c => Number(r[c]) || 0);
+      const total = values.reduce((s, v) => s + v, 0);
+      return [`Ruta ${r.routeNumber}`, ...values, total];
     });
 
-    const totals = rows.reduce((acc, r) => ({
-      AM: acc.AM + (Number(r[1]) || 0),
-      MD: acc.MD + (Number(r[2]) || 0),
-      PM: acc.PM + (Number(r[3]) || 0),
-      EX: acc.EX + (Number(r[4]) || 0),
-      total: acc.total + (Number(r[5]) || 0)
-    }), { AM: 0, MD: 0, PM: 0, EX: 0, total: 0 });
+    const totals = scheduleCodes.reduce((acc, c, i) => {
+      acc[c] = rows.reduce((sum, r) => sum + (Number(r[i + 1]) || 0), 0);
+      return acc;
+    }, {});
+    const grandTotal = Object.values(totals).reduce((s, v) => s + v, 0);
 
-    rows.push(['Total', totals.AM, totals.MD, totals.PM, totals.EX, totals.total]);
+    rows.push(['Total', ...scheduleCodes.map(c => totals[c]), grandTotal]);
 
     doc.autoTable({
       startY: 42,

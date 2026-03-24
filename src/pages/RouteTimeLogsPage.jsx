@@ -1,6 +1,6 @@
 // src/pages/RouteTimeLogsPage.jsx
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Typography,
@@ -34,7 +34,6 @@ import {
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import tw from 'twin.macro';
@@ -42,6 +41,7 @@ import { getRouteTimeLogs, getAllRouteTimeLogs } from '../services/routeTimeLogS
 import { deleteRouteTimeLog } from '../services/routeTimeLogService';
 import ExcelJS from 'exceljs';
 import api from '../utils/axiosConfig';
+import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -71,6 +71,7 @@ const RouteTimeLogsPage = () => {
     const [schools, setSchools] = useState([]);
     const [buses, setBuses] = useState([]);
     const [schoolRoutes, setSchoolRoutes] = useState([]);
+    const [schoolScheduleCodes, setSchoolScheduleCodes] = useState([]);
     const [selectedSchool, setSelectedSchool] = useState('');
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
@@ -100,9 +101,11 @@ const RouteTimeLogsPage = () => {
         if (selectedSchool) {
             fetchBusesBySchool(selectedSchool);
             fetchRouteNumbersBySchool(selectedSchool);
+            fetchSchoolSchedules(selectedSchool);
         } else {
             setBuses([]);
             setSchoolRoutes([]);
+            setSchoolScheduleCodes([]);
         }
     }, [selectedSchool]);
 
@@ -139,6 +142,37 @@ const RouteTimeLogsPage = () => {
         }
     };
 
+    const fetchSchoolSchedules = async (schoolId) => {
+        try {
+            const response = await api.get(`/schools/${schoolId}`);
+            const school = response.data?.school || response.data;
+            setSchoolScheduleCodes(getScheduleCodesFromSchool(school?.schedules));
+        } catch (error) {
+            console.error('Error al cargar horarios del colegio:', error);
+            setSchoolScheduleCodes([]);
+        }
+    };
+
+    const availableScheduleCodes = useMemo(() => {
+        if (!selectedSchool) {
+            return [...DEFAULT_SCHEDULE_CODES];
+        }
+
+        if (schoolScheduleCodes.length > 0) {
+            return schoolScheduleCodes
+                .map(code => String(code || '').trim().toUpperCase())
+                .filter(Boolean);
+        }
+
+        return [...DEFAULT_SCHEDULE_CODES];
+    }, [selectedSchool, schoolScheduleCodes]);
+
+    useEffect(() => {
+        if (selectedSchedule && !availableScheduleCodes.includes(selectedSchedule)) {
+            setSelectedSchedule('');
+        }
+    }, [availableScheduleCodes, selectedSchedule]);
+
     const fetchTimeLogs = useCallback(async () => {
         const requestSeq = ++timeLogsRequestSeqRef.current;
         setLoading(true);
@@ -155,7 +189,7 @@ const RouteTimeLogsPage = () => {
             if (selectedSchool) filters.schoolId = selectedSchool;
             if (selectedPlate) filters.plate = selectedPlate;
             if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedSchedule) filters.schedule = selectedSchedule;
+            if (selectedSchedule) filters.schedule = String(selectedSchedule).trim().toUpperCase();
             if (selectedDay) filters.day = selectedDay;
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
@@ -229,10 +263,6 @@ const RouteTimeLogsPage = () => {
         setPage(0);
     };
 
-    const handleRefresh = () => {
-        fetchTimeLogs();
-    };
-
     // Register page-level refresh handler for the global refresh control
     useRegisterPageRefresh(fetchTimeLogs);
 
@@ -275,15 +305,6 @@ const RouteTimeLogsPage = () => {
     // Server returns ordered results; use them directly
     const displayedLogs = timeLogs;
 
-    const getScheduleLabel = (schedule) => {
-        const labels = {
-            'AM': 'Mañana',
-            'MD': 'Mediodía',
-            'PM': 'Tarde',
-            'EX': 'Extracurricular',
-        };
-        return labels[schedule] || schedule;
-    };
 
     const getDayLabel = (day) => {
         const labels = {
@@ -325,7 +346,7 @@ const RouteTimeLogsPage = () => {
             if (selectedSchool) filters.schoolId = selectedSchool;
             if (selectedPlate) filters.plate = selectedPlate;
             if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedSchedule) filters.schedule = selectedSchedule;
+            if (selectedSchedule) filters.schedule = String(selectedSchedule).trim().toUpperCase();
             if (selectedDay) filters.day = selectedDay;
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
@@ -496,6 +517,7 @@ const RouteTimeLogsPage = () => {
                                         setSelectedSchool(e.target.value);
                                         setSelectedPlate('');
                                         setSelectedRoute('');
+                                        setSelectedSchedule('');
                                     }}
                                     label="Colegio"
                                     MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
@@ -570,10 +592,9 @@ const RouteTimeLogsPage = () => {
                                     MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="AM">Mañana</MenuItem>
-                                    <MenuItem value="MD">Mediodía</MenuItem>
-                                    <MenuItem value="PM">Tarde</MenuItem>
-                                    <MenuItem value="EX">Extracurricular</MenuItem>
+                                    {availableScheduleCodes.map(code => (
+                                        <MenuItem key={code} value={code}>{getScheduleLabel(code)}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
                         </Grid>
@@ -772,11 +793,7 @@ const RouteTimeLogsPage = () => {
                                                     <Chip 
                                                         label={getScheduleLabel(log.schedule)} 
                                                         size="small"
-                                                        color={
-                                                            log.schedule === 'AM' ? 'primary' :
-                                                            log.schedule === 'MD' ? 'secondary' :
-                                                            log.schedule === 'PM' ? 'warning' : 'default'
-                                                        }
+                                                        color={getScheduleColor(log.schedule)}
                                                     />
                                                 </TableCell>
                                                 <TableCell>

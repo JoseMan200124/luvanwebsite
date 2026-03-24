@@ -36,7 +36,6 @@ import {
     DirectionsBus,
     Group,
     ArrowBack,
-    TrendingUp,
     People,
     Description as ContractIcon,
     Payment as PaymentIcon,
@@ -52,6 +51,7 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 import RouteStudentsModal from '../components/modals/RouteStudentsModal';
 import { generateRouteOccupancyPDF } from '../utils/pdfExport';
+import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, getScheduleColor, getScheduleBgColor } from '../utils/scheduleConfig';
 import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
@@ -173,13 +173,7 @@ const SchoolDashboardPage = () => {
             setRouteOccupancy(response.data.routes || []);
         } catch (err) {
             console.error('Error fetching route occupancy:', err);
-            // Datos de ejemplo con el nuevo formato
-            setRouteOccupancy([
-                { routeNumber: '1', AM: 25, PM: 18, MD: 12, EX: 8 },
-                { routeNumber: '2', AM: 20, PM: 22, MD: 15, EX: 5 },
-                { routeNumber: '3', AM: 18, PM: 25, MD: 10, EX: 12 },
-                { routeNumber: '4', AM: 22, PM: 20, MD: 8, EX: 6 }
-            ]);
+            setRouteOccupancy([]);
         }
     }, [auth.token, schoolId, schoolYear, selectedDay]);
 
@@ -416,6 +410,7 @@ const SchoolDashboardPage = () => {
                 schoolName: currentSchool?.name || '',
                 schoolYear: currentSchoolYear || '',
                 generatedAt: new Date(),
+                scheduleCodes,
                 dayLabels
             });
         } catch (err) {
@@ -424,13 +419,18 @@ const SchoolDashboardPage = () => {
         }
     };
 
-    // Totals for route occupancy columns
-    const totals = routeOccupancy.reduce((acc, r) => ({
-        AM: acc.AM + (Number(r.AM) || 0),
-        MD: acc.MD + (Number(r.MD) || 0),
-        PM: acc.PM + (Number(r.PM) || 0),
-        EX: acc.EX + (Number(r.EX) || 0)
-    }), { AM: 0, MD: 0, PM: 0, EX: 0 });
+    // Derive schedule codes dynamically from the current school's config
+    const scheduleCodes = currentSchool?.schedules
+        ? getScheduleCodesFromSchool(currentSchool.schedules)
+        : (routeOccupancy.length > 0
+            ? [...new Set(routeOccupancy.flatMap(r => Object.keys(r).filter(k => k !== 'routeNumber')))]
+            : DEFAULT_SCHEDULE_CODES);
+
+    // Totals for route occupancy columns — dynamic
+    const totals = routeOccupancy.reduce((acc, r) => {
+        scheduleCodes.forEach(code => { acc[code] = (acc[code] || 0) + (Number(r[code]) || 0); });
+        return acc;
+    }, {});
 
     if (loading && !currentSchool) {
         return (
@@ -547,26 +547,13 @@ const SchoolDashboardPage = () => {
                                                         Número de Ruta
                                                     </Typography>
                                                 </TableCell>
-                                                <TableCell align="center">
-                                                    <Typography variant="subtitle2" fontWeight="bold">
-                                                        Horario AM
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Typography variant="subtitle2" fontWeight="bold">
-                                                        Horario MD
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Typography variant="subtitle2" fontWeight="bold">
-                                                        Horario PM
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Typography variant="subtitle2" fontWeight="bold">
-                                                        Horario EX
-                                                    </Typography>
-                                                </TableCell>
+                                                {scheduleCodes.map(code => (
+                                                    <TableCell key={code} align="center">
+                                                        <Typography variant="subtitle2" fontWeight="bold">
+                                                            Horario {code}
+                                                        </Typography>
+                                                    </TableCell>
+                                                ))}
                                                 <TableCell align="center">
                                                     <Typography variant="subtitle2" fontWeight="bold">
                                                         Total
@@ -576,7 +563,7 @@ const SchoolDashboardPage = () => {
                                         </TableHead>
                                         <TableBody>
                                             {routeOccupancy.map((route, index) => {
-                                                const rowTotal = (Number(route.AM) || 0) + (Number(route.MD) || 0) + (Number(route.PM) || 0) + (Number(route.EX) || 0);
+                                                const rowTotal = scheduleCodes.reduce((sum, code) => sum + (Number(route[code]) || 0), 0);
                                                 return (
                                                     <TableRow key={index}>
                                                         <TableCell>
@@ -584,94 +571,37 @@ const SchoolDashboardPage = () => {
                                                                 Ruta {route.routeNumber}
                                                             </Typography>
                                                         </TableCell>
-                                                        <TableCell align="center">
-                                                            <Button
-                                                                variant="contained"
-                                                                color="primary"
-                                                                size="small"
-                                                                disableElevation
-                                                                disableRipple
-                                                                sx={{ 
-                                                                    minWidth: '60px',
-                                                                    boxShadow: 'none',
-                                                                    backgroundColor: route.AM > 0 ? 'primary.main' : 'grey.300',
-                                                                    color: route.AM > 0 ? 'white' : 'grey.600',
-                                                                    '&:hover': {
-                                                                        backgroundColor: route.AM > 0 ? 'primary.dark' : 'grey.400',
-                                                                        boxShadow: 'none'
-                                                                    }
-                                                                }}
-                                                                onClick={() => handleRouteScheduleClick(route.routeNumber, 'AM')}
-                                                            >
-                                                                {route.AM}
-                                                            </Button>
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <Button
-                                                                variant="contained"
-                                                                color="warning"
-                                                                size="small"
-                                                                disableElevation
-                                                                disableRipple
-                                                                sx={{ 
-                                                                    minWidth: '60px',
-                                                                    boxShadow: 'none',
-                                                                    backgroundColor: route.MD > 0 ? 'warning.main' : 'grey.300',
-                                                                    color: route.MD > 0 ? 'white' : 'grey.600',
-                                                                    '&:hover': {
-                                                                        backgroundColor: route.MD > 0 ? 'warning.dark' : 'grey.400',
-                                                                        boxShadow: 'none'
-                                                                    }
-                                                                }}
-                                                                onClick={() => handleRouteScheduleClick(route.routeNumber, 'MD')}
-                                                            >
-                                                                {route.MD}
-                                                            </Button>
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <Button
-                                                                variant="contained"
-                                                                color="success"
-                                                                size="small"
-                                                                disableElevation
-                                                                disableRipple
-                                                                sx={{ 
-                                                                    minWidth: '60px',
-                                                                    boxShadow: 'none',
-                                                                    backgroundColor: route.PM > 0 ? 'success.main' : 'grey.300',
-                                                                    color: route.PM > 0 ? 'white' : 'grey.600',
-                                                                    '&:hover': {
-                                                                        backgroundColor: route.PM > 0 ? 'success.dark' : 'grey.400',
-                                                                        boxShadow: 'none'
-                                                                    }
-                                                                }}
-                                                                onClick={() => handleRouteScheduleClick(route.routeNumber, 'PM')}
-                                                            >
-                                                                {route.PM}
-                                                            </Button>
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <Button
-                                                                variant="contained"
-                                                                color="info"
-                                                                size="small"
-                                                                disableElevation
-                                                                disableRipple
-                                                                sx={{ 
-                                                                    minWidth: '60px',
-                                                                    boxShadow: 'none',
-                                                                    backgroundColor: route.EX > 0 ? 'info.main' : 'grey.300',
-                                                                    color: route.EX > 0 ? 'white' : 'grey.600',
-                                                                    '&:hover': {
-                                                                        backgroundColor: route.EX > 0 ? 'info.dark' : 'grey.400',
-                                                                        boxShadow: 'none'
-                                                                    }
-                                                                }}
-                                                                onClick={() => handleRouteScheduleClick(route.routeNumber, 'EX')}
-                                                            >
-                                                                {route.EX}
-                                                            </Button>
-                                                        </TableCell>
+                                                        {scheduleCodes.map(code => {
+                                                            const count = Number(route[code]) || 0;
+                                                            const muiColor = getScheduleColor(code);
+                                                            const safeColor = muiColor === 'default' ? 'primary' : muiColor;
+                                                            const bgWhenActive = getScheduleBgColor(code);
+
+                                                            return (
+                                                                <TableCell key={code} align="center">
+                                                                    <Button
+                                                                        variant="contained"
+                                                                        color={safeColor}
+                                                                        size="small"
+                                                                        disableElevation
+                                                                        disableRipple
+                                                                        sx={{ 
+                                                                            minWidth: '60px',
+                                                                            boxShadow: 'none',
+                                                                            backgroundColor: count > 0 ? bgWhenActive : 'grey.300',
+                                                                            color: count > 0 ? 'text.primary' : 'grey.600',
+                                                                            '&:hover': {
+                                                                                backgroundColor: count > 0 ? bgWhenActive : 'grey.400',
+                                                                                boxShadow: 'none'
+                                                                            }
+                                                                        }}
+                                                                        onClick={() => handleRouteScheduleClick(route.routeNumber, code)}
+                                                                    >
+                                                                        {count}
+                                                                    </Button>
+                                                                </TableCell>
+                                                            );
+                                                        })}
                                                         <TableCell align="center">
                                                             <Typography variant="subtitle1" fontWeight="bold">
                                                                 {rowTotal}
@@ -687,26 +617,13 @@ const SchoolDashboardPage = () => {
                                                         Total
                                                     </Typography>
                                                 </TableCell>
-                                                <TableCell align="center">
-                                                    <Typography variant="subtitle1" fontWeight="bold">
-                                                        {totals.AM}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Typography variant="subtitle1" fontWeight="bold">
-                                                        {totals.MD}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Typography variant="subtitle1" fontWeight="bold">
-                                                        {totals.PM}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Typography variant="subtitle1" fontWeight="bold">
-                                                        {totals.EX}
-                                                    </Typography>
-                                                </TableCell>
+                                                {scheduleCodes.map(code => (
+                                                    <TableCell key={code} align="center">
+                                                        <Typography variant="subtitle1" fontWeight="bold">
+                                                            {totals[code] || 0}
+                                                        </Typography>
+                                                    </TableCell>
+                                                ))}
                                             </TableRow>
                                         </TableBody>
                                     </Table>

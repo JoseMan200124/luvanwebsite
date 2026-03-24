@@ -58,6 +58,8 @@ import SubmissionPreview from './SubmissionPreview';
 import ExcelJS from 'exceljs';
 import moment from 'moment';
 import PermissionGuard from '../components/PermissionGuard';
+import { DEFAULT_SCHEDULE_CODES, ensureSchedules, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
+import EditSchedulesModal from '../components/modals/EditSchedulesModal';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -153,6 +155,7 @@ const SchoolYearSelectionPage = () => {
     // Estados para diálogos y acciones
     const [selectedSchool, setSelectedSchool] = useState(null);
     const [openEditDialog, setOpenEditDialog] = useState(false);
+    const [openEditSchedulesModal, setOpenEditSchedulesModal] = useState(false);
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissions, setSubmissions] = useState([]);
     const [submissionDetail, setSubmissionDetail] = useState(null);
@@ -208,41 +211,13 @@ const SchoolYearSelectionPage = () => {
         // Aquí se pueden agregar más ciclos escolares en el futuro
     ];
 
-    // Helper para asegurar que los horarios tengan 4 slots fijos (AM, MD, PM, EX)
+    // Helper para asegurar que los horarios tengan todos los slots configurados
+    // For EXISTING schools: preserves whatever schedules they have as-is.
+    // For NEW schools (empty schedules): seeds with the 4 default codes.
     const ensureFourSchedules = (schedules) => {
-        const codes = ['AM', 'MD', 'PM', 'EX'];
-        const result = codes.map((code) => ({ code, name: `HORARIO ${code}`, times: ['N/A'] }));
-
-        if (!Array.isArray(schedules)) return result;
-
-        // Try to fill by code (if schedule.name contains the code) or by index
-        schedules.forEach((s) => {
-            if (!s) return;
-            // Determine code from name if possible
-            const name = (s.name || '').toString().toUpperCase();
-            let matched = null;
-            ['AM', 'MD', 'PM', 'EX'].forEach((c) => {
-                if (name.includes(c)) matched = c;
-            });
-            if (matched) {
-                const idx = codes.indexOf(matched);
-                if (idx !== -1) {
-                    result[idx].times = Array.isArray(s.times) && s.times.length > 0 ? [s.times[0]] : ['N/A'];
-                }
-            }
-        });
-
-        // If none matched by name, try to map by order
-        const anyMatched = result.some((r, i) => r.times[0] !== 'N/A');
-        if (!anyMatched) {
-            schedules.forEach((s, i) => {
-                if (i < 4) {
-                    result[i].times = Array.isArray(s.times) && s.times.length > 0 ? [s.times[0]] : ['N/A'];
-                }
-            });
-        }
-
-        return result;
+        const arr = Array.isArray(schedules) ? schedules : [];
+        if (arr.length > 0) return [...arr]; // existing school — keep as-is
+        return ensureSchedules([], DEFAULT_SCHEDULE_CODES); // new school — seed defaults
     };
 
     const fetchSchoolsByYear = useCallback(async () => {
@@ -378,8 +353,11 @@ const SchoolYearSelectionPage = () => {
                 parsedSchedules = [];
             }
         }
-        // Normalize to 4 fixed schedules
-        const normalized = ensureFourSchedules(parsedSchedules);
+        // Normalize to 4 fixed schedules and tag each with _originalCode for change tracking
+        const normalized = ensureFourSchedules(parsedSchedules).map(s => ({
+            ...s,
+            _originalCode: s.code || null   // track original code to detect renames on save
+        }));
         setSchoolSchedules(normalized);
 
         let parsedGrades = [];
@@ -406,34 +384,25 @@ const SchoolYearSelectionPage = () => {
         }
         setSchoolRouteNumbers(parsedRouteNumbers);
 
-        // Load routeSchedules from backend detail
-        try {
-            const detail = await api.get(`/schools/${school.id}`);
-            const rs = (detail.data && detail.data.school && Array.isArray(detail.data.school.routeSchedules)) ? detail.data.school.routeSchedules : [];
-            // Normalize backend entries to the new shape with schedules[]
+        // Load routeSchedules directly from the school object (already populated by formatSchoolResponse in the list API).
+        {
+            let rs = [];
+            if (Array.isArray(school.routeSchedules)) {
+                rs = school.routeSchedules;
+            } else if (typeof school.routeSchedules === 'string' && school.routeSchedules.trim()) {
+                try { rs = JSON.parse(school.routeSchedules); } catch { rs = []; }
+            }
+            if (!Array.isArray(rs)) rs = [];
+
+            // All routeSchedules in DB use the canonical {schedules:[{code,name,times}]} format.
             const normalizeEntry = (x) => {
                 if (!x) return { routeNumber: '', schedules: [] };
-                if (Array.isArray(x.schedules)) {
-                    // Ensure each schedule has {code,name,times[0]}
-                    const cleaned = x.schedules.map(s => ({
-                        code: s && s.code ? s.code : null,
-                        name: s && s.name ? s.name : (s && s.code ? `HORARIO ${s.code}` : 'HORARIO'),
-                        times: Array.isArray(s && s.times) && s.times[0] ? [String(s.times[0])] : []
-                    }));
-                    return { routeNumber: String(x.routeNumber), schedules: cleaned };
-                }
-                // Legacy times[] -> map to school schedules by matching times
-                const times = Array.isArray(x.times) ? x.times.filter(Boolean).map(String) : [];
-                const schedulesForTimes = times.map(t => {
-                    // Try to find a school schedule that has this time to derive code/name
-                    const sch = (schoolSchedules || []).find(ss => Array.isArray(ss.times) && ss.times.includes(t));
-                    return {
-                        code: sch ? sch.code : null,
-                        name: sch ? sch.name : 'HORARIO',
-                        times: [t]
-                    };
-                });
-                return { routeNumber: String(x.routeNumber), schedules: schedulesForTimes };
+                const cleaned = (Array.isArray(x.schedules) ? x.schedules : []).map(s => ({
+                    code: s?.code ? String(s.code).toUpperCase() : null,
+                    name: s?.name ? s.name : (s?.code ? `HORARIO ${String(s.code).toUpperCase()}` : 'HORARIO'),
+                    times: Array.isArray(s?.times) && s.times[0] ? [String(s.times[0])] : []
+                })).filter(s => s.code);
+                return { routeNumber: String(x.routeNumber), schedules: cleaned };
             };
 
             const rnSet = new Set((parsedRouteNumbers || []).map(r => String(r)));
@@ -445,8 +414,6 @@ const SchoolYearSelectionPage = () => {
                 if (!rnSet.has(key)) aligned.push({ routeNumber: key, schedules: normalizeEntry(x).schedules });
             });
             setSchoolRouteSchedules(aligned);
-        } catch (e) {
-            setSchoolRouteSchedules((parsedRouteNumbers || []).map(rn => ({ routeNumber: String(rn), schedules: [] })));
         }
 
         let parsedExtraFields = [];
@@ -584,12 +551,7 @@ const SchoolYearSelectionPage = () => {
             dailyPenalty: 0,
             penaltyPaused: false
         });
-        setSchoolSchedules([
-            { code: 'AM', name: 'HORARIO AM', times: ['N/A'] },
-            { code: 'MD', name: 'HORARIO MD', times: ['N/A'] },
-            { code: 'PM', name: 'HORARIO PM', times: ['N/A'] },
-            { code: 'EX', name: 'HORARIO EX', times: ['N/A'] }
-        ]);
+        setSchoolSchedules(ensureSchedules([], DEFAULT_SCHEDULE_CODES).map(s => ({ ...s, _originalCode: null })));
         setSchoolGrades([]);
         setSchoolExtraFields([]);
         setSchoolRouteNumbers([]);
@@ -601,6 +563,7 @@ const SchoolYearSelectionPage = () => {
 
     const handleCloseEditDialog = () => {
         setOpenEditDialog(false);
+        setOpenEditSchedulesModal(false);
         setSelectedSchool(null);
         setSchoolSchedules([]);
         setSchoolGrades([]);
@@ -616,6 +579,42 @@ const SchoolYearSelectionPage = () => {
             routes: false,
             extraFields: false
         });
+    };
+
+    const handleOpenEditSchedulesModal = () => {
+        if (!selectedSchool?.id) return;
+        setOpenEditSchedulesModal(true);
+    };
+
+    const handleCloseEditSchedulesModal = () => {
+        setOpenEditSchedulesModal(false);
+    };
+
+    const handleEditSchedulesSuccess = (result) => {
+        const updatedSchedules = Array.isArray(result?.school?.schedules)
+            ? result.school.schedules
+            : [];
+
+        const normalized = ensureFourSchedules(updatedSchedules).map(s => ({
+            ...s,
+            _originalCode: s.code || null
+        }));
+
+        setSchoolSchedules(normalized);
+        setSelectedSchool((prev) => prev ? {
+            ...prev,
+            schedules: updatedSchedules,
+            routeSchedules: result?.school?.routeSchedules ?? prev.routeSchedules
+        } : prev);
+
+        // Sync schoolRouteSchedules state so "Guardar Cambios" doesn't revert
+        // deleted/edited schedule codes back into routeSchedules.
+        const updatedRS = result?.school?.routeSchedules;
+        if (Array.isArray(updatedRS)) {
+            setSchoolRouteSchedules(updatedRS);
+        }
+
+        fetchSchoolsByYear();
     };
 
     const handleCloseSubmissionDialog = () => {
@@ -662,6 +661,37 @@ const SchoolYearSelectionPage = () => {
             clone[scheduleIndex].times = [value ? value : 'N/A'];
             return clone;
         });
+    };
+
+    const DAY_OPTIONS = [
+        { key: 'monday', label: 'Lun' },
+        { key: 'tuesday', label: 'Mar' },
+        { key: 'wednesday', label: 'Mié' },
+        { key: 'thursday', label: 'Jue' },
+        { key: 'friday', label: 'Vie' },
+    ];
+
+    const ALL_DAY_KEYS = DAY_OPTIONS.map(d => d.key);
+    const DAY_LABEL_BY_KEY = DAY_OPTIONS.reduce((acc, d) => {
+        acc[d.key] = d.label;
+        return acc;
+    }, {});
+
+    const formatTimeTo12h = (hhmm) => {
+        if (!hhmm || typeof hhmm !== 'string') return hhmm;
+        const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+        if (!m) return hhmm;
+        const h24 = Number(m[1]);
+        const min = m[2];
+        if (Number.isNaN(h24) || h24 < 0 || h24 > 23) return hhmm;
+        const suffix = h24 >= 12 ? 'PM' : 'AM';
+        const h12 = ((h24 + 11) % 12) + 1;
+        return `${h12}:${min} ${suffix}`;
+    };
+
+    const isAllDaysSelected = (days) => {
+        if (!Array.isArray(days) || days.length === 0) return true;
+        return ALL_DAY_KEYS.every(day => days.includes(day));
     };
 
     // Funciones para grados
@@ -777,23 +807,82 @@ const SchoolYearSelectionPage = () => {
             return;
         }
 
+        // Validate schedules: codes must be 2-4 uppercase letters, no duplicates
+        const schedulesWithCode = schoolSchedules.filter(s => s && s.code);
+        const invalidCode = schedulesWithCode.find(s => !/^[A-Z]{2,4}$/.test(s.code));
+        if (invalidCode) {
+            setSnackbar({ open: true, message: `Código de horario inválido: "${invalidCode.code}". Use 2 a 4 letras mayúsculas (ej: AM, VE, NO).`, severity: 'error' });
+            return;
+        }
+        const codeCounts = {};
+        for (const s of schedulesWithCode) {
+            codeCounts[s.code] = (codeCounts[s.code] || 0) + 1;
+        }
+        const dupCode = Object.keys(codeCounts).find(c => codeCounts[c] > 1);
+        if (dupCode) {
+            setSnackbar({ open: true, message: `Código de horario duplicado: "${dupCode}". Cada código debe ser único.`, severity: 'error' });
+            return;
+        }
+
+        // Validate duplicate base time for the same day
+        const occupancyByDayTime = new Map();
+        for (const s of schedulesWithCode) {
+            const time = Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? String(s.times[0]) : null;
+            if (!time) continue;
+
+            const daysForSchedule = isAllDaysSelected(s.days) ? ALL_DAY_KEYS : s.days;
+            for (const day of daysForSchedule) {
+                const k = `${day}|${time}`;
+                if (occupancyByDayTime.has(k)) {
+                    const existingCode = occupancyByDayTime.get(k);
+                    const dayLabel = DAY_LABEL_BY_KEY[day] || day;
+                    const timeLabel = formatTimeTo12h(time);
+                    setSnackbar({
+                        open: true,
+                        message: `Conflicto de hora base: los horarios "${existingCode}" y "${s.code}" comparten ${timeLabel} en ${dayLabel}.`,
+                        severity: 'error'
+                    });
+                    return;
+                }
+                occupancyByDayTime.set(k, s.code);
+            }
+        }
+
+        // Warn if there are entries without code (they will be skipped)
+        const emptyCodeEntries = schoolSchedules.filter(s => s && !s.code);
+        if (emptyCodeEntries.length > 0) {
+            // Don't block, just skip them silently during normalization
+        }
+
         try {
-            // Normalize schedules to required shape: 4 entries AM/MD/PM/EX with name 'HORARIO XX' and single time or 'N/A'
-            const normalizedSchedules = ensureFourSchedules(schoolSchedules).map(s => ({
-                code: s.code,
-                name: `HORARIO ${s.code}`,
-                times: Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? [s.times[0]] : ['N/A']
-            }));
+            // Normalize schedules: filter out entries without code, preserve days
+            const normalizedSchedules = schedulesWithCode
+                .map(s => {
+                    const entry = {
+                        code: s.code.toUpperCase(),
+                        name: s.name || `HORARIO ${s.code.toUpperCase()}`,
+                        times: Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? [s.times[0]] : ['N/A']
+                    };
+                    // Preserve days restriction if set
+                    if (Array.isArray(s.days) && s.days.length > 0) {
+                        entry.days = s.days;
+                    }
+                    // Include originalCode so backend can detect renames and cascade updates
+                    if (s._originalCode !== undefined && s._originalCode !== null) {
+                        entry.originalCode = s._originalCode;
+                    }
+                    return entry;
+                });
 
             // Build routeSchedules payload aligned to current routeNumbers
             const routeSchedulesPayload = (schoolRouteNumbers || []).map(rn => {
                 const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn));
                 const schedules = Array.isArray(entry && entry.schedules) ? entry.schedules : [];
-                // Clean schedules: ensure unique by code (AM/MD/PM/EX), keep only first time if present
+                // Clean schedules: ensure unique by code, keep only first time if present
                 const byCode = new Map();
                 (schedules || []).forEach(s => {
                     if (!s) return;
-                    const code = s.code || (s.name && s.name.includes('AM') ? 'AM' : s.name && s.name.includes('MD') ? 'MD' : s.name && s.name.includes('PM') ? 'PM' : s.name && s.name.includes('EX') ? 'EX' : null);
+                    const code = (s.code || '').toUpperCase() || null;
                     const time = Array.isArray(s.times) && s.times[0] ? String(s.times[0]) : null;
                     const name = s.name || (code ? `HORARIO ${code}` : 'HORARIO');
                     if (code) byCode.set(code, { code, name, times: time ? [time] : [] });
@@ -1030,10 +1119,10 @@ const SchoolYearSelectionPage = () => {
                                     { header: 'Correo de Contacto', key: 'contactEmail', width: 30 },
                                     { header: 'Teléfono de Contacto', key: 'contactPhone', width: 20 },
                                     { header: 'Enlace Whatsapp', key: 'whatsapp', width: 20 },
-                                    { header: 'Horario AM', key: 'scheduleAM', width: 14, style: { numFmt: '@' } },
-                                    { header: 'Horario MD', key: 'scheduleMD', width: 14, style: { numFmt: '@' } },
-                                    { header: 'Horario PM', key: 'schedulePM', width: 14, style: { numFmt: '@' } },
-                                    { header: 'Horario EX', key: 'scheduleEX', width: 14, style: { numFmt: '@' } },
+                                    // Dynamic schedule columns
+                                    ...DEFAULT_SCHEDULE_CODES.map(code => ({
+                                        header: `Horario ${code}`, key: `schedule${code}`, width: 14, style: { numFmt: '@' }
+                                    })),
                                     { header: 'Grados', key: 'grades', width: 30 },
                                     { header: 'Tarifa Completa', key: 'transportFeeComplete', width: 18, style: { numFmt: '0.00' } },
                                     { header: 'Tarifa Media', key: 'transportFeeHalf', width: 18, style: { numFmt: '0.00' } },
@@ -1055,10 +1144,10 @@ const SchoolYearSelectionPage = () => {
                                     contactEmail: 'contacto@colegio.com',
                                     contactPhone: '12345678',
                                     whatsapp: '',
-                                    scheduleAM: '07:00',
-                                    scheduleMD: '12:00',
-                                    schedulePM: '13:00',
-                                    scheduleEX: '15:00',
+                                    // Dynamic schedule example values
+                                    ...Object.fromEntries(DEFAULT_SCHEDULE_CODES.map((code, i) => [
+                                        `schedule${code}`, ['07:00', '12:00', '13:00', '15:00'][i] || 'N/A'
+                                    ])),
                                     grades: 'Kinder,1ero,2do',
                                     transportFeeComplete: 0.00,
                                     transportFeeHalf: 0.00,
@@ -1599,22 +1688,23 @@ const SchoolYearSelectionPage = () => {
                         </StyledAccordionSummary>
                         <AccordionDetails>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                {schoolSchedules.map((sch, scheduleIndex) => (
-                                    <Paper key={scheduleIndex} sx={{ p: 2 }}>
-                                        <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                                            {sch.code ? `Horario ${sch.code}` : `Horario #${scheduleIndex + 1}`}
-                                        </Typography>
-                                        <TextField
-                                            label="Hora (HH:mm)"
-                                            variant="outlined"
-                                            type="time"
-                                            value={Array.isArray(sch.times) ? (sch.times[0] === 'N/A' ? '' : sch.times[0]) : ''}
-                                            onChange={(e) => handleTimeChange(e, scheduleIndex, 0)}
-                                            InputLabelProps={{ shrink: true }}
-                                            fullWidth
-                                        />
-                                    </Paper>
-                                ))}
+                                <Alert severity="info" variant="outlined">
+                                    La edición de horarios ahora se realiza desde un modal dedicado para evitar duplicidad.
+                                </Alert>
+
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Horarios configurados actualmente: {Array.isArray(schoolSchedules) ? schoolSchedules.length : 0}
+                                    </Typography>
+                                    <Button
+                                        variant="contained"
+                                        startIcon={<Edit />}
+                                        onClick={handleOpenEditSchedulesModal}
+                                        disabled={!selectedSchool?.id}
+                                    >
+                                        Abrir Modal de Horarios
+                                    </Button>
+                                </Box>
                             </Box>
                         </AccordionDetails>
                     </StyledAccordion>
@@ -1904,6 +1994,13 @@ const SchoolYearSelectionPage = () => {
                     <Button onClick={handleCloseSubmissionDialog}>Cerrar</Button>
                 </DialogActions>
             </Dialog>
+
+            <EditSchedulesModal
+                open={openEditSchedulesModal}
+                onClose={handleCloseEditSchedulesModal}
+                school={selectedSchool ? { ...selectedSchool, schedules: schoolSchedules } : null}
+                onSuccess={handleEditSchedulesSuccess}
+            />
 
             {/* Popover para mostrar grados adicionales */}
             <Popover
