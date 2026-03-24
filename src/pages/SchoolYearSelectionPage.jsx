@@ -1688,10 +1688,6 @@ const SchoolYearSelectionPage = () => {
                         </StyledAccordionSummary>
                         <AccordionDetails>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <Alert severity="info" variant="outlined">
-                                    La edición de horarios ahora se realiza desde un modal dedicado para evitar duplicidad.
-                                </Alert>
-
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                                     <Typography variant="body2" color="text.secondary">
                                         Horarios configurados actualmente: {Array.isArray(schoolSchedules) ? schoolSchedules.length : 0}
@@ -1702,7 +1698,7 @@ const SchoolYearSelectionPage = () => {
                                         onClick={handleOpenEditSchedulesModal}
                                         disabled={!selectedSchool?.id}
                                     >
-                                        Abrir Modal de Horarios
+                                        Editar Horarios del Colegio
                                     </Button>
                                 </Box>
                             </Box>
@@ -2000,6 +1996,7 @@ const SchoolYearSelectionPage = () => {
                 onClose={handleCloseEditSchedulesModal}
                 school={selectedSchool ? { ...selectedSchool, schedules: schoolSchedules } : null}
                 onSuccess={handleEditSchedulesSuccess}
+                onNotify={(snackbarState) => setSnackbar(snackbarState)}
             />
 
             {/* Popover para mostrar grados adicionales */}

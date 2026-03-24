@@ -28,11 +28,12 @@ import {
   getScheduleDeletionImpact
 } from '../../services/scheduleService';
 
-const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
+const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
+  const notify = (message, severity = 'info') => {
+    if (onNotify) onNotify({ open: true, message, severity });
+  };
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [pendingDeleteIndex, setPendingDeleteIndex] = useState(null);
   const [downloadAffectedOnSave, setDownloadAffectedOnSave] = useState(false);
@@ -63,8 +64,6 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
       : [];
 
     setSchedules(scheduleArray);
-    setError(null);
-    setSuccess(null);
     setConfirmDeleteOpen(false);
     setPendingDeleteIndex(null);
     setDownloadAffectedOnSave(false);
@@ -251,7 +250,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
         if (dayTimeMap.has(key)) {
           const existingCode = dayTimeMap.get(key);
           const dayLabel = dayLabelMap[day] || day;
-          return `No se permite repetir la hora base ${time} para el día ${dayLabel}. Conflicto entre horarios "${existingCode}" y "${sch.code}".`;
+          return `Conflicto entre horarios "${existingCode}" y "${sch.code}". Conflicto entre la hora base y los días aplicables.`;
         }
         dayTimeMap.set(key, sch.code);
       }
@@ -262,13 +261,11 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
 
   const handleSubmit = async () => {
     setLoading(true);
-    setError(null);
-    setSuccess(null);
 
     try {
       const localError = validateLocalSchedules();
       if (localError) {
-        setError(localError);
+        notify(localError, 'error');
         setLoading(false);
         return;
       }
@@ -277,7 +274,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
 
       const validation = validateSchedules(payloadSchedules);
       if (!validation.valid) {
-        setError(validation.errors.join('; '));
+        notify(validation.errors.join('; '), 'error');
         setLoading(false);
         return;
       }
@@ -292,7 +289,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
           await downloadScheduleDeletionZip(result.scheduleDeletionDownload.token);
         } catch (downloadError) {
           console.error('Error downloading affected students ZIP:', downloadError);
-          setError('Los horarios se guardaron, pero no se pudo descargar el listado de estudiantes afectados.');
+          notify('Los horarios se guardaron, pero no se pudo descargar el listado de estudiantes afectados.', 'warning');
         }
       }
 
@@ -300,25 +297,23 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
         const changes = result.scheduleChanges.changes
           .map(change => formatScheduleChange(change))
           .join('\n');
-        setSuccess(`Horarios actualizados. Cambios propagados:\n${changes}`);
+        notify(`Horarios actualizados. Cambios propagados:\n${changes}`, 'success');
       } else if (result?.scheduleDeletionDownload?.available) {
-        setSuccess('Horarios actualizados exitosamente. Se descargó el listado de estudiantes afectados.');
+        notify('Horarios actualizados exitosamente. Se descargó el listado de estudiantes afectados.', 'success');
       } else {
-        setSuccess('Horarios actualizados exitosamente');
+        notify('Horarios actualizados exitosamente', 'success');
       }
 
       if (onSuccess) {
         onSuccess(result);
       }
 
-      setTimeout(() => {
-        onClose();
-      }, 2000);
+      onClose();
     } catch (err) {
       if (err?.code === 'SCHEDULE_DELETION_CONFIRMATION_REQUIRED') {
-        setError('El backend requiere confirmación explícita para eliminar horarios con paradas asociadas. Confirma la eliminación desde el modal de borrar horario e intenta guardar nuevamente.');
+        notify('El backend requiere confirmación explícita para eliminar horarios con paradas asociadas. Confirma la eliminación desde el modal de borrar horario e intenta guardar nuevamente.', 'error');
       } else {
-        setError(err.message || 'Error al actualizar horarios');
+        notify(err.message || 'Error al actualizar horarios', 'error');
       }
     } finally {
       setLoading(false);
@@ -334,9 +329,6 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>Editar Horarios de {school?.name}</DialogTitle>
       <DialogContent>
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {success && <Alert severity="success" sx={{ mb: 2, whiteSpace: 'pre-line' }}>{success}</Alert>}
-
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {schedules.map((sch, scheduleIndex) => {
             const codeError = sch.code && (sch.code.length < 2 || !/^[A-Z]{2,4}$/.test(sch.code));
