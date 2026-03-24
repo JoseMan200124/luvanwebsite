@@ -596,7 +596,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                       const dayLabelMap = { monday: 'Lun', tuesday: 'Mar', wednesday: 'Mié', thursday: 'Jue', friday: 'Vie' };
                       return (
                         <>
-                          {schDays && (
+                          {schDays && allowedDays.length < 5 && (
                             <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4, marginBottom: 2 }}>
                               Este horario solo aplica: {allowedDays.map(d => dayLabelMap[d] || d).join(', ')}
                             </div>

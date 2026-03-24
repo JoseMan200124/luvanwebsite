@@ -15,16 +15,30 @@ import {
   CircularProgress,
   Grid,
   Chip,
-  Typography
+  Typography,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { updateSchoolSchedules, validateSchedules, formatScheduleChange } from '../../services/scheduleService';
+import {
+  updateSchoolSchedules,
+  validateSchedules,
+  formatScheduleChange,
+  downloadScheduleDeletionZip,
+  getScheduleDeletionImpact
+} from '../../services/scheduleService';
 
 const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [pendingDeleteIndex, setPendingDeleteIndex] = useState(null);
+  const [downloadAffectedOnSave, setDownloadAffectedOnSave] = useState(false);
+  const [hasConfirmedLocalDeletion, setHasConfirmedLocalDeletion] = useState(false);
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
+  const [deleteImpact, setDeleteImpact] = useState(null);
 
   const DAY_OPTIONS = [
     { key: 'monday', label: 'Lun' },
@@ -44,17 +58,23 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
         code: s?.code || '',
         name: s?.name || '',
         times: Array.isArray(s?.times) ? s.times : ['N/A'],
-        days: Array.isArray(s?.days) ? s.days : []
+        days: Array.isArray(s?.days) && s.days.length > 0 ? s.days : ALL_DAY_KEYS
       }))
       : [];
 
     setSchedules(scheduleArray);
     setError(null);
     setSuccess(null);
+    setConfirmDeleteOpen(false);
+    setPendingDeleteIndex(null);
+    setDownloadAffectedOnSave(false);
+    setHasConfirmedLocalDeletion(false);
+    setDeleteImpactLoading(false);
+    setDeleteImpact(null);
   }, [open, school?.id]);
 
   const isAllDaysSelected = (days) => {
-    if (!Array.isArray(days) || days.length === 0) return true;
+    if (!Array.isArray(days) || days.length === 0) return false;
     return ALL_DAY_KEYS.every(day => days.includes(day));
   };
 
@@ -65,13 +85,57 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
         code: '',
         name: '',
         times: ['N/A'],
-        days: []
+        days: [...ALL_DAY_KEYS]
       }
     ]));
   };
 
   const handleRemoveSchedule = (index) => {
     setSchedules(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const requestRemoveSchedule = async (index) => {
+    const targetSchedule = schedules[index];
+    setPendingDeleteIndex(index);
+    setDeleteImpactLoading(true);
+    setDeleteImpact(null);
+
+    try {
+      const impact = await getScheduleDeletionImpact(school.id, {
+        code: targetSchedule?.code,
+        originalCode: targetSchedule?.code
+      });
+      setDeleteImpact(impact);
+    } catch (impactError) {
+      console.error('Error loading schedule deletion impact:', impactError);
+      setDeleteImpact({
+        scheduleCode: targetSchedule?.code || null,
+        scheduleId: null,
+        affectedScheduleSlots: 0,
+        affectedStudents: 0,
+        affectedFamilies: 0
+      });
+    } finally {
+      setDeleteImpactLoading(false);
+      setConfirmDeleteOpen(true);
+    }
+  };
+
+  const cancelRemoveSchedule = () => {
+    setConfirmDeleteOpen(false);
+    setPendingDeleteIndex(null);
+    setDeleteImpact(null);
+    setDeleteImpactLoading(false);
+  };
+
+  const confirmRemoveSchedule = () => {
+    if (pendingDeleteIndex == null) return;
+    handleRemoveSchedule(pendingDeleteIndex);
+    setHasConfirmedLocalDeletion(true);
+    setConfirmDeleteOpen(false);
+    setPendingDeleteIndex(null);
+    setDeleteImpact(null);
+    setDeleteImpactLoading(false);
   };
 
   const handleScheduleCodeChange = (index, value) => {
@@ -109,21 +173,15 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
   const handleToggleDay = (scheduleIndex, dayKey) => {
     setSchedules(prev => {
       const clone = [...prev];
-      const rawCurrent = Array.isArray(clone[scheduleIndex].days) ? [...clone[scheduleIndex].days] : [];
-      const current = isAllDaysSelected(rawCurrent) ? [...ALL_DAY_KEYS] : rawCurrent;
+      const current = [...clone[scheduleIndex].days];
 
       if (current.includes(dayKey)) {
         const next = current.filter(d => d !== dayKey);
-        clone[scheduleIndex] = {
-          ...clone[scheduleIndex],
-          days: next.length === ALL_DAY_KEYS.length ? [] : next
-        };
+        if (next.length === 0) return prev; // prevent empty — at least 1 day required
+        clone[scheduleIndex] = { ...clone[scheduleIndex], days: next };
       } else {
         const next = [...current, dayKey];
-        clone[scheduleIndex] = {
-          ...clone[scheduleIndex],
-          days: next.length === ALL_DAY_KEYS.length ? [] : next
-        };
+        clone[scheduleIndex] = { ...clone[scheduleIndex], days: next };
       }
 
       return clone;
@@ -135,7 +193,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
       const clone = [...prev];
       clone[scheduleIndex] = {
         ...clone[scheduleIndex],
-        days: []
+        days: [...ALL_DAY_KEYS]
       };
       return clone;
     });
@@ -148,12 +206,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
         const entry = {
           code: s.code.toUpperCase(),
           name: s.name || `HORARIO ${s.code.toUpperCase()}`,
-          times: Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? [s.times[0]] : ['N/A']
+          times: Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? [s.times[0]] : ['N/A'],
+          days: s.days
         };
-
-        if (Array.isArray(s.days) && s.days.length > 0) {
-          entry.days = s.days;
-        }
 
         return entry;
       });
@@ -173,6 +228,33 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
     const dupCode = Object.keys(codeCounts).find(code => codeCounts[code] > 1);
     if (dupCode) {
       return `Codigo de horario duplicado: "${dupCode}".`;
+    }
+
+    const dayTimeMap = new Map();
+    const dayLabelMap = {
+      monday: 'Lun',
+      tuesday: 'Mar',
+      wednesday: 'Mie',
+      thursday: 'Jue',
+      friday: 'Vie'
+    };
+
+    for (const sch of schedulesWithCode) {
+      const rawTime = Array.isArray(sch.times) ? sch.times[0] : null;
+      const time = rawTime && rawTime !== 'N/A' ? rawTime : null;
+      if (!time) continue;
+
+      const expandedDays = sch.days;
+
+      for (const day of expandedDays) {
+        const key = `${day}::${time}`;
+        if (dayTimeMap.has(key)) {
+          const existingCode = dayTimeMap.get(key);
+          const dayLabel = dayLabelMap[day] || day;
+          return `No se permite repetir la hora base ${time} para el día ${dayLabel}. Conflicto entre horarios "${existingCode}" y "${sch.code}".`;
+        }
+        dayTimeMap.set(key, sch.code);
+      }
     }
 
     return null;
@@ -200,15 +282,29 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
         return;
       }
 
-      const result = await updateSchoolSchedules(school.id, payloadSchedules);
+      const result = await updateSchoolSchedules(school.id, payloadSchedules, {
+        confirmScheduleDeletion: hasConfirmedLocalDeletion,
+        downloadAffectedStudentsExcel: hasConfirmedLocalDeletion && downloadAffectedOnSave
+      });
+
+      if (result?.scheduleDeletionDownload?.available && result?.scheduleDeletionDownload?.token) {
+        try {
+          await downloadScheduleDeletionZip(result.scheduleDeletionDownload.token);
+        } catch (downloadError) {
+          console.error('Error downloading affected students ZIP:', downloadError);
+          setError('Los horarios se guardaron, pero no se pudo descargar el listado de estudiantes afectados.');
+        }
+      }
 
       if (result.scheduleChanges?.changes?.length > 0) {
         const changes = result.scheduleChanges.changes
           .map(change => formatScheduleChange(change))
           .join('\n');
         setSuccess(`Horarios actualizados. Cambios propagados:\n${changes}`);
+      } else if (result?.scheduleDeletionDownload?.available) {
+        setSuccess('Horarios actualizados exitosamente. Se descargó el listado de estudiantes afectados.');
       } else {
-        setSuccess('Horarios actualizados exitosamente (sin cambios detectados)');
+        setSuccess('Horarios actualizados exitosamente');
       }
 
       if (onSuccess) {
@@ -219,11 +315,20 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
         onClose();
       }, 2000);
     } catch (err) {
-      setError(err.message || 'Error al actualizar horarios');
+      if (err?.code === 'SCHEDULE_DELETION_CONFIRMATION_REQUIRED') {
+        setError('El backend requiere confirmación explícita para eliminar horarios con paradas asociadas. Confirma la eliminación desde el modal de borrar horario e intenta guardar nuevamente.');
+      } else {
+        setError(err.message || 'Error al actualizar horarios');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const pendingDeleteSchedule =
+    pendingDeleteIndex != null && pendingDeleteIndex >= 0 && pendingDeleteIndex < schedules.length
+      ? schedules[pendingDeleteIndex]
+      : null;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -247,7 +352,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
                     <IconButton
                       size="small"
                       color="error"
-                      onClick={() => handleRemoveSchedule(scheduleIndex)}
+                      onClick={() => requestRemoveSchedule(scheduleIndex)}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -362,6 +467,47 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess }) => {
           {loading ? <CircularProgress size={24} /> : 'Guardar Cambios'}
         </Button>
       </DialogActions>
+
+      <Dialog open={confirmDeleteOpen} onClose={cancelRemoveSchedule} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirmar eliminación de horario</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            {pendingDeleteSchedule?.code
+              ? `¿Seguro que deseas eliminar el horario ${pendingDeleteSchedule.code}?`
+              : '¿Seguro que deseas eliminar este horario?'}
+          </Typography>
+          {deleteImpactLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+              <CircularProgress size={18} />
+              <Typography variant="body2" color="text.secondary">
+                Calculando estudiantes y familias afectados...
+              </Typography>
+            </Box>
+          ) : (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {`Al eliminar este horario se verán afectados ${deleteImpact?.affectedStudents ?? 0} estudiantes de ${deleteImpact?.affectedFamilies ?? 0} familias.`}
+            </Alert>
+          )}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Si no confirmas, el horario no se eliminará.
+          </Typography>
+          <FormControlLabel
+            control={(
+              <Checkbox
+                checked={downloadAffectedOnSave}
+                onChange={(e) => setDownloadAffectedOnSave(e.target.checked)}
+              />
+            )}
+            label="Descargar listado de estudiantes afectados al guardar"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelRemoveSchedule}>Cancelar</Button>
+          <Button color="error" variant="contained" onClick={confirmRemoveSchedule}>
+            Eliminar horario
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

@@ -384,34 +384,25 @@ const SchoolYearSelectionPage = () => {
         }
         setSchoolRouteNumbers(parsedRouteNumbers);
 
-        // Load routeSchedules from backend detail
-        try {
-            const detail = await api.get(`/schools/${school.id}`);
-            const rs = (detail.data && detail.data.school && Array.isArray(detail.data.school.routeSchedules)) ? detail.data.school.routeSchedules : [];
-            // Normalize backend entries to the new shape with schedules[]
+        // Load routeSchedules directly from the school object (already populated by formatSchoolResponse in the list API).
+        {
+            let rs = [];
+            if (Array.isArray(school.routeSchedules)) {
+                rs = school.routeSchedules;
+            } else if (typeof school.routeSchedules === 'string' && school.routeSchedules.trim()) {
+                try { rs = JSON.parse(school.routeSchedules); } catch { rs = []; }
+            }
+            if (!Array.isArray(rs)) rs = [];
+
+            // All routeSchedules in DB use the canonical {schedules:[{code,name,times}]} format.
             const normalizeEntry = (x) => {
                 if (!x) return { routeNumber: '', schedules: [] };
-                if (Array.isArray(x.schedules)) {
-                    // Ensure each schedule has {code,name,times[0]}
-                    const cleaned = x.schedules.map(s => ({
-                        code: s && s.code ? s.code : null,
-                        name: s && s.name ? s.name : (s && s.code ? `HORARIO ${s.code}` : 'HORARIO'),
-                        times: Array.isArray(s && s.times) && s.times[0] ? [String(s.times[0])] : []
-                    }));
-                    return { routeNumber: String(x.routeNumber), schedules: cleaned };
-                }
-                // Legacy times[] -> map to school schedules by matching times
-                const times = Array.isArray(x.times) ? x.times.filter(Boolean).map(String) : [];
-                const schedulesForTimes = times.map(t => {
-                    // Try to find a school schedule that has this time to derive code/name
-                    const sch = (schoolSchedules || []).find(ss => Array.isArray(ss.times) && ss.times.includes(t));
-                    return {
-                        code: sch ? sch.code : null,
-                        name: sch ? sch.name : 'HORARIO',
-                        times: [t]
-                    };
-                });
-                return { routeNumber: String(x.routeNumber), schedules: schedulesForTimes };
+                const cleaned = (Array.isArray(x.schedules) ? x.schedules : []).map(s => ({
+                    code: s?.code ? String(s.code).toUpperCase() : null,
+                    name: s?.name ? s.name : (s?.code ? `HORARIO ${String(s.code).toUpperCase()}` : 'HORARIO'),
+                    times: Array.isArray(s?.times) && s.times[0] ? [String(s.times[0])] : []
+                })).filter(s => s.code);
+                return { routeNumber: String(x.routeNumber), schedules: cleaned };
             };
 
             const rnSet = new Set((parsedRouteNumbers || []).map(r => String(r)));
@@ -423,8 +414,6 @@ const SchoolYearSelectionPage = () => {
                 if (!rnSet.has(key)) aligned.push({ routeNumber: key, schedules: normalizeEntry(x).schedules });
             });
             setSchoolRouteSchedules(aligned);
-        } catch (e) {
-            setSchoolRouteSchedules((parsedRouteNumbers || []).map(rn => ({ routeNumber: String(rn), schedules: [] })));
         }
 
         let parsedExtraFields = [];
