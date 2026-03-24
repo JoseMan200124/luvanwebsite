@@ -204,10 +204,6 @@ const AttendanceManagementPage = () => {
             // Calcular estadísticas
             const attendanceList = data.attendances || data.data || [];
             if (attendanceList.length > 0) {
-                const totalStudents = attendanceList.reduce((sum, att) => sum + (att.totalAlumnos || 0), 0);
-                const totalPresent = attendanceList.reduce((sum, att) => sum + (att.alumnosPresentes || 0), 0);
-                const avgAttendance = totalStudents > 0 ? ((totalPresent / totalStudents) * 100).toFixed(2) : 0;
-
                 const totalStudents = data.totalStudents !== undefined ? data.totalStudents : (data.attendances || []).reduce((sum, att) => sum + (att.totalAlumnos || 0), 0);
                 const totalPresent = data.totalPresent !== undefined ? data.totalPresent : (data.attendances || []).reduce((sum, att) => sum + (att.alumnosPresentes || 0), 0);
                 const avgAttendance = data.averageAttendance !== undefined ? data.averageAttendance : (totalStudents > 0 ? ((totalPresent / totalStudents) * 100).toFixed(2) : 0);
