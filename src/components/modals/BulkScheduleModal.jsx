@@ -25,6 +25,7 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
+  const [multiStopInfo, setMultiStopInfo] = useState(null);
   const DAYS = ['Lunes','Martes','Miercoles','Jueves','Viernes'];
   // FRANJAS will be derived dynamically from school schedules in generateTemplate;
   // default fallback is used for initial state only.
@@ -126,8 +127,8 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
       const maxStudentsRaw = selectedFamilies.reduce((acc, fam) => Math.max(acc, getStudentsArray(fam).length || 0), 0);
       const maxStudents = Math.max(1, Math.min(4, maxStudentsRaw || 1));
 
-      // Build index: studentId -> Map(`${DiaES}||${Code}`, {time, routeNumber, note})
-      const conflicts = [];
+      // Build index: studentId -> Map(`${DiaES}||${Code}`, Array<{time, routeNumber, note}>)
+      // Multiple stops per day+franja are allowed — each entry becomes an extra row.
       const existingIndexByStudent = new Map();
 
       for (const fam of (familiesForTemplate || [])) {
@@ -146,13 +147,8 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
               const dayEs = EN_TO_ES_DAY[(d || '').toString().toLowerCase()];
               if (!dayEs) continue;
               const key = `${dayEs}||${code}`;
-              if (map.has(key)) {
-                conflicts.push({ studentId: sid, day: dayEs, code, a: map.get(key), b: slot });
-                // Keep conflict unresolved by deleting the key (no prefill)
-                map.delete(key);
-                continue;
-              }
-              map.set(key, {
+              if (!map.has(key)) map.set(key, []);
+              map.get(key).push({
                 time: slot?.time || '',
                 routeNumber: slot?.routeNumber || '',
                 note: slot?.note || ''
@@ -162,11 +158,6 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
 
           existingIndexByStudent.set(sid, map);
         }
-      }
-
-      if (conflicts.length > 0) {
-        console.warn('BulkSchedule template prefill conflicts (same day+franja):', conflicts);
-        alert(`Se detectaron ${conflicts.length} conflictos de horarios existentes (mismo día y franja). Esos campos no se prellenaron.`);
       }
 
       const workbook = new ExcelJS.Workbook();
@@ -258,59 +249,103 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
 
       // Note: removed the separate 'Instrucciones' sheet per request
 
-      // Fill rows: one row per selected family
+      // Compute max stops per family (how many rows each family needs)
+      const getMaxStopsForFamily = (fam) => {
+        let maxStops = 1;
+        const studs = getStudentsArray(fam).slice(0, maxStudents);
+        for (const s of studs) {
+          if (!s?.id) continue;
+          const idx = existingIndexByStudent.get(s.id);
+          if (!idx) continue;
+          for (const arr of idx.values()) {
+            if (arr.length > maxStops) maxStops = arr.length;
+          }
+        }
+        return maxStops;
+      };
+
+      // Track which rows are "additional stop" rows for later styling
+      const additionalStopRows = [];
+
+      // Fill rows: one or more rows per selected family
       const selArray = Array.from(selected);
       for (const famId of selArray) {
         const fam = (familiesForTemplate || []).find(f => f.id === famId) || families.find(f => f.id === famId);
         if (!fam) continue;
-        const row = [];
-        row.push(fam.familyLastName || '');
-        // students (up to maxStudents)
         const studs = getStudentsArray(fam).slice(0, maxStudents);
-        for (let i = 0; i < maxStudents; i++) {
-          const s = studs[i];
-          if (s) {
-            row.push(s.fullName || '');
-            row.push(s.grade || '');
-          } else {
-            row.push(''); row.push('');
-          }
-          // add triplets for days/franjas: Hora from schoolScheduleMap, Ruta empty, Parada empty
-          for (const dia of DAYS) {
-            for (const franja of FRANJAS) {
-              const horaVal = schoolScheduleMap[franja] || '';
-              row.push(horaVal); // Hora prefilled with school schedule when available
+        const maxStops = getMaxStopsForFamily(fam);
 
-              // Prefill from existing slots if available
-              const sid = s?.id;
-              const idx = sid ? existingIndexByStudent.get(sid) : null;
-              const pre = (idx && idx.get(`${dia}||${String(franja).toUpperCase()}`)) || null;
+        for (let stopIdx = 0; stopIdx < maxStops; stopIdx++) {
+          const row = [];
+          row.push(fam.familyLastName || '');
 
-              row.push(pre?.time || ''); // Hora Parada
-              row.push(pre?.routeNumber || ''); // Ruta
-              row.push(pre?.note || ''); // Nota Parada
+          for (let i = 0; i < maxStudents; i++) {
+            const s = studs[i];
+            // Repeat student name/grade on every row (required for backend matching)
+            if (s) {
+              row.push(s.fullName || '');
+              row.push(s.grade || '');
+            } else {
+              row.push(''); row.push('');
+            }
+            for (const dia of DAYS) {
+              for (const franja of FRANJAS) {
+                const horaVal = schoolScheduleMap[franja] || '';
+                row.push(horaVal); // Hora prefilled with school schedule
+
+                // Prefill from existing slots (stopIdx-th entry if it exists)
+                const sid = s?.id;
+                const idx = sid ? existingIndexByStudent.get(sid) : null;
+                const entries = (idx?.get(`${dia}||${String(franja).toUpperCase()}`)) || [];
+                const pre = entries[stopIdx] || null;
+
+                row.push(pre?.time || ''); // Hora Parada
+                row.push(pre?.routeNumber || ''); // Ruta
+                row.push(pre?.note || ''); // Nota Parada
+              }
             }
           }
-        }
 
-        sheet.addRow(row);
+          const addedRow = sheet.addRow(row);
+          if (stopIdx > 0) {
+            additionalStopRows.push(addedRow.number);
+          }
+        }
       }
 
-      // Apply alternating row fills and ensure first column is visually distinct
+      // Apply row fills: alternating for normal rows, orange for additional-stop rows
+      const additionalStopRowSet = new Set(additionalStopRows);
       const lastRow = sheet.lastRow ? sheet.lastRow.number : sheet.rowCount;
       for (let r = 2; r <= lastRow; r++) {
         const row = sheet.getRow(r);
-        // alternating fill
-        const isEven = (r % 2) === 0;
+        const isAdditionalStop = additionalStopRowSet.has(r);
         row.eachCell((cell, colNumber) => {
-          if (isEven) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7FAFC' } };
+          if (isAdditionalStop) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE8D0' } };
+          } else {
+            const isEven = (r % 2) === 0;
+            if (isEven) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7FAFC' } };
+            }
           }
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         });
         // emphasize first column (family last name)
         const firstCell = row.getCell(1);
         firstCell.font = { bold: true };
+      }
+
+      // Set in-platform notice if there are additional-stop rows
+      if (additionalStopRows.length > 0) {
+        setMultiStopInfo(
+          `La plantilla incluye ${additionalStopRows.length} fila(s) adicional(es) con fondo naranja. ` +
+          'Estas representan paradas adicionales (mismo estudiante, mismo día y franja, diferente ruta/hora/nota). ' +
+          'Si eliminas una fila naranja, esa parada se eliminará al subir. ' +
+          'Si agregas una nueva fila para el mismo estudiante, se creará una parada adicional. ' +
+          'No modifiques el nombre/grado del estudiante en filas adicionales.'
+        );
+      } else {
+        setMultiStopInfo(null);
       }
 
       const buf = await workbook.xlsx.writeBuffer();
@@ -465,6 +500,13 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
           <TextField size="small" value={uploadFile ? uploadFile.name : ''} sx={{ flex: 1 }} placeholder="Archivo seleccionado" />
           <Button variant="contained" color="primary" onClick={handleUpload} disabled={!uploadFile || uploading}>{uploading ? 'Subiendo...' : 'Procesar archivo'}</Button>
         </Box>
+
+        {multiStopInfo && (
+          <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>Paradas adicionales detectadas</Typography>
+            <Typography variant="body2">{multiStopInfo}</Typography>
+          </Alert>
+        )}
 
         <Alert severity="warning" variant="outlined" sx={{ mt: 1 }}>
           Nota: se aplicarán los horarios según el Excel cargado. Para evitar cambios no deseados, sube la plantilla completa con todos los días/franjas del o los estudiantes.
