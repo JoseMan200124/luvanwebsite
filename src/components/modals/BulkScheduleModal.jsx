@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Checkbox, CircularProgress, TextField } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Checkbox, CircularProgress, TextField, Alert, Divider } from '@mui/material';
 import ExcelJS from 'exceljs';
 import api from '../../utils/axiosConfig';
 import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../../utils/scheduleConfig';
+
+// Small inline Excel-like icon for buttons (color via currentColor)
+function ExcelIcon(props) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <rect x="2" y="3" width="20" height="18" rx="2" fill="currentColor" />
+      <path d="M8 7 L11 12 L8 17" stroke="#FFF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M16 7 L13 12 L16 17" stroke="#FFF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function BulkScheduleModal({ open, onClose, schoolId }) {
   const [families, setFamilies] = useState([]);
@@ -18,6 +29,14 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
   // FRANJAS will be derived dynamically from school schedules in generateTemplate;
   // default fallback is used for initial state only.
   const FRANJAS_DEFAULT = DEFAULT_SCHEDULE_CODES;
+
+  const EN_TO_ES_DAY = {
+    monday: 'Lunes',
+    tuesday: 'Martes',
+    wednesday: 'Miercoles',
+    thursday: 'Jueves',
+    friday: 'Viernes'
+  };
 
     useEffect(() => {
     if (!open) return;
@@ -78,6 +97,78 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
   const generateTemplate = async () => {
     setGenerating(true);
     try {
+      // Fetch full data (including existing schedules) only for selected families
+      let familiesForTemplate = families;
+      try {
+        const ids = Array.from(selected);
+        const params = new URLSearchParams();
+        if (includeInactive) params.set('includeInactive', 'true');
+        params.set('includeSchedules', 'true');
+        if (ids.length > 0) params.set('familyIds', ids.join(','));
+        const resp = await api.get(`/bulk-schedule/families/${schoolId}?${params.toString()}`);
+        familiesForTemplate = resp.data?.families || families;
+      } catch (e) {
+        console.warn('Could not fetch families with schedules for template; continuing without prefill', e);
+        familiesForTemplate = families;
+      }
+
+      const getStudentsArray = (fam) => {
+        if (!fam) return [];
+        if (Array.isArray(fam.students)) return fam.students;
+        if (Array.isArray(fam.Students)) return fam.Students;
+        if (Array.isArray(fam.children)) return fam.children;
+        return [];
+      };
+
+      // Dynamic template: include only as many student blocks as needed (1..4)
+      const selectedIds = new Set(Array.from(selected).map(String));
+      const selectedFamilies = (familiesForTemplate || []).filter(f => selectedIds.has(String(f.id)));
+      const maxStudentsRaw = selectedFamilies.reduce((acc, fam) => Math.max(acc, getStudentsArray(fam).length || 0), 0);
+      const maxStudents = Math.max(1, Math.min(4, maxStudentsRaw || 1));
+
+      // Build index: studentId -> Map(`${DiaES}||${Code}`, {time, routeNumber, note})
+      const conflicts = [];
+      const existingIndexByStudent = new Map();
+
+      for (const fam of (familiesForTemplate || [])) {
+        const students = getStudentsArray(fam);
+        for (const stu of (students || [])) {
+          const sid = stu?.id;
+          if (!sid) continue;
+          const slots = Array.isArray(stu.existingSlots) ? stu.existingSlots : [];
+          const map = new Map();
+
+          for (const slot of slots) {
+            const code = (slot?.schoolScheduleRef?.code || '').toString().toUpperCase().trim();
+            if (!code) continue; // cannot safely map to a franja
+            const days = Array.isArray(slot?.days) ? slot.days : [];
+            for (const d of days) {
+              const dayEs = EN_TO_ES_DAY[(d || '').toString().toLowerCase()];
+              if (!dayEs) continue;
+              const key = `${dayEs}||${code}`;
+              if (map.has(key)) {
+                conflicts.push({ studentId: sid, day: dayEs, code, a: map.get(key), b: slot });
+                // Keep conflict unresolved by deleting the key (no prefill)
+                map.delete(key);
+                continue;
+              }
+              map.set(key, {
+                time: slot?.time || '',
+                routeNumber: slot?.routeNumber || '',
+                note: slot?.note || ''
+              });
+            }
+          }
+
+          existingIndexByStudent.set(sid, map);
+        }
+      }
+
+      if (conflicts.length > 0) {
+        console.warn('BulkSchedule template prefill conflicts (same day+franja):', conflicts);
+        alert(`Se detectaron ${conflicts.length} conflictos de horarios existentes (mismo día y franja). Esos campos no se prellenaron.`);
+      }
+
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('BulkSchedules');
 
@@ -124,7 +215,7 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
 
       // Build headers
       const headers = ['Apellido Familia'];
-      for (let i = 1; i <= 4; i++) {
+      for (let i = 1; i <= maxStudents; i++) {
         headers.push(`Estudiante ${i} - Nombre`);
         headers.push(`Estudiante ${i} - Grado`);
         for (const dia of DAYS) {
@@ -170,13 +261,13 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
       // Fill rows: one row per selected family
       const selArray = Array.from(selected);
       for (const famId of selArray) {
-        const fam = families.find(f => f.id === famId);
+        const fam = (familiesForTemplate || []).find(f => f.id === famId) || families.find(f => f.id === famId);
         if (!fam) continue;
         const row = [];
         row.push(fam.familyLastName || '');
-        // students (up to 4)
-        const studs = Array.isArray(fam.students) ? fam.students.slice(0,4) : [];
-        for (let i = 0; i < 4; i++) {
+        // students (up to maxStudents)
+        const studs = getStudentsArray(fam).slice(0, maxStudents);
+        for (let i = 0; i < maxStudents; i++) {
           const s = studs[i];
           if (s) {
             row.push(s.fullName || '');
@@ -189,9 +280,15 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
             for (const franja of FRANJAS) {
               const horaVal = schoolScheduleMap[franja] || '';
               row.push(horaVal); // Hora prefilled with school schedule when available
-              row.push(''); // Hora Parada (to be filled)
-              row.push(''); // Ruta (to be filled)
-              row.push(''); // Nota Parada (to be filled)
+
+              // Prefill from existing slots if available
+              const sid = s?.id;
+              const idx = sid ? existingIndexByStudent.get(sid) : null;
+              const pre = (idx && idx.get(`${dia}||${String(franja).toUpperCase()}`)) || null;
+
+              row.push(pre?.time || ''); // Hora Parada
+              row.push(pre?.routeNumber || ''); // Ruta
+              row.push(pre?.note || ''); // Nota Parada
             }
           }
         }
@@ -253,18 +350,62 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
     }
   };
 
+  const downloadResultsAsTxt = () => {
+    if (!results) return;
+
+    const lines = [];
+    lines.push('RESULTADOS - CARGA MASIVA DE HORARIOS');
+    lines.push(new Date().toLocaleString('es-ES'));
+    lines.push('');
+    lines.push('RESUMEN');
+    lines.push(results.summary || '');
+    lines.push('');
+
+    const warnings = Array.isArray(results.warnings) ? results.warnings : [];
+    const errors = Array.isArray(results.errors) ? results.errors : [];
+
+    lines.push(`ADVERTENCIAS (${warnings.length})`);
+    for (let i = 0; i < warnings.length; i++) {
+      lines.push(`${i + 1}. ${warnings[i]}`);
+    }
+    lines.push('');
+
+    lines.push(`ERRORES (${errors.length})`);
+    for (let i = 0; i < errors.length; i++) {
+      lines.push(`${i + 1}. ${errors[i]}`);
+    }
+    lines.push('');
+
+    const text = lines.join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resultados_carga_horarios_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>Carga Masiva de Horarios</DialogTitle>
       <DialogContent>
-        <Typography variant="body2" sx={{ mb: 2 }}>
-          Selecciona las familias a incluir en la plantilla. Cada fila corresponde a una familia y hasta 4 estudiantes.
+        <Typography variant="body2" sx={{ mb: 0.5 }}>
+          Selecciona las familias a incluir en la plantilla. Cada fila corresponde a una familia.
         </Typography>
-        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Plantilla dinámica: columnas según la familia con más hijos en tu selección.
+        </Typography>
+
+        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} /> Incluir familias inactivas
           </label>
         </Box>
+
+        <Divider sx={{ mb: 2 }} />
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
         ) : (
@@ -296,14 +437,38 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
           </Box>
         )}
 
-        <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
-          <Button variant="outlined" onClick={generateTemplate} disabled={generating || selected.size===0}>Generar plantilla</Button>
-          <Button variant="outlined" component="label">Seleccionar archivo
+        <Divider sx={{ mt: 2, mb: 2 }} />
+
+        <Typography variant="body2" sx={{ mb: 2, color: 'info.main' }}>
+          <Box component="span" sx={{ fontWeight: 600 }}>Recomendación:</Box>{' '}
+          genera la plantilla, completa el Excel con todos los días/franjas que deban quedar asignados y sube ese mismo archivo.
+        </Typography>
+
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            color="success"
+            onClick={generateTemplate}
+            disabled={generating || selected.size===0}
+            startIcon={<Box component="span" sx={{ color: 'success.main', display: 'inline-flex' }}><ExcelIcon /></Box>}
+          >
+            Generar plantilla
+          </Button>
+          <Button
+            variant="outlined"
+            component="label"
+            startIcon={<Box component="span" sx={{ color: 'primary.main', display: 'inline-flex' }}><ExcelIcon /></Box>}
+          >
+            Seleccionar archivo
             <input hidden type="file" accept=".xlsx,.xls" onChange={(e)=>setUploadFile(e.target.files[0])} />
           </Button>
           <TextField size="small" value={uploadFile ? uploadFile.name : ''} sx={{ flex: 1 }} placeholder="Archivo seleccionado" />
           <Button variant="contained" color="primary" onClick={handleUpload} disabled={!uploadFile || uploading}>{uploading ? 'Subiendo...' : 'Procesar archivo'}</Button>
         </Box>
+
+        <Alert severity="warning" variant="outlined" sx={{ mt: 1 }}>
+          Nota: se aplicarán los horarios según el Excel cargado. Para evitar cambios no deseados, sube la plantilla completa con todos los días/franjas del o los estudiantes.
+        </Alert>
 
         {results && (
           <Box sx={{ mt: 2 }}>
@@ -317,11 +482,22 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
                 </ul>
               </Box>
             )}
+            {Array.isArray(results.errors) && results.errors.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" color="error.main">Errores:</Typography>
+                <ul>
+                  {results.errors.map((e,i)=>(<li key={i}><Typography variant="body2">{e}</Typography></li>))}
+                </ul>
+              </Box>
+            )}
           </Box>
         )}
 
       </DialogContent>
       <DialogActions>
+        {results && (
+          <Button color="inherit" onClick={downloadResultsAsTxt}>Descargar .txt</Button>
+        )}
         <Button onClick={onClose}>Cerrar</Button>
       </DialogActions>
     </Dialog>
