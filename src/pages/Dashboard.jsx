@@ -7,11 +7,8 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 import StatsCard from '../components/dashboard/StatsCard';
-import OutstandingPaymentsChart from '../components/dashboard/OutstandingPaymentsChart';
-import LatePaymentsChart from '../components/dashboard/LatePaymentsChart';
 import IncidentsPerPilotChart from '../components/dashboard/IncidentsPerPilotChart';
 import TotalRoutesCompletedChart from '../components/dashboard/TotalRoutesCompletedChart';
-import PaymentStatusesChart from '../components/dashboard/PaymentStatusesChart';
 import Filters from '../components/dashboard/Filters';
 import api from '../utils/axiosConfig';
 
@@ -42,10 +39,7 @@ const Dashboard = () => {
     });
 
     // Estados para guardar los datos de cada indicador
-    const [outstandingPayments, setOutstandingPayments] = useState([]);
-    const [latePayments, setLatePayments] = useState([]);
     const [totalRoutesCompleted, setTotalRoutesCompleted] = useState(0);
-    const [paymentStatuses, setPaymentStatuses] = useState([]);
     const [incidents, setIncidents] = useState([]);
 
     // Estados de carga y error
@@ -74,33 +68,21 @@ const Dashboard = () => {
         try {
             const qs = buildQueryString();
             const [
-                outstandingPaymentsRes,
-                latePaymentsRes,
                 totalRoutesRes,
-                paymentStatusesRes,
                 incidentsRes
             ] = await Promise.all([
-                api.get(`/reports/outstanding-payments${qs}`),
-                api.get(`/reports/late-payments${qs}`),
                 api.get(`/reports/total-routes-completed${qs}`),
-                api.get(`/reports/payment-statuses${qs}`),
                 api.get(`/reports/incidents-per-pilot${qs}`)
             ]);
 
-            const op = outstandingPaymentsRes.data.outstandingPayments || [];
-            const lp = latePaymentsRes.data.latePayments || [];
             const trc = totalRoutesRes.data.totalRoutesCompleted || 0;
-            const ps = paymentStatusesRes.data.paymentStatuses || [];
             const inc = incidentsRes.data.incidents || [];
 
-            setOutstandingPayments(op);
-            setLatePayments(lp);
             setTotalRoutesCompleted(trc);
-            setPaymentStatuses(ps);
             setIncidents(inc);
 
             // Si ninguno de los indicadores tiene datos, se notifica "No hay datos"
-            if (op.length === 0 && lp.length === 0 && trc === 0 && ps.length === 0 && inc.length === 0) {
+            if (trc === 0 && inc.length === 0) {
                 setError("No hay datos");
             } else {
                 setError(null);
@@ -108,10 +90,7 @@ const Dashboard = () => {
         } catch (err) {
             console.error('Error al obtener datos:', err);
             // En caso de error, se limpian los datos y se notifica "No hay datos"
-            setOutstandingPayments([]);
-            setLatePayments([]);
             setTotalRoutesCompleted(0);
-            setPaymentStatuses([]);
             setIncidents([]);
             setError("No hay datos");
         } finally {
@@ -188,16 +167,6 @@ const Dashboard = () => {
                 <div ref={reportRef}>
                     <StatsGrid>
                         <StatsCard
-                            title="Pagos Pendientes (Q)"
-                            value={outstandingPayments.reduce((acc, curr) => acc + curr.amount, 0)}
-                            icon="PendingActions"
-                        />
-                        <StatsCard
-                            title="Cobros por Mora (Q)"
-                            value={latePayments.reduce((acc, curr) => acc + curr.lateFees, 0)}
-                            icon="ReportProblem"
-                        />
-                        <StatsCard
                             title="Rutas Completadas"
                             value={totalRoutesCompleted}
                             icon="School"
@@ -205,11 +174,8 @@ const Dashboard = () => {
                     </StatsGrid>
 
                     <ChartsGrid>
-                        <OutstandingPaymentsChart data={outstandingPayments} />
-                        <LatePaymentsChart data={latePayments} />
                         <TotalRoutesCompletedChart data={totalRoutesCompleted} />
                         <IncidentsPerPilotChart data={incidents} />
-                        <PaymentStatusesChart data={paymentStatuses} />
                     </ChartsGrid>
                 </div>
             )}
