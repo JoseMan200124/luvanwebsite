@@ -769,52 +769,88 @@ const SchoolContractsPage = () => {
             ''
         );
 
+        // Limpiar prefijo de borrado lógico en el email del padre (ej. "DELETED_ID:2153_email@x")
+        const cleanDeletedEmail = (email) => {
+            if (!email) return '';
+            try {
+                return String(email).replace(/^DELETED_ID:\d+_/, '');
+            } catch (e) {
+                return email;
+            }
+        };
+
             if (isMobileView) {
-            return (
-                <MobileFilledContractCard key={filledContract.id}>
-                    <Typography variant="h6">Familia: {familyLastName}</Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Usuario: {filledContract.parent?.name || filledContract.filledData?.parentName || ''} { (filledContract.parent?.email || filledContract.filledData?.parentEmail) ? `(${filledContract.parent?.email || filledContract.filledData?.parentEmail})` : '' }
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                        <Button
-                            variant="outlined"
-                            color="primary"
-                            onClick={() => navigate(`/admin/contratos-llenados/${filledContract.uuid}`)}
-                            startIcon={<VisibilityIcon />}
-                        >
-                            Ver Detalles
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            color="secondary"
-                            onClick={() => window.open(filledContract.pdfUrl, '_blank')}
-                            startIcon={<VisibilityIcon />}
-                        >
-                            Descargar PDF
-                        </Button>
-                        <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
-                            <DeleteIcon />
-                        </IconButton>
-                    </Box>
-                </MobileFilledContractCard>
-            );
-        }
+                return (
+                    <MobileFilledContractCard key={filledContract.id}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Typography variant="h6">Familia: {familyLastName}</Typography>
+                            {filledContract.parent?.deleted && (
+                                <Chip label="Familia eliminada" color="error" size="small" variant="outlined" />
+                            )}
+                        </Box>
+                        <Typography variant="body2" color="textSecondary">
+                            Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                            {(() => {
+                                const parentName = filledContract.parent?.name || filledContract.filledData?.parentName || '';
+                                const rawEmail = filledContract.parent?.email || filledContract.filledData?.parentEmail || '';
+                                const parentEmail = cleanDeletedEmail(rawEmail);
+                                return (
+                                    <>Usuario: {parentName} {parentEmail ? `(${parentEmail})` : ''}</>
+                                );
+                            })()}
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                            <Button
+                                variant="outlined"
+                                color="primary"
+                                onClick={() => navigate(`/admin/contratos-llenados/${filledContract.uuid}`)}
+                                startIcon={<VisibilityIcon />}
+                            >
+                                Ver Detalles
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                color="secondary"
+                                onClick={() => window.open(filledContract.pdfUrl, '_blank')}
+                                startIcon={<VisibilityIcon />}
+                            >
+                                Descargar PDF
+                            </Button>
+                            <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
+                                <DeleteIcon />
+                            </IconButton>
+                        </Box>
+                    </MobileFilledContractCard>
+                );
+            }
 
         return (
             <ListItem key={filledContract.id} divider>
                 <ListItemText
-                    primary={`Familia: ${familyLastName}`}
+                    primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <span>{`Familia: ${familyLastName}`}</span>
+                            {filledContract.parent?.deleted && (
+                                <Chip label="Familia eliminada" color="error" size="small" variant="outlined" />
+                            )}
+                        </Box>
+                    }
                     secondary={
                         <>
                             <Typography variant="body2" color="textSecondary">
                                 Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
-                                Usuario: {filledContract.parent?.name || filledContract.filledData?.parentName || ''} { (filledContract.parent?.email || filledContract.filledData?.parentEmail) ? `(${filledContract.parent?.email || filledContract.filledData?.parentEmail})` : '' }
+                                {(() => {
+                                    const parentName = filledContract.parent?.name || filledContract.filledData?.parentName || '';
+                                    const rawEmail = filledContract.parent?.email || filledContract.filledData?.parentEmail || '';
+                                    const parentEmail = cleanDeletedEmail(rawEmail);
+                                    return (
+                                        <>Usuario: {parentName} {parentEmail ? `(${parentEmail})` : ''}</>
+                                    );
+                                })()}
                             </Typography>
                         </>
                     }
