@@ -2317,8 +2317,14 @@ const SchoolPaymentsPage = () => {
     // netMonthlyFee = monthlyFee - specialDiscount (lo que realmente debe pagar mensualmente)
     const dialogNetMonthlyFee = Number(registerPaymentTarget?.netMonthlyFee || 0);
     
-    // Calcular tarifa base por estudiante
-    const studentCount = (registerPaymentTarget?.User?.FamilyDetail?.Students || []).length || 1;
+    // Cantidad de estudiantes
+    const studentCount = Number(
+        registerPaymentTarget?.studentCount ||
+        (Array.isArray(registerPaymentTarget?.User?.FamilyDetail?.Students) ? registerPaymentTarget.User.FamilyDetail.Students.length : undefined) ||
+        registerPaymentTarget?.User?.FamilyDetail?.studentsCount ||
+        1
+    ) || 1;
+
     const dialogBaseFee = studentCount > 0 ? dialogMonthlyFee / studentCount : dialogMonthlyFee;
     
     // Tipo de ruta
@@ -3075,7 +3081,7 @@ const SchoolPaymentsPage = () => {
                                             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                                                 {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
                                                 {registerPaymentTarget && (
-                                                    ` (${(registerPaymentTarget.User?.FamilyDetail?.Students || []).length || (registerPaymentTarget.studentCount || 0)} estudiantes)`
+                                                    ` (${studentCount} ${studentCount === 1 ? 'estudiante' : 'estudiantes'})`
                                                 )}
                                             </Typography>
                                             {/* Show D/A chip when automatic debit is active on the payment or the family's record */}
@@ -3113,8 +3119,8 @@ const SchoolPaymentsPage = () => {
                                                         <Typography variant="body2" color="text.secondary">
                                                             Tarifa mensual
                                                             <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
-                                                                ({studentCount} {studentCount === 1 ? 'estudiante' : 'estudiantes'})
-                                                            </Typography>
+                                                                        ({studentCount} {studentCount === 1 ? 'estudiante' : 'estudiantes'})
+                                                                    </Typography>
                                                         </Typography>
                                                         <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatCurrency(effectiveMonthlyFee)}</Typography>
                                                     </Box>
@@ -3196,7 +3202,7 @@ const SchoolPaymentsPage = () => {
                                                                         const periodRouteType = period.routeType || routeType;
 
                                                                         // Tarifa base por estudiante para este período
-                                                                        const safeStudentCount = Math.max(1, Number(studentCount || 1));
+                                                                        const safeStudentCount = studentCount;
                                                                         const periodBaseFee = safeStudentCount > 0 ? (originalAmount / safeStudentCount) : originalAmount;
 
                                                                         const isParcial = periodAmountDue < periodNetAmount && periodAmountDue > 0;
@@ -3415,7 +3421,7 @@ const SchoolPaymentsPage = () => {
                                         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                                             {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
                                             {registerPaymentTarget && (
-                                                ` (${(registerPaymentTarget.User?.FamilyDetail?.Students || []).length || (registerPaymentTarget.studentCount || 0)} estudiantes)`
+                                                ` (${studentCount} ${studentCount === 1 ? 'estudiante' : 'estudiantes'})`
                                             )}
                                         </Typography>
                                         
