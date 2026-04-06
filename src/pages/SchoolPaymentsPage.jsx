@@ -2317,8 +2317,14 @@ const SchoolPaymentsPage = () => {
     // netMonthlyFee = monthlyFee - specialDiscount (lo que realmente debe pagar mensualmente)
     const dialogNetMonthlyFee = Number(registerPaymentTarget?.netMonthlyFee || 0);
     
-    // Calcular tarifa base por estudiante
-    const studentCount = (registerPaymentTarget?.User?.FamilyDetail?.Students || []).length || 1;
+    // Cantidad de estudiantes
+    const studentCount = Number(
+        registerPaymentTarget?.studentCount ||
+        (Array.isArray(registerPaymentTarget?.User?.FamilyDetail?.Students) ? registerPaymentTarget.User.FamilyDetail.Students.length : undefined) ||
+        registerPaymentTarget?.User?.FamilyDetail?.studentsCount ||
+        1
+    ) || 1;
+
     const dialogBaseFee = studentCount > 0 ? dialogMonthlyFee / studentCount : dialogMonthlyFee;
     
     // Tipo de ruta
@@ -2358,7 +2364,11 @@ const SchoolPaymentsPage = () => {
     const singlePendingPeriod = hasSinglePendingPeriod ? dialogPendingPeriods[0] : null;
     const effectiveRouteType = singlePendingPeriod?.routeType || routeType;
     const effectiveMonthlyFee = Number(singlePendingPeriod?.originalAmount ?? dialogMonthlyFee ?? 0) || 0;
-    const effectiveBaseFee = studentCount > 0 ? (effectiveMonthlyFee / studentCount) : effectiveMonthlyFee;
+    // Preferir el conteo de estudiantes almacenado en el período (snapshot) cuando exista.
+    const effectiveStudents = Number(singlePendingPeriod?.studentsCount || registerPaymentTarget?.studentCount || studentCount) || 1;
+    const effectiveBaseFee = effectiveStudents > 0 ? (effectiveMonthlyFee / effectiveStudents) : effectiveMonthlyFee;
+    // Para UI: mostrar estudiantes de CARGOS BASE según si hay un período pendiente único
+    const cargosStudents = hasSinglePendingPeriod ? effectiveStudents : studentCount;
     
     // Total a pagar en pestaña de Tarifa: NO incluye mora (se paga por separado)
     const dialogTotalToPay = Math.max(0, 
@@ -3075,7 +3085,7 @@ const SchoolPaymentsPage = () => {
                                             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                                                 {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
                                                 {registerPaymentTarget && (
-                                                    ` (${(registerPaymentTarget.User?.FamilyDetail?.Students || []).length || (registerPaymentTarget.studentCount || 0)} estudiantes)`
+                                                    ` (${studentCount} ${studentCount === 1 ? 'estudiante' : 'estudiantes'})`
                                                 )}
                                             </Typography>
                                             {/* Show D/A chip when automatic debit is active on the payment or the family's record */}
@@ -3113,8 +3123,8 @@ const SchoolPaymentsPage = () => {
                                                         <Typography variant="body2" color="text.secondary">
                                                             Tarifa mensual
                                                             <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
-                                                                ({studentCount} {studentCount === 1 ? 'estudiante' : 'estudiantes'})
-                                                            </Typography>
+                                                                            ({cargosStudents} {cargosStudents === 1 ? 'estudiante' : 'estudiantes'})
+                                                                        </Typography>
                                                         </Typography>
                                                         <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatCurrency(effectiveMonthlyFee)}</Typography>
                                                     </Box>
@@ -3195,9 +3205,9 @@ const SchoolPaymentsPage = () => {
 
                                                                         const periodRouteType = period.routeType || routeType;
 
-                                                                        // Tarifa base por estudiante para este período
-                                                                        const safeStudentCount = Math.max(1, Number(studentCount || 1));
-                                                                        const periodBaseFee = safeStudentCount > 0 ? (originalAmount / safeStudentCount) : originalAmount;
+                                                                        // Tarifa base por estudiante para este período (preferir snapshot del período)
+                                                                        const periodStudents = Number(period?.studentsCount ?? registerPaymentTarget?.studentCount ?? studentCount) || 1;
+                                                                        const periodBaseFee = periodStudents > 0 ? (originalAmount / periodStudents) : originalAmount;
 
                                                                         const isParcial = periodAmountDue < periodNetAmount && periodAmountDue > 0;
                                                                         const amountPaid = isParcial
@@ -3244,7 +3254,7 @@ const SchoolPaymentsPage = () => {
                                                                                 {/* Tarifa mensual */}
                                                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2 }}>
                                                                                     <Typography variant="caption" color="text.secondary">
-                                                                                        Tarifa mensual ({studentCount} {studentCount === 1 ? 'estudiante' : 'estudiantes'}):
+                                                                                        Tarifa mensual ({periodStudents} {periodStudents === 1 ? 'estudiante' : 'estudiantes'}):
                                                                                     </Typography>
                                                                                     <Typography variant="caption">
                                                                                         {formatCurrency(originalAmount)}
@@ -3415,7 +3425,7 @@ const SchoolPaymentsPage = () => {
                                         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                                             {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
                                             {registerPaymentTarget && (
-                                                ` (${(registerPaymentTarget.User?.FamilyDetail?.Students || []).length || (registerPaymentTarget.studentCount || 0)} estudiantes)`
+                                                ` (${studentCount} ${studentCount === 1 ? 'estudiante' : 'estudiantes'})`
                                             )}
                                         </Typography>
                                         
