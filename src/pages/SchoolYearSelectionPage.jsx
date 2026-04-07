@@ -46,7 +46,8 @@ import {
     Visibility,
     Add,
     ExpandMore,
-    DeleteSweep as DeleteSweepIcon
+    DeleteSweep as DeleteSweepIcon,
+    NotificationsActive as NotificationsActiveIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
@@ -60,6 +61,7 @@ import moment from 'moment';
 import PermissionGuard from '../components/PermissionGuard';
 import { DEFAULT_SCHEDULE_CODES, ensureSchedules, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 import EditSchedulesModal from '../components/modals/EditSchedulesModal';
+import SendNotificationModal from '../components/SendNotificationModal';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -185,6 +187,7 @@ const SchoolYearSelectionPage = () => {
     const [openQuickClear, setOpenQuickClear] = useState(false);
     const [quickClearReason, setQuickClearReason] = useState('');
     const [quickClearing, setQuickClearing] = useState(false);
+    const [openSendNotifModal, setOpenSendNotifModal] = useState(false);
     // Nombre legible del período actual (ej: Enero 2026)
     const monthNamesEs = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const currentMonthIndex = new Date().getMonth();
@@ -1069,6 +1072,16 @@ const SchoolYearSelectionPage = () => {
                             </FormControl>
 
                             <Box sx={{ display: 'flex', gap: 1 }}>
+                                <PermissionGuard permission="notificaciones-crear">
+                                    <Button
+                                        variant="outlined"
+                                        color="secondary"
+                                        startIcon={<NotificationsActiveIcon />}
+                                        onClick={() => setOpenSendNotifModal(true)}
+                                    >
+                                        Enviar Notificación
+                                    </Button>
+                                </PermissionGuard>
                                 <PermissionGuard permission="colegios-crear">
                                     <Button
                                         variant="outlined"
@@ -2042,6 +2055,12 @@ const SchoolYearSelectionPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
+            <SendNotificationModal
+                open={openSendNotifModal}
+                onClose={() => setOpenSendNotifModal(false)}
+                schools={schools}
+            />
         </PageContainer>
     );
 };
