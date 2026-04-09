@@ -38,6 +38,14 @@ const buildDefaultCounts = (codes = DEFAULT_SCHEDULE_CODES) =>
 
 const DEFAULT_COUNTS = buildDefaultCounts();
 
+const DEFAULT_PREVIEW_COUNTS = {
+    parents: 0,
+    monitoras: 0,
+    pilots: 0,
+    supervisors: 0,
+    totalUnique: 0,
+};
+
 const scheduleLabel = (code) => {
     if (!code) return 'Horario';
     const label = getScheduleLabel(code);
@@ -77,6 +85,22 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     const [sending, setSending] = useState(false);
     const [sendPush, setSendPush] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    // Roles selection: parents, monitoras, pilots, supervisors
+    const ROLE_KEYS = ['parents', 'monitoras', 'pilots', 'supervisors'];
+    const [selectedRoles, setSelectedRoles] = useState([]);
+
+    // Si no hay roles seleccionados, el modal debe mostrar 0 destinatarios
+    const effectivePreview = useMemo(() => {
+        if (!selectedRoles || selectedRoles.length === 0) {
+            return {
+                criteria: null,
+                counts: DEFAULT_PREVIEW_COUNTS,
+                sampleEmails: [],
+                sampleLimit: 0,
+            };
+        }
+        return preview;
+    }, [selectedRoles, preview]);
 
     // IDs para evitar race conditions (respuestas viejas pisan estado nuevo)
     const countsReqId = useRef(0);
@@ -254,13 +278,20 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             if (!currentSchool) return;
             if (selectedRoutes.length === 0) return;
 
-            if (!selectedSchedule) {
+            // Si no hay roles, NO pedimos preview al backend: en UI debe verse todo en 0.
+            if (!selectedRoles || selectedRoles.length === 0) {
                 setPreview(null);
                 return;
             }
 
-            // si el horario está en 0, no pedimos preview
-            if (Number(scheduleCounts[selectedSchedule] || 0) <= 0) {
+            // If parents role is selected and there is no schedule, we cannot build preview.
+            if (!selectedSchedule && selectedRoles.includes('parents')) {
+                setPreview(null);
+                return;
+            }
+
+            // si se seleccionó un horario y está en 0, no pedimos preview
+            if (selectedSchedule && Number(scheduleCounts[selectedSchedule] || 0) <= 0) {
                 setPreview(null);
                 return;
             }
@@ -273,6 +304,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                     schoolId: currentSchool.id,
                     routeNumbers: selectedRoutes,
                     scheduleCode: selectedSchedule,
+                    recipientRoles: selectedRoles,
                 });
 
                 if (reqId !== previewReqId.current) return;
@@ -296,7 +328,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
         loadPreview();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedSchedule, currentSchool?.id]);
+    }, [selectedSchedule, currentSchool?.id, selectedRoles]);
 
     const scheduleDisabled = (code) => {
         if (selectedRoutes.length === 0) return true;
@@ -310,8 +342,19 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
         }
 
         // Ruta → Horario obligatorio
-        if (selectedSchool !== 'all' && selectedRoutes.length > 0 && !selectedSchedule) {
+        if (
+            selectedSchool !== 'all' &&
+            selectedRoutes.length > 0 &&
+            selectedRoles.includes('parents') &&
+            !selectedSchedule
+        ) {
             setSnackbar({ open: true, message: 'Selecciona un horario para las rutas elegidas.', severity: 'error' });
+            return;
+        }
+
+        // Debe seleccionarse al menos un rol
+        if (!selectedRoles || selectedRoles.length === 0) {
+            setSnackbar({ open: true, message: 'Selecciona al menos un rol de destinatarios.', severity: 'error' });
             return;
         }
 
@@ -327,6 +370,9 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                 formData.append('routeNumbers', JSON.stringify(selectedRoutes));
                 formData.append('scheduleCode', selectedSchedule);
             }
+
+            // Incluir roles seleccionados para que el backend pueda filtrar destinatarios
+            formData.append('recipientRoles', JSON.stringify(selectedRoles));
 
             if (sendPush) formData.append('sendPush', true);
 
@@ -381,7 +427,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                             ))}
                         </Select>
                         <FormHelperText>
-                            Flujo: 1) Rutas ➜ 2) Horario ➜ 3) Vista previa ➜ Enviar.
+                            Flujo: 1) Rutas ➜ 2) Horario ➜ 3) Roles ➜ 4) Vista previa ➜ Enviar.
                         </FormHelperText>
                     </FormControl>
 
@@ -406,6 +452,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                         </Typography>
                                     ) : (
                                         <>
+                                            
                                             <Stack direction="row" spacing={1} sx={{ mb: 1 }} useFlexGap flexWrap="wrap">
                                                 <Button
                                                     size="small"
@@ -514,13 +561,29 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                         onChange={(_, val) => setSelectedSchedule(val ?? '')}
                                         fullWidth
                                         size="small"
-                                        sx={{ '& .MuiToggleButton-root': { textTransform: 'none', py: 1 } }}
+                                        sx={{
+                                            '& .MuiToggleButton-root': { textTransform: 'none', py: 1, border: '1px solid', borderColor: 'divider', borderRadius: 0 },
+                                            '& .MuiToggleButton-root:first-of-type': { borderTopLeftRadius: 6, borderBottomLeftRadius: 6 },
+                                            '& .MuiToggleButton-root:last-of-type': { borderTopRightRadius: 6, borderBottomRightRadius: 6 },
+                                            '& .MuiToggleButton-root:not(:first-of-type)': { borderLeft: 0 },
+                                            '& .MuiToggleButton-root.Mui-selected': {
+                                                bgcolor: '#ffffff',
+                                                color: 'primary.main',
+                                                borderColor: 'primary.main',
+                                                borderLeft: '1px solid',
+                                                borderLeftColor: 'primary.main',
+                                                '&:hover': { bgcolor: 'rgba(25,118,210,0.04)' },
+                                            },
+                                            '& .MuiToggleButton-root .count': { color: 'text.secondary' },
+                                            '& .MuiToggleButton-root.Mui-selected .count': { color: 'primary.main' },
+                                            '& .MuiToggleButton-root.Mui-selected:disabled': { opacity: 0.6 },
+                                        }}
                                     >
                                         {Object.keys(scheduleCounts).map(code => (
                                             <ToggleButton key={code} value={code} disabled={scheduleDisabled(code)}>
                                                 <Stack spacing={0.2} alignItems="center">
                                                     <Typography variant="body2" fontWeight={700}>{code}</Typography>
-                                                    <Typography variant="caption" color="text.secondary">{scheduleCounts[code] || 0} padres</Typography>
+                                                    <Typography variant="caption" className="count">{scheduleCounts[code] || 0} padres</Typography>
                                                 </Stack>
                                             </ToggleButton>
                                         ))}
@@ -536,23 +599,112 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                         </Box>
                     )}
 
-                    {/* 3) Vista previa */}
+                    {/* 3) Roles */}
                     {selectedSchool !== 'all' && selectedRoutes.length > 0 && (
                         <Box sx={{ mt: 1.25 }}>
                             <Accordion disableGutters elevation={0} square defaultExpanded>
                                 <AccordionSummary expandIcon={<ExpandMore />}>
-                                    <Typography variant="subtitle1" fontWeight={600}>3) Vista previa</Typography>
+                                    <Typography variant="subtitle1" fontWeight={600}>3) Roles</Typography>
                                 </AccordionSummary>
 
                                 <AccordionDetails>
-                                    {!selectedSchedule ? (
+                                    <FormHelperText sx={{ mb: 1 }}>
+                                        Selecciona los roles a los que quieres enviar la circular.
+                                    </FormHelperText>
+
+                                    <Stack direction="row" spacing={1} sx={{ mb: 1 }} useFlexGap flexWrap="wrap">
+                                        <Button
+                                            size="small"
+                                            variant="outlined"
+                                            onClick={() => setSelectedRoles(ROLE_KEYS)}
+                                            disabled={ROLE_KEYS.every(r => selectedRoles.includes(r))}
+                                        >
+                                            Seleccionar todos
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            variant="text"
+                                            onClick={() => setSelectedRoles([])}
+                                            disabled={selectedRoles.length === 0}
+                                        >
+                                            Limpiar
+                                        </Button>
+                                    </Stack>
+
+                                    <ToggleButtonGroup
+                                        value={selectedRoles}
+                                        onChange={(_, val) => setSelectedRoles(val ?? [])}
+                                        multiple
+                                        fullWidth
+                                        size="small"
+                                        sx={{
+                                            mt: 1,
+                                            '& .MuiToggleButton-root': { textTransform: 'none', py: 0.8, border: '1px solid', borderColor: 'divider', borderRadius: 0 },
+                                            '& .MuiToggleButton-root:first-of-type': { borderTopLeftRadius: 6, borderBottomLeftRadius: 6 },
+                                            '& .MuiToggleButton-root:last-of-type': { borderTopRightRadius: 6, borderBottomRightRadius: 6 },
+                                            '& .MuiToggleButton-root:not(:first-of-type)': { borderLeft: 0 },
+                                            '& .MuiToggleButton-root.Mui-selected': {
+                                                bgcolor: '#ffffff',
+                                                color: 'primary.main',
+                                                borderColor: 'primary.main',
+                                                borderLeft: '1px solid',
+                                                borderLeftColor: 'primary.main',
+                                                '&:hover': { bgcolor: 'rgba(25,118,210,0.04)' },
+                                            },
+                                            '& .MuiToggleButton-root .count': { color: 'text.secondary' },
+                                            '& .MuiToggleButton-root.Mui-selected .count': { color: 'primary.main' },
+                                        }}
+                                    >
+                                        <ToggleButton value="parents">
+                                            <Stack spacing={0.2} alignItems="center">
+                                                <Typography variant="body2">Padres</Typography>
+                                                <Typography variant="caption" className="count">{effectivePreview?.counts?.parents ?? 0}</Typography>
+                                            </Stack>
+                                        </ToggleButton>
+
+                                        <ToggleButton value="monitoras">
+                                            <Stack spacing={0.2} alignItems="center">
+                                                <Typography variant="body2">Monitoras</Typography>
+                                                <Typography variant="caption" className="count">{effectivePreview?.counts?.monitoras ?? 0}</Typography>
+                                            </Stack>
+                                        </ToggleButton>
+
+                                        <ToggleButton value="pilots">
+                                            <Stack spacing={0.2} alignItems="center">
+                                                <Typography variant="body2">Pilotos</Typography>
+                                                <Typography variant="caption" className="count">{effectivePreview?.counts?.pilots ?? 0}</Typography>
+                                            </Stack>
+                                        </ToggleButton>
+
+                                        <ToggleButton value="supervisors">
+                                            <Stack spacing={0.2} alignItems="center">
+                                                <Typography variant="body2">Supervisores</Typography>
+                                                <Typography variant="caption" className="count">{effectivePreview?.counts?.supervisors ?? 0}</Typography>
+                                            </Stack>
+                                        </ToggleButton>
+                                    </ToggleButtonGroup>
+                                </AccordionDetails>
+                            </Accordion>
+                        </Box>
+                    )}
+
+                    {/* 4) Vista previa */}
+                    {selectedSchool !== 'all' && selectedRoutes.length > 0 && (
+                        <Box sx={{ mt: 1.25 }}>
+                            <Accordion disableGutters elevation={0} square defaultExpanded>
+                                <AccordionSummary expandIcon={<ExpandMore />}>
+                                    <Typography variant="subtitle1" fontWeight={600}>4) Vista previa</Typography>
+                                </AccordionSummary>
+
+                                <AccordionDetails>
+                                    {selectedRoles.includes('parents') && !selectedSchedule ? (
                                         <Alert severity="warning">Selecciona un horario para ver la vista previa.</Alert>
                                     ) : previewLoading ? (
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                             <CircularProgress size={18} />
                                             <Typography variant="body2">Cargando vista previa...</Typography>
                                         </Box>
-                                    ) : !preview ? (
+                                    ) : !effectivePreview ? (
                                         <Alert severity="info">No hay vista previa para esa combinación.</Alert>
                                     ) : (
                                         <>
@@ -561,29 +713,29 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                                     Totales (únicos) a enviar:
                                                 </Typography>
 
-                                                <Typography variant="body2">• Padres: <strong>{preview.counts?.parents ?? 0}</strong></Typography>
-                                                <Typography variant="body2">• Monitoras: <strong>{preview.counts?.monitoras ?? 0}</strong></Typography>
-                                                <Typography variant="body2">• Pilotos: <strong>{preview.counts?.pilots ?? 0}</strong></Typography>
-                                                <Typography variant="body2">• Supervisores: <strong>{preview.counts?.supervisors ?? 0}</strong></Typography>
+                                                <Typography variant="body2">• Padres: <strong>{effectivePreview?.counts?.parents ?? 0}</strong></Typography>
+                                                <Typography variant="body2">• Monitoras: <strong>{effectivePreview?.counts?.monitoras ?? 0}</strong></Typography>
+                                                <Typography variant="body2">• Pilotos: <strong>{effectivePreview?.counts?.pilots ?? 0}</strong></Typography>
+                                                <Typography variant="body2">• Supervisores: <strong>{effectivePreview?.counts?.supervisors ?? 0}</strong></Typography>
                                                 <Typography variant="body2" sx={{ mt: 0.5 }}>
-                                                    • Total únicos: <strong>{preview.counts?.totalUnique ?? 0}</strong>
+                                                    • Total únicos: <strong>{effectivePreview?.counts?.totalUnique ?? 0}</strong>
                                                 </Typography>
                                             </Stack>
 
                                             <Divider sx={{ my: 1.5 }} />
 
                                             <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
-                                                Muestra de correos (máx {preview.sampleLimit || 0})
+                                                Muestra de correos (máx {effectivePreview.sampleLimit || 0})
                                             </Typography>
 
-                                            {preview.sampleEmails?.length ? (
+                                            {effectivePreview.sampleEmails?.length ? (
                                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                                    {preview.sampleEmails.map((email) => (
+                                                    {effectivePreview.sampleEmails.map((email) => (
                                                         <Chip key={email} label={email} size="small" />
                                                     ))}
-                                                    {(preview.counts?.totalUnique ?? 0) > (preview.sampleEmails.length ?? 0) && (
+                                                    {(effectivePreview?.counts?.totalUnique ?? 0) > (effectivePreview.sampleEmails.length ?? 0) && (
                                                         <Chip
-                                                            label={`+${(preview.counts.totalUnique - preview.sampleEmails.length)} más`}
+                                                            label={`+${(effectivePreview?.counts?.totalUnique - effectivePreview.sampleEmails.length)} más`}
                                                             size="small"
                                                             disabled
                                                         />
@@ -643,7 +795,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
                 <DialogActions>
                     <Button onClick={onClose} disabled={sending}>Cancelar</Button>
-                    <Button onClick={handleSendCircular} variant="contained" disabled={sending}>
+                    <Button onClick={handleSendCircular} variant="contained" disabled={sending || selectedRoles.length === 0}>
                         {sending ? 'Enviando...' : 'Enviar Circular'}
                     </Button>
                 </DialogActions>
