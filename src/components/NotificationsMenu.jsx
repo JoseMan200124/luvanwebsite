@@ -298,9 +298,35 @@ const NotificationsMenu = ({ authToken }) => {
                 // Actualizar contador
                 fetchUnreadCount();
             });
+
+            socket.on('notification_deleted', (payload) => {
+                try {
+                    const uuidsRaw = payload && (payload.uuids || payload.uuid) ? (payload.uuids || payload.uuid) : null;
+                    const uuids = Array.isArray(uuidsRaw) ? uuidsRaw : (uuidsRaw ? [uuidsRaw] : []);
+
+                    if (uuids.length > 0 && menuOpen) {
+                        setNotifications((prev) => {
+                            const next = prev.filter((n) => !uuids.includes(n.uuid));
+                            const removed = prev.length - next.length;
+                            if (removed > 0) {
+                                setTotalNotifications((t) => Math.max(0, (t || 0) - removed));
+                            }
+                            return next;
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Failed handling notification_deleted payload', e);
+                }
+
+                // Actualizar contador (por si borró una unread)
+                fetchUnreadCount();
+            });
         }
         return () => {
-            if (socket) socket.off('new_notification');
+            if (socket) {
+                socket.off('new_notification');
+                socket.off('notification_deleted');
+            }
         };
     }, [authToken, fetchUnreadCount, menuOpen]);
 
