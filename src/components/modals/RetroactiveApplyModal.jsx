@@ -155,7 +155,7 @@ const RetroactiveApplyModal = ({
                         {currentFamilyRouteType ? <> (actual: <strong>{currentFamilyRouteType}</strong>)</> : null}
                     </Typography>
                     <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
-                        Puedes aplicar el cambio al mes actual y/o a los períodos pendientes, o bien a partir del siguiente período para afectar cargos futuros.
+                        Puedes aplicar el cambio de tipo de ruta únicamente a períodos pendientes, a partir del período actual, o bien a partir del siguiente período para afectar cargos futuros.
                     </Typography>
                 </>
             );
@@ -163,7 +163,7 @@ const RetroactiveApplyModal = ({
 
         return (
             <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
-                Selecciona la opción que mejor se adapte. Puedes aplicar el descuento al mes actual y/o a los períodos pendientes, o bien a partir del siguiente período para afectar cargos futuros.
+                Selecciona la opción que mejor se adapte. Puedes aplicar el descuento únicamente a períodos pendientes, a partir del periodo actual, o bien a partir del siguiente período para afectar cargos futuros.
             </Typography>
         );
     };
@@ -202,7 +202,8 @@ const RetroactiveApplyModal = ({
             }
         }
 
-        if (option !== 'NEXT' && !selectAll && (!Array.isArray(selectedPeriods) || selectedPeriods.length === 0)) {
+        const requiresPeriodsSelection = option === 'CURRENT_OR_PENDING';
+        if (requiresPeriodsSelection && !selectAll && (!Array.isArray(selectedPeriods) || selectedPeriods.length === 0)) {
             setSnackbar({ open: true, message: 'Selecciona al menos un período antes de aplicar.', severity: 'warning' });
             return;
         }
@@ -233,6 +234,8 @@ const RetroactiveApplyModal = ({
 
             if (option === 'NEXT') {
                 payload = { ...payload, scope: 'NEXT_FROM' };
+            } else if (option === 'CURRENT_AND_NEXT') {
+                payload = { ...payload, scope: 'CURRENT_AND_NEXT_FROM' };
             } else {
                 if (selectAll) {
                     payload = { ...payload, scope: 'ALL_PENDING' };
@@ -311,17 +314,21 @@ const RetroactiveApplyModal = ({
                         >
                             <Typography variant="subtitle1" sx={(theme) => ({ textTransform: 'uppercase', fontWeight: 700, color: theme.palette.primary.main, display: 'flex', alignItems: 'center' })}>
                                 <Box component="span" sx={{ mr: 1, fontSize: 18 }}>📅</Box>
-                                APLICAR AL PERIODO ACTUAL Y/O PERÍODOS PENDIENTES
+                                APLICAR A PERIODOS PENDIENTES
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                                Selecciona el periodo actual y/o los demás períodos pendientes a los que deseas aplicar. Puedes seleccionar todos.
+                                {normalizedMode === 'ROUTE_TYPE' ? (
+                                    <>Selecciona los periodos pendientes a los que deseas aplicar el cambio de tipo de ruta. <strong>No quedará configurado para periodos futuros.</strong></>
+                                ) : (
+                                    <>Selecciona los periodos pendientes a los que deseas aplicar el descuento. <strong>No quedará configurado para periodos futuros.</strong></>
+                                )}
                             </Typography>
 
                             <Box sx={{ mt: 2 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 1 }}>
                                     <FormControlLabel
                                         control={<Switch checked={selectAll} onChange={(e) => handleToggleSelectAll(e.target.checked)} />}
-                                        label="Seleccionar todos los periodos pendientes"
+                                        label="Seleccionar todos los períodos pendientes"
                                     />
                                 </Box>
 
@@ -331,12 +338,16 @@ const RetroactiveApplyModal = ({
                                             const original = Number(p.originalAmount ?? p.amount ?? 0);
                                             const net = Number(p.netAmount ?? p.net ?? p.amount ?? 0);
 
+                                            const studentCountRaw = Number(p.studentsCount);
                                             const studentCountFromFamily = Number(
                                                 familyFromDetail?.studentsCount || effectivePayment?.studentCount || 1
                                             );
-                                            const studentCount = Math.max(1, studentCountFromFamily || 1);
+                                            const studentCount = (Number.isFinite(studentCountRaw) && studentCountRaw > 0)
+                                                ? studentCountRaw
+                                                : Math.max(1, studentCountFromFamily || 1);
 
-                                            const routeTypeForLabel = String(p.routeType || currentFamilyRouteType || routeType || '').trim();
+                                            // Use snapshot fields from new_PaymentPeriods for per-period labels
+                                            const routeTypeForLabel = String(p.routeType || '').trim();
 
                                             const baseFromPeriod = original / studentCount;
                                             const baseFee = Number.isFinite(baseFromPeriod) ? baseFromPeriod : 0;
@@ -407,6 +418,40 @@ const RetroactiveApplyModal = ({
                             sx={(theme) => ({
                                 p: 2,
                                 cursor: 'pointer',
+                                borderColor: option === 'CURRENT_AND_NEXT' ? theme.palette.success.main : alpha(theme.palette.success.main, 0.5),
+                                backgroundColor: option === 'CURRENT_AND_NEXT' ? alpha(theme.palette.success.main, 0.06) : theme.palette.background.paper,
+                                transition: 'transform 200ms, box-shadow 200ms, border-color 200ms, background-color 200ms',
+                                boxShadow: option === 'CURRENT_AND_NEXT' ? theme.shadows[2] : 'none',
+                                borderRadius: 2,
+                                '&:hover': {
+                                    transform: 'translateY(-3px)',
+                                    boxShadow: theme.shadows[3],
+                                    borderColor: theme.palette.success.main,
+                                    backgroundColor: option === 'CURRENT_AND_NEXT' ? alpha(theme.palette.success.main, 0.12) : alpha(theme.palette.success.main, 0.03)
+                                }
+                            })}
+                            onClick={() => setOption('CURRENT_AND_NEXT')}
+                        >
+                            <Typography variant="subtitle1" sx={(theme) => ({ textTransform: 'uppercase', fontWeight: 700, color: theme.palette.success.main, display: 'flex', alignItems: 'center' })}>
+                                <Box component="span" sx={{ mr: 1, fontSize: 18 }}>📅</Box>
+                                APLICAR AL PERIODO ACTUAL
+                            </Typography>
+                            <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                                {normalizedMode === 'ROUTE_TYPE' ? (
+                                    <>Aplica el cambio de tipo de ruta a partir del periodo actual pendiente. <strong>Quedará configurado para periodos futuros.</strong></>
+                                ) : (
+                                    <>Aplica el descuento a partir del periodo actual pendiente. <strong>Quedará configurado para periodos futuros.</strong></>
+                                )}
+                            </Typography>
+                        </Paper>
+                    </Box>
+
+                    <Box sx={{ width: '100%' }}>
+                        <Paper
+                            variant="outlined"
+                            sx={(theme) => ({
+                                p: 2,
+                                cursor: 'pointer',
                                 borderColor: option === 'NEXT' ? theme.palette.secondary.main : alpha(theme.palette.secondary.main, 0.5),
                                 backgroundColor: option === 'NEXT' ? alpha(theme.palette.secondary.main, 0.06) : theme.palette.background.paper,
                                 transition: 'transform 200ms, box-shadow 200ms, border-color 200ms, background-color 200ms',
@@ -426,9 +471,11 @@ const RetroactiveApplyModal = ({
                                 APLICAR AL SIGUIENTE PERIODO
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                                {normalizedMode === 'ROUTE_TYPE'
-                                    ? 'El cambio se aplicará en los cargos futuros a partir del siguiente período. No modifica períodos ya generados.'
-                                    : 'El descuento se aplicará en los cargos futuros a partir del siguiente período. No modifica períodos ya generados.'}
+                                {normalizedMode === 'ROUTE_TYPE' ? (
+                                    <>El cambio se aplicará en los cargos futuros a partir del siguiente período. <strong>No modifica períodos ya generados.</strong></>
+                                ) : (
+                                    <>El descuento se aplicará en los cargos futuros a partir del siguiente período. <strong>No modifica períodos ya generados.</strong></>
+                                )}
                             </Typography>
                         </Paper>
                     </Box>
