@@ -2181,18 +2181,29 @@ const SchoolPaymentsPage = () => {
         }
 
         const dailyPenalty = parseFloat(school?.dailyPenalty || allSchools.find(s => s.id === registerPaymentTarget?.schoolId)?.dailyPenalty || 0);
-        const sCount = (registerPaymentTarget?.User?.FamilyDetail?.Students || []).length || 1;
+        const fallbackStudentCount = Number(
+            registerPaymentTarget?.studentCount ||
+            registerPaymentTarget?.User?.FamilyDetail?.studentsCount ||
+            ((registerPaymentTarget?.User?.FamilyDetail?.Students || []).length || 0) ||
+            1
+        ) || 1;
 
         let totalPenalty = 0;
         const periodBreakdown = [];
 
         for (const period of penaltyPeriods) {
+            const periodStudentCountRaw = Number(period?.studentsCount);
+            const periodStudentCount = (Number.isFinite(periodStudentCountRaw) && periodStudentCountRaw > 0)
+                ? periodStudentCountRaw
+                : fallbackStudentCount;
+
             // Períodos congelados o limpiados mantienen su mora fija
             if (period.penaltyFrozen || period.penaltyCleared) {
                 periodBreakdown.push({
                     period: period.period,
                     daysLate: 0,
                     penaltyAmount: Number(period.penaltyDue || 0),
+                    studentCount: periodStudentCount,
                     frozen: !!period.penaltyFrozen,
                     cleared: !!period.penaltyCleared,
                 });
@@ -2217,12 +2228,13 @@ const SchoolPaymentsPage = () => {
             }
 
             const daysLate = paymentMoment.diff(penaltyStart, 'days') + 1;
-            const periodPenalty = daysLate * dailyPenalty * sCount;
+            const periodPenalty = daysLate * dailyPenalty * periodStudentCount;
 
             periodBreakdown.push({
                 period: period.period,
                 daysLate,
                 penaltyAmount: periodPenalty,
+                studentCount: periodStudentCount,
                 penaltyStartDate: penaltyStart.format('DD/MM/YYYY'),
                 frozen: false,
                 cleared: false,
@@ -2235,7 +2247,7 @@ const SchoolPaymentsPage = () => {
             periods: periodBreakdown,
             penaltyUntilPaymentDate: totalPenalty,
             dailyPenalty,
-            studentCount: sCount,
+            studentCount: fallbackStudentCount,
             paymentDate: paymentMoment.format('DD [de] MMMM, YYYY'),
             message: `Pago retroactivo: La mora acumulada hasta el ${paymentMoment.format('DD/MM/YYYY')} es de Q${totalPenalty.toFixed(2)}`
         };
@@ -2333,6 +2345,15 @@ const SchoolPaymentsPage = () => {
         if (paymentTab !== 1 || dialogPenaltyPeriods.length === 0) return null;
         return calculateRetroactivePenalty(payPenaltyDate, dialogPenaltyPeriods);
     }, [payPenaltyDate, paymentTab, dialogPenaltyPeriods, calculateRetroactivePenalty]);
+
+    // Index retroactive per-period results for O(1) lookups in the main breakdown
+    const retroPenaltyByPeriod = React.useMemo(() => {
+        const map = new Map();
+        (retroactivePenaltyCalc?.periods || []).forEach(p => {
+            if (p?.period) map.set(p.period, p);
+        });
+        return map;
+    }, [retroactivePenaltyCalc]);
 
     // Mora en tiempo real: si hay cálculo retroactivo, usar ese total; sino, el valor almacenado
     const effectivePenaltyDue = React.useMemo(() => {
@@ -3435,6 +3456,12 @@ const SchoolPaymentsPage = () => {
                                                 // Días = fin - inicio + 1 (ambos extremos inclusivos)
                                                 const moraDays = moraStart ? Math.max(0, moraEnd.diff(moraStart, 'days') + 1) : 0;
 
+                                                // En modo retroactivo: reutilizar el cálculo ya hecho en retroactivePenaltyCalc
+                                                const retroItem = retroactivePenaltyCalc ? retroPenaltyByPeriod.get(period.period) : null;
+                                                const computedPenaltyForDisplay = retroItem
+                                                    ? Number(retroItem.penaltyAmount || 0)
+                                                    : Number(period.penaltyDue || 0);
+
                                                 return (
                                                     <Box key={idx} sx={{ mb: 1, p: 1.5, borderLeft: '4px solid', borderColor: isFrozen ? '#1976d2' : isCleared ? '#4caf50' : '#d32f2f', bgcolor: isFrozen ? '#e3f2fd' : isCleared ? '#e8f5e9' : '#fce4ec', borderRadius: '0 4px 4px 0' }}>
                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3442,7 +3469,7 @@ const SchoolPaymentsPage = () => {
                                                                 {label} {isFrozen && '❄️'} {isCleared && '✅'}
                                                             </Typography>
                                                             <Typography variant="caption" sx={{ fontWeight: 700, color: isFrozen ? '#1976d2' : 'error.main' }}>
-                                                                {formatCurrency(Number(period.penaltyDue || 0))}
+                                                                {formatCurrency(computedPenaltyForDisplay)}
                                                             </Typography>
                                                         </Box>
                                                         {moraStart && (
@@ -3591,7 +3618,7 @@ const SchoolPaymentsPage = () => {
                                                             </Typography>
                                                         ) : (
                                                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                                                {p.daysLate} días × Q{retroactivePenaltyCalc.dailyPenalty} × {retroactivePenaltyCalc.studentCount} est. = {formatCurrency(p.penaltyAmount)}
+                                                                {p.daysLate} días × Q{retroactivePenaltyCalc.dailyPenalty} × {Number(p.studentCount || retroactivePenaltyCalc.studentCount || 1)} est. = {formatCurrency(p.penaltyAmount)}
                                                             </Typography>
                                                         )}
                                                     </Box>
