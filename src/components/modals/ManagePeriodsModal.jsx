@@ -51,6 +51,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     const [periodToAdd, setPeriodToAdd] = useState('');
     const [routeTypeToAdd, setRouteTypeToAdd] = useState('');
     const [discountToAdd, setDiscountToAdd] = useState('');
+    const [studentsCountToAdd, setStudentsCountToAdd] = useState('');
 
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -124,6 +125,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
         setPeriodToAdd('');
         setRouteTypeToAdd('');
         setDiscountToAdd('');
+        setStudentsCountToAdd('');
         autoFilledCurrentRef.current = false;
         setDeleteTarget(null);
         setDeleteConfirmText('');
@@ -221,6 +223,14 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
             return;
         }
 
+        const parsedStudentsCount = studentsCountToAdd === '' || studentsCountToAdd === null || typeof studentsCountToAdd === 'undefined'
+            ? NaN
+            : Number(studentsCountToAdd);
+        if (studentsCountToAdd !== '' && (!Number.isFinite(parsedStudentsCount) || !Number.isInteger(parsedStudentsCount) || parsedStudentsCount < 1)) {
+            setError('Ingresa una cantidad de estudiantes válida (entero 1 o mayor), o déjalo en blanco para usar la cantidad actual.');
+            return;
+        }
+
         setLoading(true);
         setError('');
         setSuccess('');
@@ -228,12 +238,14 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
             const payload = { period: p };
             if (rt) payload.routeType = rt;
             if (Number.isFinite(parsedDiscount)) payload.discountApplied = parsedDiscount;
+            if (Number.isFinite(parsedStudentsCount)) payload.studentsCount = parsedStudentsCount;
 
             await api.post(`/payments/v2/${paymentId}/periods`, payload);
             await refresh();
             if (onChanged) onChanged();
             setSuccess(`Período ${p} agregado correctamente.`);
             setPeriodToAdd('');
+            setStudentsCountToAdd('');
         } catch (e) {
             console.error('Error adding period', e);
             setError(e?.response?.data?.error || e?.response?.data?.message || 'Error agregando período');
@@ -304,13 +316,13 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 📅 Agregar período
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Seleccione un período y haga clic en <strong>Agregar</strong>. Puedes definir <strong>ruta</strong> y/o <strong>descuento</strong> solo para el período que deseas agregar.
+                                Seleccione un período y haga clic en <strong>Agregar</strong>. Puedes definir <strong>ruta</strong>, <strong>descuento</strong> y/o <strong>cantidad de estudiantes</strong> solo para el período que deseas agregar.
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Al no definirse ruta o descuento, se usará la configuración actual
+                                Al no definirse ruta, descuento o cantidad de estudiantes, se usará la configuración actual
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Configuración actual: Ruta: <strong>{futureRouteType || '-'}</strong> · Descuento: <strong>Q {Number(futureDiscount || 0).toFixed(2)}</strong>
+                                Configuración actual: Ruta: <strong>{futureRouteType || '-'}</strong> · Descuento: <strong>Q {Number(futureDiscount || 0).toFixed(2)}</strong> · Cantidad de estudiantes: <strong>{studentCountFromFamily}</strong>
                             </Typography>
                         </Paper>
                     </Box>
@@ -328,7 +340,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 gap: 1,
                                 alignItems: 'center',
                                 [theme.breakpoints.up('sm')]: {
-                                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))'
+                                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))'
                                 }
                             })}
                         >
@@ -399,6 +411,20 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 placeholder={`Actual: Q ${Number(futureDiscount || 0).toFixed(2)}`}
                                 value={discountToAdd}
                                 onChange={(e) => setDiscountToAdd(e.target.value)}
+                                disabled={!paymentId || loading}
+                                InputLabelProps={{ shrink: true }}
+                                fullWidth
+                                sx={{ minWidth: 0 }}
+                            />
+
+                            <TextField
+                                size="small"
+                                label="Estudiantes"
+                                type="number"
+                                inputProps={{ min: 1, step: 1 }}
+                                placeholder={`Actual: ${studentCountFromFamily}`}
+                                value={studentsCountToAdd}
+                                onChange={(e) => setStudentsCountToAdd(e.target.value)}
                                 disabled={!paymentId || loading}
                                 InputLabelProps={{ shrink: true }}
                                 fullWidth
