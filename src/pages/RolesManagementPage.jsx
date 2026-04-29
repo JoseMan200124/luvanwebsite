@@ -329,7 +329,7 @@ const RolesManagementPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const resp = await api.get('/schools');
+            const resp = await api.get('/schools', { params: { allCycles: true, latestPerSchool: true } });
             setSchools(resp.data.schools || []);
         } catch (err) {
             console.error('[fetchSchools] Error:', err);
@@ -339,7 +339,7 @@ const RolesManagementPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const resp = await api.get('/corporations');
+            const resp = await api.get('/corporations', { params: { allCycles: true } });
             setCorporations(resp.data.corporations || []);
         } catch (err) {
             console.error('[fetchCorporations] Error:', err);

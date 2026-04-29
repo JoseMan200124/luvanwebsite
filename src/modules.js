@@ -2,6 +2,7 @@
 import {
     Group,
     School,
+    CalendarMonth,
     BarChart,
     People,
     Security,
@@ -19,6 +20,7 @@ import BusesManagementPage from './pages/BusesManagementPage';
 import RouteHistoryPage from './pages/RouteHistoryPage';
 // ✅ REMOVIDO: import ActivityLogPage from './pages/ActivityLogPage';
 import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
+import CiclosEscolaresPage from './pages/CiclosEscolaresPage';
 import AttendanceManagementPage from './pages/AttendanceManagementPage';
 import StudentIncidentsPage from './pages/StudentIncidentsPage';
 import BusIncidentsPage from './pages/BusIncidentsPage';
@@ -62,6 +64,14 @@ export const modules = [
                 name: 'Colegios',
                 path: 'colegios',
                 component: SchoolYearSelectionPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'ciclos-escolares',
+                name: 'Ciclos Escolares',
+                path: 'ciclos-escolares',
+                component: CiclosEscolaresPage,
+                icon: CalendarMonth,
                 roles: ['Administrador', 'Gestor'],
             },
             {

@@ -64,6 +64,7 @@ import {
 } from '../services/mechanicRequestService';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 const PageContainer = styled.div`
     ${tw`p-6`}
@@ -103,6 +104,7 @@ const MechanicRequestsPage = () => {
     const [tipoTrabajo, setTipoTrabajo] = useState('');
     const [estado, setEstado] = useState('');
     const [urgente, setUrgente] = useState('');
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
@@ -125,8 +127,8 @@ const MechanicRequestsPage = () => {
         const loadFiltersData = async () => {
             try {
                 const [schoolsResponse, corpsResponse] = await Promise.all([
-                    api.get('/schools'),
-                    api.get('/corporations')
+                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } }),
+                    api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) })
                 ]);
                 const schoolsData = Array.isArray(schoolsResponse.data) 
                     ? schoolsResponse.data 
@@ -141,7 +143,7 @@ const MechanicRequestsPage = () => {
             }
         };
         loadFiltersData();
-    }, []);
+    }, [selectedCicloEscolar]);
 
     // Cargar opciones de placas y rutas cuando cambie el cliente seleccionado
     useEffect(() => {
@@ -190,6 +192,7 @@ const MechanicRequestsPage = () => {
                 limit: rowsPerPage,
                 sortBy,
                 sortOrder: sortOrder.toUpperCase(),
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
             if (schoolId) params.schoolId = schoolId;
@@ -210,12 +213,14 @@ const MechanicRequestsPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, rowsPerPage, schoolId, corporationId, plate, routeNumber, tipoTrabajo, estado, urgente, startDate, endDate, sortBy, sortOrder]);
+    }, [page, rowsPerPage, schoolId, corporationId, plate, routeNumber, tipoTrabajo, estado, urgente, selectedCicloEscolar, startDate, endDate, sortBy, sortOrder]);
 
     // Función para cargar estadísticas
     const fetchStatistics = useCallback(async () => {
         try {
-            const params = {};
+            const params = {
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
+            };
             if (schoolId) params.schoolId = schoolId;
             if (corporationId) params.corporationId = corporationId;
             if (startDate) params.startDate = startDate;
@@ -226,7 +231,7 @@ const MechanicRequestsPage = () => {
         } catch (error) {
             console.error('Error fetching statistics:', error);
         }
-    }, [schoolId, corporationId, startDate, endDate]);
+    }, [schoolId, corporationId, selectedCicloEscolar, startDate, endDate]);
 
     useEffect(() => {
         fetchRequests();
@@ -456,7 +461,20 @@ const MechanicRequestsPage = () => {
             {/* Filtros */}
             <FiltersContainer elevation={1}>
                 <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6} md={2}>
+                    <Grid item xs={12} sm={6} md={1.5}>
+                        <CicloEscolarFilter
+                            value={selectedCicloEscolar}
+                            onChange={(value) => {
+                                setSelectedCicloEscolar(value);
+                                setSchoolId('');
+                                setCorporationId('');
+                                setPlate('');
+                                setRouteNumber('');
+                                setPage(0);
+                            }}
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={1.5}>
                         <TextField
                             select
                             fullWidth
@@ -474,7 +492,7 @@ const MechanicRequestsPage = () => {
                             ))}
                         </TextField>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
+                    <Grid item xs={12} sm={6} md={1.5}>
                         <TextField
                             select
                             fullWidth
@@ -577,7 +595,7 @@ const MechanicRequestsPage = () => {
                             <MenuItem value="false">No</MenuItem>
                         </TextField>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.3}>
+                    <Grid item xs={12} sm={6} md={1.25}>
                         <TextField
                             fullWidth
                             size="small"
@@ -588,7 +606,7 @@ const MechanicRequestsPage = () => {
                             InputLabelProps={{ shrink: true }}
                         />
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.3}>
+                    <Grid item xs={12} sm={6} md={1.25}>
                         <TextField
                             fullWidth
                             size="small"

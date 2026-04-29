@@ -41,6 +41,7 @@ import ColaboradorDashboardPage from './pages/ColaboradorDashboardPage';
 import ColaboradorProtocolsPage from './pages/ColaboradorProtocolsPage';
 import { modules } from './modules';
 import AdminAuditHidden from './pages/AdminAuditHidden';
+import AdminRebuildPaymentsHidden from './pages/AdminRebuildPaymentsHidden';
 
 function App() {
     /* ------------------------------------------------------ */
@@ -256,6 +257,16 @@ function App() {
                         element={
                 <ProtectedRoute roles={['Gestor']}>
                                 <AdminAuditHidden />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* Ruta oculta de reconstrucción de pagos (no listada en menús). */}
+                    <Route
+                        path="/_hidden/rebuild-payments/gestor/3f1e7a92-5c4d-4e8b-9f1a-2d6b8c7e0a14"
+                        element={
+                            <ProtectedRoute roles={['Gestor']}>
+                                <AdminRebuildPaymentsHidden />
                             </ProtectedRoute>
                         }
                     />

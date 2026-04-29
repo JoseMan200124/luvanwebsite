@@ -47,6 +47,7 @@ import tw from 'twin.macro';
 import { getAttendances, getAttendanceDetails } from '../services/attendanceService';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -74,6 +75,7 @@ const AttendanceManagementPage = () => {
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedSchedule, setSelectedSchedule] = useState('');
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
 
@@ -87,7 +89,7 @@ const AttendanceManagementPage = () => {
 
     useEffect(() => {
         fetchSchools();
-    }, []);
+    }, [selectedCicloEscolar]);
 
     useEffect(() => {
         if (selectedSchool) {
@@ -104,11 +106,11 @@ const AttendanceManagementPage = () => {
     useEffect(() => {
         fetchAttendances();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedSchedule, startDate, endDate]);
+    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedSchedule, selectedCicloEscolar, startDate, endDate]);
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools');
+            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setSchools(schoolsData);
         } catch (error) {
@@ -187,6 +189,7 @@ const AttendanceManagementPage = () => {
             const filters = {
                 page: page + 1,
                 limit: rowsPerPage,
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
             if (selectedSchool) filters.schoolId = selectedSchool;
@@ -263,11 +266,6 @@ const AttendanceManagementPage = () => {
         setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
     };
-
-    const handleRefresh = () => {
-        fetchAttendances();
-    };
-
 
     const getDayLabel = (day) => {
         const labels = {
@@ -349,7 +347,20 @@ const AttendanceManagementPage = () => {
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid item xs={12} sm={6} md={2}>
+                            <CicloEscolarFilter size="medium"
+                                value={selectedCicloEscolar}
+                                onChange={(value) => {
+                                    setSelectedCicloEscolar(value);
+                                    setSelectedSchool('');
+                                    setSelectedPlate('');
+                                    setSelectedRoute('');
+                                    setSelectedSchedule('');
+                                    setPage(0);
+                                }}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={2}>
                             <FormControl fullWidth>
                                 <InputLabel>Colegio</InputLabel>
                                 <Select
@@ -437,25 +448,22 @@ const AttendanceManagementPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={4}>
-                            <Grid container spacing={1}>
-                                <Grid item xs={6}>
-                                    <DatePicker
-                                        label="Fecha Inicio"
-                                        value={startDate}
-                                        onChange={(newValue) => setStartDate(newValue)}
-                                    />
-                                </Grid>
-                                <Grid item xs={6}>
-                                    <DatePicker
-                                        label="Fecha Fin"
-                                        value={endDate}
-                                        onChange={(newValue) => setEndDate(newValue)}
-                                    />
-                                </Grid>
-                            </Grid>
+                        <Grid item xs={12} sm={12} md={3}>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                <DatePicker
+                                    label="Fecha Inicio"
+                                    value={startDate}
+                                    onChange={(newValue) => setStartDate(newValue)}
+                                    sx={{ flex: 1 }}
+                                />
+                                <DatePicker
+                                    label="Fecha Fin"
+                                    value={endDate}
+                                    onChange={(newValue) => setEndDate(newValue)}
+                                    sx={{ flex: 1 }}
+                                />
+                            </Box>
                         </Grid>
-                        {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
                     </Grid>
                 </Paper>
 
