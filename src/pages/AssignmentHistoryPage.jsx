@@ -24,10 +24,11 @@ import {
     CircularProgress,
     Alert
 } from '@mui/material';
-import { Refresh as RefreshIcon, Visibility as ViewIcon } from '@mui/icons-material';
+import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import moment from 'moment-timezone';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -53,10 +54,10 @@ const AssignmentHistoryPage = () => {
     const [corporationId, setCorporationId] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
 
     // Catálogos para filtros
     const [buses, setBuses] = useState([]);
-    const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
     const [corporations, setCorporations] = useState([]);
 
@@ -94,7 +95,7 @@ const AssignmentHistoryPage = () => {
     useEffect(() => {
         fetchHistory();
         fetchCatalogs();
-    }, [page, rowsPerPage, assignmentType, busId, userId, schoolId, corporationId, startDate, endDate]);
+    }, [page, rowsPerPage, assignmentType, busId, userId, schoolId, corporationId, startDate, endDate, selectedCicloEscolar]);
 
     const fetchHistory = async () => {
         setLoading(true);
@@ -102,7 +103,8 @@ const AssignmentHistoryPage = () => {
         try {
             const params = {
                 page: page + 1,
-                limit: rowsPerPage
+                limit: rowsPerPage,
+                ...getCicloEscolarFilterParams(selectedCicloEscolar)
             };
 
             if (assignmentType) params.assignmentType = assignmentType;
@@ -138,21 +140,18 @@ const AssignmentHistoryPage = () => {
 
             // Cargar colegios
             const schoolsRes = await api.get('/schools', {
+                params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true },
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             setSchools(schoolsRes.data.schools || []);
 
             // Cargar corporaciones
             const corpsRes = await api.get('/corporations', {
+                params: getCicloEscolarFilterParams(selectedCicloEscolar),
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             setCorporations(corpsRes.data.corporations || []);
 
-            // Cargar usuarios (pilotos y monitoras)
-            const usersRes = await api.get('/users', {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setUsers(usersRes.data.users || []);
         } catch (err) {
             console.error('Error al cargar catálogos:', err);
         }
@@ -163,23 +162,11 @@ const AssignmentHistoryPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
-    const handleClearFilters = () => {
-        setAssignmentType('');
-        setBusId('');
-        setUserId('');
-        setSchoolId('');
-        setCorporationId('');
-        setStartDate('');
-        setEndDate('');
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
     const renderChangeDescription = (record) => {
-        const type = record.assignmentType;
         const changeType = record.changeType;
 
         const parseJson = (v) => {
@@ -304,6 +291,21 @@ const AssignmentHistoryPage = () => {
                         Filtros
                     </Typography>
                     <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <CicloEscolarFilter
+                                value={selectedCicloEscolar}
+                                onChange={(value) => {
+                                    setSelectedCicloEscolar(value);
+                                    setBusId('');
+                                    setUserId('');
+                                    setSchoolId('');
+                                    setCorporationId('');
+                                    setPage(0);
+                                }}
+                                size="small"
+                            />
+                        </Grid>
+
                         <Grid item xs={12} sm={6} md={3}>
                             <FormControl fullWidth size="small">
                                 <InputLabel>Tipo de Asignación</InputLabel>

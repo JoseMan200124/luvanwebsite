@@ -207,7 +207,10 @@ const SchoolUsersPage = () => {
 
         try {
             setRouteReportLoading(true);
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, serviceStatus } });
+            const currentSchoolYear = schoolYear || stateSchoolYear;
+            const resp = await api.get('/users/parents/download', {
+                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), serviceStatus }
+            });
             const parents = resp.data.users || [];
             if (parents.length === 0) {
                 setSnackbar({ open: true, message: `No hay padres con estado de servicio ${serviceStatus} para descargar.`, severity: 'info' });
@@ -236,7 +239,10 @@ const SchoolUsersPage = () => {
             setRouteReportLoading(true);
 
             // Request backend for filtered parents for download
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'new' } });
+            const currentSchoolYear = schoolYear || stateSchoolYear;
+            const resp = await api.get('/users/parents/download', {
+                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'new' }
+            });
             const newParents = resp.data.users || [];
 
             // Si no hay nuevos, avisar
@@ -399,7 +405,10 @@ const SchoolUsersPage = () => {
         const SCHEDULE_CODES = getScheduleCodesFromSchool(currentSchool?.schedules);
         try {
             // Usar endpoint del backend que filtra por activos
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'active' } });
+            const currentSchoolYear = schoolYear || stateSchoolYear;
+            const resp = await api.get('/users/parents/download', {
+                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'active' }
+            });
             const activeParents = resp.data.users || [];
 
             const parentsWithRoutes = activeParents.filter(u =>
@@ -639,7 +648,10 @@ const SchoolUsersPage = () => {
         try {
             setRouteReportLoading(true);
             // Request backend for all parents for this school
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'all' } });
+            const currentSchoolYear = schoolYear || stateSchoolYear;
+            const resp = await api.get('/users/parents/download', {
+                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'all' }
+            });
             const parents = resp.data.users || [];
             // Reuse the full workbook builder to ensure parity
             await buildParentsWorkbookAndDownload(parents, schoolIdToUse, 'padres');
@@ -799,7 +811,10 @@ const SchoolUsersPage = () => {
             setRouteReportLoading(true);
 
             // Request backend for filtered parents for download
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'active' } });
+            const currentSchoolYear = schoolYear || stateSchoolYear;
+            const resp = await api.get('/users/parents/download', {
+                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'active' }
+            });
             const filtered = resp.data.users || [];
             if (filtered.length === 0) {
                 setSnackbar({ open: true, message: 'No hay padres activos para descargar.', severity: 'info' });
@@ -914,7 +929,10 @@ const SchoolUsersPage = () => {
 
         try {
             setRouteReportLoading(true);
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'inactive' } });
+            const currentSchoolYear = schoolYear || stateSchoolYear;
+            const resp = await api.get('/users/parents/download', {
+                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'inactive' }
+            });
             const filtered = resp.data.users || [];
             if (filtered.length === 0) {
                 setSnackbar({ open: true, message: 'No hay padres inactivos para descargar.', severity: 'info' });
@@ -1113,6 +1131,7 @@ const SchoolUsersPage = () => {
     // Obtener datos del estado de navegación
     const stateSchool = location.state?.school;
     const stateSchoolYear = location.state?.schoolYear;
+    const stateCicloEscolarId = location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
 
     // Funciones auxiliares para determinar el estado de los usuarios
     const isUserNew = (user) => {
@@ -1264,7 +1283,7 @@ const SchoolUsersPage = () => {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: { schoolId, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}) }
+                params: { schoolId, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}) }
             });
 
             const usersData = response.data.users || [];
@@ -2575,6 +2594,7 @@ const SchoolUsersPage = () => {
                 user={selectedUser}
                 schoolId={stateSchool?.id || schoolId}
                 schoolYear={schoolYear || stateSchoolYear}
+                cicloEscolarId={stateCicloEscolarId}
                 onSuccess={handleServiceStatusSuccess}
             />
 

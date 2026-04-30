@@ -136,6 +136,7 @@ const SchoolDashboardPage = () => {
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
     const stateSchoolYear = location.state?.schoolYear;
+    const currentCicloEscolarId = location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || schoolData?.cicloEscolarId || '';
 
     const fetchSchoolData = useCallback(async () => {
         if (!schoolId) return;
@@ -167,6 +168,7 @@ const SchoolDashboardPage = () => {
                 },
                 params: {
                     schoolYear: schoolYear,
+                    cicloEscolarId: currentCicloEscolarId || '',
                     day: selectedDay
                 }
             });
@@ -175,7 +177,7 @@ const SchoolDashboardPage = () => {
             console.error('Error fetching route occupancy:', err);
             setRouteOccupancy([]);
         }
-    }, [auth.token, schoolId, schoolYear, selectedDay]);
+    }, [auth.token, schoolId, schoolYear, selectedDay, currentCicloEscolarId]);
 
     const fetchUserSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!schoolId) return;
@@ -185,7 +187,7 @@ const SchoolDashboardPage = () => {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: { schoolYear: schoolYear, serviceStatus }
+                params: { schoolYear: schoolYear, cicloEscolarId: currentCicloEscolarId || '', serviceStatus }
             });
             
             const summary = response.data.summary || {};
@@ -199,7 +201,7 @@ const SchoolDashboardPage = () => {
             console.error('Error fetching user summary:', err);
             setUserSummary({ completa: 0, mediaAM: 0, mediaPM: 0, total: 0 });
         }
-    }, [auth.token, schoolId, schoolYear]);
+    }, [auth.token, schoolId, schoolYear, currentCicloEscolarId]);
 
     const fetchStudentSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!schoolId) return;
@@ -209,7 +211,7 @@ const SchoolDashboardPage = () => {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: { schoolYear: schoolYear, serviceStatus }
+                params: { schoolYear: schoolYear, cicloEscolarId: currentCicloEscolarId || '', serviceStatus }
             });
             
             const summary = response.data.summary || {};
@@ -231,7 +233,7 @@ const SchoolDashboardPage = () => {
             console.error('Error fetching student summary:', err);
             setStudentSummary({ completa: 0, mediaAM: 0, mediaPM: 0, inactive: 0, total: 0 });
         }
-    }, [auth.token, schoolId, schoolYear]);
+    }, [auth.token, schoolId, schoolYear, currentCicloEscolarId]);
 
     // Obtiene contadores globales: cuántas familias/estudiantes usan vs no usan el servicio
     const fetchServiceUsageSummary = useCallback(async () => {
@@ -245,14 +247,14 @@ const SchoolDashboardPage = () => {
                 Promise.all(allStatuses.map(s =>
                     api.get(`/parents/summary/${schoolId}`, {
                         headers: { Authorization: `Bearer ${auth.token}` },
-                        params: { schoolYear, serviceStatus: s }
+                        params: { schoolYear, cicloEscolarId: currentCicloEscolarId || '', serviceStatus: s }
                     }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
                     .catch(() => ({ status: s, total: 0, inactive: 0 }))
                 )),
                 Promise.all(allStatuses.map(s =>
                     api.get(`/students/summary/${schoolId}`, {
                         headers: { Authorization: `Bearer ${auth.token}` },
-                        params: { schoolYear, serviceStatus: s }
+                        params: { schoolYear, cicloEscolarId: currentCicloEscolarId || '', serviceStatus: s }
                     }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
                     .catch(() => ({ status: s, total: 0, inactive: 0 }))
                 ))
@@ -272,7 +274,7 @@ const SchoolDashboardPage = () => {
         } catch (err) {
             console.error('Error fetching service usage summary:', err);
         }
-    }, [auth.token, schoolId, schoolYear]);
+    }, [auth.token, schoolId, schoolYear, currentCicloEscolarId]);
 
     useEffect(() => {
         if (auth.token && schoolId) {
@@ -307,6 +309,7 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/${schoolYear}/${schoolId}/usuarios`, {
             state: {
                 schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
@@ -316,6 +319,7 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/${schoolYear}/${schoolId}/buses-gestion`, {
             state: {
                 schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
@@ -325,6 +329,7 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/${schoolYear}/${schoolId}/pagos`, {
             state: {
                 schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
@@ -334,6 +339,7 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/${schoolYear}/${schoolId}/contratos`, {
             state: {
                 schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
@@ -343,6 +349,7 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/${schoolYear}/${schoolId}/protocolos`, {
             state: {
                 schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
@@ -401,7 +408,7 @@ const SchoolDashboardPage = () => {
             await Promise.all(weekdays.map(async (d) => {
                 const resp = await api.get(`/routes/occupancy/${schoolId}`, {
                     headers: { Authorization: `Bearer ${auth.token}` },
-                    params: { schoolYear: schoolYear, day: d }
+                    params: { schoolYear: schoolYear, cicloEscolarId: currentCicloEscolarId || '', day: d }
                 });
                 dayMap[d] = resp.data.routes || [];
             }));

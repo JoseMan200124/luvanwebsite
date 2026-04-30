@@ -49,6 +49,7 @@ import {
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import { getCiclosEscolares, getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import * as XLSX from 'xlsx';
@@ -501,10 +502,17 @@ const BusesManagementPage = () => {
     useEffect(() => {
         const loadClients = async () => {
             try {
-                const [schoolsResp, corpsResp] = await Promise.all([
-                    api.get('/schools', { headers: { Authorization: `Bearer ${auth.token}` } }),
-                    api.get('/corporations', { headers: { Authorization: `Bearer ${auth.token}` } })
+                const [ciclosData, schoolsResp, corpsResp] = await Promise.all([
+                    getCiclosEscolares(),
+                    api.get('/schools', { params: { allCycles: true, includeArchived: true } }),
+                    api.get('/corporations', { params: { allCycles: true } })
                 ]);
+
+                const ciclosList = ciclosData?.ciclosEscolares || (Array.isArray(ciclosData) ? ciclosData : []);
+                const cicloMap = {};
+                for (const c of ciclosList) {
+                    cicloMap[c.id] = getCicloEscolarOptionLabel(c);
+                }
 
                 const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
                 const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
@@ -515,11 +523,20 @@ const BusesManagementPage = () => {
                     if (item.deleted) return;
                     const id = item.id || item._id || item.value || item.uuid || item.name;
                     const name = item.name || item.nombre || item.label || String(id);
-                    combined.push({ id, name, _raw: item, type });
+                    const cicloLabel = item.cicloEscolarId && cicloMap[item.cicloEscolarId]
+                        ? cicloMap[item.cicloEscolarId]
+                        : 'Sin ciclo';
+                    combined.push({ id, name, cicloLabel, _raw: item, type });
                 };
 
                 (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
                 (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
+
+                combined.sort((a, b) => {
+                    const cmp = b.cicloLabel.localeCompare(a.cicloLabel);
+                    if (cmp !== 0) return cmp;
+                    return a.name.localeCompare(b.name);
+                });
 
                 setClientOptions(combined);
             } catch (err) {
@@ -699,6 +716,7 @@ const BusesManagementPage = () => {
                         size="small"
                         options={clientOptions}
                         getOptionLabel={(opt) => opt.name || ''}
+                        groupBy={(opt) => opt.cicloLabel || 'Sin ciclo'}
                         value={clientFilter ? clientOptions.find((o) => 
                             String(o.id) === String(clientFilter.id) && o.type === clientFilter.type
                         ) || null : null}

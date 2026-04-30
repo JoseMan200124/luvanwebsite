@@ -62,6 +62,7 @@ import PermissionGuard from '../components/PermissionGuard';
 import { DEFAULT_SCHEDULE_CODES, ensureSchedules, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 import EditSchedulesModal from '../components/modals/EditSchedulesModal';
 import SendNotificationModal from '../components/SendNotificationModal';
+import { getCicloEscolarOptionLabel, getCiclosEscolares } from '../services/cicloEscolarService';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -150,13 +151,18 @@ const SchoolYearSelectionPage = () => {
     const navigate = useNavigate();
 
     const [schools, setSchools] = useState([]);
-    const [selectedSchoolYear, setSelectedSchoolYear] = useState('2025');
+    const [ciclosEscolares, setCiclosEscolares] = useState([]);
+    const [selectedCicloEscolarId, setSelectedCicloEscolarId] = useState(() => localStorage.getItem('selectedCicloEscolarId') || '');
+    const [selectedSchoolYear, setSelectedSchoolYear] = useState(() => localStorage.getItem('selectedSchoolYear') || '');
+    const [cyclesLoading, setCyclesLoading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     
     // Estados para diálogos y acciones
     const [selectedSchool, setSelectedSchool] = useState(null);
     const [openEditDialog, setOpenEditDialog] = useState(false);
+    const [savingSchool, setSavingSchool] = useState(false);
+    const [cycleMigrationConfirmation, setCycleMigrationConfirmation] = useState(null);
     const [openEditSchedulesModal, setOpenEditSchedulesModal] = useState(false);
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissions, setSubmissions] = useState([]);
@@ -208,11 +214,17 @@ const SchoolYearSelectionPage = () => {
     const [anchorEl, setAnchorEl] = useState(null);
     const [popoverGrades, setPopoverGrades] = useState([]);
 
-    // Por ahora solo tenemos el ciclo escolar 2025, pero preparamos para futuras expansiones
-    const schoolYears = [
-        { id: '2025', name: 'Ciclo Escolar 2025' },
-        // Aquí se pueden agregar más ciclos escolares en el futuro
-    ];
+    const selectedCicloEscolar = ciclosEscolares.find((cicloEscolar) => String(cicloEscolar.id) === String(selectedCicloEscolarId));
+    const defaultCicloEscolar = ciclosEscolares.find((cicloEscolar) => cicloEscolar.predeterminado && cicloEscolar.activo) || ciclosEscolares.find((cicloEscolar) => cicloEscolar.predeterminado) || null;
+    const selectedCycleYear = selectedCicloEscolar?.anio ? String(selectedCicloEscolar.anio) : selectedSchoolYear;
+    const enabledCiclosEscolares = ciclosEscolares.filter((cicloEscolar) => cicloEscolar.activo);
+    const selectableCiclosEscolares = enabledCiclosEscolares.length > 0 ? enabledCiclosEscolares : ciclosEscolares;
+    const schoolYears = selectableCiclosEscolares.map((cicloEscolar) => ({
+        id: String(cicloEscolar.id),
+        name: getCicloEscolarOptionLabel(cicloEscolar),
+        anio: String(cicloEscolar.anio || ''),
+        cicloEscolar
+    }));
 
     // Helper para asegurar que los horarios tengan todos los slots configurados
     // For EXISTING schools: preserves whatever schedules they have as-is.
@@ -223,10 +235,57 @@ const SchoolYearSelectionPage = () => {
         return ensureSchedules([], DEFAULT_SCHEDULE_CODES); // new school — seed defaults
     };
 
+    const isPreviousCycleSchool = (school) => {
+        const cycleStatus = String(school?.cycleStatus || '').trim().toUpperCase();
+        if (cycleStatus === 'ARCHIVED') return true;
+
+        const selectedYear = Number(selectedCicloEscolar?.anio || selectedCycleYear || 0);
+        const defaultYear = Number(defaultCicloEscolar?.anio || 0);
+        return selectedYear > 0 && defaultYear > 0 && selectedYear < defaultYear;
+    };
+
+    const fetchCiclosEscolares = useCallback(async () => {
+        setCyclesLoading(true);
+        try {
+            const data = await getCiclosEscolares();
+            const ciclos = Array.isArray(data.ciclosEscolares) ? data.ciclosEscolares : [];
+            setCiclosEscolares(ciclos);
+
+            if (ciclos.length === 0) return;
+
+            const storedId = localStorage.getItem('selectedCicloEscolarId');
+            const selectableCycles = ciclos.filter((cicloEscolar) => cicloEscolar.activo);
+            const cycleOptions = selectableCycles.length > 0 ? selectableCycles : ciclos;
+            const storedCycle = storedId ? cycleOptions.find((cicloEscolar) => String(cicloEscolar.id) === String(storedId)) : null;
+            const defaultCycle = data.default || data.active || ciclos.find((cicloEscolar) => cicloEscolar.predeterminado) || cycleOptions[0];
+            const nextCycle = storedCycle || defaultCycle;
+
+            if (nextCycle?.id) {
+                setSelectedCicloEscolarId(String(nextCycle.id));
+                localStorage.setItem('selectedCicloEscolarId', String(nextCycle.id));
+            }
+            if (nextCycle?.anio) {
+                setSelectedSchoolYear(String(nextCycle.anio));
+                localStorage.setItem('selectedSchoolYear', String(nextCycle.anio));
+            }
+        } catch (error) {
+            console.error('Error fetching ciclos escolares:', error);
+            setSnackbar({ open: true, message: 'Error al obtener los ciclos escolares', severity: 'error' });
+        } finally {
+            setCyclesLoading(false);
+        }
+    }, []);
+
     const fetchSchoolsByYear = useCallback(async () => {
         setLoading(true);
         try {
-            const params = { schoolYear: selectedSchoolYear };
+            const params = {
+                schoolYear: selectedCycleYear,
+                includeArchived: true
+            };
+            if (selectedCicloEscolarId) {
+                params.cicloEscolarId = selectedCicloEscolarId;
+            }
             // If the current user is not role 1 (Gestor) or 2 (Administrador),
             // request only assigned schools. Backend also enforces this rule,
             // but sending the hint keeps intent explicit.
@@ -277,7 +336,7 @@ const SchoolYearSelectionPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [auth.token, selectedSchoolYear]);
+    }, [auth.token, selectedCycleYear, selectedCicloEscolarId]);
 
     // Register page-level refresh handler for global refresh control
     useRegisterPageRefresh(async () => {
@@ -285,19 +344,34 @@ const SchoolYearSelectionPage = () => {
     }, [fetchSchoolsByYear]);
 
     useEffect(() => {
-        if (auth.token && selectedSchoolYear) {
+        if (auth.token) {
+            fetchCiclosEscolares();
+        }
+    }, [auth.token, fetchCiclosEscolares]);
+
+    useEffect(() => {
+        if (auth.token && selectedCycleYear) {
             fetchSchoolsByYear();
         }
-    }, [auth.token, selectedSchoolYear, fetchSchoolsByYear]);
+    }, [auth.token, selectedCycleYear, selectedCicloEscolarId, fetchSchoolsByYear]);
 
     const handleSchoolYearChange = (event) => {
-        setSelectedSchoolYear(event.target.value);
+        const nextCicloEscolarId = event.target.value;
+        const nextCycle = ciclosEscolares.find((cicloEscolar) => String(cicloEscolar.id) === String(nextCicloEscolarId));
+        setSelectedCicloEscolarId(nextCicloEscolarId);
+        localStorage.setItem('selectedCicloEscolarId', String(nextCicloEscolarId));
+
+        if (nextCycle?.anio) {
+            setSelectedSchoolYear(String(nextCycle.anio));
+            localStorage.setItem('selectedSchoolYear', String(nextCycle.anio));
+        }
     };
 
     const handleSchoolSelect = (school) => {
-        navigate(`/admin/escuelas/${selectedSchoolYear}/${school.id}`, {
+        navigate(`/admin/escuelas/${selectedCycleYear}/${school.id}`, {
             state: {
-                schoolYear: selectedSchoolYear,
+                schoolYear: selectedCycleYear,
+                cicloEscolarId: selectedCicloEscolarId,
                 school: school
             }
         });
@@ -517,6 +591,12 @@ const SchoolYearSelectionPage = () => {
         try {
             const formData = new FormData();
             formData.append('file', bulkFile);
+            if (selectedCicloEscolarId) {
+                formData.append('cicloEscolarId', selectedCicloEscolarId);
+            }
+            if (selectedCycleYear) {
+                formData.append('schoolYear', selectedCycleYear);
+            }
             const resp = await api.post('/schools/bulk-upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
@@ -567,6 +647,7 @@ const SchoolYearSelectionPage = () => {
     const handleCloseEditDialog = () => {
         setOpenEditDialog(false);
         setOpenEditSchedulesModal(false);
+        setCycleMigrationConfirmation(null);
         setSelectedSchool(null);
         setSchoolSchedules([]);
         setSchoolGrades([]);
@@ -778,6 +859,45 @@ const SchoolYearSelectionPage = () => {
         });
     };
 
+    const isSchoolCycleMigrationConfirmation = (error) => {
+        const responseData = error?.response?.data;
+        return error?.response?.status === 409 && responseData?.code === 'SCHOOL_CYCLE_MIGRATION_CONFIRMATION_REQUIRED';
+    };
+
+    const handleConfirmCycleMigration = async () => {
+        if (!cycleMigrationConfirmation?.payload) return;
+
+        setSavingSchool(true);
+        try {
+            const response = await api.post('/schools', {
+                ...cycleMigrationConfirmation.payload,
+                confirmCycleMigration: true
+            }, {
+                headers: { Authorization: `Bearer ${auth.token}` },
+            });
+
+            const transfer = response.data?.cycleMigrationTransfer;
+            const hasTransfer = transfer && Object.values(transfer).some((value) => Number(value) > 0);
+            setSnackbar({
+                open: true,
+                message: hasTransfer ? 'Colegio creado y relaciones actualizadas al nuevo ciclo.' : 'Colegio creado exitosamente',
+                severity: 'success'
+            });
+            setCycleMigrationConfirmation(null);
+            fetchSchoolsByYear();
+            handleCloseEditDialog();
+        } catch (err) {
+            console.error('Error al confirmar traslado de ciclo:', err);
+            setSnackbar({
+                open: true,
+                message: 'Error al crear el colegio con traslado de ciclo',
+                severity: 'error'
+            });
+        } finally {
+            setSavingSchool(false);
+        }
+    };
+
     // Función para guardar cambios
     const handleSave = async () => {
         if (!selectedSchool) return;
@@ -857,6 +977,8 @@ const SchoolYearSelectionPage = () => {
             // Don't block, just skip them silently during normalization
         }
 
+        let attemptedPayload = null;
+        setSavingSchool(true);
         try {
             // Normalize schedules: filter out entries without code, preserve days
             const normalizedSchedules = schedulesWithCode
@@ -917,9 +1039,11 @@ const SchoolYearSelectionPage = () => {
                 // school year bounds
                 schoolYearStart: schoolYearStart || null,
                 schoolYearEnd: schoolYearEnd || null,
+                cicloEscolarId: selectedCicloEscolarId || null,
                 // Add school year for new schools
-                schoolYear: selectedSchoolYear
+                schoolYear: selectedCycleYear
             };
+            attemptedPayload = payload;
 
             // Distinguish between create and update
             if (selectedSchool.id) {
@@ -935,13 +1059,16 @@ const SchoolYearSelectionPage = () => {
                 });
             } else {
                 // Create new school
-                await api.post('/schools', payload, {
+                const createResponse = await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
+
+                const transfer = createResponse.data?.cycleMigrationTransfer;
+                const hasTransfer = transfer && Object.values(transfer).some((value) => Number(value) > 0);
                 
                 setSnackbar({
                     open: true,
-                    message: 'Colegio creado exitosamente',
+                    message: hasTransfer ? 'Colegio creado y relaciones actualizadas al nuevo ciclo.' : 'Colegio creado exitosamente',
                     severity: 'success'
                 });
             }
@@ -950,11 +1077,22 @@ const SchoolYearSelectionPage = () => {
             handleCloseEditDialog();
         } catch (err) {
             console.error('Error al guardar el colegio:', err);
+            if (!selectedSchool?.id && attemptedPayload && isSchoolCycleMigrationConfirmation(err)) {
+                setCycleMigrationConfirmation({
+                    open: true,
+                    payload: attemptedPayload,
+                    message: err.response.data?.message || '',
+                    impact: err.response.data?.impact || null
+                });
+                return;
+            }
             setSnackbar({
                 open: true,
                 message: 'Error al guardar el colegio',
                 severity: 'error'
             });
+        } finally {
+            setSavingSchool(false);
         }
     };
 
@@ -1002,7 +1140,8 @@ const SchoolYearSelectionPage = () => {
         try {
             const response = await api.post('/payments/penalties/clear', {
                 schoolId: selectedSchool.id,
-                schoolYear: selectedSchoolYear,
+                schoolYear: selectedCycleYear,
+                cicloEscolarId: selectedCicloEscolarId || null,
                 period: periodToClean,
                 reason: clearReason
             });
@@ -1059,15 +1198,21 @@ const SchoolYearSelectionPage = () => {
                             <FormControl fullWidth variant="outlined" sx={{ maxWidth: 300 }}>
                                 <InputLabel>Seleccionar Ciclo Escolar</InputLabel>
                                 <Select
-                                    value={selectedSchoolYear}
+                                    value={selectedCicloEscolarId}
                                     onChange={handleSchoolYearChange}
                                     label="Seleccionar Ciclo Escolar"
+                                    disabled={cyclesLoading || schoolYears.length === 0}
                                 >
                                     {schoolYears.map((year) => (
                                         <MenuItem key={year.id} value={year.id}>
                                             {year.name}
                                         </MenuItem>
                                     ))}
+                                    {schoolYears.length === 0 && (
+                                        <MenuItem value="" disabled>
+                                            Sin ciclos configurados
+                                        </MenuItem>
+                                    )}
                                 </Select>
                             </FormControl>
 
@@ -1115,7 +1260,7 @@ const SchoolYearSelectionPage = () => {
                         <br />
                         <br />
                         Para los horarios, escribir tiempos en formato <code>HH:MM</code> (ej. <code>13:00</code>). <br /> <br />
-                        Las fechas de Inicio Ciclo / Fin Ciclo deben ir en formato <code>dd-mm-aaaa</code> (ej. <code>01-03-2025</code>).
+                        Las fechas de Inicio Ciclo / Fin Ciclo deben ir en formato <code>dd-mm-aaaa</code>.
                     </Typography>
                     <Button
                         variant="outlined"
@@ -1148,6 +1293,8 @@ const SchoolYearSelectionPage = () => {
                                     { header: 'Fin Ciclo', key: 'schoolYearEnd', width: 14, style: { numFmt: '@' } }
                                 ];
 
+                                const templateYear = Number.parseInt(selectedCycleYear, 10) || new Date().getFullYear();
+
                                 // Example row to guide users
                                 worksheet.addRow({
                                     name: 'Colegio Ejemplo',
@@ -1169,8 +1316,8 @@ const SchoolYearSelectionPage = () => {
                                     bankAccount: '',
                                     routeNumbers: '12,15',
                                     dailyPenalty: 10.00,
-                                    schoolYearStart: '01-03-2025',
-                                    schoolYearEnd: '28-02-2026'
+                                    schoolYearStart: `01-03-${templateYear}`,
+                                    schoolYearEnd: `28-02-${templateYear + 1}`
                                 });
 
                                 worksheet.getRow(1).font = { bold: true };
@@ -1252,7 +1399,7 @@ const SchoolYearSelectionPage = () => {
             <Card>
                 <CardContent>
                     <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-                        Colegios - {schoolYears.find(y => y.id === selectedSchoolYear)?.name}
+                        Colegios - {schoolYears.find(y => y.id === selectedCicloEscolarId)?.name || `Ciclo Escolar ${selectedCycleYear}`}
                     </Typography>
 
                     {loading ? (
@@ -1272,6 +1419,16 @@ const SchoolYearSelectionPage = () => {
                                 <Grid item xs={12} sm={6} md={4} lg={3} key={school.id}>
                                     <SchoolCard>
                                         <CardContent sx={{ textAlign: 'center', py: 3 }}>
+                                            <Box sx={{ minHeight: 28, mb: 1, display: 'flex', justifyContent: 'center' }}>
+                                                {isPreviousCycleSchool(school) && (
+                                                    <Chip
+                                                        label="Ciclo anterior"
+                                                        size="small"
+                                                        color="warning"
+                                                        variant="filled"
+                                                    />
+                                                )}
+                                            </Box>
                                             <SchoolIcon 
                                                 sx={{ 
                                                     fontSize: 48, 
@@ -1529,7 +1686,7 @@ const SchoolYearSelectionPage = () => {
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 <Box sx={{ display: 'flex', gap: 2 }}>
                                     <TextField
-                                        label="Inicio Ciclo Escolar"
+                                        label="Inicio Ciclo del Colegio"
                                         type="date"
                                         fullWidth
                                         variant="outlined"
@@ -1538,7 +1695,7 @@ const SchoolYearSelectionPage = () => {
                                         InputLabelProps={{ shrink: true }}
                                     />
                                     <TextField
-                                        label="Fin Ciclo Escolar"
+                                        label="Fin Ciclo del Colegio"
                                         type="date"
                                         fullWidth
                                         variant="outlined"
@@ -1668,7 +1825,8 @@ const SchoolYearSelectionPage = () => {
                                         const period = `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
                                         await api.post('/payments/penalties/clear', {
                                             schoolId: selectedSchool.id,
-                                            schoolYear: selectedSchoolYear,
+                                            schoolYear: selectedCycleYear,
+                                            cicloEscolarId: selectedCicloEscolarId || null,
                                             period,
                                             reason: quickClearReason
                                         });
@@ -1920,8 +2078,52 @@ const SchoolYearSelectionPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseEditDialog}>Cancelar</Button>
-                    <Button onClick={handleSave} variant="contained" color="primary">
-                        {selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio'}
+                    <Button onClick={handleSave} variant="contained" color="primary" disabled={savingSchool}>
+                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : (selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio')}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={!!cycleMigrationConfirmation?.open}
+                onClose={() => !savingSchool && setCycleMigrationConfirmation(null)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Confirmar traslado al nuevo ciclo</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        {cycleMigrationConfirmation?.message || 'Ya existe un colegio con este nombre en un ciclo escolar anterior.'}
+                    </DialogContentText>
+                    <Alert severity="warning" sx={{ mt: 2, mb: 2 }}>
+                        Si continúas, el colegio anterior quedará archivado y se aplicarán estos cambios operativos:
+                    </Alert>
+                    <Box component="ul" sx={{ pl: 3, my: 0 }}>
+                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.pilotsToMove || 0)} pilotos se moverán al colegio del ciclo nuevo.</li>
+                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.monitorasToMove || 0)} monitoras se moverán al colegio del ciclo nuevo.</li>
+                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.busesToUnassign || 0)} buses quedarán sin ruta/colegio para poder reasignarlos.</li>
+                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.routeAssignmentsToClear || 0)} asignaciones de ruta del colegio anterior se limpiarán.</li>
+                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.supervisorsToMove || 0)} supervisores apuntarán al colegio del ciclo nuevo.</li>
+                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.auxiliariesToMove || 0)} auxiliares apuntarán al colegio del ciclo nuevo.</li>
+                    </Box>
+                    {Array.isArray(cycleMigrationConfirmation?.impact?.oldSchools) && cycleMigrationConfirmation.impact.oldSchools.length > 0 && (
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }}>
+                            {cycleMigrationConfirmation.impact.oldSchools.map((school) => (
+                                <Chip
+                                    key={school.id}
+                                    label={`${school.name} (${school.schoolYear || 'sin ciclo'})`}
+                                    size="small"
+                                    color="warning"
+                                    variant="outlined"
+                                />
+                            ))}
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setCycleMigrationConfirmation(null)} disabled={savingSchool}>Cancelar</Button>
+                    <Button onClick={handleConfirmCycleMigration} variant="contained" color="warning" disabled={savingSchool}>
+                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Aceptar y crear'}
                     </Button>
                 </DialogActions>
             </Dialog>

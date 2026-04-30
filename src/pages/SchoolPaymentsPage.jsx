@@ -110,6 +110,7 @@ const SchoolPaymentsPage = () => {
     const { schoolYear, schoolId } = useParams();
 
     const [school, setSchool] = useState(location.state?.school || null);
+    const currentCicloEscolarId = location.state?.cicloEscolarId || location.state?.school?.cicloEscolarId || school?.cicloEscolarId || '';
     const [allSchools, setAllSchools] = useState([]);
     // paymentsAll stores the full dataset fetched from server. filtered is the client-side filtered pageable set.
     const [paymentsAll, setPaymentsAll] = useState([]);
@@ -223,12 +224,12 @@ const SchoolPaymentsPage = () => {
             try {
                 // Trigger background recalculation so UI load is not blocked.
                 // Fire-and-forget: do not await the request.
-                api.post('/payments/recalc-school', { schoolId, schoolYear, background: true }).catch(err => {
+                api.post('/payments/recalc-school', { schoolId, schoolYear, cicloEscolarId: currentCicloEscolarId || '', background: true }).catch(err => {
                     // Log but don't block UI
                     console.error('Background recalc failed to start', err);
                 });
                 // Trigger auto-debits for this school as a fire-and-forget operation
-                api.post('/payments/process-auto-debits', { schoolId, schoolYear }).catch(err => {
+                api.post('/payments/process-auto-debits', { schoolId, schoolYear, cicloEscolarId: currentCicloEscolarId || '' }).catch(err => {
                     console.error('Background auto-debits failed to start', err);
                 });
             } catch (e) {
@@ -261,12 +262,12 @@ const SchoolPaymentsPage = () => {
 
     const fetchAllSchools = useCallback(async () => {
         try {
-            const res = await api.get('/schools');
+            const res = await api.get('/schools', { params: { schoolYear, cicloEscolarId: currentCicloEscolarId || '', includeArchived: true } });
             setAllSchools(res.data.schools || []);
         } catch (err) {
             console.error('fetchAllSchools', err);
         }
-    }, []);
+    }, [schoolYear, currentCicloEscolarId]);
 
     // Fetch all payments for the school in one request and store locally.
     // Tries a single large request first and falls back to iterative paging if backend enforces pagination.
@@ -275,7 +276,7 @@ const SchoolPaymentsPage = () => {
         try {
             const st = status ? String(status).toUpperCase().trim() : '';
             const qq = q ? String(q).trim() : '';
-            const params = { schoolId, schoolYear, page: 1, limit: 10000 };
+            const params = { schoolId, schoolYear, cicloEscolarId: currentCicloEscolarId || '', page: 1, limit: 10000 };
 
             // MORA y PENDIENTE son valores de finalStatus → filtrar en el servidor.
             // PAGADO (= CONFIRMADO + ADELANTADO) e INACTIVO (= serviceStatus INACTIVE)
@@ -300,7 +301,7 @@ const SchoolPaymentsPage = () => {
                 const all = [];
                 for (let p = 0; p < pages; p++) {
                     const serverFilter = st && SERVER_FINAL_STATUS.has(st) ? { finalStatus: st } : {};
-                    const r = await api.get('/payments', { params: { schoolId, schoolYear, page: p + 1, limit: per, ...serverFilter, ...(qq ? { search: qq } : {}) } });
+                    const r = await api.get('/payments', { params: { schoolId, schoolYear, cicloEscolarId: currentCicloEscolarId || '', page: p + 1, limit: per, ...serverFilter, ...(qq ? { search: qq } : {}) } });
                     const part = r.data.payments || r.data.rows || [];
                     if (Array.isArray(part) && part.length > 0) all.push(...part);
                 }
@@ -338,7 +339,7 @@ const SchoolPaymentsPage = () => {
     const fetchPaymentsAnalysis = async (schId) => {
         if (!schId) return;
         try {
-            const res = await api.get('/payments/analysis', { params: { schoolId: schId, schoolYear, excludeInactive: true } });
+            const res = await api.get('/payments/analysis', { params: { schoolId: schId, schoolYear, cicloEscolarId: currentCicloEscolarId || '', excludeInactive: true } });
             // expected shape: { statusDistribution: [...], monthlyEarnings: [...] }
             const data = res.data || null;
             // Keep ELIMINADO in statusDistribution so the counter chip reads the correct value.
@@ -401,7 +402,7 @@ const SchoolPaymentsPage = () => {
 
     const fetchExtraordinaryEarnings = async () => {
         try {
-            const res = await api.get('/payments/extraordinary/analysis', { params: { schoolId } });
+            const res = await api.get('/payments/extraordinary/analysis', { params: { schoolId, schoolYear, cicloEscolarId: currentCicloEscolarId || '' } });
             return res.data.monthlyEarnings || [];
         } catch (error) {
             console.error('fetchExtraordinaryEarnings error', error);
@@ -1738,7 +1739,7 @@ const SchoolPaymentsPage = () => {
             // matching the selected final status. Backend will JOIN PaymentHistory -> Payment.
             // If 'GENERAL' is selected, omit the finalstatus param so backend returns all statuses.
             const selectedYear = String(year || exportYear || moment().year());
-            const params = { schoolId, schoolYear: selectedYear, page: 1, limit: 10000 };
+            const params = { schoolId, schoolYear: selectedYear, cicloEscolarId: currentCicloEscolarId || '', page: 1, limit: 10000 };
             // Manejar agrupación de estados: PAGADO incluye CONFIRMADO y ADELANTADO
             if (exportFinalStatus && String(exportFinalStatus).toUpperCase() === 'PAGADO') {
             } else if (exportFinalStatus && exportFinalStatus !== 'TODOS') {
@@ -1824,7 +1825,7 @@ const SchoolPaymentsPage = () => {
 
                     for (const yr of yearsToFetch) {
                         try {
-                            const resPayments = await api.get('/payments', { params: { schoolId, schoolYear: yr, page: 1, limit: 10000 } });
+                            const resPayments = await api.get('/payments', { params: { schoolId, schoolYear: yr, cicloEscolarId: currentCicloEscolarId || '', page: 1, limit: 10000 } });
                             const allPayments = resPayments.data.payments || resPayments.data.rows || [];
 
                             const partialServiceMap = buildServiceStatusMap(allPayments);
@@ -2027,7 +2028,7 @@ const SchoolPaymentsPage = () => {
             console.error('handleDownloadPaymentsByStatus', err);
             setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
         }
-    }, [schoolId, schoolYear, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus]);
+    }, [schoolId, schoolYear, currentCicloEscolarId, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus]);
 
     // Export payments filtered by estado using client-side dataset (paymentsAll)
     const handleDownloadByState = useCallback(async (estado) => {
