@@ -62,6 +62,7 @@ const SchoolEnrollmentPage = () => {
 
     const [grades, setGrades] = useState([]);
     const [extraFields, setExtraFields] = useState([]);
+    const [enrollmentBlockedMessage, setEnrollmentBlockedMessage] = useState('');
 
     const [familyLastName, setFamilyLastName] = useState('');
     const [serviceAddress, setServiceAddress] = useState('');
@@ -120,6 +121,14 @@ const SchoolEnrollmentPage = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (enrollmentBlockedMessage) {
+            setSnackbar({
+                open: true,
+                message: enrollmentBlockedMessage,
+                severity: 'warning'
+            });
+            return;
+        }
 
         const finalStudentsCount = students.length;
         const payload = {
@@ -207,11 +216,15 @@ const SchoolEnrollmentPage = () => {
                 
                 if (response.data?.school) {
                     const { school } = response.data;
+                    setEnrollmentBlockedMessage(school.canCreateNewUsers === false
+                        ? (school.newUserCreationMessage || 'Este enlace pertenece a un ciclo anterior. Solicita el enlace del ciclo más reciente.')
+                        : '');
                     setGrades(normalizeGrades(school.grades));
 
                     setExtraFields(parseArrayField(school.extraEnrollmentFields));
 
                 } else {
+                    setEnrollmentBlockedMessage('No se pudo validar el colegio para inscripción.');
                     setGrades([]);
                     setExtraFields([]);
                 }
@@ -299,6 +312,11 @@ const SchoolEnrollmentPage = () => {
                     Formulario de Inscripción
                 </Typography>
 
+                {enrollmentBlockedMessage ? (
+                    <Alert severity="warning" sx={{ mb: 3 }}>
+                        {enrollmentBlockedMessage}
+                    </Alert>
+                ) : (
                 <form onSubmit={handleSubmit} style={{ flexGrow: 1 }}>
                     <Typography variant="h6" sx={{ mb: 2 }}>
                         Información Familiar
@@ -643,6 +661,7 @@ const SchoolEnrollmentPage = () => {
                         Enviar
                     </Button>
                 </form>
+                )}
 
                 <Box sx={{ mt: 4, textAlign: 'center', color: '#777' }}>
                     <Divider sx={{ mb: 1 }} />

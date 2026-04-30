@@ -1713,6 +1713,11 @@ const SchoolUsersPage = () => {
     };
 
     const handleAddUser = () => {
+        if (!canCreateUsersInManagedSchool) {
+            setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
+            return;
+        }
+
         setSelectedUser({
             id: null,
             name: '',
@@ -1872,6 +1877,10 @@ const SchoolUsersPage = () => {
 
     const handleBulkUpload = async () => {
         if (!bulkFile) return;
+        if (!canCreateUsersInManagedSchool) {
+            setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
+            return;
+        }
         
         setBulkLoading(true);
         try {
@@ -1910,6 +1919,12 @@ const SchoolUsersPage = () => {
     };
 
     const currentSchool = stateSchool;
+    const schoolRecordFromList = Array.isArray(schools)
+        ? schools.find(s => String(s.id) === String(schoolId || currentSchool?.id || ''))
+        : null;
+    const managedSchool = { ...(schoolRecordFromList || {}), ...(currentSchool || {}) };
+    const canCreateUsersInManagedSchool = managedSchool.canCreateNewUsers !== false;
+    const newUserCreationDisabledMessage = managedSchool.newUserCreationMessage || 'Este colegio pertenece a un ciclo anterior. Para crear nuevos usuarios, usa el colegio del ciclo más reciente.';
 
     // Obtener opciones de grados del colegio gestionado (soporta varios formatos)
     const availableGrades = (() => {
@@ -2171,6 +2186,11 @@ const SchoolUsersPage = () => {
             {/* Botones de Acción */}
             <Card sx={{ mb: 3 }}>
                 <CardContent>
+                    {!canCreateUsersInManagedSchool && (
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            {newUserCreationDisabledMessage}
+                        </Alert>
+                    )}
                     <Grid container spacing={2}>
                         <Grid item xs={12} md={2}>
                             <Button
@@ -2179,6 +2199,7 @@ const SchoolUsersPage = () => {
                                 startIcon={<FileUpload />}
                                 fullWidth
                                 onClick={() => setOpenBulkDialog(true)}
+                                disabled={!canCreateUsersInManagedSchool}
                             >
                                 Carga Masiva
                             </Button>
@@ -2201,6 +2222,7 @@ const SchoolUsersPage = () => {
                                 startIcon={<Add />}
                                 fullWidth
                                 onClick={handleAddUser}
+                                disabled={!canCreateUsersInManagedSchool}
                             >
                                 Añadir Familia
                             </Button>

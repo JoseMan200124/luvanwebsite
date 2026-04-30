@@ -1633,16 +1633,19 @@ const CicloEscolarSelectionPage = () => {
                                                 borderTop: '1px solid #e0e0e0',
                                                 pt: 1.5
                                             }}>
-                                                <Tooltip title="Copiar enlace de inscripción">
-                                                    <IconButton 
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleCopyLink(school.id);
-                                                        }}
-                                                    >
-                                                        <ContentCopy fontSize="small" />
-                                                    </IconButton>
+                                                <Tooltip title={school.canCreateNewUsers === false ? 'Solo disponible en el ciclo más reciente' : 'Copiar enlace de inscripción'}>
+                                                    <span>
+                                                        <IconButton 
+                                                            size="small"
+                                                            disabled={school.canCreateNewUsers === false}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleCopyLink(school.id);
+                                                            }}
+                                                        >
+                                                            <ContentCopy fontSize="small" />
+                                                        </IconButton>
+                                                    </span>
                                                 </Tooltip>
                                                 <Tooltip title="Editar colegio">
                                                     <IconButton 
