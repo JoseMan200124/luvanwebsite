@@ -53,6 +53,15 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const family = localPayment?.User?.FamilyDetail || payment?.User?.FamilyDetail || {};
     const finalStatus = ((localPayment || payment)?.finalStatus || '').toString().toUpperCase();
     const isDeleted = finalStatus === 'ELIMINADO' || !!family.deleted;
+
+    // Derive frozen state from per-period data (penaltyFrozenAt removed from NewPayment model)
+    const hasFrozenPeriods = React.useMemo(() => {
+        const p = localPayment || payment;
+        try {
+            const raw = p?.unpaidPeriods ? (typeof p.unpaidPeriods === 'string' ? JSON.parse(p.unpaidPeriods) : p.unpaidPeriods) : [];
+            return Array.isArray(raw) && raw.some(pp => pp.penaltyFrozen);
+        } catch { return false; }
+    }, [localPayment, payment]);
     const [autoDebit, setAutoDebit] = useState(!!family.autoDebit || false);
     const [requiresInvoice, setRequiresInvoice] = useState(!!family.requiresInvoice || false);
     const [discount, setDiscount] = useState(family.specialFee ?? family.discount ?? 0);
@@ -239,7 +248,20 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     const handleAction = (name, payload = {}) => {
         // Prevent mutating actions for deleted families
-        const mutating = ['exoneratePenalty', 'addTransaction', 'updateReceiptNumber', 'updatePayment', 'toggleRequiresInvoice', 'toggleAutoDebit', 'toggleFreezePenalty'];
+        const mutating = [
+            'exoneratePenalty',
+            'addTransaction',
+            'updateReceiptNumber',
+            'updatePayment',
+            'toggleRequiresInvoice',
+            'toggleAutoDebit',
+            'toggleFreezePenalty',
+            'freezePenalty',
+            'unfreezePenalty',
+            'payPenalty',
+            'discountPenalty',
+            'deletePayment'
+        ];
         if (isDeleted && mutating.includes(name)) {
             // silently ignore or optionally show a client-side message
             return;
@@ -261,11 +283,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         }
 
         // Optimistic UI updates for certain actions
-        if (name === 'toggleFreezePenalty' || name === 'freezePenalty') {
-            setLocalPayment(prev => {
-                if (!prev) return prev;
-                return { ...prev, penaltyFrozen: !prev.penaltyFrozen };
-            });
+        if (name === 'toggleFreezePenalty' || name === 'freezePenalty' || name === 'unfreezePenalty') {
+            // Refresh from parent instead of optimistic update on removed field
         }
 
         // Special-case receipts: open receipts dialog and fetch receipts
@@ -473,11 +492,11 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     {/* Freeze/Unfreeze penalty button - disponible para todos los pagos */}
                     <Button 
                         variant="outlined" 
-                        color={localPayment?.penaltyFrozenAt ? "success" : "primary"}
-                        startIcon={localPayment?.penaltyFrozenAt ? <PlayArrowIcon /> : <PauseIcon />}
+                        color={hasFrozenPeriods ? "success" : "primary"}
+                        startIcon={hasFrozenPeriods ? <PlayArrowIcon /> : <PauseIcon />}
                         onClick={async () => {
                             if (isDeleted) return;
-                            if (localPayment?.penaltyFrozenAt) {
+                            if (hasFrozenPeriods) {
                                 handleAction('unfreezePenalty');
                             } else {
                                 // Freeze with current date from backend (simulated or real)
@@ -495,7 +514,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         }}
                         disabled={isDeleted}
                     >
-                        {localPayment?.penaltyFrozenAt ? 'Reanudar Mora' : 'Congelar Mora'}
+                        {hasFrozenPeriods ? 'Reanudar Mora' : 'Congelar Mora'}
                     </Button>
                     {/* State changes handled elsewhere; action buttons removed */}
                     {/* Delete/Revert payment */}

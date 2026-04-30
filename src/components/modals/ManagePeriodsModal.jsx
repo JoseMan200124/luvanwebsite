@@ -467,6 +467,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                             const per = String(p.period || '');
                             const isCurrent = per === currentPeriod;
                             const status = String(p.status || '').toUpperCase();
+                            const penaltyStatus = String(p.penaltyStatus || 'SIN_MORA').toUpperCase();
                             const amountPaid = Number(p.amountPaid || 0);
                             const amountDue = Number(p.amountDue ?? p.netAmount ?? 0);
 
@@ -474,6 +475,14 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 if (status === 'PAGADO') return 'success';
                                 if (status === 'PARCIAL') return 'warning';
                                 if (status === 'PENDIENTE') return 'warning';
+                                return 'default';
+                            })();
+
+                            const penaltyStatusChipColor = (() => {
+                                if (penaltyStatus === 'PENDIENTE') return 'error';
+                                if (penaltyStatus === 'PARCIAL') return 'warning';
+                                if (penaltyStatus === 'PAGADA') return 'success';
+                                if (penaltyStatus === 'EXONERADA') return 'info';
                                 return 'default';
                             })();
 
@@ -487,6 +496,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                     const periodStudentsCount = Math.max(1, Number(p.studentsCount || studentCountFromFamily || 1));
                                     const baseFee = (original && periodStudentsCount) ? (original / periodStudentsCount) : 0;
                                     const discount = Math.max(0, original - net) || Number(p.discountApplied ?? 0);
+                                    const extraTariffDiscount = Number(p.extraordinaryTariffDiscount ?? 0);
 
                                     const studentsLabel = `${periodStudentsCount} estudiante${periodStudentsCount === 1 ? '' : 's'}`;
                                     const baseLabel = `Tarifa base${routeTypeForLabel ? ` (${routeTypeForLabel})` : ''}`;
@@ -537,7 +547,15 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                             (Periodo actual)
                                                         </Typography>
                                                     )}
-                                                    {status && <Chip size="small" label={status} color={statusChipColor} variant="filled" />}
+                                                    {status && <Chip size="small" label={`Tarifa: ${status}`} color={statusChipColor} variant="filled" />}
+                                                    {penaltyStatus && (
+                                                        <Chip
+                                                            size="small"
+                                                            label={`Mora: ${penaltyStatus.replace('_', ' ')}`}
+                                                            color={penaltyStatusChipColor}
+                                                            variant={penaltyStatus === 'SIN_MORA' ? 'outlined' : 'filled'}
+                                                        />
+                                                    )}
                                                 </Box>
                                                 {isOverdue && (
                                                     <Typography
@@ -567,6 +585,13 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>Descuento</Typography>
                                                         <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{`Q ${Number(discount || 0).toFixed(2)}`}</Typography>
                                                     </Box>
+
+                                                    {extraTariffDiscount > 0 && (
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <Typography variant="body2" sx={{ color: 'warning.dark' }}>Desc. extraordinario tarifa</Typography>
+                                                            <Typography variant="body2" sx={{ color: 'warning.dark', fontWeight: 600, minWidth: 120, textAlign: 'right' }}>{`Q ${extraTariffDiscount.toFixed(2)}`}</Typography>
+                                                        </Box>
+                                                    )}
 
                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                         <Typography component="span" sx={{ fontWeight: 800 }}>Subtotal período:</Typography>
