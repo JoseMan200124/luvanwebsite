@@ -22,12 +22,10 @@ import {
     Tooltip,
     Typography
 } from '@mui/material';
-import { Add, CheckCircle, Edit, Star } from '@mui/icons-material';
+import { Add, Edit, Star } from '@mui/icons-material';
 import PermissionGuard from '../components/PermissionGuard';
 import {
-    activateCicloEscolar,
     createCicloEscolar,
-    getCicloEscolarOptionLabel,
     getCiclosEscolares,
     setDefaultCicloEscolar,
     updateCicloEscolar
@@ -35,10 +33,7 @@ import {
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 const emptyForm = {
-    anio: '',
-    nombre: '',
-    label: '',
-    descripcion: ''
+    anio: ''
 };
 
 const CiclosEscolaresPage = () => {
@@ -80,10 +75,7 @@ const CiclosEscolaresPage = () => {
     const handleOpenEdit = (cicloEscolar) => {
         setSelectedCiclo(cicloEscolar);
         setForm({
-            anio: cicloEscolar.anio || '',
-            nombre: cicloEscolar.nombre || '',
-            label: cicloEscolar.label || '',
-            descripcion: cicloEscolar.descripcion || ''
+            anio: cicloEscolar.anio || ''
         });
         setOpenDialog(true);
     };
@@ -96,6 +88,11 @@ const CiclosEscolaresPage = () => {
 
     const handleChange = (event) => {
         const { name, value } = event.target;
+        if (name === 'anio') {
+            const digits = value.replaceAll(/\D/g, '').slice(0, 4);
+            setForm((prev) => ({ ...prev, [name]: digits }));
+            return;
+        }
         setForm((prev) => ({ ...prev, [name]: value }));
     };
 
@@ -105,18 +102,13 @@ const CiclosEscolaresPage = () => {
             setSnackbar({ open: true, message: 'Ingresa un año válido entre 2000 y 2100', severity: 'error' });
             return;
         }
-        if (!String(form.nombre || '').trim()) {
-            setSnackbar({ open: true, message: 'El nombre del ciclo escolar es obligatorio', severity: 'error' });
-            return;
-        }
 
         setSaving(true);
         try {
             const payload = {
                 anio,
-                nombre: form.nombre.trim(),
-                label: form.label.trim() || null,
-                descripcion: form.descripcion.trim() || null
+                nombre: String(anio),
+                label: `Ciclo Escolar ${anio}`
             };
 
             if (selectedCiclo?.id) {
@@ -131,21 +123,6 @@ const CiclosEscolaresPage = () => {
         } catch (error) {
             console.error('Error guardando ciclo escolar:', error);
             setSnackbar({ open: true, message: error.response?.data?.message || 'Error al guardar ciclo escolar', severity: 'error' });
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleActivate = async (cicloEscolar) => {
-        if (!cicloEscolar?.id || cicloEscolar.activo) return;
-        setSaving(true);
-        try {
-            await activateCicloEscolar(cicloEscolar.id);
-            setSnackbar({ open: true, message: 'Ciclo escolar habilitado', severity: 'success' });
-            fetchCiclosEscolares();
-        } catch (error) {
-            console.error('Error habilitando ciclo escolar:', error);
-            setSnackbar({ open: true, message: error.response?.data?.message || 'Error al habilitar ciclo escolar', severity: 'error' });
         } finally {
             setSaving(false);
         }
@@ -201,10 +178,8 @@ const CiclosEscolaresPage = () => {
                             <TableHead>
                                 <TableRow>
                                     <TableCell>Año</TableCell>
-                                    <TableCell>Nombre</TableCell>
                                     <TableCell>Etiqueta</TableCell>
                                     <TableCell>Estado</TableCell>
-                                    <TableCell>Descripción</TableCell>
                                     <TableCell align="right">Acciones</TableCell>
                                 </TableRow>
                             </TableHead>
@@ -212,30 +187,18 @@ const CiclosEscolaresPage = () => {
                                 {ciclosEscolares.map((cicloEscolar) => (
                                     <TableRow key={cicloEscolar.id} hover>
                                         <TableCell>{cicloEscolar.anio}</TableCell>
-                                        <TableCell>{cicloEscolar.nombre}</TableCell>
-                                        <TableCell>{getCicloEscolarOptionLabel(cicloEscolar)}</TableCell>
+                                        <TableCell>{`Ciclo Escolar ${cicloEscolar.anio}`}</TableCell>
                                         <TableCell>
                                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                                <Chip label={cicloEscolar.activo ? 'Habilitado' : 'Deshabilitado'} color={cicloEscolar.activo ? 'success' : 'default'} size="small" />
                                                 {cicloEscolar.predeterminado && <Chip label="Predeterminado" color="primary" size="small" />}
                                             </Box>
                                         </TableCell>
-                                        <TableCell>{cicloEscolar.descripcion || '-'}</TableCell>
                                         <TableCell align="right">
                                             <PermissionGuard permission="ciclos-escolares-editar">
                                                 <Tooltip title="Editar">
                                                     <IconButton onClick={() => handleOpenEdit(cicloEscolar)}>
                                                         <Edit />
                                                     </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                            <PermissionGuard permission="ciclos-escolares-activar">
-                                                <Tooltip title={cicloEscolar.activo ? 'Ya está habilitado' : 'Habilitar'}>
-                                                    <span>
-                                                        <IconButton disabled={cicloEscolar.activo || saving} color="success" onClick={() => handleActivate(cicloEscolar)}>
-                                                            <CheckCircle />
-                                                        </IconButton>
-                                                    </span>
                                                 </Tooltip>
                                             </PermissionGuard>
                                             <PermissionGuard permission="ciclos-escolares-activar">
@@ -252,7 +215,7 @@ const CiclosEscolaresPage = () => {
                                 ))}
                                 {ciclosEscolares.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={6} align="center">No hay ciclos escolares configurados.</TableCell>
+                                        <TableCell colSpan={4} align="center">No hay ciclos escolares configurados.</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
@@ -264,10 +227,8 @@ const CiclosEscolaresPage = () => {
             <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
                 <DialogTitle>{selectedCiclo ? 'Editar Ciclo Escolar' : 'Nuevo Ciclo Escolar'}</DialogTitle>
                 <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                    <TextField name="anio" label="Año" type="number" value={form.anio} onChange={handleChange} slotProps={{ htmlInput: { min: 2000, max: 2100 } }} fullWidth />
-                    <TextField name="nombre" label="Nombre" value={form.nombre} onChange={handleChange} fullWidth placeholder="2026" />
-                    <TextField name="label" label="Etiqueta" value={form.label} onChange={handleChange} fullWidth placeholder="Ciclo Escolar 2026" />
-                    <TextField name="descripcion" label="Descripción" value={form.descripcion} onChange={handleChange} fullWidth multiline rows={3} />
+                    <TextField name="anio" label="Año" value={form.anio} onChange={handleChange} slotProps={{ htmlInput: { inputMode: 'numeric' } }} fullWidth />
+                    <TextField label="Etiqueta" value={form.anio ? `Ciclo Escolar ${form.anio}` : ''} fullWidth disabled />
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialog}>Cancelar</Button>
