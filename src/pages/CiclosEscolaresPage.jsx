@@ -204,8 +204,8 @@ const CiclosEscolaresPage = () => {
                                             <PermissionGuard permission="ciclos-escolares-activar">
                                                 <Tooltip title={cicloEscolar.predeterminado ? 'Ya es predeterminado' : 'Marcar como predeterminado'}>
                                                     <span>
-                                                        <IconButton disabled={cicloEscolar.predeterminado || saving} color="primary" onClick={() => handleSetDefault(cicloEscolar)}>
-                                                            <Star />
+                                                        <IconButton disabled={cicloEscolar.predeterminado || saving} onClick={() => handleSetDefault(cicloEscolar)}>
+                                                            <Star sx={{ color: cicloEscolar.predeterminado ? 'primary.main' : 'text.secondary' }} />
                                                         </IconButton>
                                                     </span>
                                                 </Tooltip>
