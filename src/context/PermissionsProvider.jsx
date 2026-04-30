@@ -2,7 +2,6 @@
 import React, { createContext, useState, useEffect, useContext, useMemo } from 'react';
 import { AuthContext } from './AuthProvider';
 import api from '../utils/axiosConfig';
-import { modules } from '../modules';
 
 export const PermissionsContext = createContext();
 

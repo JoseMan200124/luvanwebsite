@@ -11,7 +11,7 @@ const SEV_COLOR = { high: 'error', medium: 'warning', low: 'info' };
 
 export default function AdminRebuildPaymentsHidden() {
     const [filters, setFilters] = useState({
-        schoolId: '', paymentId: '', year: '', onlyActive: false, noPenalty: false
+        schoolId: '', paymentId: '', cicloEscolarId: '', onlyActive: false, noPenalty: false
     });
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState(null);
@@ -29,12 +29,12 @@ export default function AdminRebuildPaymentsHidden() {
             const body = {};
             if (filters.schoolId)  body.schoolId  = Number.parseInt(filters.schoolId, 10);
             if (filters.paymentId) body.paymentId = Number.parseInt(filters.paymentId, 10);
-            if (filters.year)      body.year      = filters.year;
+            if (filters.cicloEscolarId) body.cicloEscolarId = Number.parseInt(filters.cicloEscolarId, 10);
             body.onlyActive = !!filters.onlyActive;
             body.noPenalty  = !!filters.noPenalty;
 
-            if (!body.schoolId && !body.paymentId && !body.year) {
-                setError('Debes proveer al menos uno: schoolId, paymentId o year.');
+            if (!body.schoolId && !body.paymentId && !body.cicloEscolarId) {
+                setError('Debes proveer al menos uno: schoolId, paymentId o cicloEscolarId.');
                 setLoading(false);
                 return;
             }
@@ -109,8 +109,8 @@ export default function AdminRebuildPaymentsHidden() {
                             value={filters.paymentId} onChange={e => handleChange('paymentId', e.target.value)}
                         />
                         <TextField
-                            label="schoolYear (ej: 2025-2026)" size="small"
-                            value={filters.year} onChange={e => handleChange('year', e.target.value)}
+                            label="cicloEscolarId" type="number" size="small"
+                            value={filters.cicloEscolarId} onChange={e => handleChange('cicloEscolarId', e.target.value)}
                         />
                         <FormControlLabel
                             control={<Switch checked={filters.onlyActive} onChange={e => handleChange('onlyActive', e.target.checked)} />}

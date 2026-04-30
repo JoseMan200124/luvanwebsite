@@ -245,7 +245,7 @@ const EMPTY_FORM = {
 
 /**
  * @param {{ open: boolean, onClose: () => void, schools: Array }} props
- *   schools – array already loaded in SchoolYearSelectionPage (includes routeSchedules).
+ *   schools – array already loaded in CicloEscolarSelectionPage (includes routeSchedules).
  */
 const SendNotificationModal = ({ open, onClose, schools = [] }) => {
     const [form, setForm]       = useState(EMPTY_FORM);

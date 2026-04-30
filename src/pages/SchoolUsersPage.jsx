@@ -97,7 +97,7 @@ const SchoolUsersPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
-    const { schoolYear, schoolId } = useParams();
+    const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
 
     const [users, setUsers] = useState([]);
     const [filteredUsers, setFilteredUsers] = useState([]);
@@ -167,7 +167,7 @@ const SchoolUsersPage = () => {
     const [isRouteTypeSelectOpen, setIsRouteTypeSelectOpen] = useState(false);
     const [originalStudents, setOriginalStudents] = useState([]);
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
-    
+
     // Estados para Supervisor y Auxiliar
     const [allPilots, setAllPilots] = useState([]);
     const [allMonitoras, setAllMonitoras] = useState([]);
@@ -185,7 +185,6 @@ const SchoolUsersPage = () => {
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
 
-    // Traduce el estado de servicio canónico a su etiqueta en español usada en el sistema
     const translateServiceStatus = (status) => {
         if (!status) return '';
         switch ((status || '').toString()) {
@@ -196,6 +195,15 @@ const SchoolUsersPage = () => {
             default: return '';
         }
     };
+    // Obtener datos del estado de navegación
+    const stateSchool = location.state?.school;
+    const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
+    const currentCycleLabel = stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || stateCicloEscolarId;
+    const buildSchoolCycleParams = useCallback((targetSchoolId, extra = {}) => ({
+        schoolId: targetSchoolId,
+        ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}),
+        ...extra
+    }), [stateCicloEscolarId]);
 
     // Descargar por estado de servicio explícito (PAUSED, SUSPENDED, ACTIVE, INACTIVE)
     const handleDownloadByServiceStatus = async (serviceStatus, schoolIdParam) => {
@@ -207,9 +215,8 @@ const SchoolUsersPage = () => {
 
         try {
             setRouteReportLoading(true);
-            const currentSchoolYear = schoolYear || stateSchoolYear;
             const resp = await api.get('/users/parents/download', {
-                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), serviceStatus }
+                params: buildSchoolCycleParams(schoolIdToUse, { serviceStatus })
             });
             const parents = resp.data.users || [];
             if (parents.length === 0) {
@@ -239,9 +246,8 @@ const SchoolUsersPage = () => {
             setRouteReportLoading(true);
 
             // Request backend for filtered parents for download
-            const currentSchoolYear = schoolYear || stateSchoolYear;
             const resp = await api.get('/users/parents/download', {
-                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'new' }
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'new' })
             });
             const newParents = resp.data.users || [];
 
@@ -405,9 +411,8 @@ const SchoolUsersPage = () => {
         const SCHEDULE_CODES = getScheduleCodesFromSchool(currentSchool?.schedules);
         try {
             // Usar endpoint del backend que filtra por activos
-            const currentSchoolYear = schoolYear || stateSchoolYear;
             const resp = await api.get('/users/parents/download', {
-                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'active' }
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'active' })
             });
             const activeParents = resp.data.users || [];
 
@@ -648,9 +653,8 @@ const SchoolUsersPage = () => {
         try {
             setRouteReportLoading(true);
             // Request backend for all parents for this school
-            const currentSchoolYear = schoolYear || stateSchoolYear;
             const resp = await api.get('/users/parents/download', {
-                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'all' }
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'all' })
             });
             const parents = resp.data.users || [];
             // Reuse the full workbook builder to ensure parity
@@ -811,9 +815,8 @@ const SchoolUsersPage = () => {
             setRouteReportLoading(true);
 
             // Request backend for filtered parents for download
-            const currentSchoolYear = schoolYear || stateSchoolYear;
             const resp = await api.get('/users/parents/download', {
-                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'active' }
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'active' })
             });
             const filtered = resp.data.users || [];
             if (filtered.length === 0) {
@@ -929,9 +932,8 @@ const SchoolUsersPage = () => {
 
         try {
             setRouteReportLoading(true);
-            const currentSchoolYear = schoolYear || stateSchoolYear;
             const resp = await api.get('/users/parents/download', {
-                params: { schoolId: schoolIdToUse, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}), mode: 'inactive' }
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'inactive' })
             });
             const filtered = resp.data.users || [];
             if (filtered.length === 0) {
@@ -1128,11 +1130,6 @@ const SchoolUsersPage = () => {
     const [contracts, setContracts] = useState([]);
     const [schools, setSchools] = useState([]);
 
-    // Obtener datos del estado de navegación
-    const stateSchool = location.state?.school;
-    const stateSchoolYear = location.state?.schoolYear;
-    const stateCicloEscolarId = location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
-
     // Funciones auxiliares para determinar el estado de los usuarios
     const isUserNew = (user) => {
         if (!user.FamilyDetail) return false;
@@ -1278,12 +1275,11 @@ const SchoolUsersPage = () => {
         setLoading(true);
         try {
             // Fetch only parents from the backend endpoint
-            const currentSchoolYear = schoolYear || stateSchoolYear;
             const response = await api.get('/users/parents', {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: { schoolId, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}), ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}) }
+                params: buildSchoolCycleParams(schoolId)
             });
 
             const usersData = response.data.users || [];
@@ -1314,7 +1310,7 @@ const SchoolUsersPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [auth.token, schoolId, schoolYear, stateSchoolYear]);
+    }, [auth.token, schoolId, buildSchoolCycleParams]);
 
     useEffect(() => {
         if (auth.token && schoolId) {
@@ -1412,9 +1408,9 @@ const SchoolUsersPage = () => {
     }, [users, searchQuery, statusFilter, serviceStatusFilter, getUserStatus]);
 
     const handleBackToDashboard = () => {
-        navigate(`/admin/escuelas/${schoolYear || stateSchoolYear}/${schoolId}`, {
+        navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
             state: {
-                schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: stateCicloEscolarId,
                 school: stateSchool
             }
         });
@@ -1914,7 +1910,6 @@ const SchoolUsersPage = () => {
     };
 
     const currentSchool = stateSchool;
-    const currentSchoolYear = schoolYear || stateSchoolYear;
 
     // Obtener opciones de grados del colegio gestionado (soporta varios formatos)
     const availableGrades = (() => {
@@ -2066,7 +2061,7 @@ const SchoolUsersPage = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Chip 
                                     icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${currentSchoolYear}`}
+                                    label={`Ciclo Escolar ${currentCycleLabel || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -2593,7 +2588,6 @@ const SchoolUsersPage = () => {
                 }}
                 user={selectedUser}
                 schoolId={stateSchool?.id || schoolId}
-                schoolYear={schoolYear || stateSchoolYear}
                 cicloEscolarId={stateCicloEscolarId}
                 onSuccess={handleServiceStatusSuccess}
             />

@@ -11,11 +11,12 @@ const api = axios.create({
 
 const WRITE_METHODS = new Set(['post', 'put', 'patch']);
 
-const getCycleContext = () => ({
-    token: localStorage.getItem('token'),
-    selectedSchoolYear: localStorage.getItem('selectedSchoolYear'),
-    selectedCicloEscolarId: localStorage.getItem('selectedCicloEscolarId')
-});
+const getCycleContext = () => {
+    return {
+        token: localStorage.getItem('token'),
+        selectedCicloEscolarId: localStorage.getItem('selectedCicloEscolarId')
+    };
+};
 
 const shouldInjectCycleContext = (url = '') => {
     const skippedFragments = [
@@ -40,7 +41,7 @@ const isJsonBody = (data) => {
     return data && typeof data === 'object' && !isFormData;
 };
 
-const CYCLE_OVERRIDE_KEYS = new Set(['allCycles', 'cicloEscolarId', 'ciclo_escolar_id', 'schoolYear', 'cicloescolar', 'cicloEscolar']);
+const CYCLE_OVERRIDE_KEYS = new Set(['allCycles', 'cicloEscolarId', 'ciclo_escolar_id']);
 
 const hasCycleOverrideInParams = (params) => {
     if (!params || typeof params !== 'object') return false;
@@ -67,9 +68,6 @@ const hasExplicitCycleOverride = (config) => {
 };
 
 const injectCycleHeaders = (config, cycleContext) => {
-    if (cycleContext.selectedSchoolYear) {
-        config.headers['X-School-Year'] = cycleContext.selectedSchoolYear;
-    }
     if (cycleContext.selectedCicloEscolarId) {
         config.headers['X-Ciclo-Escolar-Id'] = cycleContext.selectedCicloEscolarId;
     }
@@ -77,9 +75,6 @@ const injectCycleHeaders = (config, cycleContext) => {
 
 const injectCycleParams = (config, cycleContext) => {
     const params = ensureObjectParams(config);
-    if (cycleContext.selectedSchoolYear && !('schoolYear' in params)) {
-        params.schoolYear = cycleContext.selectedSchoolYear;
-    }
     if (cycleContext.selectedCicloEscolarId && !('cicloEscolarId' in params)) {
         params.cicloEscolarId = cycleContext.selectedCicloEscolarId;
     }
@@ -87,9 +82,6 @@ const injectCycleParams = (config, cycleContext) => {
 
 const injectCycleBody = (config, cycleContext) => {
     if (!isJsonBody(config.data)) return;
-    if (cycleContext.selectedSchoolYear && !('cicloescolar' in config.data)) {
-        config.data.cicloescolar = cycleContext.selectedSchoolYear;
-    }
     if (cycleContext.selectedCicloEscolarId && !('cicloEscolarId' in config.data)) {
         config.data.cicloEscolarId = cycleContext.selectedCicloEscolarId;
     }

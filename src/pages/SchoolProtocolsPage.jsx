@@ -88,7 +88,7 @@ const SchoolProtocolsPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const navigate = useNavigate();
-    const { schoolYear, schoolId } = useParams();
+    const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
     const location = useLocation();
 
     // Estados principales
@@ -128,7 +128,8 @@ const SchoolProtocolsPage = () => {
 
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
-    const stateSchoolYear = location.state?.schoolYear;
+    const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
+    const currentCycleLabel = stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || stateCicloEscolarId;
 
     // ---------------------------
     // Funciones para cargar datos
@@ -373,9 +374,14 @@ const SchoolProtocolsPage = () => {
     // Navegación
     // ---------------------------
     const handleBackToDashboard = () => {
-        navigate(`/admin/escuelas/${schoolYear || stateSchoolYear}/${schoolId}`, {
+        if (!stateCicloEscolarId) {
+            navigate(-1);
+            return;
+        }
+
+        navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
             state: {
-                schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: stateCicloEscolarId,
                 school: stateSchool
             }
         });
@@ -526,7 +532,7 @@ const SchoolProtocolsPage = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Chip 
                                     icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${schoolYear || stateSchoolYear}`}
+                                    label={`Ciclo Escolar ${currentCycleLabel || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
                                 <Typography variant="body1" sx={{ opacity: 0.9 }}>

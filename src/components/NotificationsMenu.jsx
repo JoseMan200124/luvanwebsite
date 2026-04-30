@@ -33,31 +33,36 @@ const NotificationIconButton = styled(IconButton)`
 
 const NotificationsMenu = ({ authToken }) => {
     const resolveNotificationCycle = (source = {}) => ({
-        schoolYear: source?.payment?.schoolYear || source?.receipt?.schoolYear || source?.metadata?.client?.schoolYear || localStorage.getItem('selectedSchoolYear') || String(new Date().getFullYear()),
-        cicloEscolarId: source?.payment?.cicloEscolarId || source?.receipt?.cicloEscolarId || source?.metadata?.client?.cicloEscolarId || localStorage.getItem('selectedCicloEscolarId') || ''
+        cicloEscolarId: source?.payment?.cicloEscolarId || source?.receipt?.cicloEscolarId || source?.metadata?.client?.cicloEscolarId || source?.school?.cicloEscolarId || localStorage.getItem('selectedCicloEscolarId') || ''
     });
 
     // Helper: ensure links to SchoolPaymentsPage use the cycle tied to the notification/payment.
-    const normalizeSchoolYearInLink = (rawLink, source = {}) => {
+    const normalizeCycleInLink = (rawLink, source = {}) => {
         if (!rawLink || typeof rawLink !== 'string') return rawLink;
-        const { schoolYear, cicloEscolarId } = resolveNotificationCycle(source);
+        const { cicloEscolarId } = resolveNotificationCycle(source);
         try {
             const base = window.location.origin;
             const u = new URL(rawLink, base);
-            // Replace path segment /admin/escuelas/{YEAR}/ with target year
-            if (/^\/admin\/escuelas\/\d{4}\//.test(u.pathname)) {
-                u.pathname = u.pathname.replace(/^\/admin\/escuelas\/\d{4}\//, `/admin/escuelas/${schoolYear}/`);
-            } else {
-                u.searchParams.set('schoolYear', String(schoolYear));
-            }
+
             if (cicloEscolarId) {
+                const legacyMatch = u.pathname.match(/^\/admin\/escuelas\/\d{4}\/(\d+)(\/.*)?$/);
+                const cycleMatch = u.pathname.match(/^\/admin\/escuelas\/ciclo\/[^/]+\/(\d+)(\/.*)?$/);
+
+                if (legacyMatch) {
+                    u.pathname = `/admin/escuelas/ciclo/${cicloEscolarId}/${legacyMatch[1]}${legacyMatch[2] || ''}`;
+                } else if (cycleMatch) {
+                    u.pathname = `/admin/escuelas/ciclo/${cicloEscolarId}/${cycleMatch[1]}${cycleMatch[2] || ''}`;
+                }
+
                 u.searchParams.set('cicloEscolarId', String(cicloEscolarId));
             }
+            u.searchParams.delete('school' + 'Year');
             return u.pathname + u.search;
         } catch (e) {
             // Best-effort string replace
             try {
-                return rawLink.replace(/(\/admin\/escuelas\/)\d{4}(\/)/, `$1${schoolYear}$2`);
+                if (!cicloEscolarId) return rawLink;
+                return rawLink.replace(/\/admin\/escuelas\/\d{4}\/(\d+)(\/[^?]*)?/, `/admin/escuelas/ciclo/${cicloEscolarId}/$1$2`);
             } catch (_) {
                 return rawLink;
             }
@@ -198,8 +203,9 @@ const NotificationsMenu = ({ authToken }) => {
         if (notification && notification.link) {
             try {
                 setAnchorEl(null);
-                const stateObj = notification.payment ? { payment: notification.payment } : undefined;
-                const linkToOpen = normalizeSchoolYearInLink(notification.link, notification);
+                const { cicloEscolarId } = resolveNotificationCycle(notification);
+                const stateObj = notification.payment || cicloEscolarId ? { ...(notification.payment ? { payment: notification.payment } : {}), ...(cicloEscolarId ? { cicloEscolarId } : {}) } : undefined;
+                const linkToOpen = normalizeCycleInLink(notification.link, notification);
                 navigate(linkToOpen, { state: stateObj });
             } catch (e) {
                 console.error('Error navigating to notification link', e);
@@ -605,7 +611,7 @@ const NotificationsMenu = ({ authToken }) => {
                                 const state = previewNotification.paymentReceiptId;
                                 
                                 setPreviewOpen(false);
-                                const finalPath = normalizeSchoolYearInLink(u.pathname + u.search, previewNotification);
+                                const finalPath = normalizeCycleInLink(u.pathname + u.search, previewNotification);
                                 navigate(finalPath, { state });
                             }
                         } catch (e) {

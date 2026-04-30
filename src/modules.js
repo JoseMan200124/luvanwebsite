@@ -19,7 +19,7 @@ import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import RouteHistoryPage from './pages/RouteHistoryPage';
 // ✅ REMOVIDO: import ActivityLogPage from './pages/ActivityLogPage';
-import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
+import CicloEscolarSelectionPage from './pages/CicloEscolarSelectionPage';
 import CiclosEscolaresPage from './pages/CiclosEscolaresPage';
 import AttendanceManagementPage from './pages/AttendanceManagementPage';
 import StudentIncidentsPage from './pages/StudentIncidentsPage';
@@ -63,7 +63,7 @@ export const modules = [
                 key: 'colegios',
                 name: 'Colegios',
                 path: 'colegios',
-                component: SchoolYearSelectionPage,
+                component: CicloEscolarSelectionPage,
                 roles: ['Administrador', 'Gestor'],
             },
             {

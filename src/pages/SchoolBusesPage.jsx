@@ -44,12 +44,12 @@ const HeaderCard = styled(Card)`
 
 const SchoolBusesPage = () => {
     const { auth } = useContext(AuthContext);
-    const { schoolYear, schoolId } = useParams();
+    const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
     const location = useLocation();
     const navigate = useNavigate();
 
     const stateSchool = location.state?.school;
-    const stateSchoolYear = location.state?.schoolYear;
+    const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
 
     const [buses, setBuses] = useState([]);
     const [schoolRouteNumbers, setSchoolRouteNumbers] = useState([]);
@@ -66,7 +66,7 @@ const SchoolBusesPage = () => {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     const currentSchool = stateSchool;
-    const currentSchoolYear = schoolYear || stateSchoolYear;
+    const currentCycleLabel = stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || stateCicloEscolarId;
 
     const fetchSchoolData = useCallback(async () => {
         if (!schoolId) return;
@@ -743,7 +743,7 @@ const SchoolBusesPage = () => {
                         <DirectionsBus sx={{ fontSize: 40 }} />
                         <Box>
                             <Typography variant="h4">Asignación de Buses - {currentSchool?.name || 'Cargando...'}</Typography>
-                            <Typography variant="body2">Ciclo Escolar {currentSchoolYear}</Typography>
+                            <Typography variant="body2">Ciclo Escolar {currentCycleLabel}</Typography>
                         </Box>
                     </Box>
                 </CardContent>

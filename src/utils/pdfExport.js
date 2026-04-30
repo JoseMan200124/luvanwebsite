@@ -9,12 +9,12 @@ import { DEFAULT_SCHEDULE_CODES } from './scheduleConfig';
  * - dayMap: an object mapping day keys to arrays of routes, e.g. { monday: [...], tuesday: [...] }
  *
  * @param {Object|Array} data - either array (routes) or map of day => routes
- * @param {Object} meta - { schoolName, schoolYear, generatedAt (Date), scheduleCodes (optional) }
+ * @param {Object} meta - { schoolName, cycleLabel, generatedAt (Date), scheduleCodes (optional) }
  */
 export function generateRouteOccupancyPDF(data = [], meta = {}) {
   const doc = new jsPDF({ orientation: 'portrait' });
   const schoolName = meta.schoolName || '';
-  const schoolYear = meta.schoolYear || '';
+  const cycleLabel = meta.cycleLabel || '';
   const generatedAt = meta.generatedAt ? new Date(meta.generatedAt) : new Date();
   const scheduleCodes = meta.scheduleCodes || DEFAULT_SCHEDULE_CODES;
 
@@ -31,7 +31,7 @@ export function generateRouteOccupancyPDF(data = [], meta = {}) {
     doc.setFontSize(14);
     doc.text(schoolName || ' ', 14, 14);
     doc.setFontSize(10);
-    doc.text(`Ciclo: ${schoolYear}`, 14, 20);
+    doc.text(`Ciclo: ${cycleLabel}`, 14, 20);
     doc.text(`Generado: ${generatedAt.toLocaleString()}`, 14, 26);
 
     doc.setFontSize(12);
@@ -69,7 +69,7 @@ export function generateRouteOccupancyPDF(data = [], meta = {}) {
   doc.setFontSize(14);
   doc.text(schoolName || ' ', 14, 14);
   doc.setFontSize(10);
-  doc.text(`Ciclo: ${schoolYear}`, 14, 20);
+  doc.text(`Ciclo: ${cycleLabel}`, 14, 20);
   doc.text(`Generado: ${timestamp}`, 14, 26);
 
   // If data is an object (dayMap), iterate days in a reasonable order
@@ -90,7 +90,7 @@ export function generateRouteOccupancyPDF(data = [], meta = {}) {
   }
 
   const safeName = schoolName ? schoolName.replace(/\s+/g, '_') : 'school';
-  const fileName = `ocupacion_rutas_${safeName}_${schoolYear || ''}.pdf`;
+  const fileName = `ocupacion_rutas_${safeName}_${cycleLabel || ''}.pdf`;
   doc.save(fileName);
 }
 

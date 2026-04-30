@@ -37,7 +37,7 @@ const HistoricalDataPage = () => {
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     const currentYear = new Date().getFullYear();
-    const fallbackYear = Number(localStorage.getItem('selectedSchoolYear')) || currentYear;
+    const fallbackYear = currentYear;
 
     const [years, setYears] = useState([fallbackYear]);
     const [selectedYear, setSelectedYear] = useState(fallbackYear);

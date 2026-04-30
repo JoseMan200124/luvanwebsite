@@ -26,7 +26,7 @@ import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import ParentProtocolsPage from './pages/ParentProtocolsPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
-import SchoolYearSelectionPage from './pages/SchoolYearSelectionPage';
+import CicloEscolarSelectionPage from './pages/CicloEscolarSelectionPage';
 import SchoolDashboardPage from './pages/SchoolDashboardPage';
 import SchoolUsersPage from './pages/SchoolUsersPage';
 import SchoolBusesPage from './pages/SchoolBusesPage';
@@ -152,12 +152,12 @@ function App() {
                             path="escuelas"
                             element={
                                 <ProtectedRoute moduleKey={'colegios-listar'}>
-                                    <SchoolYearSelectionPage />
+                                    <CicloEscolarSelectionPage />
                                 </ProtectedRoute>
                             }
                         />
                         <Route
-                            path="escuelas/:schoolYear/:schoolId"
+                            path="escuelas/ciclo/:cicloEscolarId/:schoolId"
                             element={
                                 <ProtectedRoute moduleKey={'colegios-dashboard'}>
                                     <SchoolDashboardPage />
@@ -165,7 +165,7 @@ function App() {
                             }
                         />
                         <Route
-                            path="escuelas/:schoolYear/:schoolId/usuarios"
+                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/usuarios"
                             element={
                                 <ProtectedRoute moduleKey={'colegios-familias'}>
                                     <SchoolUsersPage />
@@ -173,7 +173,7 @@ function App() {
                             }
                         />
                         <Route
-                            path="escuelas/:schoolYear/:schoolId/buses-gestion"
+                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/buses-gestion"
                             element={
                                 <ProtectedRoute moduleKey={'colegios-gestion-buses'}>
                                     <SchoolBusesPage />
@@ -181,7 +181,7 @@ function App() {
                             }
                         />
                         <Route
-                            path="escuelas/:schoolYear/:schoolId/contratos"
+                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/contratos"
                             element={
                                 <ProtectedRoute moduleKey={'colegios-contratos'}>
                                     <SchoolContractsPage />
@@ -189,7 +189,7 @@ function App() {
                             }
                         />
                         <Route
-                            path="escuelas/:schoolYear/:schoolId/protocolos"
+                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/protocolos"
                             element={
                                 <ProtectedRoute moduleKey={'colegios-protocolos-reglamentos'}>
                                     <SchoolProtocolsPage />
@@ -197,7 +197,7 @@ function App() {
                             }
                         />
                         <Route
-                            path="escuelas/:schoolYear/:schoolId/pagos"
+                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/pagos"
                             element={
                                 <ProtectedRoute moduleKey={'colegios-pagos'}>
                                     <SchoolPaymentsPage />

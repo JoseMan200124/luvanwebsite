@@ -158,7 +158,6 @@ const CiclosEscolaresPage = () => {
             const data = await setDefaultCicloEscolar(cicloEscolar.id);
             const defaultCycle = data.cicloEscolar || cicloEscolar;
             localStorage.setItem('selectedCicloEscolarId', String(defaultCycle.id));
-            localStorage.setItem('selectedSchoolYear', String(defaultCycle.anio));
             setSnackbar({ open: true, message: 'Ciclo escolar predeterminado actualizado', severity: 'success' });
             fetchCiclosEscolares();
         } catch (error) {

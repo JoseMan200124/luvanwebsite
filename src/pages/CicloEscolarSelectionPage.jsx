@@ -1,4 +1,4 @@
-// src/pages/SchoolYearSelectionPage.jsx
+// src/pages/CicloEscolarSelectionPage.jsx
 
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
@@ -146,7 +146,7 @@ const StyledAccordionSummary = styled(AccordionSummary)`
     }
 `;
 
-const SchoolYearSelectionPage = () => {
+const CicloEscolarSelectionPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
 
@@ -2246,4 +2246,4 @@ const SchoolYearSelectionPage = () => {
     );
 };
 
-export default SchoolYearSelectionPage;
+export default CicloEscolarSelectionPage;
