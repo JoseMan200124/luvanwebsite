@@ -174,6 +174,8 @@ const CicloEscolarSelectionPage = () => {
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkMigrationConfirmation, setBulkMigrationConfirmation] = useState(null);
+    const [bulkSelectedRows, setBulkSelectedRows] = useState(new Set());
     
     // Estados para edición de colegio
     const [schoolSchedules, setSchoolSchedules] = useState([]);
@@ -697,24 +699,37 @@ const CicloEscolarSelectionPage = () => {
     const handleOpenBulkUpload = () => {
         setBulkFile(null);
         setBulkResults(null);
+        setBulkMigrationConfirmation(null);
+        setBulkSelectedRows(new Set());
         setOpenBulkDialog(true);
     };
     const handleCloseBulkDialog = () => {
         setOpenBulkDialog(false);
     };
     const handleFileChange = (e) => {
-        const file = e.target.files && e.target.files[0];
+        const file = e.target.files?.[0];
         setBulkFile(file || null);
+        setBulkResults(null);
+        setBulkMigrationConfirmation(null);
+        setBulkSelectedRows(new Set());
     };
-    const handleUploadBulk = async () => {
+    const submitBulkUpload = async ({ confirmCycleMigration = false, confirmedRows = [] } = {}) => {
         if (!bulkFile) return;
         setBulkLoading(true);
-        setBulkResults(null);
+        if (!confirmCycleMigration) {
+            setBulkResults(null);
+            setBulkMigrationConfirmation(null);
+            setBulkSelectedRows(new Set());
+        }
         try {
             const formData = new FormData();
             formData.append('file', bulkFile);
             if (selectedCicloEscolarId) {
                 formData.append('cicloEscolarId', selectedCicloEscolarId);
+            }
+            if (confirmCycleMigration) {
+                formData.append('confirmCycleMigration', 'true');
+                formData.append('confirmedMigrationRows', JSON.stringify(confirmedRows));
             }
             const resp = await api.post('/schools/bulk-upload', formData, {
                 headers: {
@@ -723,15 +738,41 @@ const CicloEscolarSelectionPage = () => {
                 }
             });
             setBulkResults(resp.data || null);
+            setBulkMigrationConfirmation(null);
+            setBulkSelectedRows(new Set());
             // Refresh list after upload
             fetchSchoolsByYear();
             setSnackbar({ open: true, message: 'Carga masiva procesada', severity: 'success' });
         } catch (err) {
             console.error('Error al subir colegios masivamente:', err);
+            const responseData = err.response?.data;
+            if (err.response?.status === 409 && responseData?.bulk && responseData?.code === 'SCHOOL_CYCLE_MIGRATION_CONFIRMATION_REQUIRED') {
+                const pendingRows = Array.isArray(responseData.pendingRows) ? responseData.pendingRows : [];
+                setBulkMigrationConfirmation(responseData);
+                setBulkSelectedRows(new Set(pendingRows.map((row) => Number(row.row)).filter(Boolean)));
+                setBulkResults(responseData);
+                setSnackbar({ open: true, message: 'Revisa los colegios que requieren confirmación de traslado.', severity: 'warning' });
+                return;
+            }
             setSnackbar({ open: true, message: 'Error al procesar la carga masiva', severity: 'error' });
         } finally {
             setBulkLoading(false);
         }
+    };
+    const handleUploadBulk = () => submitBulkUpload();
+    const handleToggleBulkMigrationRow = (rowNumber) => {
+        setBulkSelectedRows((prev) => {
+            const next = new Set(prev);
+            if (next.has(rowNumber)) next.delete(rowNumber);
+            else next.add(rowNumber);
+            return next;
+        });
+    };
+    const handleConfirmBulkMigration = () => {
+        submitBulkUpload({
+            confirmCycleMigration: true,
+            confirmedRows: Array.from(bulkSelectedRows)
+        });
     };
 
     // Add school handler (reuse existing edit dialog)
@@ -1471,19 +1512,91 @@ const CicloEscolarSelectionPage = () => {
                             </Typography>
                         </Box>
                     )}
+                    {bulkMigrationConfirmation && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="warning">
+                                <Typography sx={{ fontWeight: 600, mb: 1 }}>
+                                    Colegios encontrados en ciclos anteriores
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                    Marca los colegios que deseas crear en el ciclo seleccionado y trasladar sus relaciones operativas.
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    {(bulkMigrationConfirmation.pendingRows || []).map((row) => {
+                                        const counts = row.impact?.counts || {};
+                                        return (
+                                            <FormControlLabel
+                                                key={row.row}
+                                                control={
+                                                    <Checkbox
+                                                        checked={bulkSelectedRows.has(Number(row.row))}
+                                                        onChange={() => handleToggleBulkMigrationRow(Number(row.row))}
+                                                    />
+                                                }
+                                                label={
+                                                    <Box>
+                                                        <Typography variant="body2">
+                                                            Fila {row.row}: {row.name}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            {Number(counts.pilotsToMove || 0)} pilotos, {Number(counts.monitorasToMove || 0)} monitoras, {Number(counts.busesToUnassign || 0)} buses, {Number(counts.routeAssignmentsToClear || 0)} rutas afectadas
+                                                        </Typography>
+                                                    </Box>
+                                                }
+                                            />
+                                        );
+                                    })}
+                                </Box>
+                            </Alert>
+                        </Box>
+                    )}
                     {bulkResults && (
                         <Box sx={{ mt: 2 }}>
                             <Alert severity="info">
                                 <Typography>
-                                    <strong>Colegios creados/actualizados:</strong> {bulkResults.successCount}
+                                    <strong>Colegios creados:</strong> {bulkResults.successCount || 0}
                                 </Typography>
                                 <Typography>
-                                    <strong>Errores:</strong> {bulkResults.errorsCount}
+                                    <strong>Duplicados ignorados:</strong> {bulkResults.duplicateCount || 0}
                                 </Typography>
+                                <Typography>
+                                    <strong>No procesados por selección:</strong> {bulkResults.skippedCount || 0}
+                                </Typography>
+                                <Typography>
+                                    <strong>Errores:</strong> {bulkResults.errorsCount || 0}
+                                </Typography>
+                                {bulkResults.duplicateRows && bulkResults.duplicateRows.length > 0 && (
+                                    <>
+                                        <Typography sx={{ mt: 1 }}>
+                                            <strong>Duplicados:</strong>
+                                        </Typography>
+                                        <ul>
+                                            {bulkResults.duplicateRows.map((duplicate) => (
+                                                <li key={`duplicate-${duplicate.row}`}>
+                                                    Fila {duplicate.row}: {duplicate.name || 'Sin nombre'} - {duplicate.reason}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </>
+                                )}
+                                {bulkResults.skippedRows && bulkResults.skippedRows.length > 0 && (
+                                    <>
+                                        <Typography sx={{ mt: 1 }}>
+                                            <strong>No procesados:</strong>
+                                        </Typography>
+                                        <ul>
+                                            {bulkResults.skippedRows.map((skipped) => (
+                                                <li key={`skipped-${skipped.row}`}>
+                                                    Fila {skipped.row}: {skipped.name || 'Sin nombre'} - {skipped.reason}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </>
+                                )}
                                 {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
                                     <ul>
-                                        {bulkResults.errorsList.map((err, idx) => (
-                                            <li key={idx}>
+                                        {bulkResults.errorsList.map((err) => (
+                                            <li key={`error-${err.row}`}>
                                                 Fila {err.row}: {err.errorMessage}
                                             </li>
                                         ))}
@@ -1496,12 +1609,12 @@ const CicloEscolarSelectionPage = () => {
                 <DialogActions>
                     <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
                     <Button
-                        onClick={handleUploadBulk}
+                        onClick={bulkMigrationConfirmation ? handleConfirmBulkMigration : handleUploadBulk}
                         variant="contained"
-                        color="primary"
+                        color={bulkMigrationConfirmation ? 'warning' : 'primary'}
                         disabled={!bulkFile || bulkLoading}
                     >
-                        Subir
+                        {bulkMigrationConfirmation ? 'Procesar selección' : 'Subir'}
                     </Button>
                 </DialogActions>
             </Dialog>
