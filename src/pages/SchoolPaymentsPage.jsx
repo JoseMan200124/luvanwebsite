@@ -66,6 +66,7 @@ import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
+import { getCicloEscolarYear } from '../services/cicloEscolarService';
 
 moment.locale('es'); // Configurar moment en español
 const PageContainer = styled.div`
@@ -111,8 +112,10 @@ const SchoolPaymentsPage = () => {
 
     const [school, setSchool] = useState(location.state?.school || null);
     const currentCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || location.state?.school?.cicloEscolarId || school?.cicloEscolarId || '';
-    const currentCycleYear = Number(location.state?.school?.cicloEscolar?.anio || school?.cicloEscolar?.anio || school?.CicloEscolar?.anio || moment().year());
-    const currentCycleLabel = location.state?.school?.cicloEscolar?.label || school?.cicloEscolar?.label || school?.CicloEscolar?.label || currentCycleYear || currentCicloEscolarId;
+    const stateCycleYear = getCicloEscolarYear(location.state?.cicloEscolar) || getCicloEscolarYear(location.state?.school?.cicloEscolar) || getCicloEscolarYear(location.state?.school?.CicloEscolar);
+    const schoolCycleYear = getCicloEscolarYear(school?.cicloEscolar) || getCicloEscolarYear(school?.CicloEscolar);
+    const currentCycleYear = Number(stateCycleYear || schoolCycleYear || moment().year());
+    const currentCycleLabel = stateCycleYear || schoolCycleYear || String(currentCycleYear || '');
     const buildPaymentParams = useCallback((extra = {}) => ({
         schoolId,
         ...(currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}),
@@ -540,7 +543,8 @@ const SchoolPaymentsPage = () => {
             return;
         }
 
-        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}`, { state: { school, cicloEscolarId: currentCicloEscolarId } });
+        const cicloEscolar = school?.cicloEscolar || school?.CicloEscolar || location.state?.cicloEscolar || null;
+        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}`, { state: { school, cicloEscolarId: currentCicloEscolarId, cicloEscolar } });
     };
 
     const handleRequestSort = (property) => {

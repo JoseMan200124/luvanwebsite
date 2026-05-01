@@ -42,6 +42,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 
 import SimpleEditor from './SimpleEditor';
 import api from '../utils/axiosConfig';
+import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import mammoth from 'mammoth';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -152,7 +153,9 @@ const SchoolContractsPage = () => {
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
     const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
-    const currentCycleLabel = stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || stateCicloEscolarId;
+    const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
+    const currentCicloEscolar = schoolData?.cicloEscolar || schoolData?.CicloEscolar || stateCicloEscolar;
+    const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
 
     // ---------------------------
     // useEffect para cargar contratos del colegio específico
@@ -745,7 +748,8 @@ const SchoolContractsPage = () => {
         navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
             state: {
                 cicloEscolarId: stateCicloEscolarId,
-                school: stateSchool
+                cicloEscolar: currentCicloEscolar,
+                school: schoolData || stateSchool
             }
         });
     };

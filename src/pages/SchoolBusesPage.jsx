@@ -26,6 +26,7 @@ import { DirectionsBus, Save, Clear, ArrowBack, Refresh } from '@mui/icons-mater
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 
@@ -61,12 +62,15 @@ const SchoolBusesPage = () => {
     const [routeMonitorAssignments, setRouteMonitorAssignments] = useState({});
     const [availablePilots, setAvailablePilots] = useState([]);
     const [availableMonitors, setAvailableMonitors] = useState([]);
+    const [schoolData, setSchoolData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-    const currentSchool = stateSchool;
-    const currentCycleLabel = stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || stateCicloEscolarId;
+    const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
+    const currentCicloEscolar = schoolData?.cicloEscolar || schoolData?.CicloEscolar || stateCicloEscolar;
+    const currentSchool = schoolData || stateSchool;
+    const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
 
     const fetchSchoolData = useCallback(async () => {
         if (!schoolId) return;
@@ -75,6 +79,7 @@ const SchoolBusesPage = () => {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             const school = resp.data.school;
+            setSchoolData(school || null);
             if (school && school.routeNumbers) {
                 const routeNumbers = typeof school.routeNumbers === 'string' 
                     ? JSON.parse(school.routeNumbers) 
