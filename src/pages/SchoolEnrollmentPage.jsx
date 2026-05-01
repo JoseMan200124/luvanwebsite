@@ -20,6 +20,39 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
 
+const parseArrayField = (value) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value !== 'string' || !value.trim()) return [];
+
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const normalizeGrades = (value) => (
+    parseArrayField(value)
+        .map((grade) => {
+            if (typeof grade === 'string') {
+                const name = grade.trim();
+                return name ? { name } : null;
+            }
+            if (grade && typeof grade === 'object') {
+                const name = String(grade.name || grade.label || grade.value || '').trim();
+                return name ? { ...grade, name } : null;
+            }
+            return null;
+        })
+        .filter(Boolean)
+);
+
+const getGradeName = (grade) => {
+    if (typeof grade === 'string') return grade;
+    return String(grade?.name || grade?.label || grade?.value || '').trim();
+};
+
 const SchoolEnrollmentPage = () => {
     const { schoolId } = useParams();
         
@@ -29,6 +62,7 @@ const SchoolEnrollmentPage = () => {
 
     const [grades, setGrades] = useState([]);
     const [extraFields, setExtraFields] = useState([]);
+    const [enrollmentBlockedMessage, setEnrollmentBlockedMessage] = useState('');
 
     const [familyLastName, setFamilyLastName] = useState('');
     const [serviceAddress, setServiceAddress] = useState('');
@@ -87,6 +121,14 @@ const SchoolEnrollmentPage = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (enrollmentBlockedMessage) {
+            setSnackbar({
+                open: true,
+                message: enrollmentBlockedMessage,
+                severity: 'warning'
+            });
+            return;
+        }
 
         const finalStudentsCount = students.length;
         const payload = {
@@ -172,27 +214,17 @@ const SchoolEnrollmentPage = () => {
             try {
                 const response = await api.get(`/schools/${schoolId}`);
                 
-                if (response.data && response.data.school) {
+                if (response.data?.school) {
                     const { school } = response.data;
-                    if (Array.isArray(school.grades)) {
-                        setGrades(school.grades);
-                    } else {
-                        setGrades([]);
-                    }
+                    setEnrollmentBlockedMessage(school.canCreateNewUsers === false
+                        ? (school.newUserCreationMessage || 'Este enlace pertenece a un ciclo anterior. Solicita el enlace del ciclo más reciente.')
+                        : '');
+                    setGrades(normalizeGrades(school.grades));
 
-                    let parsedExtraFields = [];
-                    if (Array.isArray(school.extraEnrollmentFields)) {
-                        parsedExtraFields = school.extraEnrollmentFields;
-                    } else {
-                        try {
-                            parsedExtraFields = JSON.parse(school.extraEnrollmentFields) || [];
-                        } catch {
-                            parsedExtraFields = [];
-                        }
-                    }
-                    setExtraFields(parsedExtraFields);
+                    setExtraFields(parseArrayField(school.extraEnrollmentFields));
 
                 } else {
+                    setEnrollmentBlockedMessage('No se pudo validar el colegio para inscripción.');
                     setGrades([]);
                     setExtraFields([]);
                 }
@@ -280,6 +312,11 @@ const SchoolEnrollmentPage = () => {
                     Formulario de Inscripción
                 </Typography>
 
+                {enrollmentBlockedMessage ? (
+                    <Alert severity="warning" sx={{ mb: 3 }}>
+                        {enrollmentBlockedMessage}
+                    </Alert>
+                ) : (
                 <form onSubmit={handleSubmit} style={{ flexGrow: 1 }}>
                     <Typography variant="h6" sx={{ mb: 2 }}>
                         Información Familiar
@@ -361,16 +398,16 @@ const SchoolEnrollmentPage = () => {
                             />
                             <Autocomplete
                                 options={grades}
-                                getOptionLabel={(option) => option.name}
-                                isOptionEqualToValue={(option, value) => option.name === value.name}
+                                getOptionLabel={getGradeName}
+                                isOptionEqualToValue={(option, value) => getGradeName(option) === getGradeName(value)}
                                 value={
-                                    grades.find((g) => g.name === st.grade) || null
+                                    grades.find((g) => getGradeName(g) === st.grade) || null
                                 }
                                 onChange={(event, newValue) =>
                                     handleChangeStudentField(
                                         index,
                                         'grade',
-                                        newValue ? newValue.name : ''
+                                        getGradeName(newValue)
                                     )
                                 }
                                 renderInput={(params) => (
@@ -624,6 +661,7 @@ const SchoolEnrollmentPage = () => {
                         Enviar
                     </Button>
                 </form>
+                )}
 
                 <Box sx={{ mt: 4, textAlign: 'center', color: '#777' }}>
                     <Divider sx={{ mb: 1 }} />

@@ -1,4 +1,4 @@
-// src/pages/SchoolYearSelectionPage.jsx
+// src/pages/CicloEscolarSelectionPage.jsx
 
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
@@ -146,7 +146,7 @@ const StyledAccordionSummary = styled(AccordionSummary)`
     }
 `;
 
-const SchoolYearSelectionPage = () => {
+const CicloEscolarSelectionPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
 
@@ -161,6 +161,9 @@ const SchoolYearSelectionPage = () => {
     const [selectedSchool, setSelectedSchool] = useState(null);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [savingSchool, setSavingSchool] = useState(false);
+    const [prefillSchools, setPrefillSchools] = useState([]);
+    const [prefillSchoolsLoading, setPrefillSchoolsLoading] = useState(false);
+    const [selectedPrefillSchoolId, setSelectedPrefillSchoolId] = useState('');
     const [cycleMigrationConfirmation, setCycleMigrationConfirmation] = useState(null);
     const [openEditSchedulesModal, setOpenEditSchedulesModal] = useState(false);
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
@@ -171,6 +174,8 @@ const SchoolYearSelectionPage = () => {
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkMigrationConfirmation, setBulkMigrationConfirmation] = useState(null);
+    const [bulkSelectedRows, setBulkSelectedRows] = useState(new Set());
     
     // Estados para edición de colegio
     const [schoolSchedules, setSchoolSchedules] = useState([]);
@@ -232,6 +237,109 @@ const SchoolYearSelectionPage = () => {
         const arr = Array.isArray(schedules) ? schedules : [];
         if (arr.length > 0) return [...arr]; // existing school — keep as-is
         return ensureSchedules([], DEFAULT_SCHEDULE_CODES); // new school — seed defaults
+    };
+
+    const parseArrayField = (value) => {
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'string' && value.trim()) {
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        }
+        return [];
+    };
+
+    const buildEmptySchoolDraft = () => ({
+        id: null,
+        name: '',
+        address: '',
+        city: '',
+        contactPerson: '',
+        contactEmail: '',
+        contactPhone: '',
+        whatsappLink: '',
+        transportFeeComplete: '',
+        transportFeeHalf: '',
+        duePaymentDay: '',
+        bankName: '',
+        bankAccount: '',
+        dailyPenalty: 0,
+        penaltyPaused: false
+    });
+
+    const normalizeRouteSchedulesFromSchool = (school, routeNumbers) => {
+        const sourceRouteSchedules = parseArrayField(school?.routeSchedules);
+        const routeNumberSet = new Set((routeNumbers || []).map(String));
+
+        const normalizeEntry = (entry) => {
+            const schedules = parseArrayField(entry?.schedules)
+                .map((schedule) => ({
+                    code: schedule?.code ? String(schedule.code).toUpperCase() : null,
+                    name: schedule?.name || (schedule?.code ? `HORARIO ${String(schedule.code).toUpperCase()}` : 'HORARIO'),
+                    times: Array.isArray(schedule?.times) && schedule.times[0] ? [String(schedule.times[0])] : []
+                }))
+                .filter((schedule) => schedule.code);
+
+            return {
+                routeNumber: entry?.routeNumber == null ? '' : String(entry.routeNumber),
+                schedules
+            };
+        };
+
+        const existingByRouteNumber = new Map(sourceRouteSchedules.map((entry) => {
+            const normalized = normalizeEntry(entry);
+            return [String(normalized.routeNumber), normalized.schedules];
+        }));
+
+        const aligned = Array.from(routeNumberSet).map((routeNumber) => ({
+            routeNumber,
+            schedules: existingByRouteNumber.get(routeNumber) || []
+        }));
+
+        sourceRouteSchedules.forEach((entry) => {
+            const normalized = normalizeEntry(entry);
+            const key = String(normalized.routeNumber);
+            if (key && !routeNumberSet.has(key)) aligned.push(normalized);
+        });
+
+        return aligned;
+    };
+
+    const resetCreateSchoolDraft = (sourceSchool = null) => {
+        const source = sourceSchool || {};
+        const routeNumbers = parseArrayField(source.routeNumbers).map(String);
+        const schedules = sourceSchool
+            ? ensureFourSchedules(parseArrayField(source.schedules)).map((schedule) => ({ ...schedule, _originalCode: null }))
+            : ensureSchedules([], DEFAULT_SCHEDULE_CODES).map((schedule) => ({ ...schedule, _originalCode: null }));
+
+        setSelectedSchool(sourceSchool ? {
+            ...buildEmptySchoolDraft(),
+            name: source.name || '',
+            address: source.address || '',
+            city: source.city || '',
+            contactPerson: source.contactPerson || '',
+            contactEmail: source.contactEmail || '',
+            contactPhone: source.contactPhone || '',
+            whatsappLink: source.whatsappLink || '',
+            transportFeeComplete: source.transportFeeComplete ?? '',
+            transportFeeHalf: source.transportFeeHalf ?? '',
+            duePaymentDay: source.duePaymentDay ?? '',
+            bankName: source.bankName || '',
+            bankAccount: source.bankAccount || '',
+            dailyPenalty: source.dailyPenalty ?? 0,
+            penaltyPaused: !!source.penaltyPaused
+        } : buildEmptySchoolDraft());
+        setSchoolSchedules(schedules);
+        setSchoolGrades(parseArrayField(source.grades));
+        setSchoolExtraFields(parseArrayField(source.extraEnrollmentFields));
+        setSchoolRouteNumbers(routeNumbers);
+        setSchoolRouteSchedules(sourceSchool ? normalizeRouteSchedulesFromSchool(source, routeNumbers) : []);
+        setSchoolYearStart(source.schoolYearStart || '');
+        setSchoolYearEnd(source.schoolYearEnd || '');
+        setNewGradeName('');
     };
 
     const isPreviousCycleSchool = (school) => {
@@ -329,6 +437,36 @@ const SchoolYearSelectionPage = () => {
             setLoading(false);
         }
     }, [auth.token, selectedCicloEscolarId]);
+
+    const fetchPrefillSchools = useCallback(async () => {
+        if (!auth.token) return;
+
+        setPrefillSchoolsLoading(true);
+        try {
+            const response = await api.get('/schools', {
+                headers: {
+                    Authorization: `Bearer ${auth.token}`,
+                },
+                params: {
+                    includeArchived: true,
+                    includeAllCycles: true,
+                    useHighestSchoolCycle: true
+                }
+            });
+
+            const rawSchools = Array.isArray(response.data.schools) ? response.data.schools : [];
+            setPrefillSchools(rawSchools.filter((school) => school?.id));
+        } catch (err) {
+            console.error('Error fetching prefill schools:', err);
+            setSnackbar({
+                open: true,
+                message: 'Error al obtener colegios para prellenar',
+                severity: 'error'
+            });
+        } finally {
+            setPrefillSchoolsLoading(false);
+        }
+    }, [auth.token]);
 
     // Register page-level refresh handler for global refresh control
     useRegisterPageRefresh(async () => {
@@ -561,24 +699,37 @@ const SchoolYearSelectionPage = () => {
     const handleOpenBulkUpload = () => {
         setBulkFile(null);
         setBulkResults(null);
+        setBulkMigrationConfirmation(null);
+        setBulkSelectedRows(new Set());
         setOpenBulkDialog(true);
     };
     const handleCloseBulkDialog = () => {
         setOpenBulkDialog(false);
     };
     const handleFileChange = (e) => {
-        const file = e.target.files && e.target.files[0];
+        const file = e.target.files?.[0];
         setBulkFile(file || null);
+        setBulkResults(null);
+        setBulkMigrationConfirmation(null);
+        setBulkSelectedRows(new Set());
     };
-    const handleUploadBulk = async () => {
+    const submitBulkUpload = async ({ confirmCycleMigration = false, confirmedRows = [] } = {}) => {
         if (!bulkFile) return;
         setBulkLoading(true);
-        setBulkResults(null);
+        if (!confirmCycleMigration) {
+            setBulkResults(null);
+            setBulkMigrationConfirmation(null);
+            setBulkSelectedRows(new Set());
+        }
         try {
             const formData = new FormData();
             formData.append('file', bulkFile);
             if (selectedCicloEscolarId) {
                 formData.append('cicloEscolarId', selectedCicloEscolarId);
+            }
+            if (confirmCycleMigration) {
+                formData.append('confirmCycleMigration', 'true');
+                formData.append('confirmedMigrationRows', JSON.stringify(confirmedRows));
             }
             const resp = await api.post('/schools/bulk-upload', formData, {
                 headers: {
@@ -587,44 +738,64 @@ const SchoolYearSelectionPage = () => {
                 }
             });
             setBulkResults(resp.data || null);
+            setBulkMigrationConfirmation(null);
+            setBulkSelectedRows(new Set());
             // Refresh list after upload
             fetchSchoolsByYear();
             setSnackbar({ open: true, message: 'Carga masiva procesada', severity: 'success' });
         } catch (err) {
             console.error('Error al subir colegios masivamente:', err);
+            const responseData = err.response?.data;
+            if (err.response?.status === 409 && responseData?.bulk && responseData?.code === 'SCHOOL_CYCLE_MIGRATION_CONFIRMATION_REQUIRED') {
+                const pendingRows = Array.isArray(responseData.pendingRows) ? responseData.pendingRows : [];
+                setBulkMigrationConfirmation(responseData);
+                setBulkSelectedRows(new Set(pendingRows.map((row) => Number(row.row)).filter(Boolean)));
+                setBulkResults(responseData);
+                setSnackbar({ open: true, message: 'Revisa los colegios que requieren confirmación de traslado.', severity: 'warning' });
+                return;
+            }
             setSnackbar({ open: true, message: 'Error al procesar la carga masiva', severity: 'error' });
         } finally {
             setBulkLoading(false);
         }
     };
+    const handleUploadBulk = () => submitBulkUpload();
+    const handleToggleBulkMigrationRow = (rowNumber) => {
+        setBulkSelectedRows((prev) => {
+            const next = new Set(prev);
+            if (next.has(rowNumber)) next.delete(rowNumber);
+            else next.add(rowNumber);
+            return next;
+        });
+    };
+    const handleConfirmBulkMigration = () => {
+        submitBulkUpload({
+            confirmCycleMigration: true,
+            confirmedRows: Array.from(bulkSelectedRows)
+        });
+    };
 
     // Add school handler (reuse existing edit dialog)
     const handleAddSchool = () => {
-        setSelectedSchool({
-            id: null,
-            name: '',
-            address: '',
-            city: '',
-            contactPerson: '',
-            contactEmail: '',
-            contactPhone: '',
-            whatsappLink: '',
-            transportFeeComplete: '',
-            transportFeeHalf: '',
-            duePaymentDay: '',
-            bankName: '',
-            bankAccount: '',
-            dailyPenalty: 0,
-            penaltyPaused: false
-        });
-        setSchoolSchedules(ensureSchedules([], DEFAULT_SCHEDULE_CODES).map(s => ({ ...s, _originalCode: null })));
-        setSchoolGrades([]);
-        setSchoolExtraFields([]);
-        setSchoolRouteNumbers([]);
-        setSchoolRouteSchedules([]);
-        setSchoolYearStart('');
-        setSchoolYearEnd('');
+        setSelectedPrefillSchoolId('');
+        resetCreateSchoolDraft();
+        fetchPrefillSchools();
         setOpenEditDialog(true);
+    };
+
+    const handlePrefillSchoolChange = (event) => {
+        const nextSchoolId = event.target.value;
+        setSelectedPrefillSchoolId(nextSchoolId);
+
+        if (!nextSchoolId) {
+            resetCreateSchoolDraft();
+            return;
+        }
+
+        const sourceSchool = prefillSchools.find((school) => String(school.id) === String(nextSchoolId));
+        if (!sourceSchool) return;
+
+        resetCreateSchoolDraft(sourceSchool);
     };
 
     const handleCloseEditDialog = () => {
@@ -632,6 +803,7 @@ const SchoolYearSelectionPage = () => {
         setOpenEditSchedulesModal(false);
         setCycleMigrationConfirmation(null);
         setSelectedSchool(null);
+        setSelectedPrefillSchoolId('');
         setSchoolSchedules([]);
         setSchoolGrades([]);
         setSchoolExtraFields([]);
@@ -1340,19 +1512,91 @@ const SchoolYearSelectionPage = () => {
                             </Typography>
                         </Box>
                     )}
+                    {bulkMigrationConfirmation && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="warning">
+                                <Typography sx={{ fontWeight: 600, mb: 1 }}>
+                                    Colegios encontrados en ciclos anteriores
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                    Marca los colegios que deseas crear en el ciclo seleccionado y trasladar sus relaciones operativas.
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    {(bulkMigrationConfirmation.pendingRows || []).map((row) => {
+                                        const counts = row.impact?.counts || {};
+                                        return (
+                                            <FormControlLabel
+                                                key={row.row}
+                                                control={
+                                                    <Checkbox
+                                                        checked={bulkSelectedRows.has(Number(row.row))}
+                                                        onChange={() => handleToggleBulkMigrationRow(Number(row.row))}
+                                                    />
+                                                }
+                                                label={
+                                                    <Box>
+                                                        <Typography variant="body2">
+                                                            Fila {row.row}: {row.name}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            {Number(counts.pilotsToMove || 0)} pilotos, {Number(counts.monitorasToMove || 0)} monitoras, {Number(counts.busesToUnassign || 0)} buses, {Number(counts.routeAssignmentsToClear || 0)} rutas afectadas
+                                                        </Typography>
+                                                    </Box>
+                                                }
+                                            />
+                                        );
+                                    })}
+                                </Box>
+                            </Alert>
+                        </Box>
+                    )}
                     {bulkResults && (
                         <Box sx={{ mt: 2 }}>
                             <Alert severity="info">
                                 <Typography>
-                                    <strong>Colegios creados/actualizados:</strong> {bulkResults.successCount}
+                                    <strong>Colegios creados:</strong> {bulkResults.successCount || 0}
                                 </Typography>
                                 <Typography>
-                                    <strong>Errores:</strong> {bulkResults.errorsCount}
+                                    <strong>Duplicados ignorados:</strong> {bulkResults.duplicateCount || 0}
                                 </Typography>
+                                <Typography>
+                                    <strong>No procesados por selección:</strong> {bulkResults.skippedCount || 0}
+                                </Typography>
+                                <Typography>
+                                    <strong>Errores:</strong> {bulkResults.errorsCount || 0}
+                                </Typography>
+                                {bulkResults.duplicateRows && bulkResults.duplicateRows.length > 0 && (
+                                    <>
+                                        <Typography sx={{ mt: 1 }}>
+                                            <strong>Duplicados:</strong>
+                                        </Typography>
+                                        <ul>
+                                            {bulkResults.duplicateRows.map((duplicate) => (
+                                                <li key={`duplicate-${duplicate.row}`}>
+                                                    Fila {duplicate.row}: {duplicate.name || 'Sin nombre'} - {duplicate.reason}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </>
+                                )}
+                                {bulkResults.skippedRows && bulkResults.skippedRows.length > 0 && (
+                                    <>
+                                        <Typography sx={{ mt: 1 }}>
+                                            <strong>No procesados:</strong>
+                                        </Typography>
+                                        <ul>
+                                            {bulkResults.skippedRows.map((skipped) => (
+                                                <li key={`skipped-${skipped.row}`}>
+                                                    Fila {skipped.row}: {skipped.name || 'Sin nombre'} - {skipped.reason}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </>
+                                )}
                                 {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
                                     <ul>
-                                        {bulkResults.errorsList.map((err, idx) => (
-                                            <li key={idx}>
+                                        {bulkResults.errorsList.map((err) => (
+                                            <li key={`error-${err.row}`}>
                                                 Fila {err.row}: {err.errorMessage}
                                             </li>
                                         ))}
@@ -1365,12 +1609,12 @@ const SchoolYearSelectionPage = () => {
                 <DialogActions>
                     <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
                     <Button
-                        onClick={handleUploadBulk}
+                        onClick={bulkMigrationConfirmation ? handleConfirmBulkMigration : handleUploadBulk}
                         variant="contained"
-                        color="primary"
+                        color={bulkMigrationConfirmation ? 'warning' : 'primary'}
                         disabled={!bulkFile || bulkLoading}
                     >
-                        Subir
+                        {bulkMigrationConfirmation ? 'Procesar selección' : 'Subir'}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -1502,16 +1746,19 @@ const SchoolYearSelectionPage = () => {
                                                 borderTop: '1px solid #e0e0e0',
                                                 pt: 1.5
                                             }}>
-                                                <Tooltip title="Copiar enlace de inscripción">
-                                                    <IconButton 
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleCopyLink(school.id);
-                                                        }}
-                                                    >
-                                                        <ContentCopy fontSize="small" />
-                                                    </IconButton>
+                                                <Tooltip title={school.canCreateNewUsers === false ? 'Solo disponible en el ciclo más reciente' : 'Copiar enlace de inscripción'}>
+                                                    <span>
+                                                        <IconButton 
+                                                            size="small"
+                                                            disabled={school.canCreateNewUsers === false}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleCopyLink(school.id);
+                                                            }}
+                                                        >
+                                                            <ContentCopy fontSize="small" />
+                                                        </IconButton>
+                                                    </span>
                                                 </Tooltip>
                                                 <Tooltip title="Editar colegio">
                                                     <IconButton 
@@ -1570,6 +1817,42 @@ const SchoolYearSelectionPage = () => {
                     {selectedSchool?.id ? 'Editar Colegio' : 'Añadir Nuevo Colegio'}
                 </DialogTitle>
                 <DialogContent sx={{ px: 3, py: 2 }}>
+                    {!selectedSchool?.id && (
+                        <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel>Prellenar con colegio existente</InputLabel>
+                                    <Select
+                                        value={selectedPrefillSchoolId}
+                                        label="Prellenar con colegio existente"
+                                        onChange={handlePrefillSchoolChange}
+                                        disabled={prefillSchoolsLoading}
+                                    >
+                                        <MenuItem value="">
+                                            <em>Sin prellenar</em>
+                                        </MenuItem>
+                                        {prefillSchools.map((school) => {
+                                            const cicloLabel = school?.cicloEscolar?.label
+                                                || school?.cicloEscolar?.nombre
+                                                || school?.cicloEscolar?.anio
+                                                || school?.cicloEscolarId
+                                                || 'Ciclo actual';
+                                            return (
+                                                <MenuItem key={school.id} value={String(school.id)}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, width: '100%' }}>
+                                                        <Typography>{school.name}</Typography>
+                                                        <Chip label={cicloLabel} size="small" variant="outlined" />
+                                                    </Box>
+                                                </MenuItem>
+                                            );
+                                        })}
+                                    </Select>
+                                </FormControl>
+                                {prefillSchoolsLoading && <CircularProgress size={22} />}
+                            </Box>
+                        </Paper>
+                    )}
+
                     {/* Sección: Información Básica */}
                     <StyledAccordion 
                         expanded={expandedPanels.basicInfo} 
@@ -2249,4 +2532,4 @@ const SchoolYearSelectionPage = () => {
     );
 };
 
-export default SchoolYearSelectionPage;
+export default CicloEscolarSelectionPage;

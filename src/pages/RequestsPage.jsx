@@ -64,6 +64,7 @@ import {
     REQUEST_STATES,
     STATE_COLORS
 } from '../services/requestService';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 const PageContainer = styled.div`
     ${tw`p-6`}
@@ -118,6 +119,7 @@ const RequestsPage = () => {
     const [draftFilters, setDraftFilters] = useState(initialFilters);
     const [schools, setSchools] = useState([]);
     const [corporations, setCorporations] = useState([]);
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [sortBy, setSortBy] = useState('createdAt');
     const [sortOrder, setSortOrder] = useState('desc');
 
@@ -138,6 +140,7 @@ const RequestsPage = () => {
                 limit: rowsPerPage,
                 sortBy,
                 sortOrder: sortOrder.toUpperCase(),
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
                 ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== ''))
             };
             const res = await getAllRequests(params);
@@ -148,12 +151,14 @@ const RequestsPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, rowsPerPage, filters, sortBy, sortOrder]);
+    }, [page, rowsPerPage, filters, selectedCicloEscolar, sortBy, sortOrder]);
 
     // Load statistics
     const fetchStatistics = useCallback(async () => {
         try {
-            const params = {};
+            const params = {
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
+            };
             if (filters.startDate) params.startDate = filters.startDate;
             if (filters.endDate) params.endDate = filters.endDate;
             if (filters.schoolId) params.schoolId = filters.schoolId;
@@ -163,7 +168,7 @@ const RequestsPage = () => {
         } catch (err) {
             console.error('Error fetching statistics', err);
         }
-    }, [filters.startDate, filters.endDate, filters.schoolId, filters.corporationId]);
+    }, [filters.startDate, filters.endDate, filters.schoolId, filters.corporationId, selectedCicloEscolar]);
 
     useEffect(() => { fetchRequests(); }, [fetchRequests]);
     useEffect(() => { fetchStatistics(); }, [fetchStatistics]);
@@ -171,15 +176,15 @@ const RequestsPage = () => {
         // Fetch schools and corporations for client selector
         (async () => {
             try {
-                const sc = await getSchoolsList();
+                const sc = await getSchoolsList(getCicloEscolarFilterParams(selectedCicloEscolar));
                 setSchools(sc || []);
             } catch (e) { console.error('Error loading schools', e); }
             try {
-                const cc = await getCorporationsList();
+                const cc = await getCorporationsList(getCicloEscolarFilterParams(selectedCicloEscolar));
                 setCorporations(cc || []);
             } catch (e) { console.error('Error loading corporations', e); }
         })();
-    }, []);
+    }, [selectedCicloEscolar]);
 
     const handleDraftChange = (field) => (event) => {
         setDraftFilters(prev => ({ ...prev, [field]: event.target.value }));
@@ -393,6 +398,18 @@ const RequestsPage = () => {
 
             <FiltersContainer elevation={1}>
                 <Grid container spacing={2} alignItems="center">
+                    <Grid item xs="auto" sm="auto" md={"auto"}>
+                        <CicloEscolarFilter
+                            value={selectedCicloEscolar}
+                            onChange={(value) => {
+                                setSelectedCicloEscolar(value);
+                                setDraftFilters(initialFilters);
+                                setFilters(initialFilters);
+                                setPage(0);
+                            }}
+                            sx={{ width: 190 }}
+                        />
+                    </Grid>
                     <Grid item xs="auto" sm="auto" md={"auto"}>
                         <TextField fullWidth size="small" label="Tipo" select value={draftFilters.requestType} onChange={handleDraftChange('requestType')} sx={{ width: 200 }}>
                             <MenuItem value="">Todos</MenuItem>

@@ -27,7 +27,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
 import { getScheduleLabel } from '../../utils/scheduleConfig';
 
-const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId, schoolYear, selectedDay }) => {
+const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId, cicloEscolarId, selectedDay }) => {
     const { auth } = useContext(AuthContext);
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -87,7 +87,7 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
                     Authorization: `Bearer ${auth.token}`,
                 },
                 params: {
-                    schoolYear: schoolYear,
+                    cicloEscolarId,
                     day: selectedDay
                 }
             });
@@ -99,7 +99,7 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
         } finally {
             setLoading(false);
         }
-    }, [routeNumber, scheduleCode, schoolId, schoolYear, selectedDay, auth.token]);
+    }, [routeNumber, scheduleCode, schoolId, cicloEscolarId, selectedDay, auth.token]);
 
     useEffect(() => {
         if (open && routeNumber && scheduleCode && schoolId) {

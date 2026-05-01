@@ -57,6 +57,7 @@ import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 const RouteHistoryPage = () => {
     const { auth } = useContext(AuthContext);
@@ -86,6 +87,7 @@ const RouteHistoryPage = () => {
     const [statusFilter, setStatusFilter] = useState('');
     const [startHour, setStartHour] = useState('');
     const [endHour, setEndHour] = useState('');
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [clients, setClients] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
     const [clientTouched, setClientTouched] = useState(false);
@@ -184,6 +186,7 @@ const RouteHistoryPage = () => {
             }
 
             const params = {
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
                 ...clientParam,
                 // Incluir routeNumber solo cuando el cliente es específico.
                 routeNumber: (selectedClientType === 'school' || selectedClientType === 'corporation') ? routeNumber : undefined,
@@ -226,7 +229,7 @@ const RouteHistoryPage = () => {
             routeNumber: routeNumber || undefined,
             page: 1
         });
-    }, [fetchRouteHistory, startDate, endDate, pilotoFilter, busFilter, onlyFailures, statusFilter, startHour, endHour, routeNumber]);
+    }, [fetchRouteHistory, startDate, endDate, pilotoFilter, busFilter, onlyFailures, statusFilter, startHour, endHour, routeNumber, selectedCicloEscolar]);
 
     useEffect(() => {
         if (!initialFetchDone && (selectedClient || clientId)) {
@@ -241,8 +244,8 @@ const RouteHistoryPage = () => {
                 const loadClients = async () => {
                     try {
                         const [schoolsResp, corpsResp] = await Promise.all([
-                            api.get('/schools'),
-                            api.get('/corporations')
+                            api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } }),
+                            api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) })
                         ]);
 
                         const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
@@ -280,7 +283,7 @@ const RouteHistoryPage = () => {
                 };
         loadClients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [selectedCicloEscolar]);
 
     // Debounced server-side search for pilots
     useEffect(() => {
@@ -659,6 +662,7 @@ const RouteHistoryPage = () => {
             }
 
             const params = {
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
                 ...clientParam,
                 startDate: startDateParam,
                 endDate: endDateParam,
@@ -1698,6 +1702,20 @@ const RouteHistoryPage = () => {
             {/* Historial: transferido desde RouteHistoryModal */}
             <Paper elevation={1} sx={{ p: 2, borderRadius: 2 }}>
                 <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} md={2}>
+                        <CicloEscolarFilter
+                            value={selectedCicloEscolar}
+                            onChange={(value) => {
+                                setSelectedCicloEscolar(value);
+                                setSelectedClient(null);
+                                setStatsSelectedClient(null);
+                                setRouteNumber('');
+                                setRouteSelected(null);
+                                setStatsFiltersDirty(true);
+                                setPage(1);
+                            }}
+                        />
+                    </Grid>
                             <Grid item xs={12} md={3}>
                         <Autocomplete
                             size="small"

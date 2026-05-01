@@ -109,7 +109,7 @@ const buildRequestBody = ({
     corporationId,
     fiscalYear,
     schoolId,
-    schoolYear,
+    cicloEscolarId,
     ignoreMissingContractForAutoSuspension,
     ignoreMoraForAutoSuspension,
     selectedStatus,
@@ -126,7 +126,9 @@ const buildRequestBody = ({
     }
 
     body.schoolId = schoolId;
-    body.schoolYear = schoolYear;
+    if (cicloEscolarId) {
+        body.cicloEscolarId = cicloEscolarId;
+    }
     body.ignoreMissingContractForAutoSuspension = ignoreMissingContractForAutoSuspension;
     body.ignoreMoraForAutoSuspension = ignoreMoraForAutoSuspension;
 
@@ -137,7 +139,7 @@ const buildRequestBody = ({
     return body;
 };
 
-const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onSuccess, userType = 'FAMILY', corporationId = null, fiscalYear = null }) => {
+const UserServiceStatusModal = ({ open, onClose, user, schoolId, cicloEscolarId = null, onSuccess, userType = 'FAMILY', corporationId = null, fiscalYear = null }) => {
     const [loading, setLoading] = useState(false);
     const [currentStatus, setCurrentStatus] = useState(null);
     const [currentStatusRecord, setCurrentStatusRecord] = useState(null);
@@ -154,13 +156,13 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
         const canFetch =
             open && user &&
             (
-                (userType === 'FAMILY' && schoolId && schoolYear) ||
+                (userType === 'FAMILY' && schoolId && cicloEscolarId) ||
                 (userType === 'COLABORADOR' && corporationId)
             );
         if (canFetch) {
             fetchCurrentStatus();
         }
-    }, [open, user, schoolId, schoolYear, userType, corporationId]);
+    }, [open, user, schoolId, cicloEscolarId, userType, corporationId]);
 
     // Limpiar formulario al abrir
     useEffect(() => {
@@ -184,7 +186,7 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
                 if (fiscalYear) params.fiscalYear = fiscalYear;
             } else {
                 params.schoolId = schoolId;
-                params.schoolYear = schoolYear;
+                if (cicloEscolarId) params.cicloEscolarId = cicloEscolarId;
             }
             const response = await api.get(`/service-status/${user.id}`, { params });
 
@@ -261,7 +263,7 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, schoolYear, onS
                 corporationId,
                 fiscalYear,
                 schoolId,
-                schoolYear,
+                cicloEscolarId,
                 ignoreMissingContractForAutoSuspension,
                 ignoreMoraForAutoSuspension,
                 selectedStatus,
@@ -534,7 +536,7 @@ UserServiceStatusModal.propTypes = {
     onClose: PropTypes.func.isRequired,
     onSuccess: PropTypes.func,
     schoolId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-    schoolYear: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    cicloEscolarId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     userType: PropTypes.oneOf(['FAMILY', 'COLABORADOR']),
     corporationId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     fiscalYear: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),

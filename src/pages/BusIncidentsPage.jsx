@@ -49,6 +49,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
 import api from '../utils/axiosConfig';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -72,6 +73,7 @@ const BusIncidentsPage = () => {
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedTipoFalla, setSelectedTipoFalla] = useState('');
     const [selectedTipo, setSelectedTipo] = useState('');
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
 
@@ -99,7 +101,7 @@ const BusIncidentsPage = () => {
     useEffect(() => {
         fetchSchools();
         fetchCorporations();
-    }, []);
+    }, [selectedCicloEscolar]);
 
     useEffect(() => {
         if (selectedSchool) {
@@ -117,11 +119,11 @@ const BusIncidentsPage = () => {
     useEffect(() => {
         fetchIncidents();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, selectedTipoFalla, selectedTipo, startDate, endDate, orderBy, order]);
+    }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, selectedTipoFalla, selectedTipo, selectedCicloEscolar, startDate, endDate, orderBy, order]);
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools');
+            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setSchools(schoolsData);
         } catch (error) {
@@ -132,7 +134,7 @@ const BusIncidentsPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations');
+            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) });
             const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
             setCorporations(corporationsData);
         } catch (error) {
@@ -191,6 +193,7 @@ const BusIncidentsPage = () => {
             const filters = {
                 page: page + 1,
                 limit: rowsPerPage,
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
             if (selectedSchool) filters.schoolId = selectedSchool;
@@ -427,7 +430,20 @@ const BusIncidentsPage = () => {
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.5}>
+                            <CicloEscolarFilter size="medium"
+                                value={selectedCicloEscolar}
+                                onChange={(value) => {
+                                    setSelectedCicloEscolar(value);
+                                    setSelectedSchool('');
+                                    setSelectedCorporation('');
+                                    setSelectedPlate('');
+                                    setSelectedRoute('');
+                                    setPage(0);
+                                }}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={1.75}>
                             <FormControl fullWidth>
                                 <InputLabel>Colegio</InputLabel>
                                 <Select
@@ -450,7 +466,7 @@ const BusIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.75}>
                             <FormControl fullWidth>
                                 <InputLabel>Corporación</InputLabel>
                                 <Select
@@ -552,7 +568,7 @@ const BusIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={1.5}>
+                        <Grid item xs={12} sm={6} md={1.25}>
                             <DatePicker
                                 label="Fecha Inicio"
                                 value={startDate}
@@ -560,7 +576,7 @@ const BusIncidentsPage = () => {
                                 slotProps={{ textField: { fullWidth: true } }}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={1.5}>
+                        <Grid item xs={12} sm={6} md={1.25}>
                             <DatePicker
                                 label="Fecha Fin"
                                 value={endDate}

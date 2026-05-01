@@ -76,6 +76,9 @@ const roleOptions = [
     { id: 3, name: 'Padre' }
 ];
 
+const stripArchivedEmailPrefix = (email) => String(email || '').replace(/^ARCHIVED_ID:?\d+_/i, '');
+const getVisibleUserEmail = (user) => stripArchivedEmailPrefix(user?.email || user?.motherEmail || user?.fatherEmail || '');
+
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
     padding: 2rem;
@@ -97,7 +100,7 @@ const SchoolUsersPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
-    const { schoolYear, schoolId } = useParams();
+    const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
 
     const [users, setUsers] = useState([]);
     const [filteredUsers, setFilteredUsers] = useState([]);
@@ -130,6 +133,9 @@ const SchoolUsersPage = () => {
     // Estados para diferentes operaciones
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkGradeIssues, setBulkGradeIssues] = useState([]);
+    const [bulkGradeAssignments, setBulkGradeAssignments] = useState({});
+    const [bulkGradeSaving, setBulkGradeSaving] = useState(false);
     const [downloadMode, setDownloadMode] = useState('');
     // Dialogo unificado para descargas (Nuevos / Todos / Reporte)
     const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
@@ -167,7 +173,7 @@ const SchoolUsersPage = () => {
     const [isRouteTypeSelectOpen, setIsRouteTypeSelectOpen] = useState(false);
     const [originalStudents, setOriginalStudents] = useState([]);
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
-    
+
     // Estados para Supervisor y Auxiliar
     const [allPilots, setAllPilots] = useState([]);
     const [allMonitoras, setAllMonitoras] = useState([]);
@@ -185,7 +191,6 @@ const SchoolUsersPage = () => {
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
 
-    // Traduce el estado de servicio canónico a su etiqueta en español usada en el sistema
     const translateServiceStatus = (status) => {
         if (!status) return '';
         switch ((status || '').toString()) {
@@ -197,6 +202,16 @@ const SchoolUsersPage = () => {
         }
     };
 
+    // Obtener datos del estado de navegación
+    const stateSchool = location.state?.school;
+    const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
+    const currentCycleLabel = stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || stateCicloEscolarId;
+    const buildSchoolCycleParams = useCallback((targetSchoolId, extra = {}) => ({
+        schoolId: targetSchoolId,
+        ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}),
+        ...extra
+    }), [stateCicloEscolarId]);
+
     // Descargar por estado de servicio explícito (PAUSED, SUSPENDED, ACTIVE, INACTIVE)
     const handleDownloadByServiceStatus = async (serviceStatus, schoolIdParam) => {
         const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
@@ -207,7 +222,9 @@ const SchoolUsersPage = () => {
 
         try {
             setRouteReportLoading(true);
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, serviceStatus } });
+            const resp = await api.get('/users/parents/download', {
+                params: buildSchoolCycleParams(schoolIdToUse, { serviceStatus })
+            });
             const parents = resp.data.users || [];
             if (parents.length === 0) {
                 setSnackbar({ open: true, message: `No hay padres con estado de servicio ${serviceStatus} para descargar.`, severity: 'info' });
@@ -236,7 +253,9 @@ const SchoolUsersPage = () => {
             setRouteReportLoading(true);
 
             // Request backend for filtered parents for download
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'new' } });
+            const resp = await api.get('/users/parents/download', {
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'new' })
+            });
             const newParents = resp.data.users || [];
 
             // Si no hay nuevos, avisar
@@ -399,7 +418,9 @@ const SchoolUsersPage = () => {
         const SCHEDULE_CODES = getScheduleCodesFromSchool(currentSchool?.schedules);
         try {
             // Usar endpoint del backend que filtra por activos
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'active' } });
+            const resp = await api.get('/users/parents/download', {
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'active' })
+            });
             const activeParents = resp.data.users || [];
 
             const parentsWithRoutes = activeParents.filter(u =>
@@ -639,7 +660,9 @@ const SchoolUsersPage = () => {
         try {
             setRouteReportLoading(true);
             // Request backend for all parents for this school
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'all' } });
+            const resp = await api.get('/users/parents/download', {
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'all' })
+            });
             const parents = resp.data.users || [];
             // Reuse the full workbook builder to ensure parity
             await buildParentsWorkbookAndDownload(parents, schoolIdToUse, 'padres');
@@ -799,7 +822,9 @@ const SchoolUsersPage = () => {
             setRouteReportLoading(true);
 
             // Request backend for filtered parents for download
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'active' } });
+            const resp = await api.get('/users/parents/download', {
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'active' })
+            });
             const filtered = resp.data.users || [];
             if (filtered.length === 0) {
                 setSnackbar({ open: true, message: 'No hay padres activos para descargar.', severity: 'info' });
@@ -914,7 +939,9 @@ const SchoolUsersPage = () => {
 
         try {
             setRouteReportLoading(true);
-            const resp = await api.get('/users/parents/download', { params: { schoolId: schoolIdToUse, mode: 'inactive' } });
+            const resp = await api.get('/users/parents/download', {
+                params: buildSchoolCycleParams(schoolIdToUse, { mode: 'inactive' })
+            });
             const filtered = resp.data.users || [];
             if (filtered.length === 0) {
                 setSnackbar({ open: true, message: 'No hay padres inactivos para descargar.', severity: 'info' });
@@ -1110,10 +1137,6 @@ const SchoolUsersPage = () => {
     const [contracts, setContracts] = useState([]);
     const [schools, setSchools] = useState([]);
 
-    // Obtener datos del estado de navegación
-    const stateSchool = location.state?.school;
-    const stateSchoolYear = location.state?.schoolYear;
-
     // Funciones auxiliares para determinar el estado de los usuarios
     const isUserNew = (user) => {
         if (!user.FamilyDetail) return false;
@@ -1259,12 +1282,11 @@ const SchoolUsersPage = () => {
         setLoading(true);
         try {
             // Fetch only parents from the backend endpoint
-            const currentSchoolYear = schoolYear || stateSchoolYear;
             const response = await api.get('/users/parents', {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: { schoolId, ...(currentSchoolYear ? { schoolYear: currentSchoolYear } : {}) }
+                params: buildSchoolCycleParams(schoolId)
             });
 
             const usersData = response.data.users || [];
@@ -1295,7 +1317,7 @@ const SchoolUsersPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [auth.token, schoolId, schoolYear, stateSchoolYear]);
+    }, [auth.token, schoolId, buildSchoolCycleParams]);
 
     useEffect(() => {
         if (auth.token && schoolId) {
@@ -1352,7 +1374,7 @@ const SchoolUsersPage = () => {
                 const motherEmail = normalize(user.motherEmail || '');
                 const fatherEmail = normalize(user.fatherEmail || '');
                 const name = normalize(user.name || '');
-                const email = normalize(user.email || '');
+                const email = normalize(stripArchivedEmailPrefix(user.email || ''));
 
                 // For each token, ensure it matches at least one field
                 return tokens.every(token => (
@@ -1393,9 +1415,9 @@ const SchoolUsersPage = () => {
     }, [users, searchQuery, statusFilter, serviceStatusFilter, getUserStatus]);
 
     const handleBackToDashboard = () => {
-        navigate(`/admin/escuelas/${schoolYear || stateSchoolYear}/${schoolId}`, {
+        navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
             state: {
-                schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: stateCicloEscolarId,
                 school: stateSchool
             }
         });
@@ -1698,6 +1720,11 @@ const SchoolUsersPage = () => {
     };
 
     const handleAddUser = () => {
+        if (!canCreateUsersInManagedSchool) {
+            setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
+            return;
+        }
+
         setSelectedUser({
             id: null,
             name: '',
@@ -1857,6 +1884,10 @@ const SchoolUsersPage = () => {
 
     const handleBulkUpload = async () => {
         if (!bulkFile) return;
+        if (!canCreateUsersInManagedSchool) {
+            setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
+            return;
+        }
         
         setBulkLoading(true);
         try {
@@ -1866,12 +1897,31 @@ const SchoolUsersPage = () => {
             const schoolToAttach = currentSchool?.id || schoolId || '';
             if (schoolToAttach) formData.append('schoolId', String(schoolToAttach));
             
-            await api.post('/parents/bulk-upload', formData, {
+            const response = await api.post('/parents/bulk-upload', formData, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                     'Content-Type': 'multipart/form-data'
                 }
             });
+
+            const gradeIssues = Array.isArray(response.data?.gradeAssignmentIssues)
+                ? response.data.gradeAssignmentIssues
+                : [];
+
+            if (gradeIssues.length > 0) {
+                setBulkGradeIssues(gradeIssues);
+                setBulkGradeAssignments({});
+                setSnackbar({
+                    open: true,
+                    message: `Carga procesada. ${gradeIssues.length} estudiante(s) necesitan un grado válido.`,
+                    severity: 'warning'
+                });
+                fetchUsers();
+                return;
+            }
+
+            setBulkGradeIssues([]);
+            setBulkGradeAssignments({});
             
             setSnackbar({
                 open: true,
@@ -1894,8 +1944,65 @@ const SchoolUsersPage = () => {
         }
     };
 
+    const handleBulkGradeAssignmentChange = (studentId, grade) => {
+        setBulkGradeAssignments(prev => ({
+            ...prev,
+            [String(studentId)]: grade
+        }));
+    };
+
+    const handleSaveBulkGradeAssignments = async () => {
+        if (bulkGradeIssues.length === 0) return;
+
+        const missingGrade = bulkGradeIssues.some(issue => !bulkGradeAssignments[String(issue.studentId)]);
+        if (missingGrade) {
+            setSnackbar({ open: true, message: 'Selecciona un grado para cada estudiante pendiente.', severity: 'warning' });
+            return;
+        }
+
+        const schoolToAttach = currentSchool?.id || schoolId || '';
+        if (!schoolToAttach) {
+            setSnackbar({ open: true, message: 'No se pudo determinar el colegio.', severity: 'error' });
+            return;
+        }
+
+        setBulkGradeSaving(true);
+        try {
+            await api.post('/parents/bulk-upload/resolve-grades', {
+                schoolId: schoolToAttach,
+                assignments: bulkGradeIssues.map(issue => ({
+                    studentId: issue.studentId,
+                    grade: bulkGradeAssignments[String(issue.studentId)]
+                }))
+            }, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+
+            setSnackbar({ open: true, message: 'Grados actualizados correctamente.', severity: 'success' });
+            setBulkGradeIssues([]);
+            setBulkGradeAssignments({});
+            setBulkFile(null);
+            setOpenBulkDialog(false);
+            fetchUsers();
+        } catch (err) {
+            console.error('Error saving bulk grade assignments:', err);
+            setSnackbar({
+                open: true,
+                message: err?.response?.data?.message || 'No se pudieron guardar los grados.',
+                severity: 'error'
+            });
+        } finally {
+            setBulkGradeSaving(false);
+        }
+    };
+
     const currentSchool = stateSchool;
-    const currentSchoolYear = schoolYear || stateSchoolYear;
+    const schoolRecordFromList = Array.isArray(schools)
+        ? schools.find(s => String(s.id) === String(schoolId || currentSchool?.id || ''))
+        : null;
+    const managedSchool = { ...(schoolRecordFromList || {}), ...(currentSchool || {}) };
+    const canCreateUsersInManagedSchool = managedSchool.canCreateNewUsers !== false;
+    const newUserCreationDisabledMessage = managedSchool.newUserCreationMessage || 'Este colegio pertenece a un ciclo anterior. Para crear nuevos usuarios, usa el colegio del ciclo más reciente.';
 
     // Obtener opciones de grados del colegio gestionado (soporta varios formatos)
     const availableGrades = (() => {
@@ -1974,8 +2081,8 @@ const SchoolUsersPage = () => {
                     vb = b.name || '';
                     break;
                 case 'email':
-                    va = a.email || a.motherEmail || a.fatherEmail || '';
-                    vb = b.email || b.motherEmail || b.fatherEmail || '';
+                    va = getVisibleUserEmail(a);
+                    vb = getVisibleUserEmail(b);
                     break;
                 case 'role':
                     va = (roleOptions.find(r => r.id === a.roleId)?.name) || '';
@@ -2047,7 +2154,7 @@ const SchoolUsersPage = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Chip 
                                     icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${currentSchoolYear}`}
+                                    label={`Ciclo Escolar ${currentCycleLabel || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -2157,6 +2264,11 @@ const SchoolUsersPage = () => {
             {/* Botones de Acción */}
             <Card sx={{ mb: 3 }}>
                 <CardContent>
+                    {!canCreateUsersInManagedSchool && (
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            {newUserCreationDisabledMessage}
+                        </Alert>
+                    )}
                     <Grid container spacing={2}>
                         <Grid item xs={12} md={2}>
                             <Button
@@ -2165,6 +2277,7 @@ const SchoolUsersPage = () => {
                                 startIcon={<FileUpload />}
                                 fullWidth
                                 onClick={() => setOpenBulkDialog(true)}
+                                disabled={!canCreateUsersInManagedSchool}
                             >
                                 Carga Masiva
                             </Button>
@@ -2187,6 +2300,7 @@ const SchoolUsersPage = () => {
                                 startIcon={<Add />}
                                 fullWidth
                                 onClick={handleAddUser}
+                                disabled={!canCreateUsersInManagedSchool}
                             >
                                 Añadir Familia
                             </Button>
@@ -2198,6 +2312,7 @@ const SchoolUsersPage = () => {
                                 startIcon={<Mail />}
                                 fullWidth
                                 onClick={() => setOpenCircularModal(true)}
+                                disabled={!canCreateUsersInManagedSchool}
                             >
                                 Enviar Circular
                             </Button>
@@ -2365,7 +2480,7 @@ const SchoolUsersPage = () => {
                                                 <TableCell>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                         <Email fontSize="small" color="action" />
-                                                        {user.email || user.motherEmail || user.fatherEmail || 'N/A'}
+                                                        {getVisibleUserEmail(user) || 'N/A'}
                                                     </Box>
                                                 </TableCell>
                                                 <TableCell>
@@ -2490,7 +2605,7 @@ const SchoolUsersPage = () => {
                 </CardContent>
             </Card>
 
-            <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth="sm" fullWidth>
+            <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth={bulkGradeIssues.length > 0 ? 'md' : 'sm'} fullWidth>
                 <DialogTitle>Carga Masiva de Familias</DialogTitle>
                 <DialogContent>
                     <Typography variant="body1" sx={{ mb: 1 }}>
@@ -2514,7 +2629,11 @@ const SchoolUsersPage = () => {
                             <input
                                 type="file"
                                 hidden
-                                onChange={(e) => setBulkFile(e.target.files[0])}
+                                onChange={(e) => {
+                                    setBulkFile(e.target.files[0]);
+                                    setBulkGradeIssues([]);
+                                    setBulkGradeAssignments({});
+                                }}
                                 accept=".xlsx,.xls,.csv"
                             />
                         </Button>
@@ -2532,17 +2651,85 @@ const SchoolUsersPage = () => {
                             </Typography>
                         </Box>
                     )}
+                    {bulkGradeIssues.length > 0 && (
+                        <Box sx={{ mt: 3 }}>
+                            <Alert severity="warning" sx={{ mb: 2 }}>
+                                La carga terminó, pero algunos estudiantes venían con un grado vacío o que no pertenece al colegio. Asigna un grado válido para finalizar la corrección.
+                            </Alert>
+                            <TableContainer component={Paper} sx={{ maxHeight: 360 }}>
+                                <Table size="small" stickyHeader>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>Familia</TableCell>
+                                            <TableCell>Estudiante</TableCell>
+                                            <TableCell>Grado en Excel</TableCell>
+                                            <TableCell>Grado válido</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {bulkGradeIssues.map((issue) => {
+                                            const issueGrades = Array.isArray(issue.allowedGrades) && issue.allowedGrades.length > 0
+                                                ? issue.allowedGrades
+                                                : availableGrades;
+                                            return (
+                                                <TableRow key={issue.studentId}>
+                                                    <TableCell>
+                                                        <Typography variant="body2" fontWeight={600}>
+                                                            {issue.familyLastName || issue.email || 'Familia'}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Fila {issue.row}{issue.email ? ` - ${issue.email}` : ''}
+                                                        </Typography>
+                                                    </TableCell>
+                                                    <TableCell>{issue.studentName}</TableCell>
+                                                    <TableCell>{issue.originalGrade || 'Sin grado'}</TableCell>
+                                                    <TableCell sx={{ minWidth: 220 }}>
+                                                        <FormControl size="small" fullWidth>
+                                                            <InputLabel>Grado</InputLabel>
+                                                            <Select
+                                                                label="Grado"
+                                                                value={bulkGradeAssignments[String(issue.studentId)] || ''}
+                                                                onChange={(e) => handleBulkGradeAssignmentChange(issue.studentId, e.target.value)}
+                                                            >
+                                                                <MenuItem value="">
+                                                                    <em>Seleccione un grado</em>
+                                                                </MenuItem>
+                                                                {issueGrades.map((grade) => (
+                                                                    <MenuItem key={grade} value={grade}>{grade}</MenuItem>
+                                                                ))}
+                                                            </Select>
+                                                        </FormControl>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Box>
+                    )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenBulkDialog(false)}>Cancelar</Button>
-                    <Button 
-                        variant="contained" 
-                        color="primary" 
-                        disabled={!bulkFile || bulkLoading}
-                        onClick={handleBulkUpload}
-                    >
-                        Subir
-                    </Button>
+                    {bulkGradeIssues.length > 0 ? (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            disabled={bulkGradeSaving || bulkGradeIssues.some(issue => !bulkGradeAssignments[String(issue.studentId)])}
+                            onClick={handleSaveBulkGradeAssignments}
+                        >
+                            {bulkGradeSaving ? 'Guardando...' : 'Guardar grados'}
+                        </Button>
+                    ) : (
+                        <Button 
+                            variant="contained" 
+                            color="primary" 
+                            disabled={!bulkFile || bulkLoading}
+                            onClick={handleBulkUpload}
+                        >
+                            Subir
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 
@@ -2574,7 +2761,7 @@ const SchoolUsersPage = () => {
                 }}
                 user={selectedUser}
                 schoolId={stateSchool?.id || schoolId}
-                schoolYear={schoolYear || stateSchoolYear}
+                cicloEscolarId={stateCicloEscolarId}
                 onSuccess={handleServiceStatusSuccess}
             />
 

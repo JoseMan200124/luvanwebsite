@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import { getCiclosEscolares } from '../services/cicloEscolarService';
 import tw, { styled } from 'twin.macro';
 
 // Contenedores y estilos básicos
@@ -35,14 +36,33 @@ const HistoricalDataPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    // Array de años desde 2025 hasta el actual
-    const startYear = 2025;
     const currentYear = new Date().getFullYear();
-    const years = Array.from({ length: currentYear - startYear + 1 }, (_, i) => startYear + i);
+    const fallbackYear = currentYear;
 
-    const [selectedYear, setSelectedYear] = useState(years[0]);
+    const [years, setYears] = useState([fallbackYear]);
+    const [selectedYear, setSelectedYear] = useState(fallbackYear);
     const [data, setData] = useState({});
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchCycles = async () => {
+            try {
+                const response = await getCiclosEscolares();
+                const cycleYears = (response.ciclosEscolares || [])
+                    .map((cycle) => Number(cycle.anio))
+                    .filter((year) => Number.isFinite(year));
+                const nextYears = Array.from(new Set([...cycleYears, fallbackYear])).sort((a, b) => b - a);
+                setYears(nextYears);
+                if (!nextYears.includes(selectedYear)) {
+                    setSelectedYear(nextYears[0]);
+                }
+            } catch (error) {
+                console.error('Error fetching school cycles for history =>', error);
+            }
+        };
+
+        fetchCycles();
+    }, [fallbackYear, selectedYear]);
 
     // Traer todos los datasets de golpe
     useEffect(() => {

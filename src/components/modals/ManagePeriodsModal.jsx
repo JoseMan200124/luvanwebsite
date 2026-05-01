@@ -51,6 +51,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     const [periodToAdd, setPeriodToAdd] = useState('');
     const [routeTypeToAdd, setRouteTypeToAdd] = useState('');
     const [discountToAdd, setDiscountToAdd] = useState('');
+    const [studentsCountToAdd, setStudentsCountToAdd] = useState('');
 
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -124,6 +125,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
         setPeriodToAdd('');
         setRouteTypeToAdd('');
         setDiscountToAdd('');
+        setStudentsCountToAdd('');
         autoFilledCurrentRef.current = false;
         setDeleteTarget(null);
         setDeleteConfirmText('');
@@ -221,6 +223,14 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
             return;
         }
 
+        const parsedStudentsCount = studentsCountToAdd === '' || studentsCountToAdd === null || typeof studentsCountToAdd === 'undefined'
+            ? NaN
+            : Number(studentsCountToAdd);
+        if (studentsCountToAdd !== '' && (!Number.isInteger(parsedStudentsCount) || parsedStudentsCount < 1)) {
+            setError('Ingresa una cantidad de estudiantes válida (entero mayor o igual a 1), o déjala en blanco para usar la cantidad actual.');
+            return;
+        }
+
         setLoading(true);
         setError('');
         setSuccess('');
@@ -228,12 +238,14 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
             const payload = { period: p };
             if (rt) payload.routeType = rt;
             if (Number.isFinite(parsedDiscount)) payload.discountApplied = parsedDiscount;
+            if (Number.isFinite(parsedStudentsCount)) payload.studentsCount = parsedStudentsCount;
 
             await api.post(`/payments/v2/${paymentId}/periods`, payload);
             await refresh();
             if (onChanged) onChanged();
             setSuccess(`Período ${p} agregado correctamente.`);
             setPeriodToAdd('');
+            setStudentsCountToAdd('');
         } catch (e) {
             console.error('Error adding period', e);
             setError(e?.response?.data?.error || e?.response?.data?.message || 'Error agregando período');
@@ -304,13 +316,13 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 📅 Agregar período
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Seleccione un período y haga clic en <strong>Agregar</strong>. Puedes definir <strong>ruta</strong> y/o <strong>descuento</strong> solo para el período que deseas agregar.
+                                Seleccione un período y haga clic en <strong>Agregar</strong>. Puedes definir <strong>ruta</strong>, <strong>descuento</strong> y/o <strong>estudiantes</strong> solo para el período que deseas agregar.
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Al no definirse ruta o descuento, se usará la configuración actual
+                                Al no definirse ruta, descuento o estudiantes, se usará la configuración actual
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Configuración actual: Ruta: <strong>{futureRouteType || '-'}</strong> · Descuento: <strong>Q {Number(futureDiscount || 0).toFixed(2)}</strong>
+                                Configuración actual: Ruta: <strong>{futureRouteType || '-'}</strong> · Descuento: <strong>Q {Number(futureDiscount || 0).toFixed(2)}</strong> · Estudiantes: <strong>{studentCountFromFamily}</strong>
                             </Typography>
                         </Paper>
                     </Box>
@@ -327,8 +339,8 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 gridTemplateColumns: '1fr',
                                 gap: 1,
                                 alignItems: 'center',
-                                [theme.breakpoints.up('sm')]: {
-                                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))'
+                                [theme.breakpoints.up('md')]: {
+                                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))'
                                 }
                             })}
                         >
@@ -404,6 +416,20 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 fullWidth
                                 sx={{ minWidth: 0 }}
                             />
+
+                            <TextField
+                                size="small"
+                                label="Estudiantes"
+                                type="number"
+                                inputProps={{ min: 1, step: 1 }}
+                                placeholder={`Actual: ${studentCountFromFamily}`}
+                                value={studentsCountToAdd}
+                                onChange={(e) => setStudentsCountToAdd(e.target.value)}
+                                disabled={!paymentId || loading}
+                                InputLabelProps={{ shrink: true }}
+                                fullWidth
+                                sx={{ minWidth: 0 }}
+                            />
                         </Box>
 
                         <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -467,6 +493,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                             const per = String(p.period || '');
                             const isCurrent = per === currentPeriod;
                             const status = String(p.status || '').toUpperCase();
+                            const penaltyStatus = String(p.penaltyStatus || 'SIN_MORA').toUpperCase();
                             const amountPaid = Number(p.amountPaid || 0);
                             const amountDue = Number(p.amountDue ?? p.netAmount ?? 0);
 
@@ -474,6 +501,14 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 if (status === 'PAGADO') return 'success';
                                 if (status === 'PARCIAL') return 'warning';
                                 if (status === 'PENDIENTE') return 'warning';
+                                return 'default';
+                            })();
+
+                            const penaltyStatusChipColor = (() => {
+                                if (penaltyStatus === 'PENDIENTE') return 'error';
+                                if (penaltyStatus === 'PARCIAL') return 'warning';
+                                if (penaltyStatus === 'PAGADA') return 'success';
+                                if (penaltyStatus === 'EXONERADA') return 'info';
                                 return 'default';
                             })();
 
@@ -487,6 +522,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                     const periodStudentsCount = Math.max(1, Number(p.studentsCount || studentCountFromFamily || 1));
                                     const baseFee = (original && periodStudentsCount) ? (original / periodStudentsCount) : 0;
                                     const discount = Math.max(0, original - net) || Number(p.discountApplied ?? 0);
+                                    const extraTariffDiscount = Number(p.extraordinaryTariffDiscount ?? 0);
 
                                     const studentsLabel = `${periodStudentsCount} estudiante${periodStudentsCount === 1 ? '' : 's'}`;
                                     const baseLabel = `Tarifa base${routeTypeForLabel ? ` (${routeTypeForLabel})` : ''}`;
@@ -537,7 +573,15 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                             (Periodo actual)
                                                         </Typography>
                                                     )}
-                                                    {status && <Chip size="small" label={status} color={statusChipColor} variant="filled" />}
+                                                    {status && <Chip size="small" label={`Tarifa: ${status}`} color={statusChipColor} variant="filled" />}
+                                                    {penaltyStatus && (
+                                                        <Chip
+                                                            size="small"
+                                                            label={`Mora: ${penaltyStatus.replace('_', ' ')}`}
+                                                            color={penaltyStatusChipColor}
+                                                            variant={penaltyStatus === 'SIN_MORA' ? 'outlined' : 'filled'}
+                                                        />
+                                                    )}
                                                 </Box>
                                                 {isOverdue && (
                                                     <Typography
@@ -567,6 +611,13 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>Descuento</Typography>
                                                         <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{`Q ${Number(discount || 0).toFixed(2)}`}</Typography>
                                                     </Box>
+
+                                                    {extraTariffDiscount > 0 && (
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <Typography variant="body2" sx={{ color: 'warning.dark' }}>Desc. extraordinario tarifa</Typography>
+                                                            <Typography variant="body2" sx={{ color: 'warning.dark', fontWeight: 600, minWidth: 120, textAlign: 'right' }}>{`Q ${extraTariffDiscount.toFixed(2)}`}</Typography>
+                                                        </Box>
+                                                    )}
 
                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                         <Typography component="span" sx={{ fontWeight: 800 }}>Subtotal período:</Typography>

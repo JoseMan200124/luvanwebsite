@@ -91,7 +91,7 @@ const SchoolDashboardPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
-    const { schoolYear, schoolId } = useParams();
+    const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
 
     const [schoolData, setSchoolData] = useState(null);
     const [routeOccupancy, setRouteOccupancy] = useState([]);
@@ -135,7 +135,12 @@ const SchoolDashboardPage = () => {
 
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
-    const stateSchoolYear = location.state?.schoolYear;
+    const currentCicloEscolarId = routeCicloEscolarId || stateSchool?.cicloEscolarId || schoolData?.cicloEscolarId || location.state?.cicloEscolarId || '';
+    const currentCycleLabel = schoolData?.cicloEscolar?.label || schoolData?.cicloEscolar?.nombre || schoolData?.cicloEscolar?.anio || stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || '';
+    const buildSchoolCycleParams = useCallback((extra = {}) => ({
+        ...(currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}),
+        ...extra
+    }), [currentCicloEscolarId]);
 
     const fetchSchoolData = useCallback(async () => {
         if (!schoolId) return;
@@ -165,17 +170,14 @@ const SchoolDashboardPage = () => {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: {
-                    schoolYear: schoolYear,
-                    day: selectedDay
-                }
+                params: buildSchoolCycleParams({ day: selectedDay })
             });
             setRouteOccupancy(response.data.routes || []);
         } catch (err) {
             console.error('Error fetching route occupancy:', err);
             setRouteOccupancy([]);
         }
-    }, [auth.token, schoolId, schoolYear, selectedDay]);
+    }, [auth.token, schoolId, selectedDay, buildSchoolCycleParams]);
 
     const fetchUserSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!schoolId) return;
@@ -185,7 +187,7 @@ const SchoolDashboardPage = () => {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: { schoolYear: schoolYear, serviceStatus }
+                params: buildSchoolCycleParams({ serviceStatus })
             });
             
             const summary = response.data.summary || {};
@@ -199,7 +201,7 @@ const SchoolDashboardPage = () => {
             console.error('Error fetching user summary:', err);
             setUserSummary({ completa: 0, mediaAM: 0, mediaPM: 0, total: 0 });
         }
-    }, [auth.token, schoolId, schoolYear]);
+    }, [auth.token, schoolId, buildSchoolCycleParams]);
 
     const fetchStudentSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!schoolId) return;
@@ -209,7 +211,7 @@ const SchoolDashboardPage = () => {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 },
-                params: { schoolYear: schoolYear, serviceStatus }
+                params: buildSchoolCycleParams({ serviceStatus })
             });
             
             const summary = response.data.summary || {};
@@ -231,7 +233,7 @@ const SchoolDashboardPage = () => {
             console.error('Error fetching student summary:', err);
             setStudentSummary({ completa: 0, mediaAM: 0, mediaPM: 0, inactive: 0, total: 0 });
         }
-    }, [auth.token, schoolId, schoolYear]);
+    }, [auth.token, schoolId, buildSchoolCycleParams]);
 
     // Obtiene contadores globales: cuántas familias/estudiantes usan vs no usan el servicio
     const fetchServiceUsageSummary = useCallback(async () => {
@@ -245,14 +247,14 @@ const SchoolDashboardPage = () => {
                 Promise.all(allStatuses.map(s =>
                     api.get(`/parents/summary/${schoolId}`, {
                         headers: { Authorization: `Bearer ${auth.token}` },
-                        params: { schoolYear, serviceStatus: s }
+                        params: buildSchoolCycleParams({ serviceStatus: s })
                     }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
                     .catch(() => ({ status: s, total: 0, inactive: 0 }))
                 )),
                 Promise.all(allStatuses.map(s =>
                     api.get(`/students/summary/${schoolId}`, {
                         headers: { Authorization: `Bearer ${auth.token}` },
-                        params: { schoolYear, serviceStatus: s }
+                        params: buildSchoolCycleParams({ serviceStatus: s })
                     }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
                     .catch(() => ({ status: s, total: 0, inactive: 0 }))
                 ))
@@ -272,7 +274,7 @@ const SchoolDashboardPage = () => {
         } catch (err) {
             console.error('Error fetching service usage summary:', err);
         }
-    }, [auth.token, schoolId, schoolYear]);
+    }, [auth.token, schoolId, buildSchoolCycleParams]);
 
     useEffect(() => {
         if (auth.token && schoolId) {
@@ -304,45 +306,45 @@ const SchoolDashboardPage = () => {
     };
 
     const handleViewUsers = () => {
-        navigate(`/admin/escuelas/${schoolYear}/${schoolId}/usuarios`, {
+        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/usuarios`, {
             state: {
-                schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
     };
 
     const handleViewBuses = () => {
-        navigate(`/admin/escuelas/${schoolYear}/${schoolId}/buses-gestion`, {
+        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/buses-gestion`, {
             state: {
-                schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
     };
 
     const handleViewPayments = () => {
-        navigate(`/admin/escuelas/${schoolYear}/${schoolId}/pagos`, {
+        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/pagos`, {
             state: {
-                schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
     };
 
     const handleViewContracts = () => {
-        navigate(`/admin/escuelas/${schoolYear}/${schoolId}/contratos`, {
+        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/contratos`, {
             state: {
-                schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
     };
 
     const handleViewProtocols = () => {
-        navigate(`/admin/escuelas/${schoolYear}/${schoolId}/protocolos`, {
+        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/protocolos`, {
             state: {
-                schoolYear: schoolYear || stateSchoolYear,
+                cicloEscolarId: currentCicloEscolarId,
                 school: schoolData || stateSchool
             }
         });
@@ -383,7 +385,6 @@ const SchoolDashboardPage = () => {
     };
 
     const currentSchool = schoolData || stateSchool;
-    const currentSchoolYear = schoolYear || stateSchoolYear;
 
     const dayLabels = {
         'monday': 'Lunes',
@@ -401,14 +402,14 @@ const SchoolDashboardPage = () => {
             await Promise.all(weekdays.map(async (d) => {
                 const resp = await api.get(`/routes/occupancy/${schoolId}`, {
                     headers: { Authorization: `Bearer ${auth.token}` },
-                    params: { schoolYear: schoolYear, day: d }
+                    params: buildSchoolCycleParams({ day: d })
                 });
                 dayMap[d] = resp.data.routes || [];
             }));
 
             generateRouteOccupancyPDF(dayMap, {
                 schoolName: currentSchool?.name || '',
-                schoolYear: currentSchoolYear || '',
+                cycleLabel: currentCycleLabel || currentCicloEscolarId || '',
                 generatedAt: new Date(),
                 scheduleCodes,
                 dayLabels
@@ -465,7 +466,7 @@ const SchoolDashboardPage = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Chip 
                                     icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${currentSchoolYear}`}
+                                    label={`Ciclo Escolar ${currentCycleLabel || currentCicloEscolarId || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
                                 <Typography variant="body1" sx={{ opacity: 0.9 }}>
@@ -1013,7 +1014,7 @@ const SchoolDashboardPage = () => {
                 routeNumber={selectedRoute.routeNumber}
                 scheduleCode={selectedRoute.scheduleCode}
                 schoolId={schoolId}
-                schoolYear={schoolYear || stateSchoolYear}
+                cicloEscolarId={currentCicloEscolarId}
                 selectedDay={selectedDay}
             />
 

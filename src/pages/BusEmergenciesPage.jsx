@@ -45,6 +45,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAllBusEmergencies, getBusEmergencyById, deleteBusEmergency } from '../services/busEmergencyService';
 import api from '../utils/axiosConfig';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -66,6 +67,7 @@ const BusEmergenciesPage = () => {
     const [selectedCorporation, setSelectedCorporation] = useState('');
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
 
@@ -92,7 +94,7 @@ const BusEmergenciesPage = () => {
     useEffect(() => {
         fetchSchools();
         fetchCorporations();
-    }, []);
+    }, [selectedCicloEscolar]);
 
     useEffect(() => {
         if (selectedSchool) {
@@ -110,11 +112,11 @@ const BusEmergenciesPage = () => {
     useEffect(() => {
         fetchEmergencies();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, startDate, endDate, orderBy, order]);
+    }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, selectedCicloEscolar, startDate, endDate, orderBy, order]);
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools');
+            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setSchools(schoolsData);
         } catch (error) {
@@ -125,7 +127,7 @@ const BusEmergenciesPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations');
+            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) });
             const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
             setCorporations(corporationsData);
         } catch (error) {
@@ -184,6 +186,7 @@ const BusEmergenciesPage = () => {
             const filters = {
                 page: page + 1,
                 limit: rowsPerPage,
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
             if (selectedSchool) filters.schoolId = selectedSchool;
@@ -369,6 +372,19 @@ const BusEmergenciesPage = () => {
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12} sm={6} md={2}>
+                            <CicloEscolarFilter size="medium"
+                                value={selectedCicloEscolar}
+                                onChange={(value) => {
+                                    setSelectedCicloEscolar(value);
+                                    setSelectedSchool('');
+                                    setSelectedCorporation('');
+                                    setSelectedPlate('');
+                                    setSelectedRoute('');
+                                    setPage(0);
+                                }}
+                            />
+                        </Grid>
                         <Grid item xs={12} sm={6} md={2}>
                             <FormControl fullWidth>
                                 <InputLabel>Colegio</InputLabel>

@@ -38,6 +38,7 @@ import tw from 'twin.macro';
 import { getAllStudentIncidents, getStudentIncidentById, INCIDENT_TYPES } from '../services/studentIncidentService';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, SCHEDULE_LABELS } from '../utils/scheduleConfig';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -59,6 +60,7 @@ const StudentIncidentsPage = () => {
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedIncidentType, setSelectedIncidentType] = useState('');
     const [selectedScheduleType, setSelectedScheduleType] = useState('');
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
 
@@ -75,7 +77,7 @@ const StudentIncidentsPage = () => {
 
     useEffect(() => {
         fetchSchools();
-    }, []);
+    }, [selectedCicloEscolar]);
 
     useEffect(() => {
         if (selectedSchool) {
@@ -89,11 +91,11 @@ const StudentIncidentsPage = () => {
     useEffect(() => {
         fetchIncidents();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedIncidentType, selectedScheduleType, startDate, endDate]);
+    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedIncidentType, selectedScheduleType, selectedCicloEscolar, startDate, endDate]);
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools');
+            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setSchools(schoolsData);
         } catch (error) {
@@ -130,6 +132,7 @@ const StudentIncidentsPage = () => {
             const filters = {
                 page: page + 1,
                 limit: rowsPerPage,
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
                 if (selectedSchool) filters.schoolId = selectedSchool;
@@ -273,7 +276,19 @@ const StudentIncidentsPage = () => {
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid item xs={12} sm={6} md={1.5}>
+                            <CicloEscolarFilter size="medium"
+                                value={selectedCicloEscolar}
+                                onChange={(value) => {
+                                    setSelectedCicloEscolar(value);
+                                    setSelectedSchool('');
+                                    setSelectedPlate('');
+                                    setSelectedRoute('');
+                                    setPage(0);
+                                }}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={1.75}>
                             <FormControl fullWidth>
                                 <InputLabel>Colegio</InputLabel>
                                 <Select
@@ -392,25 +407,22 @@ const StudentIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} sm={6} md={4}>
-                            <Grid container spacing={1}>
-                                <Grid item xs={6}>
-                                    <DatePicker
-                                        label="Fecha Inicio"
-                                        value={startDate}
-                                        onChange={(newValue) => setStartDate(newValue)}
-                                    />
-                                </Grid>
-                                <Grid item xs={6}>
-                                    <DatePicker
-                                        label="Fecha Fin"
-                                        value={endDate}
-                                        onChange={(newValue) => setEndDate(newValue)}
-                                    />
-                                </Grid>
-                            </Grid>
+                        <Grid item xs={12} sm={12} md={3}>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                <DatePicker
+                                    label="Fecha Inicio"
+                                    value={startDate}
+                                    onChange={(newValue) => setStartDate(newValue)}
+                                    sx={{ flex: 1 }}
+                                />
+                                <DatePicker
+                                    label="Fecha Fin"
+                                    value={endDate}
+                                    onChange={(newValue) => setEndDate(newValue)}
+                                    sx={{ flex: 1 }}
+                                />
+                            </Box>
                         </Grid>
-                        {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
                     </Grid>
                 </Paper>
 

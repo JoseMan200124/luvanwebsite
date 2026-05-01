@@ -34,6 +34,7 @@ import tw from 'twin.macro';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import moment from 'moment-timezone';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -130,15 +131,16 @@ const ReportsUsagePage = () => {
     // Controles TOP-N
     const [distanceTopN, setDistanceTopN] = useState(isMobile ? 10 : 15);
     const [schoolsTopN, setSchoolsTopN] = useState(isMobile ? 8 : 12);
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
             const [schoolsRes, incidentsRes, distancePerPilotRes] = await Promise.all([
-                api.get('/reports/schools-usage'),
-                api.get('/reports/incidents-by-type'),
-                api.get('/reports/distance-per-pilot'),
+                api.get('/reports/schools-usage', { params: getCicloEscolarFilterParams(selectedCicloEscolar) }),
+                api.get('/reports/incidents-by-type', { params: getCicloEscolarFilterParams(selectedCicloEscolar) }),
+                api.get('/reports/distance-per-pilot', { params: getCicloEscolarFilterParams(selectedCicloEscolar) }),
             ]);
 
             setData({
@@ -152,7 +154,7 @@ const ReportsUsagePage = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedCicloEscolar]);
 
     useEffect(() => {
         fetchData();
@@ -277,6 +279,13 @@ const ReportsUsagePage = () => {
                 <Button variant="contained" color="primary" onClick={generatePDF}>
                     Generar PDF
                 </Button>
+
+                <CicloEscolarFilter
+                    value={selectedCicloEscolar}
+                    onChange={setSelectedCicloEscolar}
+                    size="small"
+                    sx={{ minWidth: 220 }}
+                />
 
                 <TopNSelect
                     label="Top pilotos"

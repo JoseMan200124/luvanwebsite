@@ -51,6 +51,7 @@ import {
     FUEL_TYPES
 } from '../services/fuelRecordService';
 import api from '../utils/axiosConfig';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -78,6 +79,7 @@ const FuelRecordsPage = () => {
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedFuelType, setSelectedFuelType] = useState('');
     const [selectedFuelingReason, setSelectedFuelingReason] = useState('');
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
 
@@ -118,7 +120,7 @@ const FuelRecordsPage = () => {
         fetchPilots();
         fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [selectedCicloEscolar]);
 
     const fetchPilots = async () => {
         try {
@@ -137,11 +139,11 @@ const FuelRecordsPage = () => {
         fetchFuelRecords();
         fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedClient, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, startDate, endDate, orderBy, order]);
+    }, [page, rowsPerPage, selectedClient, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, selectedCicloEscolar, startDate, endDate, orderBy, order]);
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools');
+            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setSchools(schoolsData);
         } catch (error) {
@@ -165,7 +167,7 @@ const FuelRecordsPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations');
+            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) });
             const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
             setCorporations(corporationsData);
         } catch (error) {
@@ -281,6 +283,7 @@ const FuelRecordsPage = () => {
             const filters = {
                 page: page + 1,
                 limit: rowsPerPage,
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
             if (selectedClient) {
@@ -344,7 +347,9 @@ const FuelRecordsPage = () => {
 
     const fetchStatistics = async () => {
         try {
-            const filters = {};
+            const filters = {
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
+            };
 
             if (selectedClient) {
                     const { type, id } = selectedClient || {};
@@ -618,6 +623,19 @@ const FuelRecordsPage = () => {
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
                         <Grid item xs="auto" sm="auto" md={"auto"}>
+                            <CicloEscolarFilter size="medium"
+                                value={selectedCicloEscolar}
+                                onChange={(value) => {
+                                    setSelectedCicloEscolar(value);
+                                    setSelectedClient(null);
+                                    setSelectedPlate('');
+                                    setSelectedRoute('');
+                                    setPage(0);
+                                }}
+                                sx={{ width: 190 }}
+                            />
+                        </Grid>
+                        <Grid item xs="auto" sm="auto" md={"auto"}>
                                 <Autocomplete
                                     options={clientOptions}
                                     value={selectedClient}
@@ -732,6 +750,7 @@ const FuelRecordsPage = () => {
                                         setSelectedRoute('');
                                         setSelectedFuelingReason('');
                                         setSelectedFuelType('');
+                                        setSelectedCicloEscolar(getInitialCicloEscolarFilter());
                                         setStartDate(null);
                                         setEndDate(null);
                                         setPage(0);
