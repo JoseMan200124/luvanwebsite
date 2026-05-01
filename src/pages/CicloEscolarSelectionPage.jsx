@@ -2368,6 +2368,9 @@ const CicloEscolarSelectionPage = () => {
                         <li>{Number(cycleMigrationConfirmation?.impact?.counts?.supervisorsToMove || 0)} supervisores apuntarán al colegio del ciclo nuevo.</li>
                         <li>{Number(cycleMigrationConfirmation?.impact?.counts?.auxiliariesToMove || 0)} auxiliares apuntarán al colegio del ciclo nuevo.</li>
                     </Box>
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                        <strong>Importante:</strong> Solo se está moviendo el colegio asignado a estos usuarios al nuevo ciclo. Las asignaciones de buses (placas, monitoras y pilotos asignados a rutas) <strong>no se transfieren automáticamente</strong> y deberán configurarse nuevamente en el nuevo ciclo.
+                    </Alert>
                     {Array.isArray(cycleMigrationConfirmation?.impact?.oldSchools) && cycleMigrationConfirmation.impact.oldSchools.length > 0 && (
                         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }}>
                             {cycleMigrationConfirmation.impact.oldSchools.map((school) => (
