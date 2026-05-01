@@ -130,6 +130,9 @@ const SchoolUsersPage = () => {
     // Estados para diferentes operaciones
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkGradeIssues, setBulkGradeIssues] = useState([]);
+    const [bulkGradeAssignments, setBulkGradeAssignments] = useState({});
+    const [bulkGradeSaving, setBulkGradeSaving] = useState(false);
     const [downloadMode, setDownloadMode] = useState('');
     // Dialogo unificado para descargas (Nuevos / Todos / Reporte)
     const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
@@ -1890,12 +1893,31 @@ const SchoolUsersPage = () => {
             const schoolToAttach = currentSchool?.id || schoolId || '';
             if (schoolToAttach) formData.append('schoolId', String(schoolToAttach));
             
-            await api.post('/parents/bulk-upload', formData, {
+            const response = await api.post('/parents/bulk-upload', formData, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                     'Content-Type': 'multipart/form-data'
                 }
             });
+
+            const gradeIssues = Array.isArray(response.data?.gradeAssignmentIssues)
+                ? response.data.gradeAssignmentIssues
+                : [];
+
+            if (gradeIssues.length > 0) {
+                setBulkGradeIssues(gradeIssues);
+                setBulkGradeAssignments({});
+                setSnackbar({
+                    open: true,
+                    message: `Carga procesada. ${gradeIssues.length} estudiante(s) necesitan un grado válido.`,
+                    severity: 'warning'
+                });
+                fetchUsers();
+                return;
+            }
+
+            setBulkGradeIssues([]);
+            setBulkGradeAssignments({});
             
             setSnackbar({
                 open: true,
@@ -1915,6 +1937,58 @@ const SchoolUsersPage = () => {
             });
         } finally {
             setBulkLoading(false);
+        }
+    };
+
+    const handleBulkGradeAssignmentChange = (studentId, grade) => {
+        setBulkGradeAssignments(prev => ({
+            ...prev,
+            [String(studentId)]: grade
+        }));
+    };
+
+    const handleSaveBulkGradeAssignments = async () => {
+        if (bulkGradeIssues.length === 0) return;
+
+        const missingGrade = bulkGradeIssues.some(issue => !bulkGradeAssignments[String(issue.studentId)]);
+        if (missingGrade) {
+            setSnackbar({ open: true, message: 'Selecciona un grado para cada estudiante pendiente.', severity: 'warning' });
+            return;
+        }
+
+        const schoolToAttach = currentSchool?.id || schoolId || '';
+        if (!schoolToAttach) {
+            setSnackbar({ open: true, message: 'No se pudo determinar el colegio.', severity: 'error' });
+            return;
+        }
+
+        setBulkGradeSaving(true);
+        try {
+            await api.post('/parents/bulk-upload/resolve-grades', {
+                schoolId: schoolToAttach,
+                assignments: bulkGradeIssues.map(issue => ({
+                    studentId: issue.studentId,
+                    grade: bulkGradeAssignments[String(issue.studentId)]
+                }))
+            }, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+
+            setSnackbar({ open: true, message: 'Grados actualizados correctamente.', severity: 'success' });
+            setBulkGradeIssues([]);
+            setBulkGradeAssignments({});
+            setBulkFile(null);
+            setOpenBulkDialog(false);
+            fetchUsers();
+        } catch (err) {
+            console.error('Error saving bulk grade assignments:', err);
+            setSnackbar({
+                open: true,
+                message: err?.response?.data?.message || 'No se pudieron guardar los grados.',
+                severity: 'error'
+            });
+        } finally {
+            setBulkGradeSaving(false);
         }
     };
 
@@ -2526,7 +2600,7 @@ const SchoolUsersPage = () => {
                 </CardContent>
             </Card>
 
-            <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth="sm" fullWidth>
+            <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth={bulkGradeIssues.length > 0 ? 'md' : 'sm'} fullWidth>
                 <DialogTitle>Carga Masiva de Familias</DialogTitle>
                 <DialogContent>
                     <Typography variant="body1" sx={{ mb: 1 }}>
@@ -2550,7 +2624,11 @@ const SchoolUsersPage = () => {
                             <input
                                 type="file"
                                 hidden
-                                onChange={(e) => setBulkFile(e.target.files[0])}
+                                onChange={(e) => {
+                                    setBulkFile(e.target.files[0]);
+                                    setBulkGradeIssues([]);
+                                    setBulkGradeAssignments({});
+                                }}
                                 accept=".xlsx,.xls,.csv"
                             />
                         </Button>
@@ -2568,17 +2646,85 @@ const SchoolUsersPage = () => {
                             </Typography>
                         </Box>
                     )}
+                    {bulkGradeIssues.length > 0 && (
+                        <Box sx={{ mt: 3 }}>
+                            <Alert severity="warning" sx={{ mb: 2 }}>
+                                La carga terminó, pero algunos estudiantes venían con un grado vacío o que no pertenece al colegio. Asigna un grado válido para finalizar la corrección.
+                            </Alert>
+                            <TableContainer component={Paper} sx={{ maxHeight: 360 }}>
+                                <Table size="small" stickyHeader>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>Familia</TableCell>
+                                            <TableCell>Estudiante</TableCell>
+                                            <TableCell>Grado en Excel</TableCell>
+                                            <TableCell>Grado válido</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {bulkGradeIssues.map((issue) => {
+                                            const issueGrades = Array.isArray(issue.allowedGrades) && issue.allowedGrades.length > 0
+                                                ? issue.allowedGrades
+                                                : availableGrades;
+                                            return (
+                                                <TableRow key={issue.studentId}>
+                                                    <TableCell>
+                                                        <Typography variant="body2" fontWeight={600}>
+                                                            {issue.familyLastName || issue.email || 'Familia'}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Fila {issue.row}{issue.email ? ` - ${issue.email}` : ''}
+                                                        </Typography>
+                                                    </TableCell>
+                                                    <TableCell>{issue.studentName}</TableCell>
+                                                    <TableCell>{issue.originalGrade || 'Sin grado'}</TableCell>
+                                                    <TableCell sx={{ minWidth: 220 }}>
+                                                        <FormControl size="small" fullWidth>
+                                                            <InputLabel>Grado</InputLabel>
+                                                            <Select
+                                                                label="Grado"
+                                                                value={bulkGradeAssignments[String(issue.studentId)] || ''}
+                                                                onChange={(e) => handleBulkGradeAssignmentChange(issue.studentId, e.target.value)}
+                                                            >
+                                                                <MenuItem value="">
+                                                                    <em>Seleccione un grado</em>
+                                                                </MenuItem>
+                                                                {issueGrades.map((grade) => (
+                                                                    <MenuItem key={grade} value={grade}>{grade}</MenuItem>
+                                                                ))}
+                                                            </Select>
+                                                        </FormControl>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Box>
+                    )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenBulkDialog(false)}>Cancelar</Button>
-                    <Button 
-                        variant="contained" 
-                        color="primary" 
-                        disabled={!bulkFile || bulkLoading}
-                        onClick={handleBulkUpload}
-                    >
-                        Subir
-                    </Button>
+                    {bulkGradeIssues.length > 0 ? (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            disabled={bulkGradeSaving || bulkGradeIssues.some(issue => !bulkGradeAssignments[String(issue.studentId)])}
+                            onClick={handleSaveBulkGradeAssignments}
+                        >
+                            {bulkGradeSaving ? 'Guardando...' : 'Guardar grados'}
+                        </Button>
+                    ) : (
+                        <Button 
+                            variant="contained" 
+                            color="primary" 
+                            disabled={!bulkFile || bulkLoading}
+                            onClick={handleBulkUpload}
+                        >
+                            Subir
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 
