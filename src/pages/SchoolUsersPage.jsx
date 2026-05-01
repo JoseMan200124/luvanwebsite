@@ -76,6 +76,9 @@ const roleOptions = [
     { id: 3, name: 'Padre' }
 ];
 
+const stripArchivedEmailPrefix = (email) => String(email || '').replace(/^ARCHIVED_ID:?\d+_/i, '');
+const getVisibleUserEmail = (user) => stripArchivedEmailPrefix(user?.email || user?.motherEmail || user?.fatherEmail || '');
+
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
     padding: 2rem;
@@ -198,6 +201,7 @@ const SchoolUsersPage = () => {
             default: return '';
         }
     };
+
     // Obtener datos del estado de navegación
     const stateSchool = location.state?.school;
     const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
@@ -1370,7 +1374,7 @@ const SchoolUsersPage = () => {
                 const motherEmail = normalize(user.motherEmail || '');
                 const fatherEmail = normalize(user.fatherEmail || '');
                 const name = normalize(user.name || '');
-                const email = normalize(user.email || '');
+                const email = normalize(stripArchivedEmailPrefix(user.email || ''));
 
                 // For each token, ensure it matches at least one field
                 return tokens.every(token => (
@@ -2077,8 +2081,8 @@ const SchoolUsersPage = () => {
                     vb = b.name || '';
                     break;
                 case 'email':
-                    va = a.email || a.motherEmail || a.fatherEmail || '';
-                    vb = b.email || b.motherEmail || b.fatherEmail || '';
+                    va = getVisibleUserEmail(a);
+                    vb = getVisibleUserEmail(b);
                     break;
                 case 'role':
                     va = (roleOptions.find(r => r.id === a.roleId)?.name) || '';
@@ -2308,6 +2312,7 @@ const SchoolUsersPage = () => {
                                 startIcon={<Mail />}
                                 fullWidth
                                 onClick={() => setOpenCircularModal(true)}
+                                disabled={!canCreateUsersInManagedSchool}
                             >
                                 Enviar Circular
                             </Button>
@@ -2475,7 +2480,7 @@ const SchoolUsersPage = () => {
                                                 <TableCell>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                         <Email fontSize="small" color="action" />
-                                                        {user.email || user.motherEmail || user.fatherEmail || 'N/A'}
+                                                        {getVisibleUserEmail(user) || 'N/A'}
                                                     </Box>
                                                 </TableCell>
                                                 <TableCell>
