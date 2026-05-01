@@ -355,10 +355,17 @@ const SchoolYearSelectionPage = () => {
 
     const handleSchoolSelect = (school) => {
         const cicloEscolarId = school.cicloEscolarId || selectedCicloEscolarId;
+        const cicloEscolar = school.cicloEscolar || selectedCicloEscolar || ciclosEscolares.find((item) => String(item.id) === String(cicloEscolarId)) || null;
+        const schoolWithCicloEscolar = {
+            ...school,
+            cicloEscolarId,
+            ...(cicloEscolar ? { cicloEscolar } : {})
+        };
         navigate(`/admin/escuelas/ciclo/${cicloEscolarId}/${school.id}`, {
             state: {
                 cicloEscolarId,
-                school: school
+                cicloEscolar,
+                school: schoolWithCicloEscolar
             }
         });
     };
@@ -2093,7 +2100,7 @@ const SchoolYearSelectionPage = () => {
                             {cycleMigrationConfirmation.impact.oldSchools.map((school) => (
                                 <Chip
                                     key={school.id}
-                                    label={`${school.name} (${school.cicloEscolar?.label || school.cicloEscolar?.nombre || school.cicloEscolar?.anio || school.cicloEscolarId || 'sin ciclo'})`}
+                                    label={`${school.name} (${getCicloEscolarOptionLabel(school.cicloEscolar) || 'sin ciclo'})`}
                                     size="small"
                                     color="warning"
                                     variant="outlined"

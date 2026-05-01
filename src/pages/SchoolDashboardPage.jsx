@@ -53,6 +53,7 @@ import RouteStudentsModal from '../components/modals/RouteStudentsModal';
 import { generateRouteOccupancyPDF } from '../utils/pdfExport';
 import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, getScheduleColor, getScheduleBgColor } from '../utils/scheduleConfig';
 import PermissionGuard from '../components/PermissionGuard';
+import { getCicloEscolarYear } from '../services/cicloEscolarService';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -135,8 +136,14 @@ const SchoolDashboardPage = () => {
 
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
+    const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
     const currentCicloEscolarId = routeCicloEscolarId || stateSchool?.cicloEscolarId || schoolData?.cicloEscolarId || location.state?.cicloEscolarId || '';
-    const currentCycleLabel = schoolData?.cicloEscolar?.label || schoolData?.cicloEscolar?.nombre || schoolData?.cicloEscolar?.anio || stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || '';
+    const currentCicloEscolar = schoolData?.cicloEscolar || schoolData?.CicloEscolar || stateCicloEscolar;
+    const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
+    const currentSchool = schoolData || (stateSchool ? {
+        ...stateSchool,
+        ...(currentCicloEscolar ? { cicloEscolar: currentCicloEscolar } : {})
+    } : null);
     const buildSchoolCycleParams = useCallback((extra = {}) => ({
         ...(currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}),
         ...extra
@@ -309,7 +316,8 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/usuarios`, {
             state: {
                 cicloEscolarId: currentCicloEscolarId,
-                school: schoolData || stateSchool
+                cicloEscolar: currentCicloEscolar,
+                school: currentSchool
             }
         });
     };
@@ -318,7 +326,8 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/buses-gestion`, {
             state: {
                 cicloEscolarId: currentCicloEscolarId,
-                school: schoolData || stateSchool
+                cicloEscolar: currentCicloEscolar,
+                school: currentSchool
             }
         });
     };
@@ -327,7 +336,8 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/pagos`, {
             state: {
                 cicloEscolarId: currentCicloEscolarId,
-                school: schoolData || stateSchool
+                cicloEscolar: currentCicloEscolar,
+                school: currentSchool
             }
         });
     };
@@ -336,7 +346,8 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/contratos`, {
             state: {
                 cicloEscolarId: currentCicloEscolarId,
-                school: schoolData || stateSchool
+                cicloEscolar: currentCicloEscolar,
+                school: currentSchool
             }
         });
     };
@@ -345,7 +356,8 @@ const SchoolDashboardPage = () => {
         navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/protocolos`, {
             state: {
                 cicloEscolarId: currentCicloEscolarId,
-                school: schoolData || stateSchool
+                cicloEscolar: currentCicloEscolar,
+                school: currentSchool
             }
         });
     };
@@ -384,8 +396,6 @@ const SchoolDashboardPage = () => {
         return dayLabels[day] || day;
     };
 
-    const currentSchool = schoolData || stateSchool;
-
     const dayLabels = {
         'monday': 'Lunes',
         'tuesday': 'Martes',
@@ -409,7 +419,7 @@ const SchoolDashboardPage = () => {
 
             generateRouteOccupancyPDF(dayMap, {
                 schoolName: currentSchool?.name || '',
-                cycleLabel: currentCycleLabel || currentCicloEscolarId || '',
+                cycleLabel: currentCycleLabel || '',
                 generatedAt: new Date(),
                 scheduleCodes,
                 dayLabels
@@ -466,7 +476,7 @@ const SchoolDashboardPage = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Chip 
                                     icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${currentCycleLabel || currentCicloEscolarId || ''}`}
+                                    label={`Ciclo Escolar ${currentCycleLabel || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
                                 <Typography variant="body1" sx={{ opacity: 0.9 }}>

@@ -25,7 +25,32 @@ export const setDefaultCicloEscolar = async (id) => {
     return response.data;
 };
 
+const normalizeCycleYear = (value) => {
+    if (value === undefined || value === null || value === '') return '';
+    const year = Number.parseInt(value, 10);
+    return Number.isInteger(year) && year >= 1900 && year <= 2199 ? String(year) : '';
+};
+
+const extractCycleYear = (value) => {
+    const match = /\b(?:19|20|21)\d{2}\b/.exec(String(value || ''));
+    return match ? match[0] : '';
+};
+
+const getStoredCycleLabel = (cicloEscolar) => {
+    const value = String(cicloEscolar?.label || cicloEscolar?.nombre || '').trim();
+    if (!value) return '';
+    return /^(ciclo\s+escolar\s*)?\d{1,3}$/i.test(value) ? '' : value;
+};
+
+export const getCicloEscolarYear = (cicloEscolar) => {
+    if (!cicloEscolar) return '';
+    return normalizeCycleYear(cicloEscolar.anio)
+        || extractCycleYear(cicloEscolar.label)
+        || extractCycleYear(cicloEscolar.nombre);
+};
+
 export const getCicloEscolarOptionLabel = (cicloEscolar) => {
     if (!cicloEscolar) return '';
-    return cicloEscolar.label || cicloEscolar.nombre || String(cicloEscolar.anio || '');
+    const year = getCicloEscolarYear(cicloEscolar);
+    return year ? `Ciclo Escolar ${year}` : getStoredCycleLabel(cicloEscolar);
 };

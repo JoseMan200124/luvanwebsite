@@ -70,6 +70,7 @@ import BulkScheduleModal from '../components/modals/BulkScheduleModal';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, resolveScheduleCodeFromSlot, slotHasScheduleData } from '../utils/scheduleConfig';
+import { getCicloEscolarYear } from '../services/cicloEscolarService';
 
 // Opciones de roles disponibles en esta vista: Padre solamente
 const roleOptions = [
@@ -205,7 +206,8 @@ const SchoolUsersPage = () => {
     // Obtener datos del estado de navegación
     const stateSchool = location.state?.school;
     const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
-    const currentCycleLabel = stateSchool?.cicloEscolar?.label || stateSchool?.cicloEscolar?.nombre || stateSchool?.cicloEscolar?.anio || stateCicloEscolarId;
+    const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
+    const currentCycleLabel = getCicloEscolarYear(stateCicloEscolar);
     const buildSchoolCycleParams = useCallback((targetSchoolId, extra = {}) => ({
         schoolId: targetSchoolId,
         ...(stateCicloEscolarId ? { cicloEscolarId: stateCicloEscolarId } : {}),
@@ -1418,7 +1420,8 @@ const SchoolUsersPage = () => {
         navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
             state: {
                 cicloEscolarId: stateCicloEscolarId,
-                school: stateSchool
+                cicloEscolar: stateCicloEscolar,
+                school: currentSchool
             }
         });
     };
@@ -1996,7 +1999,10 @@ const SchoolUsersPage = () => {
         }
     };
 
-    const currentSchool = stateSchool;
+    const currentSchool = stateSchool ? {
+        ...stateSchool,
+        ...(stateCicloEscolar ? { cicloEscolar: stateCicloEscolar } : {})
+    } : null;
     const schoolRecordFromList = Array.isArray(schools)
         ? schools.find(s => String(s.id) === String(schoolId || currentSchool?.id || ''))
         : null;

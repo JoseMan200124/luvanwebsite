@@ -13,12 +13,11 @@ import {
     TableBody,
     CircularProgress,
     useTheme,
-    useMediaQuery,
-    Divider
+    useMediaQuery
 } from '@mui/material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import { getCiclosEscolares } from '../services/cicloEscolarService';
+import { getCiclosEscolares, getCicloEscolarYear } from '../services/cicloEscolarService';
 import tw, { styled } from 'twin.macro';
 
 // Contenedores y estilos básicos
@@ -49,7 +48,7 @@ const HistoricalDataPage = () => {
             try {
                 const response = await getCiclosEscolares();
                 const cycleYears = (response.ciclosEscolares || [])
-                    .map((cycle) => Number(cycle.anio))
+                    .map((cycle) => Number(getCicloEscolarYear(cycle)))
                     .filter((year) => Number.isFinite(year));
                 const nextYears = Array.from(new Set([...cycleYears, fallbackYear])).sort((a, b) => b - a);
                 setYears(nextYears);
