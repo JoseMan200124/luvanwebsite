@@ -230,21 +230,12 @@ const SchoolPaymentsPage = () => {
             setLoading(true);
             // If the current `school` is missing or does not match the requested `schoolId`, fetch it.
             if (!school || String(school.id) !== String(schoolId)) await fetchSchool();
-            // trigger batch recalc for this school before loading payments
-            try {
-                // Trigger background recalculation so UI load is not blocked.
-                // Fire-and-forget: do not await the request.
-                api.post('/payments/recalc-school', { schoolId, cicloEscolarId: currentCicloEscolarId || '', background: true }).catch(err => {
-                    // Log but don't block UI
-                    console.error('Background recalc failed to start', err);
-                });
-                // Trigger auto-debits for this school as a fire-and-forget operation
-                api.post('/payments/process-auto-debits', { schoolId, cicloEscolarId: currentCicloEscolarId || '' }).catch(err => {
-                    console.error('Background auto-debits failed to start', err);
-                });
-            } catch (e) {
-                // ignore errors from recalc initiation; continue to fetch payments
-            }
+            // Avoid school-wide mora recalculation on page load. Opening the register modal
+            // refreshes only the selected family's payment with /payments/:id/recalc.
+            // Trigger auto-debits for this school as a fire-and-forget operation
+            api.post('/payments/process-auto-debits', { schoolId, cicloEscolarId: currentCicloEscolarId || '' }).catch(err => {
+                console.error('Background auto-debits failed to start', err);
+            });
             // load all payments once (client-side pagination/filtering)
             await fetchAllPayments(statusFilter, search);
             // fetch analysis after payments loaded
