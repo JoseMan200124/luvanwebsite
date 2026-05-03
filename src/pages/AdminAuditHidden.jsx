@@ -1,4 +1,5 @@
 /* eslint-disable react/prop-types */
+/* global globalThis */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import copy from 'copy-to-clipboard';
