@@ -151,6 +151,18 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     const [editPeriods, setEditPeriods] = useState({});
     const [anomalyDecisions, setAnomalyDecisions] = useState({});
     const [creditAutoDecisions, setCreditAutoDecisions] = useState({});
+    const [lateStartDecisions, setLateStartDecisions] = useState({});
+    const [moraPaidAsTariffDecisions, setMoraPaidAsTariffDecisions] = useState({});
+    const [manualTransactions, setManualTransactions] = useState([]);
+    const [manualDeleteTransactionIds, setManualDeleteTransactionIds] = useState({});
+    const [manualTxForm, setManualTxForm] = useState({
+        type: 'TARIFA',
+        date: '',
+        amount: '',
+        receiptNumber: '',
+        extraordinaryDiscount: '',
+        notes: ''
+    });
     const [applying, setApplying] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [appliedResult, setAppliedResult] = useState(null);
@@ -172,6 +184,11 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         setEditPayment({});
         setEditPeriods({});
         setCreditAutoDecisions({});
+        setLateStartDecisions({});
+        setMoraPaidAsTariffDecisions({});
+        setManualTransactions([]);
+        setManualDeleteTransactionIds({});
+        setManualTxForm({ type: 'TARIFA', date: '', amount: '', receiptNumber: '', extraordinaryDiscount: '', notes: '' });
         setAppliedResult(null);
         setTab(0);
         const init = {};
@@ -261,7 +278,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     const handleResimulate = async () => {
         setRefreshing(true);
         try {
-            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions });
+            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
@@ -287,7 +304,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         setCreditAutoDecisions(next);
         setRefreshing(true);
         try {
-            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions: next });
+            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions: next, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
@@ -297,6 +314,150 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPeriods({});
                 setAppliedResult(null);
                 setSnackbar({ open: true, severity: 'success', message: 'Reconstrucción recalculada con la decisión de crédito automático.' });
+            }
+        } catch (err) {
+            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const handleLateStartDecisionChange = async (period, waive) => {
+        const next = { ...lateStartDecisions };
+        if (waive) next[period] = false;
+        else delete next[period];
+        setLateStartDecisions(next);
+        setRefreshing(true);
+        try {
+            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions: next, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds });
+            const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
+            if (!fresh) {
+                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+            } else {
+                if (onReplaceRow) onReplaceRow(fresh);
+                setEditPayment({});
+                setEditPeriods({});
+                setAppliedResult(null);
+                setSnackbar({ open: true, severity: 'success', message: 'Mora quitada/restaurada. Simulación actualizada.' });
+            }
+        } catch (err) {
+            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const handleMoraPaidAsTariffDecisionChange = async (caseKey, applies) => {
+        if (!caseKey) return;
+        const next = { ...moraPaidAsTariffDecisions };
+        if (applies) next[caseKey] = true;
+        else delete next[caseKey];
+        setMoraPaidAsTariffDecisions(next);
+        setRefreshing(true);
+        try {
+            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions: next, manualTransactions, manualDeleteTransactionIds });
+            const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
+            if (!fresh) {
+                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+            } else {
+                if (onReplaceRow) onReplaceRow(fresh);
+                setEditPayment({});
+                setEditPeriods({});
+                setAppliedResult(null);
+                setSnackbar({ open: true, severity: 'success', message: 'Escenario aplicado/restaurado. Simulación actualizada.' });
+            }
+        } catch (err) {
+            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const simulateWithManualTransactions = async (nextManualTransactions, successMessage) => {
+        setManualTransactions(nextManualTransactions);
+        setRefreshing(true);
+        try {
+            const { data } = await api.post('/payments/rebuild/simulate', {
+                paymentId: payment.paymentId,
+                creditAutoDecisions,
+                lateStartDecisions,
+                moraPaidAsTariffDecisions,
+                manualTransactions: nextManualTransactions,
+                manualDeleteTransactionIds
+            });
+            const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
+            if (!fresh) {
+                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+            } else {
+                if (onReplaceRow) onReplaceRow(fresh);
+                setEditPayment({});
+                setEditPeriods({});
+                setAppliedResult(null);
+                setSnackbar({ open: true, severity: 'success', message: successMessage });
+            }
+        } catch (err) {
+            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const handleManualTxFormChange = (field, value) => {
+        setManualTxForm(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleAddManualTransaction = async () => {
+        const amount = Number(manualTxForm.amount || 0);
+        const extraordinaryDiscount = Number(manualTxForm.extraordinaryDiscount || 0);
+        const type = String(manualTxForm.type || 'TARIFA').trim().toUpperCase();
+        if (!manualTxForm.date || Number.isNaN(amount) || amount <= 0 || !['TARIFA', 'MORA'].includes(type)) {
+            setSnackbar({ open: true, severity: 'warning', message: 'Completa tipo (TARIFA/MORA), fecha y monto válido.' });
+            return;
+        }
+        const tx = {
+            key: `manual-${Date.now()}`,
+            type,
+            date: manualTxForm.date,
+            amount,
+            receiptNumber: manualTxForm.receiptNumber || null,
+            extraordinaryDiscount: Number.isNaN(extraordinaryDiscount) ? 0 : extraordinaryDiscount,
+            notes: manualTxForm.notes || '[REBUILD] Transacción manual agregada desde reconstrucción'
+        };
+        const next = [...manualTransactions, tx];
+        setManualTxForm({ type: 'TARIFA', date: '', amount: '', receiptNumber: '', extraordinaryDiscount: '', notes: '' });
+        await simulateWithManualTransactions(next, 'Transacción manual agregada a la simulación.');
+    };
+
+    const handleRemoveManualTransaction = async (key) => {
+        const next = manualTransactions.filter(tx => tx.key !== key);
+        await simulateWithManualTransactions(next, 'Transacción manual removida de la simulación.');
+    };
+
+    const handleManualDeleteTransactionChange = async (transactionId, shouldDelete) => {
+        if (!transactionId) return;
+        const next = { ...manualDeleteTransactionIds };
+        if (shouldDelete) next[transactionId] = true;
+        else delete next[transactionId];
+        setManualDeleteTransactionIds(next);
+        setRefreshing(true);
+        try {
+            const { data } = await api.post('/payments/rebuild/simulate', {
+                paymentId: payment.paymentId,
+                creditAutoDecisions,
+                lateStartDecisions,
+                moraPaidAsTariffDecisions,
+                manualTransactions,
+                manualDeleteTransactionIds: next
+            });
+            const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
+            if (!fresh) {
+                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+            } else {
+                if (onReplaceRow) onReplaceRow(fresh);
+                setEditPayment({});
+                setEditPeriods({});
+                setAppliedResult(null);
+                setSnackbar({ open: true, severity: 'success', message: shouldDelete ? 'Transacción marcada para eliminar.' : 'Transacción restaurada en la simulación.' });
             }
         } catch (err) {
             setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
@@ -328,7 +489,11 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 expectedPayment: Object.keys(payloadPayment).length > 0 ? payloadPayment : undefined,
                 expectedPeriods: payloadPeriods.length > 0 ? payloadPeriods : undefined,
                 anomalyDecisions,
-                creditAutoDecisions
+                creditAutoDecisions,
+                lateStartDecisions,
+                moraPaidAsTariffDecisions,
+                manualTransactions,
+                manualDeleteTransactionIds
             };
 
             const { data } = await api.post('/payments/rebuild/apply', body);
@@ -442,6 +607,8 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                     <Typography variant="h6" gutterBottom>Anomalías ({payment.anomalies.length})</Typography>
                                     {payment.anomalies.map((a, i) => {
                                         const sev = SEV[a.severity] || SEV.low;
+                                        const isLateStart = a.code === 'LATE_START_PENALTY';
+                                        const isMoraPaidAsTariff = a.code === 'MORA_PAID_AS_TARIFF';
                                         return (
                                             <Box key={`${a.code}-${i}`} sx={{ p: 1.5, mb: 1, border: `1px solid ${sev.color}`, borderRadius: 1, bgcolor: sev.bg }}>
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -457,6 +624,76 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                                     )}
                                                 </Box>
                                                 <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>{a.detail}</Typography>
+                                                {isLateStart && !appliedResult && (a.data?.periods || []).length > 0 && (
+                                                    <Box sx={{ mt: 1, borderTop: `1px solid ${sev.color}`, pt: 1 }}>
+                                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                                                            Decisión por período:
+                                                        </Typography>
+                                                        {(a.data.periods).map(p => (
+                                                            <Box key={p.period} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5, pl: 1 }}>
+                                                                <Box>
+                                                                    <Typography variant="body2" component="span" sx={{ fontFamily: 'monospace', fontWeight: 600, mr: 1 }}>
+                                                                        {p.period}
+                                                                    </Typography>
+                                                                    <Typography variant="caption" color="text.secondary">
+                                                                        billedAt: {p.billedAt} · desc. tarifa: Q{Number(p.extraordinaryTariffDiscount).toFixed(2)} · mora: Q{Number(p.penaltyAmount).toFixed(2)}
+                                                                    </Typography>
+                                                                </Box>
+                                                                <FormControlLabel
+                                                                    sx={{ ml: 1, mr: 0 }}
+                                                                    control={
+                                                                        <Switch
+                                                                            size="small"
+                                                                            checked={lateStartDecisions[p.period] === false}
+                                                                            disabled={refreshing}
+                                                                            onChange={e => handleLateStartDecisionChange(p.period, e.target.checked)}
+                                                                        />
+                                                                    }
+                                                                    label={
+                                                                        <Typography variant="caption">
+                                                                            {lateStartDecisions[p.period] === false ? 'Mora quitada' : 'Quitar mora'}
+                                                                        </Typography>
+                                                                    }
+                                                                />
+                                                            </Box>
+                                                        ))}
+                                                    </Box>
+                                                )}
+                                                {isMoraPaidAsTariff && !appliedResult && (a.data?.cases || []).length > 0 && (
+                                                    <Box sx={{ mt: 1, borderTop: `1px solid ${sev.color}`, pt: 1 }}>
+                                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                                                            Confirmar escenario:
+                                                        </Typography>
+                                                        {(a.data.cases).map(item => (
+                                                            <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5, pl: 1, gap: 2 }}>
+                                                                <Box>
+                                                                    <Typography variant="body2" component="span" sx={{ fontFamily: 'monospace', fontWeight: 600, mr: 1 }}>
+                                                                        {item.period}
+                                                                    </Typography>
+                                                                    <Typography variant="caption" color="text.secondary">
+                                                                        MORA #{item.moraReceipt || item.moraTxId}: Q{Number(item.penaltyAmount).toFixed(2)} · TARIFA #{item.tariffReceipt || item.tariffTxId}: Q{Number(item.tariffOriginalAmount).toFixed(2)} → Q{Number(item.tariffAdjustedAmount).toFixed(2)}
+                                                                    </Typography>
+                                                                </Box>
+                                                                <FormControlLabel
+                                                                    sx={{ ml: 1, mr: 0 }}
+                                                                    control={
+                                                                        <Switch
+                                                                            size="small"
+                                                                            checked={moraPaidAsTariffDecisions[item.key] === true}
+                                                                            disabled={refreshing}
+                                                                            onChange={e => handleMoraPaidAsTariffDecisionChange(item.key, e.target.checked)}
+                                                                        />
+                                                                    }
+                                                                    label={
+                                                                        <Typography variant="caption">
+                                                                            {moraPaidAsTariffDecisions[item.key] === true ? 'Escenario aplicado' : 'Aplicar escenario'}
+                                                                        </Typography>
+                                                                    }
+                                                                />
+                                                            </Box>
+                                                        ))}
+                                                    </Box>
+                                                )}
                                             </Box>
                                         );
                                     })}
@@ -647,6 +884,93 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                             <Alert severity="info" sx={{ mb: 2 }}>
                                 Historial de Pagos antes vs después. Las filas marcadas en verde se crearán; las marcadas en rojo se borrarán; las marcadas en amarillo se actualizarán.
                             </Alert>
+                            {!appliedResult && (
+                                <Box sx={{ mb: 2, p: 1.5, border: '1px solid #ddd', borderRadius: 1 }}>
+                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>Agregar transacción manual</Typography>
+                                    <Box sx={{ display: 'grid', gridTemplateColumns: '110px 150px 120px 140px 120px minmax(180px, 1fr) auto', gap: 1, alignItems: 'center' }}>
+                                        <TextField
+                                            label="Tipo"
+                                            size="small"
+                                            value={manualTxForm.type}
+                                            onChange={e => handleManualTxFormChange('type', e.target.value.toUpperCase())}
+                                            inputProps={{ maxLength: 6 }}
+                                            disabled={refreshing || applying}
+                                        />
+                                        <TextField
+                                            label="Fecha"
+                                            type="date"
+                                            size="small"
+                                            value={manualTxForm.date}
+                                            onChange={e => handleManualTxFormChange('date', e.target.value)}
+                                            InputLabelProps={{ shrink: true }}
+                                            disabled={refreshing || applying}
+                                        />
+                                        <TextField
+                                            label="Monto"
+                                            type="number"
+                                            size="small"
+                                            value={manualTxForm.amount}
+                                            onChange={e => handleManualTxFormChange('amount', e.target.value)}
+                                            disabled={refreshing || applying}
+                                        />
+                                        <TextField
+                                            label="Boleta"
+                                            size="small"
+                                            value={manualTxForm.receiptNumber}
+                                            onChange={e => handleManualTxFormChange('receiptNumber', e.target.value)}
+                                            disabled={refreshing || applying}
+                                        />
+                                        <TextField
+                                            label="Desc. extra"
+                                            type="number"
+                                            size="small"
+                                            value={manualTxForm.extraordinaryDiscount}
+                                            onChange={e => handleManualTxFormChange('extraordinaryDiscount', e.target.value)}
+                                            disabled={refreshing || applying}
+                                        />
+                                        <TextField
+                                            label="Notas"
+                                            size="small"
+                                            value={manualTxForm.notes}
+                                            onChange={e => handleManualTxFormChange('notes', e.target.value)}
+                                            disabled={refreshing || applying}
+                                        />
+                                        <Button variant="outlined" size="small" onClick={handleAddManualTransaction} disabled={refreshing || applying}>
+                                            Agregar
+                                        </Button>
+                                    </Box>
+                                    {manualTransactions.length > 0 && (
+                                        <Table size="small" sx={{ mt: 1, '& td, & th': { fontSize: 11 } }}>
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell>Fecha</TableCell>
+                                                    <TableCell>Tipo</TableCell>
+                                                    <TableCell align="right">Monto</TableCell>
+                                                    <TableCell>Boleta</TableCell>
+                                                    <TableCell>Notas</TableCell>
+                                                    <TableCell align="right">Acción</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {manualTransactions.map(tx => (
+                                                    <TableRow key={tx.key}>
+                                                        <TableCell>{tx.date}</TableCell>
+                                                        <TableCell>{tx.type}</TableCell>
+                                                        <TableCell align="right">{Number(tx.amount).toFixed(2)}</TableCell>
+                                                        <TableCell>{tx.receiptNumber || '—'}</TableCell>
+                                                        <TableCell>{tx.notes || '—'}</TableCell>
+                                                        <TableCell align="right">
+                                                            <Button color="error" size="small" onClick={() => handleRemoveManualTransaction(tx.key)} disabled={refreshing || applying}>
+                                                                Quitar
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    )}
+                                </Box>
+                            )}
                             <Grid container spacing={2}>
                                 <Grid item xs={12} md={6}>
                                     <Typography variant="subtitle1" color="error" sx={{ mb: 1 }}>ANTES ({txBefore.length})</Typography>
@@ -655,6 +979,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                         markIds={txDisplayMarks.beforeMarkIds}
                                         updateIds={txDisplayMarks.updateIds}
                                         markStyle={{ bgcolor: '#ffebee' }}
+                                        manualDeleteTransactionIds={manualDeleteTransactionIds}
+                                        onManualDeleteTransactionChange={handleManualDeleteTransactionChange}
+                                        disableManualDeleteTransaction={!!appliedResult || applying || refreshing}
                                     />
                                 </Grid>
                                 <Grid item xs={12} md={6}>
@@ -900,8 +1227,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     );
 }
 
-function TxTable({ rows, markIds, updateIds, markFn, markStyle, creditAutoDecisions, onCreditAutoDecisionChange, disableCreditAutoDecision }) {
+function TxTable({ rows, markIds, updateIds, markFn, markStyle, creditAutoDecisions, onCreditAutoDecisionChange, disableCreditAutoDecision, manualDeleteTransactionIds, onManualDeleteTransactionChange, disableManualDeleteTransaction }) {
     const showCreditAutoDecision = !!onCreditAutoDecisionChange;
+    const showManualDeleteDecision = !!onManualDeleteTransactionChange;
     const sorted = [...(rows || [])].sort((a, b) => {
         const da = (a.date || a.realPaymentDate || '').toString();
         const db = (b.date || b.realPaymentDate || '').toString();
@@ -918,6 +1246,7 @@ function TxTable({ rows, markIds, updateIds, markFn, markStyle, creditAutoDecisi
                     <TableCell align="right">Monto</TableCell>
                     {hasExtraDiscount && <TableCell align="right">Desc. Extra</TableCell>}
                     <TableCell>Periodo / Boleta</TableCell>
+                    {showManualDeleteDecision && <TableCell align="center">Eliminar</TableCell>}
                     {showCreditAutoDecision && <TableCell align="center">No aplica</TableCell>}
                 </TableRow>
             </TableHead>
@@ -941,6 +1270,22 @@ function TxTable({ rows, markIds, updateIds, markFn, markStyle, creditAutoDecisi
                                 </TableCell>
                             )}
                             <TableCell>{display.periodLabel}</TableCell>
+                            {showManualDeleteDecision && (
+                                <TableCell align="center">
+                                    {!row.synthetic && row.id ? (
+                                        <Tooltip title="Marcar esta transacción para eliminarla al aplicar el rebuild">
+                                            <span>
+                                                <Switch
+                                                    size="small"
+                                                    checked={!!manualDeleteTransactionIds?.[row.id]}
+                                                    disabled={disableManualDeleteTransaction}
+                                                    onChange={event => onManualDeleteTransactionChange(row.id, event.target.checked)}
+                                                />
+                                            </span>
+                                        </Tooltip>
+                                    ) : '—'}
+                                </TableCell>
+                            )}
                             {showCreditAutoDecision && (
                                 <TableCell align="center">
                                     {canSkipCreditAuto ? (
