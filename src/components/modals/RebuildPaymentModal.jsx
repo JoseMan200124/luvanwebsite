@@ -13,6 +13,26 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import api from '../../utils/axiosConfig';
 
+const ROUTE_TYPE_LABELS = { ALL: 'Todos', COMPLETA: 'Completa', MEDIA_AM: 'Media AM', MEDIA_PM: 'Media PM' };
+const TARIFF_MODE_LABELS  = { SET: 'Fijar', INCREMENT: 'Aumentar', DECREMENT: 'Disminuir' };
+function tariffOverrideSummary(overrides = {}) {
+    return Object.entries(overrides).map(([key, val]) => {
+        const [period, routeType = 'ALL'] = key.includes('|') ? key.split('|', 2) : [key, 'ALL'];
+        const rt    = ROUTE_TYPE_LABELS[routeType]  || routeType;
+        const mode  = TARIFF_MODE_LABELS[val?.mode] || 'Fijar';
+        return `${period} [${rt}]: ${mode} Q${Number(val?.valuePerStudent || 0).toFixed(2)}/alumno`;
+    });
+}
+
+function findMoraIncludedCaseForDeletedAutoCredit(payment, txBefore, transactionId) {
+    const deletedTx = (txBefore || []).find(tx => String(tx.id) === String(transactionId));
+    if (deletedTx?.type !== 'CREDITO' || deletedTx?.source !== 'CREDIT_AUTO') return null;
+    const cases = (payment?.anomalies || [])
+        .filter(item => item.code === 'MORA_PAID_AS_TARIFF')
+        .flatMap(item => item.data?.cases || []);
+    return cases.find(item => item.createMora && Math.abs(Number(item.penaltyAmount || 0) - Number(deletedTx.amount || 0)) < 0.02) || null;
+}
+
 const SEV = {
     high:   { label: 'ALTA',   color: '#d32f2f', bg: '#ffebee' },
     medium: { label: 'MEDIA',  color: '#ed6c02', bg: '#fff4e5' },
@@ -145,7 +165,7 @@ function getTransactionDisplay(row) {
     };
 }
 
-export default function RebuildPaymentModal({ open, onClose, payment, onApplied, onCtxChanged, onReplaceRow }) {
+export default function RebuildPaymentModal({ open, onClose, payment, onApplied, onCtxChanged, onReplaceRow, tariffOverrides = {}, noPenalty = false }) {
     const [tab, setTab] = useState(0);
     const [editPayment, setEditPayment] = useState({});
     const [editPeriods, setEditPeriods] = useState({});
@@ -278,7 +298,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     const handleResimulate = async () => {
         setRefreshing(true);
         try {
-            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds });
+            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
@@ -304,7 +324,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         setCreditAutoDecisions(next);
         setRefreshing(true);
         try {
-            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions: next, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds });
+            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions: next, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
@@ -329,7 +349,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         setLateStartDecisions(next);
         setRefreshing(true);
         try {
-            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions: next, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds });
+            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions: next, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
@@ -355,7 +375,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         setMoraPaidAsTariffDecisions(next);
         setRefreshing(true);
         try {
-            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions: next, manualTransactions, manualDeleteTransactionIds });
+            const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions: next, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
@@ -383,7 +403,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 lateStartDecisions,
                 moraPaidAsTariffDecisions,
                 manualTransactions: nextManualTransactions,
-                manualDeleteTransactionIds
+                manualDeleteTransactionIds,
+                tariffOverrides,
+                noPenalty
             });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
@@ -410,7 +432,13 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         const amount = Number(manualTxForm.amount || 0);
         const extraordinaryDiscount = Number(manualTxForm.extraordinaryDiscount || 0);
         const type = String(manualTxForm.type || 'TARIFA').trim().toUpperCase();
-        if (!manualTxForm.date || Number.isNaN(amount) || amount <= 0 || !['TARIFA', 'MORA'].includes(type)) {
+        if (!manualTxForm.date || Number.isNaN(amount) || !['TARIFA', 'MORA'].includes(type)) {
+            setSnackbar({ open: true, severity: 'warning', message: 'Completa tipo (TARIFA/MORA), fecha y monto válido.' });
+            return;
+        }
+        // For MORA, amount=0 is valid when extraordinaryDiscount > 0 (full exoneration)
+        const isMoraExoneration = type === 'MORA' && amount === 0 && extraordinaryDiscount > 0;
+        if (!isMoraExoneration && amount <= 0) {
             setSnackbar({ open: true, severity: 'warning', message: 'Completa tipo (TARIFA/MORA), fecha y monto válido.' });
             return;
         }
@@ -438,6 +466,14 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         const next = { ...manualDeleteTransactionIds };
         if (shouldDelete) next[transactionId] = true;
         else delete next[transactionId];
+        let nextMoraPaidAsTariffDecisions = moraPaidAsTariffDecisions;
+        if (shouldDelete) {
+            const matchingCase = findMoraIncludedCaseForDeletedAutoCredit(payment, txBefore, transactionId);
+            if (matchingCase) {
+                nextMoraPaidAsTariffDecisions = { ...moraPaidAsTariffDecisions, [matchingCase.key]: true };
+                setMoraPaidAsTariffDecisions(nextMoraPaidAsTariffDecisions);
+            }
+        }
         setManualDeleteTransactionIds(next);
         setRefreshing(true);
         try {
@@ -445,9 +481,11 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 paymentId: payment.paymentId,
                 creditAutoDecisions,
                 lateStartDecisions,
-                moraPaidAsTariffDecisions,
+                moraPaidAsTariffDecisions: nextMoraPaidAsTariffDecisions,
                 manualTransactions,
-                manualDeleteTransactionIds: next
+                manualDeleteTransactionIds: next,
+                tariffOverrides,
+                noPenalty
             });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
@@ -493,7 +531,8 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 lateStartDecisions,
                 moraPaidAsTariffDecisions,
                 manualTransactions,
-                manualDeleteTransactionIds
+                manualDeleteTransactionIds,
+                tariffOverrides
             };
 
             const { data } = await api.post('/payments/rebuild/apply', body);
@@ -598,6 +637,15 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                     <Tab label="JSON" />
                 </Tabs>
 
+                {Object.keys(tariffOverrides).length > 0 && (
+                    <Box sx={{ px: 2, py: 0.75, bgcolor: '#fff3e0', borderBottom: '1px solid #ffe0b2', display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <Typography variant="caption" sx={{ fontWeight: 600, color: '#e65100', mr: 0.5 }}>Tarifas override activas:</Typography>
+                        {tariffOverrideSummary(tariffOverrides).map((label, i) => (
+                            <Chip key={i} size="small" label={label} sx={{ bgcolor: '#ff9800', color: '#fff', fontSize: '0.7rem' }} />
+                        ))}
+                    </Box>
+                )}
+
                 <DialogContent dividers sx={{ minHeight: 480 }}>
                     {tab === 0 && (
                         <Box>
@@ -671,7 +719,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                                                         {item.period}
                                                                     </Typography>
                                                                     <Typography variant="caption" color="text.secondary">
-                                                                        MORA #{item.moraReceipt || item.moraTxId}: Q{Number(item.penaltyAmount).toFixed(2)} · TARIFA #{item.tariffReceipt || item.tariffTxId}: Q{Number(item.tariffOriginalAmount).toFixed(2)} → Q{Number(item.tariffAdjustedAmount).toFixed(2)}
+                                                                        {item.createMora ? 'Crear MORA' : `MORA #${item.moraReceipt || item.moraTxId}`}: Q{Number(item.penaltyAmount).toFixed(2)} · TARIFA #{item.tariffReceipt || item.tariffTxId}: Q{Number(item.tariffOriginalAmount).toFixed(2)} → Q{Number(item.tariffAdjustedAmount).toFixed(2)}
                                                                     </Typography>
                                                                 </Box>
                                                                 <FormControlLabel
