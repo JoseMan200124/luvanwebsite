@@ -2,12 +2,35 @@ import React, { useState } from 'react';
 import {
     Box, Card, CardContent, Typography, TextField, Switch, FormControlLabel,
     Button, Table, TableHead, TableBody, TableRow, TableCell, Chip, CircularProgress,
-    Alert, Snackbar
+    Alert, Snackbar, MenuItem
 } from '@mui/material';
 import api from '../utils/axiosConfig';
 import RebuildPaymentModal from '../components/modals/RebuildPaymentModal';
 
 const SEV_COLOR = { high: 'error', medium: 'warning', low: 'info' };
+const TARIFF_OVERRIDE_MODE_LABELS = {
+    SET: 'Fijar',
+    INCREMENT: 'Aumentar',
+    DECREMENT: 'Disminuir'
+};
+
+const ROUTE_TYPE_LABELS = {
+    ALL: 'Todos',
+    COMPLETA: 'Completa',
+    MEDIA_AM: 'Media AM',
+    MEDIA_PM: 'Media PM'
+};
+
+function parsePeriodsInput(value) {
+    return [...new Set(String(value || '').split(/[\s,;]+/).map(p => p.trim()).filter(Boolean))];
+}
+
+function tariffOverrideLabel(key, override) {
+    const [period, routeType] = key.includes('|') ? key.split('|', 2) : [key, 'ALL'];
+    const modeLabel = TARIFF_OVERRIDE_MODE_LABELS[override?.mode] || 'Fijar';
+    const rtLabel = ROUTE_TYPE_LABELS[routeType] || routeType;
+    return `${period} [${rtLabel}]: ${modeLabel} Q${Number(override?.valuePerStudent || 0).toFixed(2)} por alumno`;
+}
 
 export default function AdminRebuildPaymentsHidden() {
     const [filters, setFilters] = useState({
@@ -18,20 +41,64 @@ export default function AdminRebuildPaymentsHidden() {
     const [error, setError] = useState('');
     const [selected, setSelected] = useState(null);
     const [snack, setSnack] = useState({ open: false, message: '', severity: 'info' });
+    const [tariffOverrides, setTariffOverrides] = useState({});
+    const [tariffOverrideForm, setTariffOverrideForm] = useState({ periods: '', mode: 'SET', routeType: 'ALL', valuePerStudent: '' });
 
     const handleChange = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
+    const handleTariffOverrideFormChange = (k, v) => setTariffOverrideForm(prev => ({ ...prev, [k]: v }));
+
+    const buildSimulateBody = () => {
+        const body = {};
+        if (filters.schoolId)  body.schoolId  = Number.parseInt(filters.schoolId, 10);
+        if (filters.paymentId) body.paymentId = Number.parseInt(filters.paymentId, 10);
+        if (filters.cicloEscolarId) body.cicloEscolarId = Number.parseInt(filters.cicloEscolarId, 10);
+        body.onlyActive = !!filters.onlyActive;
+        body.noPenalty  = !!filters.noPenalty;
+        if (Object.keys(tariffOverrides).length > 0) body.tariffOverrides = tariffOverrides;
+        return body;
+    };
+
+    const handleAddTariffOverride = () => {
+        const periods = parsePeriodsInput(tariffOverrideForm.periods);
+        const valuePerStudent = Number(tariffOverrideForm.valuePerStudent || 0);
+        if (periods.length === 0 || periods.some(period => !/^\d{4}-\d{2}$/.test(period))) {
+            setError('Ingresa períodos válidos en formato YYYY-MM, separados por coma.');
+            return;
+        }
+        if (!Number.isFinite(valuePerStudent) || valuePerStudent <= 0) {
+            setError('Ingresa un monto por alumno mayor a 0.');
+            return;
+        }
+        const routeType = tariffOverrideForm.routeType || 'ALL';
+        setTariffOverrides(prev => {
+            const next = { ...prev };
+            periods.forEach(period => {
+                const key = `${period}|${routeType}`;
+                next[key] = {
+                    mode: tariffOverrideForm.mode || 'SET',
+                    valuePerStudent
+                };
+            });
+            return next;
+        });
+        setTariffOverrideForm({ periods: '', mode: tariffOverrideForm.mode || 'SET', routeType, valuePerStudent: '' });
+        setError('');
+    };
+
+    const handleRemoveTariffOverride = (key) => {
+        setTariffOverrides(prev => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+    };
 
     const handleSimulate = async () => {
         setLoading(true);
         setError('');
         setResults(null);
         try {
-            const body = {};
-            if (filters.schoolId)  body.schoolId  = Number.parseInt(filters.schoolId, 10);
-            if (filters.paymentId) body.paymentId = Number.parseInt(filters.paymentId, 10);
-            if (filters.cicloEscolarId) body.cicloEscolarId = Number.parseInt(filters.cicloEscolarId, 10);
-            body.onlyActive = !!filters.onlyActive;
-            body.noPenalty  = !!filters.noPenalty;
+            const body = buildSimulateBody();
 
             if (!body.schoolId && !body.paymentId && !body.cicloEscolarId) {
                 setError('Debes proveer al menos uno: schoolId, paymentId o cicloEscolarId.');
@@ -121,6 +188,63 @@ export default function AdminRebuildPaymentsHidden() {
                             label="--no-penalty"
                         />
                     </Box>
+                    <Box sx={{ mt: 2, p: 1.5, border: '1px solid #ddd', borderRadius: 1 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 1 }}>Cambio de tarifa por alumno</Typography>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(180px, 1fr) 140px 140px 160px auto' }, gap: 1, alignItems: 'start' }}>
+                            <TextField
+                                label="Período/s"
+                                size="small"
+                                value={tariffOverrideForm.periods}
+                                onChange={e => handleTariffOverrideFormChange('periods', e.target.value)}
+                                helperText="Ej: 2026-03, 2026-04"
+                            />
+                            <TextField
+                                select
+                                label="Tipo de ruta"
+                                size="small"
+                                value={tariffOverrideForm.routeType}
+                                onChange={e => handleTariffOverrideFormChange('routeType', e.target.value)}
+                            >
+                                <MenuItem value="ALL">Todos</MenuItem>
+                                <MenuItem value="COMPLETA">Completa</MenuItem>
+                                <MenuItem value="MEDIA_AM">Media AM</MenuItem>
+                                <MenuItem value="MEDIA_PM">Media PM</MenuItem>
+                            </TextField>
+                            <TextField
+                                select
+                                label="Modo"
+                                size="small"
+                                value={tariffOverrideForm.mode}
+                                onChange={e => handleTariffOverrideFormChange('mode', e.target.value)}
+                            >
+                                <MenuItem value="SET">Fijar</MenuItem>
+                                <MenuItem value="INCREMENT">Aumentar</MenuItem>
+                                <MenuItem value="DECREMENT">Disminuir</MenuItem>
+                            </TextField>
+                            <TextField
+                                label="Monto por alumno"
+                                type="number"
+                                size="small"
+                                value={tariffOverrideForm.valuePerStudent}
+                                onChange={e => handleTariffOverrideFormChange('valuePerStudent', e.target.value)}
+                                slotProps={{ htmlInput: { min: 0, step: '0.01' } }}
+                            />
+                            <Button variant="outlined" onClick={handleAddTariffOverride} disabled={loading}>
+                                Agregar
+                            </Button>
+                        </Box>
+                        {Object.keys(tariffOverrides).length > 0 && (
+                            <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                {Object.entries(tariffOverrides).map(([period, override]) => (
+                                    <Chip
+                                        key={period}
+                                        label={tariffOverrideLabel(period, override)}
+                                        onDelete={() => handleRemoveTariffOverride(period)}
+                                    />
+                                ))}
+                            </Box>
+                        )}
+                    </Box>
                     <Box sx={{ mt: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
                         <Button
                             variant="contained" color="primary"
@@ -209,6 +333,8 @@ export default function AdminRebuildPaymentsHidden() {
                 onApplied={handleApplied}
                 onCtxChanged={handleCtxChanged}
                 onReplaceRow={handleReplaceRow}
+                tariffOverrides={tariffOverrides}
+                noPenalty={!!filters.noPenalty}
             />
 
             <Snackbar
