@@ -161,44 +161,84 @@ const FilledContractViewer = () => {
     const handleGeneratePDF = async () => {
         if (!filledContract) return;
 
-        // Crear un div temporal con el contenido ya llenado
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = filledContract.content;
-        tempDiv.style.width = '210mm';
-        tempDiv.style.padding = '20mm';
-        tempDiv.style.boxSizing = 'border-box';
-        tempDiv.style.fontFamily = "'Times New Roman', serif";
-        tempDiv.style.lineHeight = '1.5';
-        tempDiv.style.textAlign = 'justify';
-        tempDiv.style.backgroundColor = '#fff';
-        document.body.appendChild(tempDiv);
+        const previewDiv = document.getElementById('contract-preview');
+        if (!previewDiv) return;
+
+        // Clone the preview div off-screen without any overflow/height constraints
+        // so html2canvas captures the full content, not just the visible scroll area.
+        const clone = previewDiv.cloneNode(true);
+        clone.style.position = 'absolute';
+        clone.style.top = '-99999px';
+        clone.style.left = '-99999px';
+        clone.style.width = previewDiv.scrollWidth + 'px';
+        clone.style.height = 'auto';
+        clone.style.maxHeight = 'none';
+        clone.style.overflow = 'visible';
+        document.body.appendChild(clone);
 
         try {
-            const canvas = await html2canvas(tempDiv, { scale: 2 });
-            const imgData = canvas.toDataURL('image/png');
+            const canvas = await html2canvas(clone, { scale: 2, useCORS: true });
+            document.body.removeChild(clone);
+
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+            const pdfPageHeight = pdf.internal.pageSize.getHeight();
 
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            // How many canvas pixels correspond to one PDF mm
+            const pxPerMm = canvas.width / pdfWidth;
+            const pageHeightPx = Math.floor(pdfPageHeight * pxPerMm);
+            const ctx = canvas.getContext('2d');
+
+            // Finds the nearest row above `ideal` that is mostly white,
+            // so we never split a page mid-character.
+            const findSplitRow = (ideal) => {
+                const scanDistance = Math.floor(40 * pxPerMm); // scan up to ~40 mm upward
+                const threshold = 0.97; // 97 % of pixels must be near-white
+                for (let y = ideal; y > ideal - scanDistance && y > 0; y--) {
+                    const { data } = ctx.getImageData(0, y, canvas.width, 1);
+                    let whiteCount = 0;
+                    for (let i = 0; i < data.length; i += 4) {
+                        if (data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240) whiteCount++;
+                    }
+                    if (whiteCount / (canvas.width) >= threshold) return y;
+                }
+                return ideal; // fallback: use the ideal boundary as-is
+            };
+
+            let offsetY = 0;
+            let pageIndex = 0;
+
+            while (offsetY < canvas.height) {
+                const idealSplit = offsetY + pageHeightPx;
+                const splitY =
+                    idealSplit >= canvas.height
+                        ? canvas.height
+                        : findSplitRow(idealSplit);
+
+                const sliceHeightPx = splitY - offsetY;
+                const sliceHeightMm = sliceHeightPx / pxPerMm;
+
+                const pageCanvas = document.createElement('canvas');
+                pageCanvas.width = canvas.width;
+                pageCanvas.height = sliceHeightPx;
+                pageCanvas
+                    .getContext('2d')
+                    .drawImage(canvas, 0, offsetY, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+                if (pageIndex > 0) pdf.addPage();
+                pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, sliceHeightMm);
+
+                offsetY = splitY;
+                pageIndex++;
+            }
+
             pdf.save(`${filledContract.title}.pdf`);
-
-            setSnackbar({
-                open: true,
-                message: 'PDF generado exitosamente.',
-                severity: 'success'
-            });
+            setSnackbar({ open: true, message: 'PDF generado exitosamente.', severity: 'success' });
         } catch (error) {
+            if (document.body.contains(clone)) document.body.removeChild(clone);
             console.error('Error generando el PDF:', error);
-            setSnackbar({
-                open: true,
-                message: 'Hubo un error al generar el PDF.',
-                severity: 'error'
-            });
+            setSnackbar({ open: true, message: 'Hubo un error al generar el PDF.', severity: 'error' });
         }
-
-        document.body.removeChild(tempDiv);
     };
 
     if (loading) {
