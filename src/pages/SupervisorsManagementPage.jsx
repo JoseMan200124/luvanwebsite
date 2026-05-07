@@ -347,7 +347,7 @@ const SupervisorsManagementPage = () => {
                             <TableContainer
                                 sx={{ maxHeight: { xs: 400, sm: 'none' }, overflowX: 'auto' }}
                             >
-                                <Table stickyHeader>
+                                <Table stickyHeader sx={{ minWidth: 760 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell>Nombre</TableCell>
@@ -410,7 +410,7 @@ const SupervisorsManagementPage = () => {
                                                                                     })}
                                                                                 </Select>
                                                                             </FormControl>
-                                                                            <Table size="small" sx={{ overflowX: 'auto' }}>
+                                                                            <Table size="small" sx={{ minWidth: 760 }}>
                                                                                 <TableHead>
                                                                                     <TableRow>
                                                                                         <TableCell>Nombre</TableCell>

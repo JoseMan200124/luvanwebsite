@@ -289,13 +289,13 @@ const ContractFillPage = () => {
                                     <Typography variant="subtitle1" gutterBottom>
                                         {nameTrim}
                                     </Typography>
-                                    <div ref={(el) => { fieldRefs.current[nameTrim] = el; }} style={{ border: isMissing ? '2px solid #d32f2f' : '1px solid #000', display: 'inline-block' }}>
+                                    <div ref={(el) => { fieldRefs.current[nameTrim] = el; }} style={{ border: isMissing ? '2px solid #d32f2f' : '1px solid #000', display: 'inline-block', width: 'min(300px, 100%)', maxWidth: '100%' }}>
                                         <SignatureCanvas
                                             penColor="black"
                                             canvasProps={{
                                                 width: 300,
                                                 height: 150,
-                                                style: { display: 'block' }
+                                                style: { display: 'block', width: '100%', maxWidth: '100%', height: 150 }
                                             }}
                                             ref={(ref) => handleSignature(nameTrim, ref)}
                                             onEnd={() => handleSignatureEnd(nameTrim)}

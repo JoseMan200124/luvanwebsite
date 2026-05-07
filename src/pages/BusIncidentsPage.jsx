@@ -596,8 +596,8 @@ const BusIncidentsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer>
-                                <Table>
+                            <TableContainer sx={{ overflowX: 'auto' }}>
+                                <Table sx={{ minWidth: 1100 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell>

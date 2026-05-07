@@ -1,5 +1,5 @@
 // src/components/Sidebar.jsx
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useContext, useRef } from 'react';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
@@ -16,7 +16,6 @@ import {
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import { PermissionsContext } from '../context/PermissionsProvider';
-import NotificationsMenu from './NotificationsMenu';
 import userImage from '../assets/img/user.png';
 import { modules } from '../modules';
 
@@ -32,7 +31,8 @@ const SidebarContainer = styled.div`
     overflow: hidden;
 
     @media (max-width: 768px) {
-        width: ${({ isOpen }) => (isOpen ? '100%' : '0')};
+        width: ${({ isOpen }) => (isOpen ? 'min(88vw, 320px)' : '0')};
+        max-width: 100vw;
     }
 `;
 
@@ -60,8 +60,9 @@ const ToggleTab = styled.div`
     transition: all 0.3s ease;
 
     @media (max-width: 768px) {
-        left: auto;
-        right: 60px;
+        left: 10px;
+        right: auto;
+        border-radius: 9999px;
     }
 `;
 
@@ -73,6 +74,10 @@ const SubMenuPopout = styled.div`
     width: 200px;
     z-index: 60;
     border: 1px solid #444;
+
+    @media (max-width: 768px) {
+        display: none;
+    }
 `;
 
 const PopoutList = styled.ul`list-style: none; margin: 0; padding: 0;`;
@@ -303,11 +308,6 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                     : <MenuIcon style={{ color: 'white' }} />
                 }
             </ToggleTab>
-
-            {/* Notificaciones */}
-            <div style={{ position: 'fixed', top: '10px', right: '10px', zIndex: 999 }}>
-                <NotificationsMenu authToken={auth.token} />
-            </div>
         </>
     );
 }

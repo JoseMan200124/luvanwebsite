@@ -475,8 +475,8 @@ const AttendanceManagementPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer>
-                                <Table>
+                            <TableContainer sx={{ overflowX: 'auto' }}>
+                                <Table sx={{ minWidth: 980 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell>Fecha</TableCell>

@@ -684,8 +684,8 @@ const RouteTimeLogsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer>
-                                <Table>
+                            <TableContainer sx={{ overflowX: 'auto' }}>
+                                <Table sx={{ minWidth: 1320 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell sortDirection={orderBy === 'fecha' ? order : false}>

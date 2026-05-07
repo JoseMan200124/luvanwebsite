@@ -325,8 +325,8 @@ const MonitorsManagementPage = () => {
                                     ) : (
                                         // Vista desktop: tabla
                                         <>
-                                            <TableContainer>
-                                                <Table>
+                                            <TableContainer sx={{ overflowX: 'auto' }}>
+                                                <Table sx={{ minWidth: 760 }}>
                                                     <TableHead>
                                                         <TableRow>
                                                             <TableCell sortDirection={orderBy === 'name' ? order : false}>

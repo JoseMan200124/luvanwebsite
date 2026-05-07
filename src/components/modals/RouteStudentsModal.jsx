@@ -20,7 +20,9 @@ import {
     IconButton,
     TableSortLabel,
     Grid,
-    TextField
+    TextField,
+    useMediaQuery,
+    useTheme
 } from '@mui/material';
 import { Close as CloseIcon, DirectionsBus } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
@@ -28,6 +30,8 @@ import api from '../../utils/axiosConfig';
 import { getScheduleLabel } from '../../utils/scheduleConfig';
 
 const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId, cicloEscolarId, selectedDay }) => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const { auth } = useContext(AuthContext);
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -190,22 +194,24 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
             onClose={handleClose} 
             maxWidth="lg" 
             fullWidth
+            fullScreen={isMobile}
             PaperProps={{
-                sx: { borderRadius: 2 }
+                sx: { borderRadius: { xs: 0, sm: 2 } }
             }}
         >
             <DialogTitle sx={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
-                alignItems: 'center',
+                alignItems: { xs: 'flex-start', sm: 'center' },
+                gap: 1,
                 backgroundColor: 'primary.main',
                 color: 'white',
                 py: 2
             }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                     <DirectionsBus />
                     <Box>
-                        <Typography variant="h6" component="div">
+                        <Typography variant="h6" component="div" sx={{ overflowWrap: 'anywhere' }}>
                             Ruta {routeNumber} - Horario {getScheduleCodeLabel(scheduleCode)}
                         </Typography>
                         {selectedDay && selectedDay !== 'all' && (
@@ -327,8 +333,8 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
                             </Grid>
                         </Box>
 
-                        <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
-                            <Table stickyHeader>
+                        <TableContainer component={Paper} sx={{ maxHeight: { xs: 'calc(100dvh - 260px)', sm: 500 }, overflowX: 'auto' }}>
+                            <Table stickyHeader sx={{ minWidth: 720 }}>
                                 <TableHead>
                                     <TableRow>
                                         <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>

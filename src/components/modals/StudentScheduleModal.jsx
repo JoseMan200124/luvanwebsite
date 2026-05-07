@@ -4,6 +4,8 @@ import useScheduleSlots from '../../hooks/useScheduleSlots';
 
 // Minimal modal + weekly editor for student's schedule slots
 export default function StudentScheduleModal({ studentId, students, schoolId, open, onClose }) {
+  const getIsMobileViewport = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 600px)').matches;
+  const [isMobileViewport, setIsMobileViewport] = useState(getIsMobileViewport);
   // slotsMap: { [studentId]: [slots...] }
   const [slotsMap, setSlotsMap] = useState({});
   const [loading, setLoading] = useState(false);
@@ -25,6 +27,15 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   const [assignForm, setAssignForm] = useState({ schoolSchedule: '', routeId: '', paradaTime: '', note: '', days: [] });
   const [assignRoutesOptions, setAssignRoutesOptions] = useState([]);
   const [assignEditing, setAssignEditing] = useState(null); // { slotId, day } when editing
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mediaQuery = window.matchMedia('(max-width: 600px)');
+    const handleChange = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -444,9 +455,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   const DAYS = ['monday','tuesday','wednesday','thursday','friday'];
 
   const modalContent = (
-    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30000 }}>
-      <div style={{ background: 'white', padding: 24, borderRadius: 8, width: '95vw', maxWidth: 1400, maxHeight: '85vh', overflow: 'auto', zIndex: 30001 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: isMobileViewport ? 'flex-start' : 'center', justifyContent: 'center', zIndex: 30000, padding: isMobileViewport ? 12 : 0, overflow: isMobileViewport ? 'auto' : 'hidden' }}>
+      <div style={{ background: 'white', padding: isMobileViewport ? 'clamp(12px, 3vw, 24px)' : 24, borderRadius: 8, width: isMobileViewport ? 'min(95vw, 1400px)' : '95vw', maxWidth: 1400, maxHeight: isMobileViewport ? 'calc(100dvh - 24px)' : '85vh', overflow: 'auto', zIndex: 30001 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: isMobileViewport ? 12 : 0, flexWrap: isMobileViewport ? 'wrap' : 'nowrap', marginBottom: 12 }}>
           <h3 style={{ fontSize: 18, fontWeight: 600 }}>Horario por estudiante</h3>
           <button type="button" style={{ fontSize: 13, color: '#4B5563' }} onClick={onClose}>Cerrar</button>
         </div>
@@ -458,13 +469,13 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {(Array.isArray(students) && students.length > 0 ? students : (studentId ? [{ id: studentId, fullName: 'Alumno' }] : [])).map(st => (
                 <div key={st.id} style={{ border: '1px solid #eef2f7', borderRadius: 8, padding: 12, background: '#FBFDFF' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: isMobileViewport ? 12 : 0, flexWrap: isMobileViewport ? 'wrap' : 'nowrap', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: isMobileViewport ? 'wrap' : 'nowrap', minWidth: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 700 }}>{st.fullName || `Alumno ${st.id}`}</div>
                       <div style={{ fontSize: 15, color: '#6B7280' }}>{st.grade || '—'}</div>
                     </div>
                     <div>
-                      <div style={{ display: 'flex', gap: 8 }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: isMobileViewport ? 'wrap' : 'nowrap' }}>
                         <button type="button" onClick={()=>openAssignPopup(st)} style={{ background: '#0ea5a4', color: '#fff', padding: '6px 10px', borderRadius: 6 }}>Asignar Ruta</button>
                         <button
                           type="button"
@@ -478,7 +489,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobileViewport ? 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))' : 'repeat(5, 1fr)', gap: 12 }}>
                     {['monday','tuesday','wednesday','thursday','friday'].map(d => {
                       const labelMap = { monday: 'Lunes', tuesday: 'Martes', wednesday: 'Miércoles', thursday: 'Jueves', friday: 'Viernes' };
                       const daySlots = (slotsMap[st.id] || []).filter(s => Array.isArray(s.days) && s.days.includes(d));
@@ -516,7 +527,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                       return (
                         <div key={d} style={{ border: '1px solid #eef2f7', borderRadius: 8, padding: 12, background: '#FBFDFF' }}>
                           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, textAlign: 'center', color: '#374151' }}>{labelMap[d]}</div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobileViewport ? 'repeat(auto-fit, minmax(120px, 1fr))' : '1fr 1fr', gap: 8 }}>
                             <div>
                               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Entrada</div>
                               {entradaSlots.length === 0 ? <div style={{ padding: 10, borderRadius: 6, background: '#f3f7fa', color: '#6B7280', textAlign: 'center' }}>Sin asignación</div> : entradaSlots.map(s => renderCard(s, d))}
@@ -539,9 +550,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
           {/* Assign Route popup */}
           {assignOpen && (
             <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 31000 }}>
-              <div style={{ background: '#fff', padding: 20, borderRadius: 8, width: 'min(720px, 95vw)', boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
+              <div style={{ background: '#fff', padding: isMobileViewport ? 'clamp(12px, 3vw, 20px)' : 20, borderRadius: 8, width: 'min(720px, 95vw)', maxHeight: isMobileViewport ? 'calc(100dvh - 24px)' : 'none', overflow: isMobileViewport ? 'auto' : 'visible', boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
                 <h3 style={{ marginTop: 0 }}>Asignar Ruta</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobileViewport ? 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' : '1fr 1fr', gap: 8 }}>
                   <div>
                     <label style={{ fontSize: 13 }}>Seleccionar Hora Colegio</label>
                     <select style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d1d5db' }} value={assignForm.schoolSchedule} onChange={e=>handleAssignScheduleSelect(e.target.value)}>
@@ -580,7 +591,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                     <label style={{ fontSize: 13 }}>Nota Parada</label>
                     <input type='text' style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d1d5db' }} value={assignForm.note} onChange={e=>setAssignForm(f=>({...f, note: e.target.value}))} />
                   </div>
-                  <div style={{ gridColumn: '1 / span 2' }}>
+                  <div style={{ gridColumn: isMobileViewport ? '1 / -1' : '1 / span 2' }}>
                     <label style={{ fontSize: 13 }}>Días</label>
                     {(() => {
                       // Compute allowed days based on the selected schedule's days restriction
@@ -601,7 +612,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                               Este horario solo aplica: {allowedDays.map(d => dayLabelMap[d] || d).join(', ')}
                             </div>
                           )}
-                          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: isMobileViewport ? 'wrap' : 'nowrap' }}>
                             {/* Select all / deselect all button */}
                             <button
                               type='button'

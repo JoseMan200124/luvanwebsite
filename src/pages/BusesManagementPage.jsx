@@ -889,7 +889,7 @@ const BusesManagementPage = () => {
                     ) : (
                         <Paper>
                             <TableContainer sx={{ overflowX: 'auto' }}>
-                                <Table stickyHeader>
+                                <Table stickyHeader sx={{ minWidth: 900 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell sortDirection={orderBy === 'plate' ? order : false}>

@@ -420,7 +420,12 @@ const NotificationsMenu = ({ authToken }) => {
                 open={menuOpen}
                 onClose={handleMenuClose}
                 PaperProps={{ 
-                    style: { width: 350, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' },
+                    sx: {
+                        width: { xs: 'calc(100vw - 24px)', sm: 350 },
+                        maxWidth: 'calc(100vw - 24px)',
+                        maxHeight: { xs: 'calc(100dvh - 88px)', sm: 'calc(100vh - 120px)' },
+                        overflowY: 'auto',
+                    },
                     ref: scrollContainerRef,
                     onScroll: handleScroll
                 }}

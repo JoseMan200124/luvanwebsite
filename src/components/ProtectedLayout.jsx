@@ -2,7 +2,7 @@
 
 import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Button, CircularProgress, IconButton, Tooltip } from '@mui/material';
+import { Button, CircularProgress, IconButton, Tooltip, useMediaQuery } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
 import Sidebar from './Sidebar';
 import NotificationsMenu from './NotificationsMenu';
@@ -77,6 +77,7 @@ const GlobalRefreshButton = ({ compact = false, onRefreshStart, onRefreshEnd }) 
 const ProtectedLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { auth } = useContext(AuthContext);
+    const isMobile = useMediaQuery('(max-width:768px)');
     const [refreshCompact, setRefreshCompact] = useState(false);
     const [refreshCompactLocked, setRefreshCompactLocked] = useState(null);
     const outletWrapperRef = useRef(null);
@@ -85,6 +86,10 @@ const ProtectedLayout = () => {
     const handleToggleSidebar = () => {
         setIsSidebarOpen(!isSidebarOpen);
     };
+
+    useEffect(() => {
+        if (isMobile) setIsSidebarOpen(false);
+    }, [isMobile]);
 
     useEffect(() => {
         // Lower threshold so compact transform happens earlier during scroll
@@ -101,6 +106,7 @@ const ProtectedLayout = () => {
     }, []);
 
     const effectiveRefreshCompact = refreshCompactLocked !== null ? refreshCompactLocked : refreshCompact;
+    const showCompactRefresh = isMobile || effectiveRefreshCompact;
 
     const handleRefreshStart = useCallback((startedCompact) => {
         setRefreshCompactLocked(!!startedCompact);
@@ -121,19 +127,20 @@ const ProtectedLayout = () => {
     }, []);
 
     return (
-        <div style={{ display: 'flex' }}>
+        <div style={{ display: 'flex', minHeight: '100vh' }}>
             <Sidebar isOpen={isSidebarOpen} toggleSidebar={handleToggleSidebar} />
             <div
                 id="main-content"
                 style={{
                     flex: 1,
-                    marginLeft: isSidebarOpen ? '250px' : '60px',
+                    minWidth: 0,
+                    width: '100%',
+                    marginLeft: isMobile ? 0 : (isSidebarOpen ? '250px' : '60px'),
                     transition: 'margin-left 0.3s ease',
                     position: 'relative',
                 }}
             >
                 <PageRefreshProvider>
-                    {/* Campana de Notificaciones (no se modifica) */}
                     <div
                         style={{
                             position: 'fixed',
@@ -142,29 +149,27 @@ const ProtectedLayout = () => {
                             zIndex: 40,
                         }}
                     >
-                        <NotificationsMenu authToken={auth.token} />
+                        <NotificationsMenu authToken={auth?.token} />
                     </div>
 
                     {/* Botón global de refrescar (independiente) */}
                     <div
                         style={{
                             position: 'fixed',
-                            // Place full button slightly higher so it's near the notification bubble
-                            top: effectiveRefreshCompact ? '58px' : '8px',
-                            // Nudge compact icon a bit right for better centering with notifications
-                            right: effectiveRefreshCompact ? '10px' : '72px',
+                            top: showCompactRefresh ? '58px' : '8px',
+                            right: showCompactRefresh ? '10px' : '72px',
                             zIndex: 35,
                         }}
                     >
                         <GlobalRefreshButton
-                            compact={effectiveRefreshCompact}
+                            compact={showCompactRefresh}
                             onRefreshStart={handleRefreshStart}
                             onRefreshEnd={handleRefreshEnd}
                         />
                     </div>
 
                     {/* Contenido Principal */}
-                    <div style={{ padding: '20px' }}>
+                    <div style={{ padding: isMobile ? '64px 12px 16px' : '20px' }}>
                         <div
                             ref={outletWrapperRef}
                             style={{

@@ -268,8 +268,8 @@ function PaymentHistorySection({ refresh = 0 }) {
                     <Typography variant="h6" gutterBottom>
                         Colegio: {schoolName}
                     </Typography>
-                    <TableContainer component={Paper}>
-                        <Table>
+                    <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+                        <Table sx={{ minWidth: 1100 }}>
                             <TableHead>
                                 <TableRow>
                                     <TableCell>Apellido Familia</TableCell>

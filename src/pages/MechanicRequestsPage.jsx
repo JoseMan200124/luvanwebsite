@@ -621,14 +621,14 @@ const MechanicRequestsPage = () => {
             </FiltersContainer>
 
             {/* Tabla */}
-            <TableContainer component={Paper}>
+            <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
                 {loading ? (
                     <Box display="flex" justifyContent="center" p={4}>
                         <CircularProgress />
                     </Box>
                 ) : (
                     <>
-                        <Table size="small">
+                        <Table size="small" sx={{ minWidth: 1100 }}>
                             <TableHead>
                                 <TableRow>
                                     <TableCell>

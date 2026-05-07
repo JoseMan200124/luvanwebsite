@@ -778,8 +778,8 @@ const FuelRecordsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer>
-                                <Table>
+                            <TableContainer sx={{ overflowX: 'auto' }}>
+                                <Table sx={{ minWidth: 1200 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell sortDirection={orderBy === 'recordDate' ? order : false}>

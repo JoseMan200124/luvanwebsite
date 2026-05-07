@@ -2182,8 +2182,8 @@ const ColaboradoresPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
-                                <Table stickyHeader>
+                            <TableContainer component={Paper} sx={{ maxHeight: 600, overflowX: 'auto' }}>
+                                <Table stickyHeader sx={{ minWidth: 980 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell>

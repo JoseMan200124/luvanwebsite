@@ -474,8 +474,8 @@ const RequestsPage = () => {
                 </Grid>
             </FiltersContainer>
 
-            <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: 1 }}>
-                <Table size="small">
+            <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: 1, overflowX: 'auto' }}>
+                <Table size="small" sx={{ minWidth: 900 }}>
                         <TableHead>
                             <TableRow>
                                 <TableCell>

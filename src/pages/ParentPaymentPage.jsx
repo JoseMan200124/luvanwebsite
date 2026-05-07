@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useRef, useContext, useEffect } from 'react';
 import {
     Box, Typography, Button, Card, CardContent,
-    Snackbar, Alert, CircularProgress, Container, Modal
+    Snackbar, Alert, CircularProgress, Container, Modal, useMediaQuery, useTheme
 } from '@mui/material';
 import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
@@ -13,16 +13,13 @@ import { AuthContext } from '../context/AuthProvider';
 /* ---------- estilos auxiliares ---------- */
 const HiddenInput = styled.input`display:none;`;
 const PreviewImg  = styled.img`
-    width:100%; height:auto; max-height:350px;
+    width:100%; height:auto; max-height:min(350px, 48dvh);
     object-fit:contain; margin-top:16px; border-radius:8px;
 `;
-const WebcamWrapper = styled(Box)`
-    display:flex; flex-direction:column; align-items:center; gap:12px;
-    background:#000;
-`;
-const videoConstraints = { width: 600, height: 400, facingMode: 'environment' };
 
 const ParentPaymentPage = () => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const { auth } = useContext(AuthContext);
     const isSuspended = auth?.user?.serviceStatus === 'SUSPENDED';
 
@@ -57,6 +54,11 @@ const ParentPaymentPage = () => {
     }, [isSuspended, auth?.user?.id]);
 
     const webcamRef = useRef(null);
+    const videoConstraints = {
+        width: { ideal: isMobile ? 360 : 600 },
+        height: { ideal: isMobile ? 480 : 400 },
+        facingMode: 'environment'
+    };
 
     /* ------------ helpers ------------ */
     const dataURLtoFile = (url, filename) => {
@@ -142,7 +144,7 @@ const ParentPaymentPage = () => {
         <>
             <ParentNavbar />
 
-            <Container maxWidth="sm" sx={{ py:6 }}>
+            <Container maxWidth="sm" sx={{ py: { xs: 3, sm: 6 }, px: { xs: 2, sm: 3 } }}>
                 <Card elevation={3}>
                     <Box sx={{ backgroundColor:'#0D3FE2', color:'#FFF', p:2, borderRadius:'8px 8px 0 0' }}>
                         <Typography variant="h6" align="center">Cargar Boleta de Pago</Typography>
@@ -154,7 +156,7 @@ const ParentPaymentPage = () => {
                         </Typography>
 
                         {/* ---------- botones ---------- */}
-                        <Box sx={{ display:'flex', gap:2, justifyContent:'center', flexWrap:'wrap' }}>
+                        <Box sx={{ display:'flex', gap:2, justifyContent:'center', flexDirection: { xs: 'column', sm: 'row' } }}>
                             {/* Galería */}
                             <label htmlFor="file-gallery">
                                 <HiddenInput
@@ -163,7 +165,7 @@ const ParentPaymentPage = () => {
                                     accept="image/*"
                                     onChange={handleSelect}
                                 />
-                                <Button variant="outlined" component="span">
+                                <Button variant="outlined" component="span" fullWidth={isMobile}>
                                     Desde galería
                                 </Button>
                             </label>
@@ -172,6 +174,7 @@ const ParentPaymentPage = () => {
                             <Button
                                 variant="outlined"
                                 onClick={()=>setOpenCam(true)}
+                                fullWidth={isMobile}
                             >
                                 Tomar foto
                             </Button>
@@ -205,20 +208,24 @@ const ParentPaymentPage = () => {
                 <Box sx={{
                     position:'absolute', top:'50%', left:'50%',
                     transform:'translate(-50%, -50%)',
-                    bgcolor:'#111', p:2, borderRadius:2
+                    bgcolor:'#111', p:{ xs: 1.5, sm: 2 }, borderRadius:2,
+                    width: { xs: 'calc(100vw - 24px)', sm: 640 },
+                    maxWidth: '100vw',
+                    maxHeight: 'calc(100dvh - 24px)',
+                    overflow: 'auto'
                 }}>
                     <Webcam
                         audio={false}
                         ref={webcamRef}
                         screenshotFormat="image/jpeg"
                         videoConstraints={videoConstraints}
-                        style={{ width:'100%', borderRadius:8 }}
+                        style={{ width:'100%', maxHeight: isMobile ? '64dvh' : '70vh', objectFit: 'contain', borderRadius:8 }}
                     />
-                    <Box sx={{ display:'flex', gap:2, mt:2, justifyContent:'center' }}>
-                        <Button variant="contained" onClick={capturePhoto}>
+                    <Box sx={{ display:'flex', gap:2, mt:2, justifyContent:'center', flexDirection: { xs: 'column', sm: 'row' } }}>
+                        <Button variant="contained" onClick={capturePhoto} fullWidth={isMobile}>
                             Capturar
                         </Button>
-                        <Button variant="outlined" onClick={()=>setOpenCam(false)}>
+                        <Button variant="outlined" onClick={()=>setOpenCam(false)} fullWidth={isMobile}>
                             Cancelar
                         </Button>
                     </Box>

@@ -1332,13 +1332,13 @@ const CicloEscolarSelectionPage = () => {
         <PageContainer>
             <HeaderCard>
                 <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <CalendarToday sx={{ fontSize: 40 }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 } }}>
+                        <CalendarToday sx={{ fontSize: { xs: 36, sm: 40 }, flexShrink: 0 }} />
                         <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
+                            <Typography variant="h4" component="h1" gutterBottom sx={{ fontSize: { xs: '2rem', sm: '2.125rem' }, lineHeight: 1.2 }}>
                                 Gestión de Transportes Escolares
                             </Typography>
-                            <Typography variant="h6" sx={{ opacity: 0.9 }}>
+                            <Typography variant="h6" sx={{ opacity: 0.9, fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
                                 Selecciona el ciclo escolar y colegio para gestionar
                             </Typography>
                         </Box>
@@ -1353,8 +1353,8 @@ const CicloEscolarSelectionPage = () => {
                         <Typography variant="h6" gutterBottom sx={{ mb: 1 }}>
                             Ciclo Escolar
                         </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                            <FormControl fullWidth variant="outlined" sx={{ maxWidth: 300 }}>
+                        <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+                            <FormControl fullWidth variant="outlined" sx={{ maxWidth: { xs: '100%', sm: 300 }, minWidth: 0 }}>
                                 <InputLabel>Seleccionar Ciclo Escolar</InputLabel>
                                 <Select
                                     value={selectedCicloEscolarId}
@@ -1375,13 +1375,14 @@ const CicloEscolarSelectionPage = () => {
                                 </Select>
                             </FormControl>
 
-                            <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Box sx={{ display: { xs: 'grid', sm: 'flex' }, gridTemplateColumns: { xs: '1fr' }, gap: 1, width: { xs: '100%', sm: 'auto' } }}>
                                 <PermissionGuard permission="notificaciones-crear">
                                     <Button
                                         variant="outlined"
                                         color="secondary"
                                         startIcon={<NotificationsActiveIcon />}
                                         onClick={() => setOpenSendNotifModal(true)}
+                                        sx={{ width: { xs: '100%', sm: 'auto' } }}
                                     >
                                         Enviar Notificación
                                     </Button>
@@ -1391,6 +1392,7 @@ const CicloEscolarSelectionPage = () => {
                                         variant="outlined"
                                         color="primary"
                                         onClick={handleOpenBulkUpload}
+                                        sx={{ width: { xs: '100%', sm: 'auto' } }}
                                     >
                                         Carga Masiva
                                     </Button>
@@ -1400,6 +1402,7 @@ const CicloEscolarSelectionPage = () => {
                                         variant="contained"
                                         color="primary"
                                         onClick={handleAddSchool}
+                                        sx={{ width: { xs: '100%', sm: 'auto' } }}
                                         >
                                         Añadir Colegio
                                     </Button>
