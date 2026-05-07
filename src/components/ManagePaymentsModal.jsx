@@ -47,6 +47,8 @@ import RetroactiveApplyModal from './modals/RetroactiveApplyModal';
 // cache TTL (ms)
 const PAYMENT_HIST_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
+const getReceiptDisplayDateValue = (receipt) => receipt?.displayDate || receipt?.date || receipt?.createdAt || receipt?.uploadedAt || '';
+
 const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {}, onToggleInvoiceSent = () => {} }) => {
     const [localPayment, setLocalPayment] = useState(payment);
     useEffect(() => setLocalPayment(payment), [payment]);
@@ -151,7 +153,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 setMonths.add(m);
             } catch (e) { /* ignore */ }
         };
-        (uploadedReceipts || []).forEach(r => pushDate(r.createdAt || r.uploadedAt || r.date));
+        (uploadedReceipts || []).forEach(r => pushDate(getReceiptDisplayDateValue(r)));
         const arr = Array.from(setMonths).sort().reverse();
         return arr;
     }, [uploadedReceipts]);
@@ -159,7 +161,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const filteredUploadedReceipts = React.useMemo(() => {
         if (!boletaMonth) return uploadedReceipts || [];
         return (uploadedReceipts || []).filter(r => {
-            const d = r.createdAt || r.uploadedAt || r.date;
+            const d = getReceiptDisplayDateValue(r);
             if (!d) return false;
             return moment.parseZone(d).format('YYYY-MM') === boletaMonth;
         });

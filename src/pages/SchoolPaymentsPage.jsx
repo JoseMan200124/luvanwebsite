@@ -104,6 +104,8 @@ const ChipsRow = styled(Box)`
 
 // summary is rendered inline as a horizontal chip row
 
+const getReceiptDisplayDateValue = (receipt) => receipt?.displayDate || receipt?.date || receipt?.createdAt || receipt?.uploadedAt || '';
+
 const SchoolPaymentsPage = () => {
     useContext(AuthContext); // keep context hook for future auth-based features
     const navigate = useNavigate();
@@ -559,6 +561,7 @@ const SchoolPaymentsPage = () => {
             if (key === 'status') return (p.finalStatus || '').toString().toLowerCase();
             if (key === 'serviceStatus') return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
         } catch (e) {
+            console.log('[SchoolPaymentsPage getValueKey]',e);
             return '';
         }
         return '';
@@ -649,6 +652,7 @@ const SchoolPaymentsPage = () => {
     }, [invalidatePaymentHistCacheForPaymentId, invalidatePaymentHistCacheForUser]);
     const [uploadedReceipts, setUploadedReceipts] = useState([]);
     const [uploadedReceiptsLoading, setUploadedReceiptsLoading] = useState(false);
+    const [receiptUploadLoading, setReceiptUploadLoading] = useState(false);
     const [selectedReceipt, setSelectedReceipt] = useState(null);
     const [receiptZoom, setReceiptZoom] = useState(1);
     // Month filter for boletas (format: YYYY-MM)
@@ -664,7 +668,7 @@ const SchoolPaymentsPage = () => {
                 setMonths.add(m);
             } catch (e) { /* ignore */ }
         };
-        (uploadedReceipts || []).forEach(r => pushDate(r.createdAt || r.uploadedAt || r.date));
+        (uploadedReceipts || []).forEach(r => pushDate(getReceiptDisplayDateValue(r)));
         const arr = Array.from(setMonths).sort().reverse();
         return arr;
     }, [uploadedReceipts]);
@@ -672,12 +676,58 @@ const SchoolPaymentsPage = () => {
     const filteredUploadedReceipts = React.useMemo(() => {
         if (!boletaMonth) return uploadedReceipts || [];
         return (uploadedReceipts || []).filter(r => {
-            const d = r.createdAt || r.uploadedAt || r.date;
+            const d = getReceiptDisplayDateValue(r);
             if (!d) return false;
             return moment.parseZone(d).format('YYYY-MM') === boletaMonth;
         });
     }, [uploadedReceipts, boletaMonth]);
 
+    const getRegisterReceiptUserId = useCallback(() => (
+        registerPaymentTarget?.User?.id ||
+        registerPaymentTarget?.user?.id ||
+        registerPaymentTarget?.userId ||
+        null
+    ), [registerPaymentTarget]);
+
+    const handleUploadRegisterReceipt = useCallback(async (file, displayDate) => {
+        const userId = getRegisterReceiptUserId();
+        if (!userId) {
+            setSnackbar({ open: true, message: 'No se encontro la familia para subir la boleta', severity: 'error' });
+            return;
+        }
+
+        if (!file || !['image/jpeg', 'image/png'].includes(file.type)) {
+            setSnackbar({ open: true, message: 'Solo se permite subir una imagen JPG o PNG.', severity: 'warning' });
+            return;
+        }
+
+        try {
+            setReceiptUploadLoading(true);
+            const form = new FormData();
+            form.append('receipt', file);
+            if (displayDate) form.append('displayDate', displayDate);
+
+            const res = await api.post(`/parents/${userId}/receipts`, form, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            const receipt = res.data?.receipt;
+            if (receipt) {
+                setUploadedReceipts(prev => [receipt, ...(prev || []).filter(r => r.id !== receipt.id)]);
+            } else {
+                const receiptsRes = await api.get(`/parents/${userId}/receipts`);
+                setUploadedReceipts(receiptsRes.data?.receipts || []);
+            }
+
+            setBoletaMonth('');
+            setSnackbar({ open: true, message: 'Boleta subida correctamente', severity: 'success' });
+        } catch (err) {
+            console.error('Error subiendo boleta administrativa:', err);
+            setSnackbar({ open: true, message: err.response?.data?.message || 'Error al subir la boleta', severity: 'error' });
+        } finally {
+            setReceiptUploadLoading(false);
+        }
+    }, [getRegisterReceiptUserId]);
 
     const [openReceiptDialog, setOpenReceiptDialog] = useState(false);
     const [receiptTarget, setReceiptTarget] = useState(null);
@@ -3092,6 +3142,10 @@ const SchoolPaymentsPage = () => {
                                                 setSelectedReceipt={setSelectedReceipt}
                                                 receiptZoom={receiptZoom}
                                                 setReceiptZoom={setReceiptZoom}
+                                                canManageReceipts
+                                                uploadReceiptLoading={receiptUploadLoading}
+                                                onUploadReceipt={handleUploadRegisterReceipt}
+                                                onReceiptError={(message) => setSnackbar({ open: true, message, severity: 'warning' })}
                                                 downloadFile={(url, name) => {
                                                     const a = document.createElement('a');
                                                     a.href = url;
