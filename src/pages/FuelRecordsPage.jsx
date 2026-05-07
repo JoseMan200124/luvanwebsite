@@ -194,20 +194,21 @@ const FuelRecordsPage = () => {
         ...corporations.map(c => ({ label: `${c.name} (Corporación)`, value: `corp-${c.id}`, type: 'corp', id: c.id })),
     ];
 
-    const plateOptions = selectedClient
-        ? [...new Set(
-            buses
-                .filter(b => {
-                    if (!selectedClient) return false;
-                    const { type, id } = selectedClient;
-                    if (type === 'school') return String(b.schoolId) === String(id) || String(b.school?.id) === String(id);
-                    if (type === 'corp') return String(b.corporationId) === String(id) || String(b.corporation?.id) === String(id);
-                    return false;
-                })
-                .map(b => b.plate)
-                .filter(Boolean)
-        )].sort()
-        : [...new Set(buses.map(b => b.plate).filter(Boolean))].sort();
+    const getBusClientId = (bus, type) => {
+        if (type === 'school') return bus.schoolId ?? bus.school?.id;
+        if (type === 'corp') return bus.corporationId ?? bus.corporation?.id;
+        return null;
+    };
+
+    const busesForSelectedClient = selectedClient
+        ? buses.filter((bus) => {
+            const busClientId = getBusClientId(bus, selectedClient.type);
+            return busClientId === null || busClientId === undefined || String(busClientId) === String(selectedClient.id);
+        })
+        : buses;
+
+    const plateOptions = [...new Set(busesForSelectedClient.map((bus) => bus.plate).filter(Boolean))]
+        .sort((firstPlate, secondPlate) => String(firstPlate).localeCompare(String(secondPlate)));
 
     useEffect(() => {
         if (selectedPlate && !plateOptions.includes(selectedPlate)) {
