@@ -418,8 +418,8 @@ const AssignmentHistoryPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} variant="outlined">
-                                <Table>
+                            <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+                                <Table sx={{ minWidth: 860 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell>Fecha</TableCell>

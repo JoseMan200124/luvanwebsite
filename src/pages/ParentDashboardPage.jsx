@@ -32,6 +32,7 @@ import {
   Paper,
   Collapse,
   useTheme,
+  useMediaQuery,
   IconButton,
 } from '@mui/material';
 import {
@@ -62,7 +63,14 @@ import html2canvas from 'html2canvas';
 // ---------- Estilos ----------
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
 const LoaderBox   = styled(MuiBox)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
-const DayCol      = styled(MuiBox)`min-width:190px;`;
+const DayCol      = styled(MuiBox)`
+  min-width:190px;
+
+  @media (max-width: 600px) {
+    min-width: 100%;
+    width: 100%;
+  }
+`;
 
 // ---------- Utilidades ----------
 const toArray = (v) => (Array.isArray(v) ? v : []);
@@ -240,6 +248,7 @@ const ParentDashboardPage = () => {
   const { auth, verifyToken } = useContext(AuthContext);
   const navigate = useNavigate();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Estado de servicio (preferir lo que devuelva backend para reflejar cambios sin relogin)
   const [serviceStatus, setServiceStatus] = useState(() => auth?.user?.serviceStatus || '');
@@ -573,8 +582,8 @@ const ParentDashboardPage = () => {
         elements.push(
           <div key={`sig-${nameTrim}`} style={{ margin: '12px 0' }}>
             <div style={{ marginBottom: 6 }}>{nameTrim}</div>
-            <div style={{ border: isMissing ? '2px solid #d32f2f' : '1px solid #000', display: 'inline-block' }}>
-              <SignatureCanvas penColor="black" canvasProps={{ width: 300, height: 120, style: { display: 'block' } }} ref={(r) => handleSignatureRef(nameTrim, r)} onEnd={() => handleSignatureEndLocal(nameTrim)} />
+            <div style={{ border: isMissing ? '2px solid #d32f2f' : '1px solid #000', display: 'inline-block', width: 'min(300px, 100%)', maxWidth: '100%' }}>
+              <SignatureCanvas penColor="black" canvasProps={{ width: 300, height: 120, style: { display: 'block', width: '100%', maxWidth: '100%', height: 120 } }} ref={(r) => handleSignatureRef(nameTrim, r)} onEnd={() => handleSignatureEndLocal(nameTrim)} />
             </div>
             <div style={{ marginTop: 6 }}>
               <Button size="small" onClick={() => { const p = signaturePads.current[nameTrim]; if (p) { p.clear(); setMissingFields((prev) => [...prev, nameTrim]); } }}>Limpiar</Button>
@@ -1067,13 +1076,14 @@ const ParentDashboardPage = () => {
                     sx={{ mb: 2 }}
                   >
                     {/* Filtro por día */}
-                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ width: '100%', rowGap: 1 }}>
                       <Typography variant="h6" sx={{ mr: 1 }}>Horarios y Paradas</Typography>
                     <ToggleButtonGroup
                       exclusive
                       value={selectedDay}
                       onChange={(_, v) => v && setSelectedDay(v)}
                       size="small"
+                      sx={{ flexWrap: 'wrap', width: { xs: '100%', sm: 'auto' }, '& .MuiToggleButton-root': { flex: { xs: '1 1 30%', sm: 'initial' }, minWidth: { xs: 0, sm: 'auto' }, px: { xs: 1, sm: 2 } } }}
                     >
                       <ToggleButton value="all">Semana</ToggleButton>
                       {DAYS.map((d) => (
@@ -1083,7 +1093,7 @@ const ParentDashboardPage = () => {
                   </Stack>
 
                   {/* Filtro por estudiante */}
-                  <FormControl size="small" sx={{ minWidth: 240 }}>
+                  <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 240 }, width: { xs: '100%', sm: 'auto' } }}>
                     <InputLabel id="student-filter-label">Estudiante</InputLabel>
                     <Select
                       labelId="student-filter-label"
@@ -1162,9 +1172,9 @@ const ParentDashboardPage = () => {
                             Sin horarios registrados para este estudiante.
                           </Typography>
                         ) : (
-                          <MuiBox sx={{ overflowX: isSingleDayView ? 'visible' : 'auto' }}>
+                          <MuiBox sx={{ overflowX: isSingleDayView || isMobile ? 'visible' : 'auto' }}>
                             <Stack
-                              direction={isSingleDayView ? 'column' : 'row'}
+                              direction={isSingleDayView || isMobile ? 'column' : 'row'}
                               spacing={2}
                               sx={{ minHeight: 1, pb: 1, width: '100%' }}
                             >
@@ -1174,7 +1184,7 @@ const ParentDashboardPage = () => {
                                   <Paper
                                     key={key}
                                     sx={
-                                      isSingleDayView
+                                      isSingleDayView || isMobile
                                         ? { display: 'block', width: '100%', p: 1, borderRadius: 2 }
                                         : { display: 'inline-block', p: 1, borderRadius: 2, verticalAlign: 'top' }
                                     }
@@ -1213,7 +1223,7 @@ const ParentDashboardPage = () => {
                                                 color={slot._label === 'Entrada' ? 'success' : slot._label === 'Salida' ? 'error' : 'default'}
                                                 sx={{ mb: 1 }}
                                               />
-                                              <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                              <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: { xs: 'normal', sm: 'nowrap' }, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 0.5, flexWrap: 'wrap' }}>
                                                 <AccessTimeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                                                 <strong>Hora en parada:</strong>&nbsp;
                                                 <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatTime12(slot.time) || safeStr(slot.time)}</MuiBox>
@@ -1225,7 +1235,7 @@ const ParentDashboardPage = () => {
                                                 const rn = safeStr(slot.routeNumber);
                                                 const plate = slot?.bus?.plate || plateMap[String(rn)] || (parentInfo?.routes?.find(r => safeStr(r.routeNumber) === rn)?.plate) || '';
                                                 return (
-                                                  <MuiBox sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: 'nowrap' }}>
+                                                  <MuiBox sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
                                                     <Typography variant="body2" sx={{ flex: '0 0 auto' }}><strong>Número de ruta:</strong></Typography>
                                                     <MuiBox component="span" sx={{ whiteSpace: 'nowrap', display: 'inline-block', color: 'text.primary', fontWeight: 600 }}>{slot.routeNumber}{plate ? ` (Placa: ${plate})` : ''}</MuiBox>
                                                   </MuiBox>
@@ -1270,7 +1280,7 @@ const ParentDashboardPage = () => {
                                           return (
                                             <Paper
                                               key={`${key}-${i2}`}
-                                              sx={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'stretch', p: 2, mb: 2, width: 'max-content', maxWidth: '80vw', boxSizing: 'border-box', borderRadius: 2 }}
+                                              sx={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'stretch', p: 2, mb: 2, width: { xs: '100%', sm: 'max-content' }, maxWidth: { xs: '100%', sm: '80vw' }, boxSizing: 'border-box', borderRadius: 2 }}
                                               elevation={1}
                                             >
                                               <IconButton
@@ -1288,7 +1298,7 @@ const ParentDashboardPage = () => {
                                                     color={slot._label === 'Entrada' ? 'success' : slot._label === 'Salida' ? 'error' : 'default'}
                                                     sx={{ mb: 1 }}
                                                   />
-                                                  <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                  <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: { xs: 'normal', sm: 'nowrap' }, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 0.5, flexWrap: 'wrap' }}>
                                                     <AccessTimeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                                                     <strong>Hora en parada:</strong>&nbsp;
                                                     <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatTime12(slot.time) || safeStr(slot.time)}</MuiBox>
@@ -1300,7 +1310,7 @@ const ParentDashboardPage = () => {
                                                   const rn = safeStr(slot.routeNumber);
                                                   const plate = slot?.bus?.plate || plateMap[String(rn)] || (parentInfo?.routes?.find(r => safeStr(r.routeNumber) === rn)?.plate) || '';
                                                   return (
-                                                    <MuiBox sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: 'nowrap' }}>
+                                                    <MuiBox sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
                                                       <Typography variant="body2" sx={{ flex: '0 0 auto' }}><strong>Número de ruta:</strong></Typography>
                                                       <MuiBox component="span" sx={{ whiteSpace: 'nowrap', display: 'inline-block', color: 'text.primary', fontWeight: 600 }}>{slot.routeNumber}{plate ? ` (Placa: ${plate})` : ''}</MuiBox>
                                                     </MuiBox>

@@ -24,7 +24,10 @@ import {
     ListItem,
     ListItemText,
     Chip,
-    Stack
+    Stack,
+    Paper,
+    useMediaQuery,
+    useTheme
 } from '@mui/material';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TablePagination from '@mui/material/TablePagination';
@@ -32,8 +35,6 @@ import {
     ReceiptLong as ReceiptIcon, 
     Pause as PauseIcon, 
     PlayArrow as PlayArrowIcon, 
-    Block as BlockIcon, 
-    CheckCircle as CheckCircleIcon, 
     Restore,
     HelpOutline as HelpIcon,
     NoteAlt as NoteAltIcon
@@ -49,7 +50,97 @@ const PAYMENT_HIST_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
 const getReceiptDisplayDateValue = (receipt) => receipt?.displayDate || receipt?.date || receipt?.createdAt || receipt?.uploadedAt || '';
 
+const getTransactionTypeMeta = (typeVal) => {
+    switch(typeVal?.toUpperCase()) {
+        case 'TARIFA':
+        case 'PAYMENT':
+            return { label: 'TARIFA', backgroundColor: '#e8f5e9' };
+        case 'MORA':
+        case 'PENALTY_PAYMENT':
+            return { label: 'MORA', backgroundColor: '#fff3e0' };
+        case 'CREDITO':
+        case 'PENALTY_DISCOUNT':
+            return { label: 'CREDITO', backgroundColor: '#e1f5fe' };
+        default:
+            return { label: typeVal || 'Otro', backgroundColor: '#e0e0e0' };
+    }
+};
+
+const getTransactionSourceMeta = (sourceVal) => {
+    switch(sourceVal?.toUpperCase()) {
+        case 'MANUAL':
+            return { label: 'MANUAL', backgroundColor: '#fff9c4' };
+        case 'AUTO_DEBIT':
+            return { label: 'AUTO_DEBIT', backgroundColor: '#c8e6c9' };
+        case 'CREDIT_AUTO':
+            return { label: 'CREDIT_AUTO', backgroundColor: '#b3e5fc' };
+        case 'FULL_DISCOUNT':
+            return { label: 'FULL_DISCOUNT', backgroundColor: '#d1c4e9' };
+        default:
+            return { label: sourceVal || 'Otro', backgroundColor: '#f5f5f5' };
+    }
+};
+
+const TransactionBadge = ({ label, backgroundColor, compact = false }) => (
+    <Box sx={{ display: 'inline-block', px: compact ? 1 : 1.5, py: compact ? 0.25 : 0.5, borderRadius: 1, backgroundColor, fontSize: compact ? '0.7rem' : '0.75rem', fontWeight: 600, overflowWrap: 'anywhere' }}>
+        {label}
+    </Box>
+);
+
+const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes }) => {
+    const dateVal = history.lastPaymentDate || null;
+    const amountVal = Number(history.amountPaid || 0);
+    const typeMeta = getTransactionTypeMeta(history.type || 'PAYMENT');
+    const sourceMeta = getTransactionSourceMeta(history.source || 'MANUAL');
+    const receiptVal = history.receiptNumber || '—';
+    const invoiceReq = !!history.requiresInvoice;
+    const notesVal = history.notes || '';
+
+    return (
+        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+            <Stack spacing={1.25}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'flex-start' }}>
+                    <Box>
+                        <Typography variant="caption" color="text.secondary">Fecha</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{dateVal ? moment.parseZone(dateVal).format('DD/MM/YY') : '—'}</Typography>
+                    </Box>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>Q {amountVal.toFixed(2)}</Typography>
+                </Box>
+
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                    <TransactionBadge label={typeMeta.label} backgroundColor={typeMeta.backgroundColor} compact />
+                    <TransactionBadge label={sourceMeta.label} backgroundColor={sourceMeta.backgroundColor} compact />
+                </Stack>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="caption" color="text.secondary">Desc. Extra</Typography>
+                        <Typography variant="body2">Q {(Number(history.extraordinaryDiscount || 0)).toFixed(2)}</Typography>
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="caption" color="text.secondary">N° Boleta</Typography>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{receiptVal}</Typography>
+                    </Box>
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                    <FormControlLabel
+                        control={<Checkbox checked={invoiceReq} onChange={() => onToggleInvoiceRow(history)} />}
+                        label="Factura"
+                        sx={{ m: 0 }}
+                    />
+                    <MuiIconButton size="small" onClick={() => onOpenNotes(notesVal)} title={notesVal ? 'Ver notas' : 'Agregar nota'}>
+                        <NoteAltIcon fontSize="small" color={notesVal ? 'action' : 'disabled'} />
+                    </MuiIconButton>
+                </Box>
+            </Stack>
+        </Paper>
+    );
+};
+
 const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {}, onToggleInvoiceSent = () => {} }) => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const [localPayment, setLocalPayment] = useState(payment);
     useEffect(() => setLocalPayment(payment), [payment]);
     const family = localPayment?.User?.FamilyDetail || payment?.User?.FamilyDetail || {};
@@ -379,9 +470,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const totalAfterDiscount = Math.max(0, Number(computedTariff || 0) - parsedDiscount);
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" fullScreen={isMobile} PaperProps={{ sx: { m: { xs: 0, sm: 2 }, maxHeight: { xs: '100dvh', sm: 'calc(100% - 64px)' } } }}>
             <DialogTitle>Gestión de Pagos</DialogTitle>
-            <DialogContent>
+            <DialogContent dividers sx={{ p: { xs: 1.5, sm: 3 } }}>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={12} sm={6}>
                         <Box sx={{ border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, backgroundColor: '#fafafa' }}>
@@ -449,7 +540,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 })()}
                             </Box>
 
-                            <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
+                            <Box sx={{ display: 'flex', gap: 2, mb: 1, flexWrap: 'wrap' }}>
                                 <Box>
                                     <Typography variant="caption" color="text.secondary">Cant. Hijos</Typography>
                                     <Typography variant="body1">{family.studentsCount || 0}</Typography>
@@ -460,15 +551,15 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 </Box>
                             </Box>
 
-                            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'baseline' }, gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
                                 <Box>
                                     <Typography variant="caption" color="text.secondary">Tarifa</Typography>
                                     <Typography variant="h5">Q {totalAfterDiscount}</Typography>
                                 </Box>
-                                <Box sx={{ ml: 'auto' }}>
+                                <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
                                     <Typography variant="caption" color="text.secondary">Descuento (Q)</Typography>
-                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                        <TextField label="" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: 100 }} disabled={isDeleted} />
+                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <TextField label="" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: { xs: '100%', sm: 100 } }} disabled={isDeleted} />
                                         <Button variant="outlined" size="small" onClick={() => {
                                             if (isDeleted) return;
                                             // IMPORTANT: Do NOT persist discount here.
@@ -481,7 +572,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         </Box>
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'flex-end' }}>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: { xs: 'flex-start', sm: 'flex-end' }, flexDirection: { xs: 'column', sm: 'row' } }}>
                             <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); if (!isDeleted) onAction('toggleAutoDebit', { payment, value: e.target.checked }); }} disabled={isDeleted} />} label="Débito Automático" />
                             <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); if (!isDeleted) onAction('toggleRequiresInvoice', { payment, value: e.target.checked }); }} disabled={isDeleted} />} label="Factura" />
                         </Box>
@@ -524,7 +615,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 </Box>
 
                 {/* Exonerate Dialog */}
-                <Dialog open={openExonerateDialog} onClose={() => setOpenExonerateDialog(false)} maxWidth="sm" fullWidth>
+                <Dialog open={openExonerateDialog} onClose={() => setOpenExonerateDialog(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
                     <DialogTitle>Exonerar Mora</DialogTitle>
                     <DialogContent>
                         <Typography variant="body2" sx={{ mb: 1 }}>Ingrese el monto a exonerar (Q)</Typography>
@@ -543,7 +634,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 </Dialog>
 
                 {/* Delete Payment Confirmation Dialog */}
-                <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)} maxWidth="xs" fullWidth>
+                <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)} maxWidth="xs" fullWidth fullScreen={isMobile}>
                     <DialogTitle>Confirmar revertir último pago</DialogTitle>
                     <DialogContent>
                         <Typography variant="body2">¿Está seguro que desea revertir el último pago? Esta acción no se puede deshacer.</Typography>
@@ -559,9 +650,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 </Dialog>
 
                 {/* Dialog: Boletas (Receipts) */}
-                <Dialog open={openReceiptsDialog} onClose={() => { setOpenReceiptsDialog(false); setUploadedReceipts([]); setSelectedReceipt(null); setReceiptZoom(1); }} fullWidth maxWidth="md">
+                <Dialog open={openReceiptsDialog} onClose={() => { setOpenReceiptsDialog(false); setUploadedReceipts([]); setSelectedReceipt(null); setReceiptZoom(1); }} fullWidth maxWidth="md" fullScreen={isMobile}>
                     <DialogTitle>Boletas</DialogTitle>
-                    <DialogContent>
+                    <DialogContent dividers sx={{ p: { xs: 1.5, sm: 3 } }}>
                         <ReceiptsPane
                             uploadedReceipts={uploadedReceipts}
                             uploadedReceiptsLoading={uploadedReceiptsLoading}
@@ -616,7 +707,41 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </MuiIconButton>
                 </Box>
                 <Box sx={{ overflowX: 'auto' }}>
-                <Table size="small">
+                {isMobile ? (
+                    <Stack spacing={1.25}>
+                        {(!histLoading && sortedHistories.length === 0) && (
+                            <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
+                                <Typography variant="body2" color="text.secondary">No hay transacciones registradas.</Typography>
+                            </Paper>
+                        )}
+                        {histLoading && (
+                            <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
+                                <Typography variant="body2" color="text.secondary">Cargando historial...</Typography>
+                            </Paper>
+                        )}
+                        {!histLoading && sortedHistories.map((h) => (
+                            <HistoryMobileCard
+                                key={h.id || `${h.lastPaymentDate || ''}-${Number(h.amountPaid || 0)}`}
+                                history={h}
+                                onToggleInvoiceRow={handleToggleInvoiceRow}
+                                onOpenNotes={(notes) => { setTxNotes(notes || ''); setOpenTxNotes(true); }}
+                            />
+                        ))}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', overflowX: 'auto' }}>
+                            <TablePagination
+                                component="div"
+                                count={histTotal}
+                                page={histPage}
+                                onPageChange={(e, newPage) => setHistPage(newPage)}
+                                rowsPerPage={histLimit}
+                                onRowsPerPageChange={(e) => { setHistLimit(parseInt(e.target.value, 10)); setHistPage(0); }}
+                                rowsPerPageOptions={[5,10,25,50]}
+                                labelRowsPerPage="Filas"
+                            />
+                        </Box>
+                    </Stack>
+                ) : (
+                <Table size="small" sx={{ minWidth: 900 }}>
                     <TableHead>
                         <TableRow>
                             <TableCell align="center" sx={{ minWidth: 100 }}>
@@ -664,7 +789,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 <TableCell colSpan={8} align="center">Cargando historial...</TableCell>
                             </TableRow>
                         )}
-                        {!histLoading && sortedHistories.slice(histPage * histLimit, histPage * histLimit + histLimit).map((h) => {
+                        {!histLoading && sortedHistories.map((h) => {
                             const dateVal = h.lastPaymentDate || null;
                             const amountVal = Number(h.amountPaid || 0);
                             const typeVal = h.type || 'PAYMENT';
@@ -674,52 +799,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             const notesVal = h.notes || '';
                             const key = h.id || `${dateVal || ''}-${amountVal}`;
 
-                            let typeLabel = typeVal;
-                            let typeBgColor = '#e0e0e0';
-                            switch(typeVal?.toUpperCase()) {
-                                case 'TARIFA':
-                                case 'PAYMENT':
-                                    typeLabel = 'TARIFA';
-                                    typeBgColor = '#e8f5e9';
-                                    break;
-                                case 'MORA':
-                                case 'PENALTY_PAYMENT':
-                                    typeLabel = 'MORA';
-                                    typeBgColor = '#fff3e0';
-                                    break;
-                                case 'CREDITO':
-                                case 'PENALTY_DISCOUNT':
-                                    typeLabel = 'CREDITO';
-                                    typeBgColor = '#e1f5fe';
-                                    break;
-                                default:
-                                    typeLabel = typeVal || 'Otro';
-                                    break;
-                            }
-
-                            let sourceLabel = sourceVal;
-                            let sourceBgColor = '#f5f5f5';
-                            switch(sourceVal?.toUpperCase()) {
-                                case 'MANUAL':
-                                    sourceLabel = 'MANUAL';
-                                    sourceBgColor = '#fff9c4';
-                                    break;
-                                case 'AUTO_DEBIT':
-                                    sourceLabel = 'AUTO_DEBIT';
-                                    sourceBgColor = '#c8e6c9';
-                                    break;
-                                case 'CREDIT_AUTO':
-                                    sourceLabel = 'CREDIT_AUTO';
-                                    sourceBgColor = '#b3e5fc';
-                                    break;
-                                case 'FULL_DISCOUNT':
-                                    sourceLabel = 'FULL_DISCOUNT';
-                                    sourceBgColor = '#d1c4e9';
-                                    break;
-                                default:
-                                    sourceLabel = sourceVal || 'Otro';
-                                    break;
-                            }
+                            const typeMeta = getTransactionTypeMeta(typeVal);
+                            const sourceMeta = getTransactionSourceMeta(sourceVal);
 
                             return (
                                 <TableRow key={key} hover>
@@ -727,10 +808,10 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         <Typography variant="body2">{dateVal ? moment.parseZone(dateVal).format('DD/MM/YY') : '—'}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Box sx={{ display: 'inline-block', px: 1.5, py: 0.5, borderRadius: 1, backgroundColor: typeBgColor, fontSize: '0.75rem', fontWeight: 600 }}>{typeLabel}</Box>
+                                        <TransactionBadge label={typeMeta.label} backgroundColor={typeMeta.backgroundColor} />
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Box sx={{ display: 'inline-block', px: 1, py: 0.25, borderRadius: 0.5, backgroundColor: sourceBgColor, fontSize: '0.7rem' }}>{sourceLabel}</Box>
+                                        <TransactionBadge label={sourceMeta.label} backgroundColor={sourceMeta.backgroundColor} compact />
                                     </TableCell>
                                     <TableCell align="center">
                                         <Typography variant="body2" sx={{ fontWeight: 600, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>Q {amountVal.toFixed(2)}</Typography>
@@ -771,10 +852,11 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         </TableRow>
                     </TableBody>
                 </Table>
+                )}
                 </Box>
 
                 {/* Dialog: Vista rápida de Notas de Transacciones */}
-                <Dialog open={openTxNotes} onClose={() => setOpenTxNotes(false)} maxWidth="sm" fullWidth>
+                <Dialog open={openTxNotes} onClose={() => setOpenTxNotes(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
                     <DialogTitle>Notas de Transacción</DialogTitle>
                     <DialogContent>
                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{txNotes || '—'}</Typography>
@@ -785,7 +867,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 </Dialog>
 
                 {/* Dialog: Leyenda / Ayuda de la Tabla de Historial (mejor visual) */}
-                <Dialog open={openHelpLegend} onClose={() => setOpenHelpLegend(false)} maxWidth="sm" fullWidth>
+                <Dialog open={openHelpLegend} onClose={() => setOpenHelpLegend(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
                     <DialogTitle>Leyenda - Historial de Pagos</DialogTitle>
                     <DialogContent>
                         <Grid container spacing={2}>
@@ -853,8 +935,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </DialogActions>
                 </Dialog>
             </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Cerrar</Button>
+            <DialogActions sx={{ px: { xs: 1.5, sm: 3 }, flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' } }}>
+                <Button onClick={onClose} fullWidth={isMobile}>Cerrar</Button>
             </DialogActions>
         </Dialog>
     );

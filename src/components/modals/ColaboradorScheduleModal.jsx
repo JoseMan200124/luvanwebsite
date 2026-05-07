@@ -14,6 +14,8 @@ const formatTime12Hour = (time24) => {
 
 // Modal de horarios para colaboradores - similar a StudentScheduleModal
 export default function ColaboradorScheduleModal({ colaborador, corporation, open, onClose, onScheduleUpdated }) {
+    const getIsMobileViewport = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 600px)').matches;
+    const [isMobileViewport, setIsMobileViewport] = useState(getIsMobileViewport);
     const [scheduleSlots, setScheduleSlots] = useState([]);
     const [loading, setLoading] = useState(false);
     const [assignOpen, setAssignOpen] = useState(false);
@@ -34,6 +36,15 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
         note: '',
         days: []
     });
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+        const mediaQuery = window.matchMedia('(max-width: 600px)');
+        const handleChange = (event) => setIsMobileViewport(event.matches);
+        setIsMobileViewport(mediaQuery.matches);
+        mediaQuery.addEventListener('change', handleChange);
+        return () => mediaQuery.removeEventListener('change', handleChange);
+    }, []);
 
     const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const DAY_LABELS = {
@@ -338,7 +349,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                             {/* Primera fila: Lunes a Viernes */}
                             <div style={{ 
                                 display: 'grid', 
-                                gridTemplateColumns: 'repeat(5, 1fr)', 
+                                gridTemplateColumns: isMobileViewport ? 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))' : 'repeat(5, 1fr)', 
                                 gap: 12,
                                 marginBottom: 12
                             }}>
@@ -451,7 +462,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                             </div>
                                             <div style={{ 
                                                 display: 'grid', 
-                                                gridTemplateColumns: '1fr 1fr', 
+                                                gridTemplateColumns: isMobileViewport ? 'repeat(auto-fit, minmax(120px, 1fr))' : '1fr 1fr', 
                                                 gap: 8 
                                             }}>
                                                 <div>
@@ -617,7 +628,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                             </div>
                                             <div style={{ 
                                                 display: 'grid', 
-                                                gridTemplateColumns: '1fr 1fr', 
+                                                gridTemplateColumns: isMobileViewport ? 'repeat(auto-fit, minmax(120px, 1fr))' : '1fr 1fr', 
                                                 gap: 8 
                                             }}>
                                                 <div>
@@ -690,10 +701,12 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                             padding: 20, 
                             borderRadius: 8, 
                             width: 'min(720px, 95vw)', 
+                            maxHeight: isMobileViewport ? 'calc(100dvh - 24px)' : 'none',
+                            overflow: isMobileViewport ? 'auto' : 'visible',
                             boxShadow: '0 6px 24px rgba(0,0,0,0.2)' 
                         }}>
                             <h3 style={{ marginTop: 0 }}>Asignar Ruta</h3>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobileViewport ? 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' : '1fr 1fr', gap: 12 }}>
                                 <div>
                                     <label style={{ fontSize: 13 }}>Tipo de Parada</label>
                                     <select
@@ -856,9 +869,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                         rows={1}
                                     />
                                 </div>
-                                <div style={{ gridColumn: '1 / span 2' }}>
+                                <div style={{ gridColumn: isMobileViewport ? '1 / -1' : '1 / span 2' }}>
                                     <label style={{ fontSize: 13 }}>Días</label>
-                                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                                    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: isMobileViewport ? 'wrap' : 'nowrap' }}>
                                         <button
                                             type="button"
                                             onClick={() => {

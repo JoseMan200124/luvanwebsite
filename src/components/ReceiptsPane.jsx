@@ -97,7 +97,7 @@ const ReceiptsPane = ({
     return (
         <>
             {/* Upload dialog */}
-            <Dialog open={uploadDialogOpen} onClose={closeUploadDialog} maxWidth="xs" fullWidth>
+            <Dialog open={uploadDialogOpen} onClose={closeUploadDialog} maxWidth="xs" fullWidth PaperProps={{ sx: { m: { xs: 1, sm: 2 }, width: { xs: 'calc(100% - 16px)', sm: '100%' } } }}>
                 <DialogTitle>Subir boleta</DialogTitle>
                 <DialogContent dividers>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -156,9 +156,9 @@ const ReceiptsPane = ({
                     </Button>
                 </DialogActions>
             </Dialog>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', mb: 1, gap: 1, flexDirection: { xs: 'column', sm: 'row' } }}>
                 <Typography variant="subtitle2">Boletas</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, gap: 1, flexWrap: 'wrap', width: { xs: '100%', sm: 'auto' } }}>
                     {canManageReceipts && onUploadReceipt && (
                         <Button
                             size="small"
@@ -169,7 +169,7 @@ const ReceiptsPane = ({
                             <span>Subir</span>
                         </Button>
                     )}
-                    <FormControl size="small" sx={{ minWidth: 160 }}>
+                    <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 160 }, width: { xs: '100%', sm: 'auto' } }}>
                         <InputLabel>Mes</InputLabel>
                         <Select label="Mes" value={boletaMonth} onChange={(e) => setBoletaMonth(e.target.value)}>
                             <MenuItem value="">(Todos)</MenuItem>
@@ -189,7 +189,7 @@ const ReceiptsPane = ({
                             {list.map(r => {
                                 const adminUploaded = isAdminUploadedReceipt(r);
                                 return (
-                                    <Box key={r.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, cursor: 'pointer', '&:hover': { boxShadow: 3 }, borderRadius: 1, background: selectedReceipt?.id === r.id ? '#eef2ff' : '#fafafa' }} onClick={async () => { setSelectedReceipt(r); setReceiptZoom(1); }}>
+                                    <Box key={r.id} sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, gap: 1, p: 1, cursor: 'pointer', '&:hover': { boxShadow: 3 }, borderRadius: 1, background: selectedReceipt?.id === r.id ? '#eef2ff' : '#fafafa', flexDirection: { xs: 'column', sm: 'row' } }} onClick={async () => { setSelectedReceipt(r); setReceiptZoom(1); }}>
                                         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flexWrap: 'wrap' }}>
                                                 <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1 }}>{r.name || r.filename || 'Boleta'}</Typography>
@@ -199,8 +199,8 @@ const ReceiptsPane = ({
                                                 <Typography variant="caption" color="text.secondary">{formatReceiptDate(getReceiptDisplayDate(r))}</Typography>
                                             )}
                                         </Box>
-                                        <Box sx={{ flex: 1 }} />
-                                        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                                        <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
+                                        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', justifyContent: { xs: 'flex-end', sm: 'center' }, flexWrap: 'wrap' }}>
                                             {r.fileUrl && (<Button size="small" onClick={(e) => { e.stopPropagation(); setSelectedReceipt(r); setReceiptZoom(1); }}>Ver</Button>)}
                                             {r.fileUrl && (<Button size="small" onClick={(e) => { e.stopPropagation(); openInNewTab(r.fileUrl); }}>Descargar</Button>)}
                                         </Box>
@@ -215,14 +215,14 @@ const ReceiptsPane = ({
 
             {selectedReceipt && (
                 <Box sx={{ mt: 1, mb: 1, p: 1, border: '1px solid rgba(0,0,0,0.04)', borderRadius: 1, backgroundColor: '#fafafa' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                         <IconButton size="small" onClick={() => setSelectedReceipt(null)} sx={{ mr: 1 }} aria-label="volver">
                             <ArrowBackIcon fontSize="small" />
                         </IconButton>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{getReceiptDisplayDate(selectedReceipt) ? `Boleta - ${formatReceiptDate(getReceiptDisplayDate(selectedReceipt))}` : 'Boleta'}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0, flex: '1 1 180px', overflowWrap: 'anywhere' }}>{getReceiptDisplayDate(selectedReceipt) ? `Boleta - ${formatReceiptDate(getReceiptDisplayDate(selectedReceipt))}` : 'Boleta'}</Typography>
                         {isAdminUploadedReceipt(selectedReceipt) && <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ height: 20 }} />}
-                        <Box sx={{ flex: 1 }} />
-                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                             <Button size="small" onClick={() => setReceiptZoom(z => Math.max(0.25, Number((z - 0.25).toFixed(2))))}>-</Button>
                             <Typography variant="caption">{`${Math.round(receiptZoom * 100)}%`}</Typography>
                             <Button size="small" onClick={() => setReceiptZoom(z => Math.min(3, Number((z + 0.25).toFixed(2))))}>+</Button>
@@ -231,7 +231,7 @@ const ReceiptsPane = ({
                     </Box>
                     <Box sx={{ textAlign: 'center' }}>
                         {selectedReceipt.fileUrl && (/\.(png|jpe?g|gif|webp|bmp)(\?|$)/i.test(selectedReceipt.fileUrl)) && (
-                            <Box sx={{ width: '100%', maxHeight: 450, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+                            <Box sx={{ width: '100%', maxHeight: { xs: 'calc(100dvh - 260px)', sm: 450 }, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
                                 <img src={selectedReceipt.fileUrl} alt="boleta" style={{ transform: `scale(${receiptZoom})`, transformOrigin: 'center top', display: 'block', maxWidth: '100%', height: 'auto' }} />
                             </Box>
                         )}
@@ -240,7 +240,7 @@ const ReceiptsPane = ({
                                 <Box sx={{ mb: 1, display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
                                     <Button size="small" onClick={() => openInNewTab(selectedReceipt.fileUrl)}>Descargar</Button>
                                 </Box>
-                                <iframe title="boleta-preview" src={selectedReceipt.fileUrl} style={{ width: '100%', height: '60vh', border: 'none' }} />
+                                <iframe title="boleta-preview" src={selectedReceipt.fileUrl} style={{ width: '100%', height: 'min(60vh, calc(100dvh - 240px))', border: 'none' }} />
                             </Box>
                         )}
                         {!selectedReceipt.fileUrl && <Typography variant="caption">No hay archivo disponible</Typography>}

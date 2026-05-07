@@ -330,8 +330,8 @@ const PilotsManagementPage = () => {
                                     ) : (
                                         // Vista desktop: tabla con ordenamiento
                                         <>
-                                            <TableContainer>
-                                                <Table>
+                                            <TableContainer sx={{ overflowX: 'auto' }}>
+                                                <Table sx={{ minWidth: 860 }}>
                                                     <TableHead>
                                                         <TableRow>
                                                             <TableCell sortDirection={orderBy === 'name' ? order : false}>

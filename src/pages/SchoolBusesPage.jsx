@@ -801,8 +801,8 @@ const SchoolBusesPage = () => {
                             </Typography>
                         </Box>
                     ) : (
-                        <TableContainer component={Paper} sx={{ mt: 2 }}>
-                            <Table>
+                        <TableContainer component={Paper} sx={{ mt: 2, overflowX: 'auto' }}>
+                            <Table sx={{ minWidth: 980 }}>
                                 <TableHead>
                                     <TableRow>
                                         <TableCell><strong>Número de Ruta</strong></TableCell>

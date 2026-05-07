@@ -591,8 +591,8 @@ const CorporateBusesPage = () => {
                             </Typography>
                         </Box>
                     ) : (
-                        <TableContainer component={Paper} sx={{ mt: 2 }}>
-                            <Table>
+                        <TableContainer component={Paper} sx={{ mt: 2, overflowX: 'auto' }}>
+                            <Table sx={{ minWidth: 900 }}>
                                 <TableHead>
                                     <TableRow>
                                         <TableCell><strong>Número de Ruta</strong></TableCell>

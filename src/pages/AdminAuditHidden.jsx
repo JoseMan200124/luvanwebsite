@@ -701,8 +701,8 @@ export default function AdminAuditHidden() {
                                 <Chip size="small" color="success" variant="outlined" label={`${comparisonStats.same} iguales`} />
                                 <Chip size="small" color="warning" variant="outlined" label={`${comparisonStats.changed} distintas`} />
                             </Stack>
-                            <TableContainer sx={{ maxHeight: 360 }}>
-                                <Table size="small" stickyHeader>
+                            <TableContainer sx={{ maxHeight: 360, overflowX: 'auto' }}>
+                                <Table size="small" stickyHeader sx={{ minWidth: 720 }}>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell sx={{ width: 72 }}>Línea</TableCell>
@@ -747,7 +747,7 @@ export default function AdminAuditHidden() {
                     </Stack>
                     <Divider />
 
-                    <TableContainer sx={{ maxHeight: 'calc(100vh - 220px)', minHeight: 260 }}>
+                    <TableContainer sx={{ maxHeight: { xs: 'calc(100dvh - 260px)', sm: 'calc(100vh - 220px)' }, minHeight: 260, overflowX: 'auto' }}>
                         <Table stickyHeader size="small" sx={{ minWidth: 1480 }}>
                             <TableHead>
                                 <TableRow>

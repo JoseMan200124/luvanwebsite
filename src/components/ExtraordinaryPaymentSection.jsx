@@ -506,8 +506,8 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                 {/* Tabla de pagos extraordinarios */}
                 <Box mt={2}>
                     {extraPayments.length > 0 ? (
-                        <TableContainer component={Paper}>
-                            <Table size="small">
+                        <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+                            <Table size="small" sx={{ minWidth: 640 }}>
                                 <TableHead>
                                     <TableRow>
                                         <TableCell>Colegio</TableCell>

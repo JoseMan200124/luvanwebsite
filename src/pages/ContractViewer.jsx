@@ -186,7 +186,8 @@ const ContractViewer = () => {
                                     <div
                                         style={{
                                             border: '1px solid #000',
-                                            width: '300px',
+                                            width: 'min(300px, 100%)',
+                                            maxWidth: '100%',
                                             height: '150px'
                                         }}
                                     >
@@ -195,7 +196,7 @@ const ContractViewer = () => {
                                         </Typography>
                                         <SignatureCanvas
                                             penColor="black"
-                                            canvasProps={{ width: 300, height: 150 }}
+                                            canvasProps={{ width: 300, height: 150, style: { display: 'block', width: '100%', maxWidth: '100%', height: 150 } }}
                                             ref={(ref) => {
                                                 if (ref) {
                                                     sigCanvasRefs.current[nameTrim] = ref;
