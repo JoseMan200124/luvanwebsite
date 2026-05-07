@@ -11,7 +11,7 @@ import {
     TableCell,
     TableBody,
     CircularProgress,
-    Grid,
+    Grid2,
     Chip,
     IconButton,
     Tooltip,
@@ -855,20 +855,20 @@ const ActivityLogPage = () => {
                                                 </MobileField>
                                                 <MobileField>
                                                     <MobileLabel>Estado de Ruta:</MobileLabel>
-                                                    {bus.currentRoute ? (
-                                                        !bus.currentRoute.endTime ? (
-                                                            <MobileValue>
-                                                                En Ruta (Inicio:{' '}
-                                                                {formatGuatemalaDatetime(bus.currentRoute.startTime)})
-                                                            </MobileValue>
-                                                        ) : (
-                                                            <MobileValue>
-                                                                Finalizada a las{' '}
-                                                                {formatGuatemalaDatetime(bus.currentRoute.endTime)}
-                                                            </MobileValue>
-                                                        )
-                                                    ) : (
+                                                    {!bus.currentRoute && (
                                                         <MobileValue>Sin ruta activa</MobileValue>
+                                                    )}
+                                                    {bus.currentRoute && !bus.currentRoute.endTime && (
+                                                        <MobileValue>
+                                                            En Ruta (Inicio:{' '}
+                                                            {formatGuatemalaDatetime(bus.currentRoute.startTime)})
+                                                        </MobileValue>
+                                                    )}
+                                                    {bus.currentRoute && bus.currentRoute.endTime && (
+                                                        <MobileValue>
+                                                            Finalizada a las{' '}
+                                                            {formatGuatemalaDatetime(bus.currentRoute.endTime)}
+                                                        </MobileValue>
                                                     )}
                                                 </MobileField>
                                                 <MobileField>
@@ -991,27 +991,7 @@ const ActivityLogPage = () => {
                                                         color="success"
                                                         sx={{ ml: 2 }}
                                                     />
-                                                    {bus.currentRoute ? (
-                                                        !bus.currentRoute.endTime ? (
-                                                            <Chip
-                                                                label={`En Ruta (Inicio: ${formatGuatemalaDatetime(
-                                                                    bus.currentRoute.startTime
-                                                                )})`}
-                                                                color="primary"
-                                                                size="small"
-                                                                sx={{ ml: 2 }}
-                                                            />
-                                                        ) : (
-                                                            <Chip
-                                                                label={`Finalizada a las ${formatGuatemalaDatetime(
-                                                                    bus.currentRoute.endTime
-                                                                )}`}
-                                                                color="secondary"
-                                                                size="small"
-                                                                sx={{ ml: 2 }}
-                                                            />
-                                                        )
-                                                    ) : (
+                                                    {!bus.currentRoute && (
                                                         <Chip
                                                             label="Sin ruta activa"
                                                             color="default"
@@ -1019,11 +999,31 @@ const ActivityLogPage = () => {
                                                             sx={{ ml: 2 }}
                                                         />
                                                     )}
+                                                    {bus.currentRoute && !bus.currentRoute.endTime && (
+                                                        <Chip
+                                                            label={`En Ruta (Inicio: ${formatGuatemalaDatetime(
+                                                                bus.currentRoute.startTime
+                                                            )})`}
+                                                            color="primary"
+                                                            size="small"
+                                                            sx={{ ml: 2 }}
+                                                        />
+                                                    )}
+                                                    {bus.currentRoute && bus.currentRoute.endTime && (
+                                                        <Chip
+                                                            label={`Finalizada a las ${formatGuatemalaDatetime(
+                                                                bus.currentRoute.endTime
+                                                            )}`}
+                                                            color="secondary"
+                                                            size="small"
+                                                            sx={{ ml: 2 }}
+                                                        />
+                                                    )}
                                                 </AccordionSummaryStyled>
 
                                                 <AccordionDetails>
-                                                    <Grid container spacing={2}>
-                                                        <Grid item xs={12} md={6}>
+                                                    <Grid2 container spacing={2}>
+                                                        <Grid2 size={{ xs: 12, md: 6 }}>
                                                             <Typography variant="body2" sx={{ mb: 1 }}>
                                                                 <strong>Piloto: </strong>
                                                                 {bus.pilot ? bus.pilot.name : '—'}
@@ -1040,8 +1040,8 @@ const ActivityLogPage = () => {
                                                                 <strong>Descripción: </strong>
                                                                 {bus.description || '—'}
                                                             </Typography>
-                                                        </Grid>
-                                                        <Grid item xs={12} md={6}>
+                                                        </Grid2>
+                                                        <Grid2 size={{ xs: 12, md: 6 }}>
                                                             {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
                                                                 <Table size="small">
                                                                     <TableHead>
@@ -1068,8 +1068,8 @@ const ActivityLogPage = () => {
                                                                     No hay paradas registradas.
                                                                 </Typography>
                                                             )}
-                                                        </Grid>
-                                                    </Grid>
+                                                        </Grid2>
+                                                    </Grid2>
                                                 </AccordionDetails>
 
                                                 <Divider />
@@ -1131,9 +1131,9 @@ const ActivityLogPage = () => {
                             Emergencias
                         </SectionTitle>
 
-                        <Grid container spacing={2} mt={1}>
+                        <Grid2 container spacing={2} mt={1}>
                             {/* Incidentes */}
-                            <Grid item xs={12} md={6}>
+                            <Grid2 size={{ xs: 12, md: 6 }}>
                                 <Typography
                                     variant="subtitle1"
                                     gutterBottom
@@ -1175,11 +1175,12 @@ const ActivityLogPage = () => {
                                     />
                                 </FiltersRow>
 
-                                {filteredIncidents.length === 0 ? (
+                                {filteredIncidents.length === 0 && (
                                     <Typography variant="body2" color="textSecondary">
                                         No hay incidentes reportados con esos filtros
                                     </Typography>
-                                ) : isMobile ? (
+                                )}
+                                {filteredIncidents.length > 0 && isMobile && (
                                     <>
                                         {incPaginated.map((incident) => (
                                             <MobileCard key={incident.id}>
@@ -1245,7 +1246,8 @@ const ActivityLogPage = () => {
                                             labelRowsPerPage="Filas por página"
                                         />
                                     </>
-                                ) : (
+                                )}
+                                {filteredIncidents.length > 0 && !isMobile && (
                                     <TableContainer sx={{ overflowX: 'auto' }}>
                                         <Table size="small">
                                             <TableHead>
@@ -1333,10 +1335,10 @@ const ActivityLogPage = () => {
                                         </Table>
                                     </TableContainer>
                                 )}
-                            </Grid>
+                            </Grid2>
 
                             {/* Emergencias */}
-                            <Grid item xs={12} md={6}>
+                            <Grid2 size={{ xs: 12, md: 6 }}>
                                 <Typography
                                     variant="subtitle1"
                                     gutterBottom
@@ -1371,11 +1373,12 @@ const ActivityLogPage = () => {
                                     />
                                 </FiltersRow>
 
-                                {filteredEmergencies.length === 0 ? (
+                                {filteredEmergencies.length === 0 && (
                                     <Typography variant="body2" color="textSecondary">
                                         No hay emergencias registradas con esos filtros
                                     </Typography>
-                                ) : isMobile ? (
+                                )}
+                                {filteredEmergencies.length > 0 && isMobile && (
                                     <>
                                         {emePaginated.map((eme) => (
                                             <MobileCard key={eme.id}>
@@ -1430,7 +1433,8 @@ const ActivityLogPage = () => {
                                             labelRowsPerPage="Filas por página"
                                         />
                                     </>
-                                ) : (
+                                )}
+                                {filteredEmergencies.length > 0 && !isMobile && (
                                     <TableContainer sx={{ overflowX: 'auto' }}>
                                         <Table size="small">
                                             <TableHead>
@@ -1501,8 +1505,8 @@ const ActivityLogPage = () => {
                                         </Table>
                                     </TableContainer>
                                 )}
-                            </Grid>
-                        </Grid>
+                            </Grid2>
+                        </Grid2>
                     </SectionPaper>
 
                     {/* Sección Pagos (no supervisor) */}
@@ -1544,15 +1548,17 @@ const ActivityLogPage = () => {
                                 />
                             </FiltersRow>
 
-                            {loadingPayments ? (
+                            {loadingPayments && (
                                 <div tw="flex justify-center p-4">
                                     <CircularProgress />
                                 </div>
-                            ) : payments.length === 0 ? (
+                            )}
+                            {!loadingPayments && payments.length === 0 && (
                                 <Typography variant="body2" color="textSecondary">
                                     Aún no hay registros de pagos con esos filtros.
                                 </Typography>
-                            ) : isMobile ? (
+                            )}
+                            {!loadingPayments && payments.length > 0 && isMobile && (
                                 <>
                                     {payments.map((pay) => (
                                         <MobileCard key={pay.id}>
@@ -1605,7 +1611,8 @@ const ActivityLogPage = () => {
                                         labelRowsPerPage="Filas por página"
                                     />
                                 </>
-                            ) : (
+                            )}
+                            {!loadingPayments && payments.length > 0 && !isMobile && (
                                 <>
                                     <Table size="small">
                                         <TableHead>
@@ -1707,8 +1714,8 @@ const ActivityLogPage = () => {
                             <SectionTitle variant="h6" gutterBottom sx={{ mt: 4 }}>
                                 Análisis general de Pagos
                             </SectionTitle>
-                            <Grid container spacing={4}>
-                                <Grid item xs={12} md={4}>
+                            <Grid2 container spacing={4}>
+                                <Grid2 size={{ xs: 12, md: 4 }}>
                                     <Paper elevation={2} sx={{ p: 2 }}>
                                         <Typography variant="subtitle2" gutterBottom>
                                             Total de registros de pago
@@ -1717,8 +1724,8 @@ const ActivityLogPage = () => {
                                             {totalPaymentsGlobal}
                                         </Typography>
                                     </Paper>
-                                </Grid>
-                                <Grid item xs={12} md={4}>
+                                </Grid2>
+                                <Grid2 size={{ xs: 12, md: 4 }}>
                                     <Paper elevation={2} sx={{ p: 2 }}>
                                         <Typography variant="subtitle2" gutterBottom>
                                             Pagos completados
@@ -1727,8 +1734,8 @@ const ActivityLogPage = () => {
                                             {totalPaidCountGlobal}
                                         </Typography>
                                     </Paper>
-                                </Grid>
-                                <Grid item xs={12} md={4}>
+                                </Grid2>
+                                <Grid2 size={{ xs: 12, md: 4 }}>
                                     <Paper elevation={2} sx={{ p: 2 }}>
                                         <Typography variant="subtitle2" gutterBottom>
                                             Pagos en Mora
@@ -1737,11 +1744,11 @@ const ActivityLogPage = () => {
                                             {totalMoraCountGlobal}
                                         </Typography>
                                     </Paper>
-                                </Grid>
-                            </Grid>
+                                </Grid2>
+                            </Grid2>
 
-                            <Grid container spacing={4} sx={{ mt: 2 }}>
-                                <Grid item xs={12} md={6}>
+                            <Grid2 container spacing={4} sx={{ mt: 2 }}>
+                                <Grid2 size={{ xs: 12, md: 6 }}>
                                     <Typography variant="subtitle2" gutterBottom>
                                         Distribución por Estatus
                                     </Typography>
@@ -1764,8 +1771,8 @@ const ActivityLogPage = () => {
                                         <RechartsTooltip />
                                         <Legend />
                                     </PieChart>
-                                </Grid>
-                                <Grid item xs={12} md={6}>
+                                </Grid2>
+                                <Grid2 size={{ xs: 12, md: 6 }}>
                                     <Typography variant="subtitle2" gutterBottom>
                                         Montos Globales
                                     </Typography>
@@ -1789,8 +1796,8 @@ const ActivityLogPage = () => {
                                         <Bar dataKey="Saldo (leftover)" fill="#82ca9d" />
                                         <Bar dataKey="Multas (penalty)" fill="#ffc658" />
                                     </BarChart>
-                                </Grid>
-                            </Grid>
+                                </Grid2>
+                            </Grid2>
                         </SectionPaper>
                     )}
                 </div>
@@ -1806,20 +1813,25 @@ const ActivityLogPage = () => {
                 >
                     <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
                     <DialogContent dividers>
-                        {loadingBoletas ? (
+                        {loadingBoletas && (
                             <div tw="flex justify-center p-4">
                                 <CircularProgress />
                             </div>
-                        ) : currentBoletas.length === 0 ? (
+                        )}
+                        {!loadingBoletas && currentBoletas.length === 0 && (
                             <Typography>No hay boletas para este padre.</Typography>
-                        ) : (
-                            <Grid container spacing={2}>
+                        )}
+                        {!loadingBoletas && currentBoletas.length > 0 && (
+                            <Grid2 container spacing={2}>
                                 {currentBoletas.map((b) => (
-                                    <Grid item xs={12} md={4} key={b.id}>
+                                    <Grid2 size={{ xs: 12, md: 4 }} key={b.id}>
                                         <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
+                                            {String(b.uploadSource || '').toUpperCase() === 'ADMIN' && (
+                                                <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ mb: 1 }} />
+                                            )}
                                             <Typography variant="body2">
-                                                <strong>Subido el:</strong>{' '}
-                                                {formatGuatemalaDatetime(b.uploadedAt)}
+                                                <strong>Fecha:</strong>{' '}
+                                                {formatGuatemalaDatetime(b.displayDate || b.uploadedAt)}
                                             </Typography>
                                             <img
                                                 src={b.fileUrl}
@@ -1832,9 +1844,9 @@ const ActivityLogPage = () => {
                                                 }}
                                             />
                                         </Paper>
-                                    </Grid>
+                                    </Grid2>
                                 ))}
-                            </Grid>
+                            </Grid2>
                         )}
                     </DialogContent>
                     <DialogActions>
@@ -1918,8 +1930,8 @@ const ActivityLogPage = () => {
             >
                 <DialogTitle>Reportar Incidente</DialogTitle>
                 <DialogContent dividers>
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} sm={6}>
+                    <Grid2 container spacing={2}>
+                        <Grid2 size={{ xs: 12, sm: 6 }}>
                             <FormControl fullWidth margin="normal">
                                 <InputLabel id="tipo-falla-label">Tipo de Falla</InputLabel>
                                 <Select
@@ -1934,9 +1946,9 @@ const ActivityLogPage = () => {
                                     <MenuItem value="otro">Otro</MenuItem>
                                 </Select>
                             </FormControl>
-                        </Grid>
+                        </Grid2>
 
-                        <Grid item xs={12} sm={6}>
+                        <Grid2 size={{ xs: 12, sm: 6 }}>
                             <FormControl fullWidth margin="normal">
                                 <InputLabel id="tipo-incidente-label">Tipo de Incidente</InputLabel>
                                 <Select
@@ -1949,20 +1961,20 @@ const ActivityLogPage = () => {
                                     <MenuItem value="accidente">Problema mayor</MenuItem>
                                 </Select>
                             </FormControl>
-                        </Grid>
+                        </Grid2>
 
                         {incidentForm.tipoFalla === 'otro' && (
-                            <Grid item xs={12}>
+                            <Grid2 size={{ xs: 12 }}>
                                 <TextField
                                     label="Detalle de la Falla (Otro)"
                                     value={incidentForm.otroFallaDetalle}
                                     onChange={(e) => handleIncidentFormChange('otroFallaDetalle', e.target.value)}
                                     fullWidth
                                 />
-                            </Grid>
+                            </Grid2>
                         )}
 
-                        <Grid item xs={12}>
+                        <Grid2 size={{ xs: 12 }}>
                             <FormControlLabel
                                 control={
                                     <Switch
@@ -1974,9 +1986,9 @@ const ActivityLogPage = () => {
                                 }
                                 label="¿Pudo continuar la ruta?"
                             />
-                        </Grid>
+                        </Grid2>
 
-                        <Grid item xs={12}>
+                        <Grid2 size={{ xs: 12 }}>
                             <FormControlLabel
                                 control={
                                     <Switch
@@ -1988,9 +2000,9 @@ const ActivityLogPage = () => {
                                 }
                                 label="¿Se utilizó bus suplente?"
                             />
-                        </Grid>
+                        </Grid2>
 
-                        <Grid item xs={12}>
+                        <Grid2 size={{ xs: 12 }}>
                             <TextField
                                 label="Descripción"
                                 value={incidentForm.descripcion}
@@ -1999,8 +2011,8 @@ const ActivityLogPage = () => {
                                 rows={4}
                                 fullWidth
                             />
-                        </Grid>
-                    </Grid>
+                        </Grid2>
+                    </Grid2>
                 </DialogContent>
                 <DialogActions>
                     <Button variant="outlined" onClick={handleCloseIncidentDialog}>
