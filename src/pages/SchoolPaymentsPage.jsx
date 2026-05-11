@@ -266,9 +266,12 @@ const SchoolPaymentsPage = () => {
     const fetchAllSchools = useCallback(async () => {
         try {
             const res = await api.get('/schools', { params: { ...(currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}), includeArchived: true } });
-            setAllSchools(res.data.schools || []);
+            const schools = res.data.schools || [];
+            setAllSchools(schools);
+            return schools;
         } catch (err) {
             console.error('fetchAllSchools', err);
+            return [];
         }
     }, [currentCicloEscolarId]);
 
@@ -823,9 +826,17 @@ const SchoolPaymentsPage = () => {
                 }
 
                 // ensure schools list is loaded only when opening register (needed for account select)
-                if (!allSchools || allSchools.length === 0) {
-                    try { await fetchAllSchools(); } catch (e) { /* ignore */ }
+                let resolvedSchools = allSchools;
+                if (!resolvedSchools || resolvedSchools.length === 0) {
+                    try { resolvedSchools = await fetchAllSchools() || []; } catch (e) { resolvedSchools = []; }
                 }
+
+                // Re-set bankAccountNumber using the payment's actual school so that navigating
+                // from a notification to a different school always picks the correct account.
+                const paymentSchoolFromList = payment.schoolId ? resolvedSchools.find(s => s.id === payment.schoolId) : null;
+                const correctBankAccount = payment.bankAccountNumber || paymentSchoolFromList?.bankAccount || (school ? school.bankAccount : '') || '';
+                setRegisterPaymentExtra(prev => ({ ...prev, bankAccountNumber: correctBankAccount }));
+                setPayPenaltyAccount(correctBankAccount);
 
                 // CRÍTICO: Recalcular mora primero para asegurar datos actualizados
                 let updatedPayment = payment;
