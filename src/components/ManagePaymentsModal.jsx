@@ -706,7 +706,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         <HelpIcon fontSize="small" />
                     </MuiIconButton>
                 </Box>
-                <Box sx={{ overflowX: 'auto' }}>
+                <Box sx={{ overflowX: 'hidden', maxWidth: '100%' }}>
                 {isMobile ? (
                     <Stack spacing={1.25}>
                         {(!histLoading && sortedHistories.length === 0) && (
@@ -727,7 +727,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 onOpenNotes={(notes) => { setTxNotes(notes || ''); setOpenTxNotes(true); }}
                             />
                         ))}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', overflowX: 'auto' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '100%' }}>
                             <TablePagination
                                 component="div"
                                 count={histTotal}
@@ -737,14 +737,18 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 onRowsPerPageChange={(e) => { setHistLimit(parseInt(e.target.value, 10)); setHistPage(0); }}
                                 rowsPerPageOptions={[5,10,25,50]}
                                 labelRowsPerPage="Filas"
+                                sx={{
+                                    '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
+                                    '& .MuiTablePagination-spacer': { display: 'none' }
+                                }}
                             />
                         </Box>
                     </Stack>
                 ) : (
-                <Table size="small" sx={{ minWidth: 900 }}>
+                <Table size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
                     <TableHead>
                         <TableRow>
-                            <TableCell align="center" sx={{ minWidth: 100 }}>
+                            <TableCell align="center" sx={{ width: 90, whiteSpace: 'nowrap' }}>
                                 <TableSortLabel
                                     active={histOrderBy === 'date'}
                                     direction={histOrderBy === 'date' ? histOrder : 'desc'}
@@ -753,7 +757,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     Fecha
                                 </TableSortLabel>
                             </TableCell>
-                            <TableCell align="center" sx={{ minWidth: 120 }}>
+                            <TableCell align="center" sx={{ width: 95, whiteSpace: 'nowrap' }}>
                                 <TableSortLabel
                                     active={histOrderBy === 'type'}
                                     direction={histOrderBy === 'type' ? histOrder : 'asc'}
@@ -762,7 +766,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     Tipo
                                 </TableSortLabel>
                             </TableCell>
-                            <TableCell align="center" sx={{ minWidth: 100 }}>
+                            <TableCell align="center" sx={{ width: 95, whiteSpace: 'nowrap' }}>
                                 <TableSortLabel
                                     active={histOrderBy === 'source'}
                                     direction={histOrderBy === 'source' ? histOrder : 'asc'}
@@ -771,11 +775,11 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     Fuente
                                 </TableSortLabel>
                             </TableCell>
-                            <TableCell align="center" sx={{ minWidth: 100 }}>Monto</TableCell>
-                            <TableCell align="center" sx={{ minWidth: 110 }}>Desc. Extra</TableCell>
-                            <TableCell align="center" sx={{ minWidth: 120 }}>N° Boleta</TableCell>
-                            <TableCell align="center" sx={{ minWidth: 100 }}>Factura</TableCell>
-                            <TableCell align="left" sx={{ minWidth: 140 }}>Notas</TableCell>
+                            <TableCell align="center" sx={{ width: 105, whiteSpace: 'nowrap' }}>Monto</TableCell>
+                            <TableCell align="center" sx={{ width: 110, whiteSpace: 'nowrap' }}>Desc. Extra</TableCell>
+                            <TableCell align="center" sx={{ width: 140, whiteSpace: 'nowrap' }}>N° Boleta</TableCell>
+                            <TableCell align="center" sx={{ width: 80, whiteSpace: 'nowrap' }}>Factura</TableCell>
+                            <TableCell align="left" sx={{ width: 80, whiteSpace: 'nowrap' }}>Notas</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -820,7 +824,13 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         <Typography variant="body2">Q {(Number(h.extraordinaryDiscount || 0)).toFixed(2)}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{receiptVal}</Typography>
+                                        <Typography
+                                            variant="body2"
+                                            sx={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                            title={receiptVal}
+                                        >
+                                            {receiptVal}
+                                        </Typography>
                                     </TableCell>
                                     <TableCell align="center">
                                         <Checkbox checked={invoiceReq} onChange={() => handleToggleInvoiceRow(h)} />
@@ -836,7 +846,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
                         <TableRow>
                             <TableCell colSpan={8} sx={{ border: 'none', py: 1 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
                                     <TablePagination
                                         component="div"
                                         count={histTotal}
@@ -846,6 +856,10 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         onRowsPerPageChange={(e) => { setHistLimit(parseInt(e.target.value, 10)); setHistPage(0); }}
                                         rowsPerPageOptions={[5,10,25,50]}
                                         labelRowsPerPage="Filas"
+                                        sx={{
+                                            '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
+                                            '& .MuiTablePagination-spacer': { display: 'none' }
+                                        }}
                                     />
                                 </Box>
                             </TableCell>
