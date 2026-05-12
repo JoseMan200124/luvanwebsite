@@ -828,7 +828,7 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const handleOpenEditSchedulesModal = () => {
-        if (!selectedSchool?.id) return;
+        if (!selectedSchool) return;
         setOpenEditSchedulesModal(true);
     };
 
@@ -860,7 +860,10 @@ const CicloEscolarSelectionPage = () => {
             setSchoolRouteSchedules(updatedRS);
         }
 
-        fetchSchoolsByYear();
+        // Only refetch when the school already exists in DB.
+        if (selectedSchool?.id) {
+            fetchSchoolsByYear();
+        }
     };
 
     const handleCloseSubmissionDialog = () => {
@@ -2135,7 +2138,7 @@ const CicloEscolarSelectionPage = () => {
                                         variant="contained"
                                         startIcon={<Edit />}
                                         onClick={handleOpenEditSchedulesModal}
-                                        disabled={!selectedSchool?.id}
+                                        disabled={!selectedSchool}
                                     >
                                         Editar Horarios del Colegio
                                     </Button>
@@ -2480,7 +2483,7 @@ const CicloEscolarSelectionPage = () => {
             <EditSchedulesModal
                 open={openEditSchedulesModal}
                 onClose={handleCloseEditSchedulesModal}
-                school={selectedSchool ? { ...selectedSchool, schedules: schoolSchedules } : null}
+                school={selectedSchool ? { ...selectedSchool, schedules: schoolSchedules, routeSchedules: schoolRouteSchedules } : null}
                 onSuccess={handleEditSchedulesSuccess}
                 onNotify={(snackbarState) => setSnackbar(snackbarState)}
             />

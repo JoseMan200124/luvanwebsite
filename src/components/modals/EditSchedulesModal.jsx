@@ -32,6 +32,8 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   const notify = (message, severity = 'info') => {
     if (onNotify) onNotify({ open: true, message, severity });
   };
+
+  const isDraft = !school?.id;
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -96,6 +98,20 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   const requestRemoveSchedule = async (index) => {
     const targetSchedule = schedules[index];
     setPendingDeleteIndex(index);
+    // In draft mode (school without id), there's nothing persisted yet.
+    if (isDraft) {
+      setDeleteImpactLoading(false);
+      setDeleteImpact({
+        scheduleCode: targetSchedule?.code || null,
+        scheduleId: null,
+        affectedScheduleSlots: 0,
+        affectedStudents: 0,
+        affectedFamilies: 0
+      });
+      setConfirmDeleteOpen(true);
+      return;
+    }
+
     setDeleteImpactLoading(true);
     setDeleteImpact(null);
 
@@ -272,6 +288,40 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
 
       const payloadSchedules = buildPayloadSchedules();
 
+      // Draft mode (creating school): allow saving with 'N/A' times.
+      if (isDraft) {
+        const allowedCodes = new Set((payloadSchedules || []).map(s => String(s.code || '').toUpperCase()).filter(Boolean));
+        const cleanedRouteSchedules = Array.isArray(school?.routeSchedules)
+          ? school.routeSchedules.map((entry) => ({
+            ...entry,
+            schedules: Array.isArray(entry?.schedules)
+              ? entry.schedules
+                .map((rs) => ({
+                  ...rs,
+                  code: rs?.code ? String(rs.code).toUpperCase() : rs?.code
+                }))
+                .filter((rs) => rs?.code && allowedCodes.has(String(rs.code).toUpperCase()))
+              : []
+          }))
+          : school?.routeSchedules;
+
+        const result = {
+          success: true,
+          school: {
+            ...(school || {}),
+            schedules: payloadSchedules,
+            // keep any existing draft routeSchedules if present
+            routeSchedules: cleanedRouteSchedules
+          },
+          scheduleChanges: { changes: [] }
+        };
+
+        notify('Horarios actualizados en borrador. Se guardarán al crear el colegio.', 'success');
+        onSuccess?.(result);
+        onClose();
+        return;
+      }
+
       const validation = validateSchedules(payloadSchedules);
       if (!validation.valid) {
         notify(validation.errors.join('; '), 'error');
@@ -327,7 +377,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Editar Horarios de {school?.name}</DialogTitle>
+      <DialogTitle>Editar Horarios de {school?.name || 'Colegio'}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {schedules.map((sch, scheduleIndex) => {
@@ -484,6 +534,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
             Si no confirmas, el horario no se eliminará.
           </Typography>
           <FormControlLabel
+            sx={{ display: isDraft ? 'none' : 'flex' }}
             control={(
               <Checkbox
                 checked={downloadAffectedOnSave}
