@@ -47,6 +47,7 @@ import {
     Add,
     ExpandMore,
     DeleteSweep as DeleteSweepIcon,
+    Mail,
     NotificationsActive as NotificationsActiveIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -61,6 +62,7 @@ import moment from 'moment';
 import PermissionGuard from '../components/PermissionGuard';
 import { DEFAULT_SCHEDULE_CODES, ensureSchedules, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 import EditSchedulesModal from '../components/modals/EditSchedulesModal';
+import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
 import { getCicloEscolarOptionLabel, getCiclosEscolares } from '../services/cicloEscolarService';
 
@@ -197,6 +199,7 @@ const CicloEscolarSelectionPage = () => {
     const [openQuickClear, setOpenQuickClear] = useState(false);
     const [quickClearReason, setQuickClearReason] = useState('');
     const [quickClearing, setQuickClearing] = useState(false);
+    const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openSendNotifModal, setOpenSendNotifModal] = useState(false);
     // Nombre legible del período actual (ej: Enero 2026)
     const monthNamesEs = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -1390,6 +1393,17 @@ const CicloEscolarSelectionPage = () => {
                                         Enviar Notificación
                                     </Button>
                                 </PermissionGuard>
+                                <PermissionGuard permission="mail-enviar-circular">
+                                    <Button
+                                        variant="outlined"
+                                        color="secondary"
+                                        startIcon={<Mail />}
+                                        onClick={() => setOpenCircularModal(true)}
+                                        sx={{ width: { xs: '100%', sm: 'auto' } }}
+                                    >
+                                        Enviar Circular
+                                    </Button>
+                                </PermissionGuard>
                                 <PermissionGuard permission="colegios-crear">
                                     <Button
                                         variant="outlined"
@@ -2565,6 +2579,15 @@ const CicloEscolarSelectionPage = () => {
                 open={openSendNotifModal}
                 onClose={() => setOpenSendNotifModal(false)}
                 schools={schools}
+            />
+
+            <CircularMasivaModal
+                open={openCircularModal}
+                onClose={() => setOpenCircularModal(false)}
+                schools={Array.isArray(schools) ? schools : []}
+                onSuccess={() => {
+                    setSnackbar({ open: true, message: 'Circular enviada exitosamente', severity: 'success' });
+                }}
             />
         </PageContainer>
     );

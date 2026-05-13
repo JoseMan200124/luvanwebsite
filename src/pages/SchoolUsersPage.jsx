@@ -65,7 +65,6 @@ import DuplicateEmailAlert from '../components/DuplicateEmailAlert';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
-import CircularMasivaModal from '../components/CircularMasivaModal';
 import BulkScheduleModal from '../components/modals/BulkScheduleModal';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
@@ -126,7 +125,6 @@ const SchoolUsersPage = () => {
     const [openServiceStatusModal, setOpenServiceStatusModal] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openRouteTypeModal, setOpenRouteTypeModal] = useState(false);
-    const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
     const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
     const [openSchoolSelectDialog, setOpenSchoolSelectDialog] = useState(false);
@@ -2314,18 +2312,6 @@ const SchoolUsersPage = () => {
                         <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
-                                color="secondary"
-                                startIcon={<Mail />}
-                                fullWidth
-                                onClick={() => setOpenCircularModal(true)}
-                                disabled={!canCreateUsersInManagedSchool}
-                            >
-                                Enviar Circular
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
                                 color="success"
                                 startIcon={<GetApp />}
                                 fullWidth
@@ -2821,16 +2807,6 @@ const SchoolUsersPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            {/* Modal Circular Masiva */}
-            <CircularMasivaModal
-                open={openCircularModal}
-                onClose={() => setOpenCircularModal(false)}
-                schools={Array.isArray(schools) ? schools : []}
-                onSuccess={() => {
-                    setSnackbar({ open: true, message: 'Circular enviada exitosamente', severity: 'success' });
-                }}
-            />
 
             {/* Modal para asignar buses */}
             <StudentScheduleModal
