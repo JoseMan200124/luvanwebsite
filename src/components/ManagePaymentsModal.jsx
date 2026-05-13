@@ -82,7 +82,18 @@ const getTransactionSourceMeta = (sourceVal) => {
 };
 
 const TransactionBadge = ({ label, backgroundColor, compact = false }) => (
-    <Box sx={{ display: 'inline-block', px: compact ? 1 : 1.5, py: compact ? 0.25 : 0.5, borderRadius: 1, backgroundColor, fontSize: compact ? '0.7rem' : '0.75rem', fontWeight: 600, overflowWrap: 'anywhere' }}>
+    <Box
+        sx={{
+            display: 'inline-block',
+            px: compact ? 1 : 1.5,
+            py: compact ? 0.25 : 0.5,
+            borderRadius: 1,
+            backgroundColor,
+            fontSize: compact ? '0.7rem' : '0.75rem',
+            fontWeight: 600,
+            whiteSpace: 'nowrap'
+        }}
+    >
         {label}
     </Box>
 );
@@ -472,10 +483,10 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" fullScreen={isMobile} PaperProps={{ sx: { m: { xs: 0, sm: 2 }, maxHeight: { xs: '100dvh', sm: 'calc(100% - 64px)' } } }}>
             <DialogTitle>Gestión de Pagos</DialogTitle>
-            <DialogContent dividers sx={{ p: { xs: 1.5, sm: 3 } }}>
+            <DialogContent sx={{ p: { xs: 1.5, sm: 3 } }}>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={12} sm={6}>
-                        <Box sx={{ border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, backgroundColor: '#fafafa' }}>
+                        <Box sx={{ border: 'none', borderRadius: 1, p: 2, backgroundColor: '#fafafa' }}>
                             <Typography variant="subtitle1">Familia</Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="h6"><strong>{family.familyLastName || '-'}</strong></Typography>
@@ -706,7 +717,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         <HelpIcon fontSize="small" />
                     </MuiIconButton>
                 </Box>
-                <Box sx={{ overflowX: 'hidden', maxWidth: '100%' }}>
+                <Box sx={{ overflowX: 'auto', maxWidth: '100%' }}>
                 {isMobile ? (
                     <Stack spacing={1.25}>
                         {(!histLoading && sortedHistories.length === 0) && (
@@ -745,10 +756,10 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         </Box>
                     </Stack>
                 ) : (
-                <Table size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
+                <Table size="small" sx={{ width: '100%' }}>
                     <TableHead>
                         <TableRow>
-                            <TableCell align="center" sx={{ width: 90, whiteSpace: 'nowrap' }}>
+                            <TableCell align="center">
                                 <TableSortLabel
                                     active={histOrderBy === 'date'}
                                     direction={histOrderBy === 'date' ? histOrder : 'desc'}
@@ -757,7 +768,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     Fecha
                                 </TableSortLabel>
                             </TableCell>
-                            <TableCell align="center" sx={{ width: 95, whiteSpace: 'nowrap' }}>
+                            <TableCell align="center">
                                 <TableSortLabel
                                     active={histOrderBy === 'type'}
                                     direction={histOrderBy === 'type' ? histOrder : 'asc'}
@@ -766,7 +777,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     Tipo
                                 </TableSortLabel>
                             </TableCell>
-                            <TableCell align="center" sx={{ width: 95, whiteSpace: 'nowrap' }}>
+                            <TableCell align="center">
                                 <TableSortLabel
                                     active={histOrderBy === 'source'}
                                     direction={histOrderBy === 'source' ? histOrder : 'asc'}
@@ -775,11 +786,11 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     Fuente
                                 </TableSortLabel>
                             </TableCell>
-                            <TableCell align="center" sx={{ width: 105, whiteSpace: 'nowrap' }}>Monto</TableCell>
-                            <TableCell align="center" sx={{ width: 110, whiteSpace: 'nowrap' }}>Desc. Extra</TableCell>
-                            <TableCell align="center" sx={{ width: 140, whiteSpace: 'nowrap' }}>N° Boleta</TableCell>
-                            <TableCell align="center" sx={{ width: 80, whiteSpace: 'nowrap' }}>Factura</TableCell>
-                            <TableCell align="left" sx={{ width: 80, whiteSpace: 'nowrap' }}>Notas</TableCell>
+                            <TableCell align="center">Monto</TableCell>
+                            <TableCell align="center">Desc. Extra</TableCell>
+                            <TableCell align="center">N° Boleta</TableCell>
+                            <TableCell align="center">Factura</TableCell>
+                            <TableCell align="left">Notas</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -824,11 +835,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         <Typography variant="body2">Q {(Number(h.extraordinaryDiscount || 0)).toFixed(2)}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Typography
-                                            variant="body2"
-                                            sx={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                            title={receiptVal}
-                                        >
+                                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                                             {receiptVal}
                                         </Typography>
                                     </TableCell>

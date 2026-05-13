@@ -10,6 +10,7 @@ import {
     Card,
     CardContent,
     Button,
+    Menu,
     Paper,
     TablePagination,
     Grid,
@@ -135,11 +136,15 @@ const SchoolPaymentsPage = () => {
     const [statusFilter, setStatusFilter] = useState('');
     const [autoDebitFilter, setAutoDebitFilter] = useState('');
     const [serviceStatusFilter, setServiceStatusFilter] = useState('');
+    const [showInactive, setShowInactive] = useState(false);
     const [showDeleted, setShowDeleted] = useState(false);
     const [countersView, setCountersView] = useState('payment'); // 'payment' o 'service'
     useEffect(() => {
         if (statusFilter) setShowDeleted(false);
     }, [statusFilter]);
+    useEffect(() => {
+        if (serviceStatusFilter === 'INACTIVE') setShowInactive(false);
+    }, [serviceStatusFilter]);
     // client-side pagination state (we fetch all data once and paginate locally)
     const [page, setPage] = useState(0); // UI page (0-based)
     const [rowsPerPage, setRowsPerPage] = useState(25);
@@ -462,17 +467,22 @@ const SchoolPaymentsPage = () => {
     // Reset to first page only when filter inputs change (not when data refreshes).
     useEffect(() => {
         setPage(0);
-    }, [search, statusFilter, autoDebitFilter, showDeleted, serviceStatusFilter]);
+    }, [search, statusFilter, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter]);
 
     useEffect(() => {
         // Apply client-side filtering of the already-fetched dataset
         try {
             const st = statusFilter ? String(statusFilter).toUpperCase().trim() : '';
             const qq = search ? String(search).toLowerCase().trim() : '';
+            const allowInactive = !!showInactive || serviceStatusFilter === 'INACTIVE' || st === 'INACTIVO';
             const arr = (paymentsAll || []).filter(p => {
                 // Determinar si la familia tiene servicio inactivo (serviceStatus = INACTIVE)
                 const isServiceInactive = (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE';
                 const isDeleted = !!p.User?.FamilyDetail?.deleted;
+
+                // Por defecto, NO mostrar inactivas. Solo mostrarlas si el toggle está activo
+                // o si el usuario filtró explícitamente por Estado del Servicio = INACTIVE.
+                if (isServiceInactive && !allowInactive) return false;
 
                 if (st) {
                     if (st === 'INACTIVO') {
@@ -483,7 +493,6 @@ const SchoolPaymentsPage = () => {
                         if (!isDeleted) return false;
                     } else {
                         // Para otros estados, excluir familias con servicio inactivo y filtrar por finalStatus
-                        if (isServiceInactive) return false;
                         if (isDeleted && !showDeleted) return false;
                         const s = (p.finalStatus || p.status || '').toUpperCase();
                         
@@ -500,7 +509,7 @@ const SchoolPaymentsPage = () => {
 
                     const s = (p.finalStatus || p.status || '').toUpperCase();
                     const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
-                    if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO') || isServiceInactive)) return false;
+                    if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO') || (allowInactive && isServiceInactive))) return false;
                 }
                 if (qq) {
                     const familyLast = (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toLowerCase();
@@ -531,7 +540,7 @@ const SchoolPaymentsPage = () => {
             console.error('filtering error', e);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, serviceStatusFilter, rowsPerPage]);
+    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage]);
 
     const handleBack = () => {
         if (!currentCicloEscolarId) {
@@ -591,6 +600,9 @@ const SchoolPaymentsPage = () => {
         };
         return stableSort(filtered.slice(), comparator);
     }, [filtered, order, orderBy]);
+
+    // Keep pagination count tied to the current filtered dataset (toggles included)
+    const paginationCount = Array.isArray(sortedFiltered) ? sortedFiltered.length : 0;
 
     const pageSlice = React.useMemo(() => {
         const start = page * rowsPerPage;
@@ -1799,6 +1811,12 @@ const SchoolPaymentsPage = () => {
     const [exportByStateValue, setExportByStateValue] = useState('TODOS');
     const [exportByStateServiceStatus, setExportByStateServiceStatus] = useState('TODOS');
 
+    // Download menu (unifies download actions to save space in the filters row)
+    const [downloadMenuAnchorEl, setDownloadMenuAnchorEl] = useState(null);
+    const downloadMenuOpen = Boolean(downloadMenuAnchorEl);
+    const handleOpenDownloadMenu = (event) => setDownloadMenuAnchorEl(event.currentTarget);
+    const handleCloseDownloadMenu = () => setDownloadMenuAnchorEl(null);
+
 
     // Export payments filtered by status and build Excel
     const handleDownloadPaymentsByStatus = useCallback(async (month = '', year = '') => {
@@ -2882,7 +2900,7 @@ const SchoolPaymentsPage = () => {
 
                 <Grid item xs={12}>
                     <Paper sx={{ p: 2 }}>
-                        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center', pr: { xs: 0, sm: 6 } }}>
                             <PaymentFilters 
                                 search={search} 
                                 onSearchChange={setSearch} 
@@ -2890,18 +2908,46 @@ const SchoolPaymentsPage = () => {
                                 onStatusChange={setStatusFilter} 
                                 autoDebit={autoDebitFilter} 
                                 onAutoDebitChange={setAutoDebitFilter} 
+                                showInactive={showInactive}
+                                onShowInactiveChange={setShowInactive}
                                 showDeleted={showDeleted} 
                                 onShowDeletedChange={setShowDeleted}
                                 serviceStatus={serviceStatusFilter}
                                 onServiceStatusChange={setServiceStatusFilter}
                             />
                             <Box sx={{ flex: 1 }} />
-                            <Button startIcon={<DownloadIcon />} size="small" onClick={() => setOpenExportStatusDialog(true)} sx={{ textTransform: 'none', mr: 1 }}>
-                                Descargar Historial
+                            <Button
+                                startIcon={<DownloadIcon />}
+                                size="small"
+                                onClick={handleOpenDownloadMenu}
+                                sx={{ textTransform: 'none' }}
+                            >
+                                Descargar
                             </Button>
-                            <Button startIcon={<DownloadIcon />} size="small" onClick={() => setOpenExportByStateDialog(true)} sx={{ textTransform: 'none' }}>
-                                Descargar por Estado
-                            </Button>
+                            <Menu
+                                anchorEl={downloadMenuAnchorEl}
+                                open={downloadMenuOpen}
+                                onClose={handleCloseDownloadMenu}
+                                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                            >
+                                <MenuItem
+                                    onClick={() => {
+                                        handleCloseDownloadMenu();
+                                        setOpenExportStatusDialog(true);
+                                    }}
+                                >
+                                    Descargar Historial
+                                </MenuItem>
+                                <MenuItem
+                                    onClick={() => {
+                                        handleCloseDownloadMenu();
+                                        setOpenExportByStateDialog(true);
+                                    }}
+                                >
+                                    Descargar por Estado
+                                </MenuItem>
+                            </Menu>
                             {/* Enviar Recordatorio button hidden temporarily per request. Restore when needed:
                                 <Button startIcon={<SendIcon />} onClick={() => setSnackbar({ open: true, message: 'Enviar recordatorios (pendiente)', severity: 'info' })}>
                                     Enviar Recordatorio
@@ -4405,7 +4451,7 @@ const SchoolPaymentsPage = () => {
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
                             <TablePagination
                                 component="div"
-                                count={totalPayments}
+                                count={paginationCount}
                                 page={page}
                                 onPageChange={(e, newPage) => {
                                     // local pagination: just change page, data is already loaded client-side
