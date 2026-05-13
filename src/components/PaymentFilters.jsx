@@ -49,7 +49,7 @@ const PaymentFilters = ({
                     <MenuItem value="no">No</MenuItem>
                 </Select>
             </FormControl>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', alignItems: 'center', width: { xs: '100%', sm: 'auto' } }}>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' }, alignItems: 'center', width: { xs: '100%', sm: 'auto' } }}>
                 <FormControlLabel
                     control={<Switch size="small" checked={showInactive} onChange={(e) => onShowInactiveChange(e.target.checked)} disabled={serviceStatus === 'INACTIVE'} />}
                     label="Mostrar inactivas"

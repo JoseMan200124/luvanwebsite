@@ -2900,7 +2900,16 @@ const SchoolPaymentsPage = () => {
 
                 <Grid item xs={12}>
                     <Paper sx={{ p: 2 }}>
-                        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center', pr: { xs: 0, sm: 6 } }}>
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                gap: 2,
+                                mb: 2,
+                                alignItems: { xs: 'stretch', sm: 'center' },
+                                flexDirection: { xs: 'column', sm: 'row' },
+                                pr: { xs: 0, sm: 6 },
+                            }}
+                        >
                             <PaymentFilters 
                                 search={search} 
                                 onSearchChange={setSearch} 
@@ -2915,12 +2924,11 @@ const SchoolPaymentsPage = () => {
                                 serviceStatus={serviceStatusFilter}
                                 onServiceStatusChange={setServiceStatusFilter}
                             />
-                            <Box sx={{ flex: 1 }} />
                             <Button
                                 startIcon={<DownloadIcon />}
                                 size="small"
                                 onClick={handleOpenDownloadMenu}
-                                sx={{ textTransform: 'none' }}
+                                sx={{ textTransform: 'none', ml: { sm: 'auto' }, alignSelf: { xs: 'flex-start', sm: 'center' } }}
                             >
                                 Descargar
                             </Button>
