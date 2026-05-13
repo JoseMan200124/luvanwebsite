@@ -1889,9 +1889,38 @@ const SchoolYearSelectionPage = () => {
                                     <Button
                                         variant="outlined"
                                         onClick={() => {
-                                            const name = (newGradeName || '').toString().trim();
-                                            if (!name) return;
-                                            setSchoolGrades(prev => [...prev, { name }]);
+                                            const raw = (newGradeName || '').toString();
+                                            const normalizeGradeName = (value) => {
+                                                const trimmed = (value || '').toString().trim();
+                                                if (!trimmed) return '';
+                                                const collapsed = trimmed.replace(/\s+/g, ' ');
+                                                return collapsed.replace(/\s+([.,;:!?])$/, '$1');
+                                            };
+
+                                            const names = raw
+                                                .split(',')
+                                                .map(normalizeGradeName)
+                                                .filter(Boolean);
+                                            if (names.length === 0) return;
+
+                                            setSchoolGrades((prev) => {
+                                                const prevArr = Array.isArray(prev) ? prev : [];
+                                                const existing = new Set(
+                                                    prevArr
+                                                        .map((g) => normalizeGradeName(g?.name).toLowerCase())
+                                                        .filter(Boolean)
+                                                );
+
+                                                const next = [...prevArr];
+                                                for (const n of names) {
+                                                    const key = n.toLowerCase();
+                                                    if (existing.has(key)) continue;
+                                                    existing.add(key);
+                                                    next.push({ name: n });
+                                                }
+                                                return next;
+                                            });
+
                                             setNewGradeName('');
                                         }}
                                         startIcon={<Add />}
