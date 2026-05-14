@@ -9,6 +9,7 @@ import {
     InputLabel,
     Select,
     MenuItem,
+    ListItemText,
     TextField,
     Button,
     Snackbar,
@@ -26,11 +27,112 @@ import {
     ToggleButton,
     ToggleButtonGroup,
     CircularProgress,
+    OutlinedInput,
 } from '@mui/material';
-import { FileUpload, ExpandMore } from '@mui/icons-material';
-import Autocomplete from '@mui/material/Autocomplete';
+import { FileUpload, ExpandMore, Notifications as NotificationsIcon } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
-import { DEFAULT_SCHEDULE_CODES, getScheduleLabel, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
+import { DEFAULT_SCHEDULE_CODES, getScheduleLabel } from '../utils/scheduleConfig';
+
+const MENU_PROPS = { PaperProps: { style: { maxHeight: 280 } } };
+
+const ROUTE_TYPE_OPTIONS = [
+    { value: 'Completa', label: 'Completa' },
+    { value: 'Media AM', label: 'Media AM' },
+    { value: 'Media PM', label: 'Media PM' },
+];
+
+const SERVICE_STATUS_OPTIONS = [
+    { value: 'ACTIVE', label: 'Activo' },
+    { value: 'PAUSED', label: 'Pausado' },
+    { value: 'SUSPENDED', label: 'Suspendido' },
+];
+
+const PAYMENT_STATUS_OPTIONS = [
+    { value: 'CONFIRMADO', label: 'Confirmado' },
+    { value: 'PENDIENTE', label: 'Pendiente' },
+    { value: 'MORA', label: 'En Mora' },
+];
+
+const MultiChipSelect = ({ label, options, value, onChange, disabled = false }) => {
+    const allSelected = options.length > 0 && options.every((o) => value.includes(o.value));
+    const someSelected = !allSelected && options.some((o) => value.includes(o.value));
+
+    const handleChange = (event) => {
+        const raw = event.target.value;
+        if (Array.isArray(raw) && raw.includes('__ALL__')) {
+            onChange({ target: { value: allSelected ? [] : options.map((o) => o.value) } });
+        } else {
+            onChange(event);
+        }
+    };
+
+    return (
+        <FormControl fullWidth size="small" disabled={disabled}>
+            <InputLabel>{label}</InputLabel>
+            <Select
+                multiple
+                value={value}
+                onChange={handleChange}
+                input={<OutlinedInput label={label} />}
+                renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {selected.map((v) => {
+                            const opt = options.find((o) => o.value === v);
+                            return <Chip key={v} label={opt?.label || v} size="small" />;
+                        })}
+                    </Box>
+                )}
+                MenuProps={MENU_PROPS}
+            >
+                <MenuItem value="__ALL__">
+                    <Checkbox checked={allSelected} indeterminate={someSelected} />
+                    <ListItemText
+                        primary="Seleccionar todos"
+                        primaryTypographyProps={{ fontWeight: 600 }}
+                    />
+                </MenuItem>
+                <Divider />
+                {options.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                        <Checkbox checked={value.includes(opt.value)} />
+                        <ListItemText primary={opt.label} />
+                    </MenuItem>
+                ))}
+            </Select>
+        </FormControl>
+    );
+};
+
+const SingleChipSelect = ({ label, options, value, onChange, disabled = false, allowAll = false, allLabel = 'Todos' }) => {
+    return (
+        <FormControl fullWidth size="small" disabled={disabled}>
+            <InputLabel>{label}</InputLabel>
+            <Select
+                value={value}
+                onChange={onChange}
+                input={<OutlinedInput label={label} />}
+                renderValue={(selected) => {
+                    const selectedStr = String(selected ?? '');
+                    const opt = options.find((o) => String(o.value) === selectedStr);
+                    const chipLabel = allowAll && selectedStr === 'all' ? allLabel : (opt?.label || selectedStr);
+                    return <Chip label={chipLabel} size="small" />;
+                }}
+                MenuProps={MENU_PROPS}
+            >
+                {allowAll && (
+                    <MenuItem value="all">
+                        <ListItemText primary={<em>{allLabel}</em>} />
+                    </MenuItem>
+                )}
+                {options.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                        <ListItemText primary={opt.label} />
+                    </MenuItem>
+                ))}
+            </Select>
+        </FormControl>
+    );
+};
 
 // Build default counts object dynamically from schedule codes
 const buildDefaultCounts = (codes = DEFAULT_SCHEDULE_CODES) =>
@@ -43,8 +145,11 @@ const DEFAULT_PREVIEW_COUNTS = {
     monitoras: 0,
     pilots: 0,
     supervisors: 0,
+    auxiliars: 0,
     totalUnique: 0,
 };
+
+const EMPTY_PADRE_FILTERS = { routeTypes: [], serviceStatuses: [], paymentStatuses: [] };
 
 const scheduleLabel = (code) => {
     if (!code) return 'Horario';
@@ -85,9 +190,11 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     const [sending, setSending] = useState(false);
     const [sendPush, setSendPush] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-    // Roles selection: parents, monitoras, pilots, supervisors
-    const ROLE_KEYS = ['parents', 'monitoras', 'pilots', 'supervisors'];
     const [selectedRoles, setSelectedRoles] = useState([]);
+    const [padreFilters, setPadreFilters] = useState({ ...EMPTY_PADRE_FILTERS });
+
+    const selectedRoutesKey = useMemo(() => [...(selectedRoutes || [])].map(String).sort().join('|'), [selectedRoutes]);
+    const padreFiltersKey = useMemo(() => JSON.stringify(padreFilters || EMPTY_PADRE_FILTERS), [padreFilters]);
 
     // Si no hay roles seleccionados, el modal debe mostrar 0 destinatarios
     const effectivePreview = useMemo(() => {
@@ -143,24 +250,31 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
         [availableRoutes]
     );
 
-    const selectedRouteOptions = useMemo(
-        () => routeOptions.filter(opt => selectedRoutes.includes(opt.value)),
-        [routeOptions, selectedRoutes]
+    const roleOptions = useMemo(
+        () => ([
+            { value: 'parents', label: 'Padres' },
+            { value: 'monitoras', label: 'Monitoras' },
+            { value: 'pilots', label: 'Pilotos' },
+            { value: 'supervisors', label: 'Supervisores' },
+            { value: 'auxiliars', label: 'Auxiliares' },
+        ]),
+        []
     );
 
-    const renderCompactTags = (value, getTagProps) => {
-        const maxShown = 3;
-        const shown = value.slice(0, maxShown);
-        const hiddenCount = value.length - shown.length;
-        return (
-            <>
-                {shown.map((option, index) => (
-                    <Chip key={option.value} label={option.label} size="small" {...getTagProps({ index })} />
-                ))}
-                {hiddenCount > 0 && <Chip label={`+${hiddenCount} más`} size="small" disabled />}
-            </>
-        );
-    };
+
+    const padreSelected = selectedRoles.includes('parents');
+
+    useEffect(() => {
+        if (!padreSelected) {
+            setPadreFilters({ ...EMPTY_PADRE_FILTERS });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [padreSelected]);
+
+    const schoolOptions = useMemo(
+        () => (Array.isArray(schools) ? schools : []).map((s) => ({ value: String(s.id), label: s.name })),
+        [schools]
+    );
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
@@ -174,13 +288,9 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
         setFile(selectedFile);
     };
 
-    const handleSelectAllRoutes = () => setSelectedRoutes(availableRoutes);
-
-    const handleClearRoutes = () => {
-        setSelectedRoutes([]);
-        setSelectedSchedule('');
-        setScheduleCounts(DEFAULT_COUNTS);
-        setPreview(null);
+    const setMulti = (setter) => (event) => {
+        const { value } = event.target;
+        setter(typeof value === 'string' ? value.split(',') : value);
     };
 
     // =========================
@@ -305,6 +415,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                     routeNumbers: selectedRoutes,
                     scheduleCode: selectedSchedule,
                     recipientRoles: selectedRoles,
+                    padreFilters: padreSelected ? padreFilters : undefined,
                 });
 
                 if (reqId !== previewReqId.current) return;
@@ -328,7 +439,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
         loadPreview();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedSchedule, currentSchool?.id, selectedRoles]);
+    }, [selectedSchedule, currentSchool?.id, selectedRoles, selectedRoutesKey, padreFiltersKey, padreSelected]);
 
     const scheduleDisabled = (code) => {
         if (selectedRoutes.length === 0) return true;
@@ -374,6 +485,10 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             // Incluir roles seleccionados para que el backend pueda filtrar destinatarios
             formData.append('recipientRoles', JSON.stringify(selectedRoles));
 
+            if (padreSelected) {
+                formData.append('padreFilters', JSON.stringify(padreFilters));
+            }
+
             if (sendPush) formData.append('sendPush', true);
 
             if (file) formData.append('file', file);
@@ -394,6 +509,8 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             setSelectedSchedule('');
             setScheduleCounts(DEFAULT_COUNTS);
             setPreview(null);
+            setSendPush(false);
+            setPadreFilters({ ...EMPTY_PADRE_FILTERS });
             onClose();
         } catch (error) {
             console.error('Error al enviar circular:', error);
@@ -406,36 +523,53 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     return (
         <>
             <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-                <DialogTitle>Enviar Circular Masiva</DialogTitle>
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <NotificationsIcon color="primary" />
+                    Enviar Circular Masiva
+                </DialogTitle>
 
-                <DialogContent>
-                    {/* Colegio */}
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel>Colegio</InputLabel>
-                        <Select
-                            value={selectedSchool}
-                            label="Colegio"
-                            onChange={(e) => setSelectedSchool(e.target.value)}
-                        >
-                            <MenuItem value="all">
-                                <em>Todos</em>
-                            </MenuItem>
-                            {schools.map((school) => (
-                                <MenuItem key={school.id} value={school.id}>
-                                    {school.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                        <FormHelperText>
-                            Flujo: 1) Rutas ➜ 2) Horario ➜ 3) Roles ➜ 4) Vista previa ➜ Enviar.
-                        </FormHelperText>
-                    </FormControl>
+                <DialogContent dividers>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 0.5 }}>
+                        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: -1 }}>
+                            Alcance
+                        </Typography>
 
-                    {/* 1) Rutas */}
-                    {selectedSchool !== 'all' && (
-                        <Box sx={{ mt: 1 }}>
-                            <Accordion disableGutters elevation={0} square defaultExpanded>
-                                <AccordionSummary expandIcon={<ExpandMore />}>
+                        <Box>
+                            <SingleChipSelect
+                                label="Colegio"
+                                options={schoolOptions}
+                                value={String(selectedSchool)}
+                                onChange={(e) => setSelectedSchool(String(e.target.value))}
+                                allowAll
+                                allLabel="Todos"
+                            />
+                            <FormHelperText>
+                                Flujo: 1) Rutas ➜ 2) Horario ➜ 3) Roles ➜ 4) Vista previa ➜ Enviar.
+                            </FormHelperText>
+                        </Box>
+
+                        <Divider />
+
+                        {/* 1) Rutas */}
+                        {selectedSchool !== 'all' && (
+                            <Accordion
+                                disableGutters
+                                elevation={0}
+                                defaultExpanded
+                                sx={{
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: '8px !important',
+                                    '&:before': { display: 'none' },
+                                }}
+                            >
+                                <AccordionSummary
+                                    expandIcon={<ExpandMore />}
+                                    sx={{
+                                        minHeight: 48,
+                                        '&.Mui-expanded': { minHeight: 48 },
+                                    }}
+                                >
                                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
                                         <Typography variant="subtitle1" fontWeight={600}>1) Rutas</Typography>
                                         <Typography variant="caption" color="text.secondary">
@@ -445,103 +579,58 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                     </Box>
                                 </AccordionSummary>
 
-                                <AccordionDetails>
+                                <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 2 }}>
                                     {availableRoutes.length === 0 ? (
                                         <Typography variant="body2" color="text.secondary">
                                             Este colegio no tiene rutas registradas.
                                         </Typography>
                                     ) : (
                                         <>
-                                            
-                                            <Stack direction="row" spacing={1} sx={{ mb: 1 }} useFlexGap flexWrap="wrap">
-                                                <Button
-                                                    size="small"
-                                                    variant="outlined"
-                                                    onClick={handleSelectAllRoutes}
-                                                    disabled={selectedRoutes.length === availableRoutes.length}
-                                                >
-                                                    Seleccionar todas
-                                                </Button>
-                                                <Button
-                                                    size="small"
-                                                    variant="text"
-                                                    onClick={handleClearRoutes}
-                                                    disabled={selectedRoutes.length === 0}
-                                                >
-                                                    Limpiar
-                                                </Button>
-
-                                                {countsLoading && (
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
-                                                        <CircularProgress size={16} />
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Calculando horarios disponibles...
-                                                        </Typography>
-                                                    </Box>
-                                                )}
-                                            </Stack>
-
-                                            <Autocomplete
-                                                multiple
-                                                disableCloseOnSelect
-                                                disablePortal
+                                            <MultiChipSelect
+                                                label="Rutas"
                                                 options={routeOptions}
-                                                value={selectedRouteOptions}
-                                                onChange={(_, newValue) => {
-                                                    // newValue son objetos {value,label}
-                                                    setSelectedRoutes(newValue.map(v => v.value));
-                                                }}
-                                                getOptionLabel={(option) => option.label}
-                                                renderOption={(props, option, { selected }) => (
-                                                    <li {...props} key={option.value}>
-                                                        <Checkbox style={{ marginRight: 8 }} checked={selected} />
-                                                        {option.label}
-                                                    </li>
-                                                )}
-                                                renderTags={renderCompactTags}
-                                                ListboxProps={{ style: { maxHeight: 260, overflow: 'auto' } }}
-                                                filterSelectedOptions
-                                                fullWidth
-                                                size="small"
-                                                noOptionsText="Sin coincidencias"
-                                                renderInput={(params) => (
-                                                    <TextField
-                                                        {...params}
-                                                        label="Buscar y seleccionar rutas"
-                                                        placeholder="Escribe para filtrar..."
-                                                    />
-                                                )}
+                                                value={selectedRoutes}
+                                                onChange={setMulti(setSelectedRoutes)}
                                             />
 
-                                            {selectedRoutes.length > 0 && (
-                                                <>
-                                                    <Divider sx={{ my: 1.5 }} />
-                                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                                        {selectedRouteOptions.slice(0, 10).map(opt => (
-                                                            <Chip key={opt.value} label={opt.label} size="small" />
-                                                        ))}
-                                                        {selectedRoutes.length > 10 && (
-                                                            <Chip label={`+${selectedRoutes.length - 10} más`} size="small" disabled />
-                                                        )}
-                                                    </Box>
-                                                </>
+                                            {countsLoading && (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <CircularProgress size={16} />
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Calculando horarios disponibles...
+                                                    </Typography>
+                                                </Box>
                                             )}
 
-                                            <FormHelperText sx={{ mt: 1 }}>
+                                            <FormHelperText>
                                                 Selecciona al menos una ruta para habilitar el horario.
                                             </FormHelperText>
                                         </>
                                     )}
                                 </AccordionDetails>
                             </Accordion>
-                        </Box>
-                    )}
+                        )}
 
-                    {/* 2) Horario */}
-                    {selectedSchool !== 'all' && (
-                        <Box sx={{ mt: 1.25 }}>
-                            <Accordion disableGutters elevation={0} square defaultExpanded>
-                                <AccordionSummary expandIcon={<ExpandMore />}>
+                        {/* 2) Horario */}
+                        {selectedSchool !== 'all' && (
+                            <Accordion
+                                disableGutters
+                                elevation={0}
+                                defaultExpanded
+                                sx={{
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: '8px !important',
+                                    '&:before': { display: 'none' },
+                                }}
+                            >
+                                <AccordionSummary
+                                    expandIcon={<ExpandMore />}
+                                    sx={{
+                                        minHeight: 48,
+                                        '&.Mui-expanded': { minHeight: 48 },
+                                    }}
+                                >
                                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
                                         <Typography variant="subtitle1" fontWeight={600}>2) Horario</Typography>
                                         <Typography variant="caption" color="text.secondary">
@@ -550,7 +639,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                     </Box>
                                 </AccordionSummary>
 
-                                <AccordionDetails>
+                                <AccordionDetails sx={{ pt: 2 }}>
                                     <FormHelperText sx={{ mb: 1 }}>
                                         Se habilitan horarios que realmente tienen padres en las rutas seleccionadas.
                                     </FormHelperText>
@@ -567,12 +656,12 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                             '& .MuiToggleButton-root:last-of-type': { borderTopRightRadius: 6, borderBottomRightRadius: 6 },
                                             '& .MuiToggleButton-root:not(:first-of-type)': { borderLeft: 0 },
                                             '& .MuiToggleButton-root.Mui-selected': {
-                                                bgcolor: '#ffffff',
+                                                bgcolor: 'background.paper',
                                                 color: 'primary.main',
                                                 borderColor: 'primary.main',
                                                 borderLeft: '1px solid',
                                                 borderLeftColor: 'primary.main',
-                                                '&:hover': { bgcolor: 'rgba(25,118,210,0.04)' },
+                                                '&:hover': { bgcolor: 'action.hover' },
                                             },
                                             '& .MuiToggleButton-root .count': { color: 'text.secondary' },
                                             '& .MuiToggleButton-root.Mui-selected .count': { color: 'primary.main' },
@@ -596,107 +685,120 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                     )}
                                 </AccordionDetails>
                             </Accordion>
-                        </Box>
-                    )}
+                        )}
 
-                    {/* 3) Roles */}
-                    {selectedSchool !== 'all' && selectedRoutes.length > 0 && (
-                        <Box sx={{ mt: 1.25 }}>
-                            <Accordion disableGutters elevation={0} square defaultExpanded>
-                                <AccordionSummary expandIcon={<ExpandMore />}>
+                        {/* 3) Roles */}
+                        {selectedSchool !== 'all' && selectedRoutes.length > 0 && (
+                            <Accordion
+                                disableGutters
+                                elevation={0}
+                                defaultExpanded
+                                sx={{
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: '8px !important',
+                                    '&:before': { display: 'none' },
+                                }}
+                            >
+                                <AccordionSummary
+                                    expandIcon={<ExpandMore />}
+                                    sx={{
+                                        minHeight: 48,
+                                        '&.Mui-expanded': { minHeight: 48 },
+                                    }}
+                                >
                                     <Typography variant="subtitle1" fontWeight={600}>3) Roles</Typography>
                                 </AccordionSummary>
 
-                                <AccordionDetails>
-                                    <FormHelperText sx={{ mb: 1 }}>
+                                <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 2 }}>
+                                    <FormHelperText>
                                         Selecciona los roles a los que quieres enviar la circular.
                                     </FormHelperText>
-
-                                    <Stack direction="row" spacing={1} sx={{ mb: 1 }} useFlexGap flexWrap="wrap">
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            onClick={() => setSelectedRoles(ROLE_KEYS)}
-                                            disabled={ROLE_KEYS.every(r => selectedRoles.includes(r))}
-                                        >
-                                            Seleccionar todos
-                                        </Button>
-                                        <Button
-                                            size="small"
-                                            variant="text"
-                                            onClick={() => setSelectedRoles([])}
-                                            disabled={selectedRoles.length === 0}
-                                        >
-                                            Limpiar
-                                        </Button>
-                                    </Stack>
-
-                                    <ToggleButtonGroup
+                                    <MultiChipSelect
+                                        label="Roles"
+                                        options={roleOptions}
                                         value={selectedRoles}
-                                        onChange={(_, val) => setSelectedRoles(val ?? [])}
-                                        multiple
-                                        fullWidth
-                                        size="small"
-                                        sx={{
-                                            mt: 1,
-                                            '& .MuiToggleButton-root': { textTransform: 'none', py: 0.8, border: '1px solid', borderColor: 'divider', borderRadius: 0 },
-                                            '& .MuiToggleButton-root:first-of-type': { borderTopLeftRadius: 6, borderBottomLeftRadius: 6 },
-                                            '& .MuiToggleButton-root:last-of-type': { borderTopRightRadius: 6, borderBottomRightRadius: 6 },
-                                            '& .MuiToggleButton-root:not(:first-of-type)': { borderLeft: 0 },
-                                            '& .MuiToggleButton-root.Mui-selected': {
-                                                bgcolor: '#ffffff',
-                                                color: 'primary.main',
-                                                borderColor: 'primary.main',
-                                                borderLeft: '1px solid',
-                                                borderLeftColor: 'primary.main',
-                                                '&:hover': { bgcolor: 'rgba(25,118,210,0.04)' },
-                                            },
-                                            '& .MuiToggleButton-root .count': { color: 'text.secondary' },
-                                            '& .MuiToggleButton-root.Mui-selected .count': { color: 'primary.main' },
-                                        }}
-                                    >
-                                        <ToggleButton value="parents">
-                                            <Stack spacing={0.2} alignItems="center">
-                                                <Typography variant="body2">Padres</Typography>
-                                                <Typography variant="caption" className="count">{effectivePreview?.counts?.parents ?? 0}</Typography>
-                                            </Stack>
-                                        </ToggleButton>
+                                        onChange={setMulti(setSelectedRoles)}
+                                    />
 
-                                        <ToggleButton value="monitoras">
-                                            <Stack spacing={0.2} alignItems="center">
-                                                <Typography variant="body2">Monitoras</Typography>
-                                                <Typography variant="caption" className="count">{effectivePreview?.counts?.monitoras ?? 0}</Typography>
-                                            </Stack>
-                                        </ToggleButton>
-
-                                        <ToggleButton value="pilots">
-                                            <Stack spacing={0.2} alignItems="center">
-                                                <Typography variant="body2">Pilotos</Typography>
-                                                <Typography variant="caption" className="count">{effectivePreview?.counts?.pilots ?? 0}</Typography>
-                                            </Stack>
-                                        </ToggleButton>
-
-                                        <ToggleButton value="supervisors">
-                                            <Stack spacing={0.2} alignItems="center">
-                                                <Typography variant="body2">Supervisores</Typography>
-                                                <Typography variant="caption" className="count">{effectivePreview?.counts?.supervisors ?? 0}</Typography>
-                                            </Stack>
-                                        </ToggleButton>
-                                    </ToggleButtonGroup>
+                                    {padreSelected && (
+                                        <Accordion
+                                            defaultExpanded
+                                            elevation={0}
+                                            sx={{
+                                                border: '1px solid',
+                                                borderColor: 'divider',
+                                                borderRadius: '8px !important',
+                                                '&:before': { display: 'none' },
+                                            }}
+                                        >
+                                            <AccordionSummary
+                                                expandIcon={<ExpandMore />}
+                                                sx={{ backgroundColor: '#f0f4ff', borderRadius: '8px', minHeight: 48 }}
+                                            >
+                                                <Typography variant="body2" fontWeight={600} color="primary">
+                                                    Filtros adicionales — Padres
+                                                </Typography>
+                                            </AccordionSummary>
+                                            <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                                                <MultiChipSelect
+                                                    label="Tipo de Ruta"
+                                                    options={ROUTE_TYPE_OPTIONS}
+                                                    value={padreFilters.routeTypes}
+                                                    onChange={(e) => setPadreFilters((prev) => ({
+                                                        ...prev,
+                                                        routeTypes: Array.isArray(e.target.value) ? e.target.value : [],
+                                                    }))}
+                                                />
+                                                <MultiChipSelect
+                                                    label="Estado del Servicio"
+                                                    options={SERVICE_STATUS_OPTIONS}
+                                                    value={padreFilters.serviceStatuses}
+                                                    onChange={(e) => setPadreFilters((prev) => ({
+                                                        ...prev,
+                                                        serviceStatuses: Array.isArray(e.target.value) ? e.target.value : [],
+                                                    }))}
+                                                />
+                                                <MultiChipSelect
+                                                    label="Estado de Pago"
+                                                    options={PAYMENT_STATUS_OPTIONS}
+                                                    value={padreFilters.paymentStatuses}
+                                                    onChange={(e) => setPadreFilters((prev) => ({
+                                                        ...prev,
+                                                        paymentStatuses: Array.isArray(e.target.value) ? e.target.value : [],
+                                                    }))}
+                                                />
+                                            </AccordionDetails>
+                                        </Accordion>
+                                    )}
                                 </AccordionDetails>
                             </Accordion>
-                        </Box>
-                    )}
+                        )}
 
-                    {/* 4) Vista previa */}
-                    {selectedSchool !== 'all' && selectedRoutes.length > 0 && (
-                        <Box sx={{ mt: 1.25 }}>
-                            <Accordion disableGutters elevation={0} square defaultExpanded>
-                                <AccordionSummary expandIcon={<ExpandMore />}>
+                        {/* 4) Vista previa */}
+                        {selectedSchool !== 'all' && selectedRoutes.length > 0 && (
+                            <Accordion
+                                disableGutters
+                                elevation={0}
+                                defaultExpanded
+                                sx={{
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: '8px !important',
+                                    '&:before': { display: 'none' },
+                                }}
+                            >
+                                <AccordionSummary
+                                    expandIcon={<ExpandMore />}
+                                    sx={{
+                                        minHeight: 48,
+                                        '&.Mui-expanded': { minHeight: 48 },
+                                    }}
+                                >
                                     <Typography variant="subtitle1" fontWeight={600}>4) Vista previa</Typography>
                                 </AccordionSummary>
 
-                                <AccordionDetails>
+                                <AccordionDetails sx={{ pt: 2 }}>
                                     {selectedRoles.includes('parents') && !selectedSchedule ? (
                                         <Alert severity="warning">Selecciona un horario para ver la vista previa.</Alert>
                                     ) : previewLoading ? (
@@ -717,6 +819,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                                 <Typography variant="body2">• Monitoras: <strong>{effectivePreview?.counts?.monitoras ?? 0}</strong></Typography>
                                                 <Typography variant="body2">• Pilotos: <strong>{effectivePreview?.counts?.pilots ?? 0}</strong></Typography>
                                                 <Typography variant="body2">• Supervisores: <strong>{effectivePreview?.counts?.supervisors ?? 0}</strong></Typography>
+                                                <Typography variant="body2">• Auxiliares: <strong>{effectivePreview?.counts?.auxiliars ?? 0}</strong></Typography>
                                                 <Typography variant="body2" sx={{ mt: 0.5 }}>
                                                     • Total únicos: <strong>{effectivePreview?.counts?.totalUnique ?? 0}</strong>
                                                 </Typography>
@@ -750,37 +853,40 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                     )}
                                 </AccordionDetails>
                             </Accordion>
+                        )}
+
+                        <Divider />
+
+                        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: -1 }}>
+                            Contenido de la circular
+                        </Typography>
+
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Asunto"
+                            value={subject}
+                            onChange={(e) => setSubject(e.target.value)}
+                        />
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Mensaje"
+                            multiline
+                            minRows={3}
+                            maxRows={6}
+                            value={message}
+                            onChange={(e) => setMessage(e.target.value)}
+                        />
+
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                            <Button variant="outlined" component="label" startIcon={<FileUpload />} size="small">
+                                Seleccionar Archivo
+                                <input type="file" hidden onChange={handleFileChange} />
+                            </Button>
+                            {file && <Typography variant="body2">{file.name}</Typography>}
                         </Box>
-                    )}
 
-                    {/* Asunto y mensaje */}
-                    <TextField
-                        fullWidth
-                        margin="dense"
-                        label="Asunto"
-                        value={subject}
-                        onChange={(e) => setSubject(e.target.value)}
-                    />
-                    <TextField
-                        fullWidth
-                        margin="dense"
-                        label="Mensaje"
-                        multiline
-                        rows={4}
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                    />
-
-                    {/* Archivo */}
-                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                        <Button variant="outlined" component="label" startIcon={<FileUpload />}>
-                            Seleccionar Archivo
-                            <input type="file" hidden onChange={handleFileChange} />
-                        </Button>
-                        {file && <Box sx={{ mt: 1 }}>{file.name}</Box>}
-                    </Box>
-
-                    <Box sx={{ mt: 1 }}>
                         <FormControl component="fieldset" variant="standard">
                             <Stack direction="row" spacing={1} alignItems="center">
                                 <Checkbox checked={sendPush} onChange={(e) => setSendPush(e.target.checked)} disabled={selectedSchool === 'all'} />
@@ -793,9 +899,14 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                     </Box>
                 </DialogContent>
 
-                <DialogActions>
+                <DialogActions sx={{ px: 3, py: 2 }}>
                     <Button onClick={onClose} disabled={sending}>Cancelar</Button>
-                    <Button onClick={handleSendCircular} variant="contained" disabled={sending || selectedRoles.length === 0}>
+                    <Button
+                        onClick={handleSendCircular}
+                        variant="contained"
+                        disabled={sending || selectedRoles.length === 0}
+                        startIcon={sending ? <CircularProgress size={16} /> : <NotificationsIcon />}
+                    >
                         {sending ? 'Enviando...' : 'Enviar Circular'}
                     </Button>
                 </DialogActions>

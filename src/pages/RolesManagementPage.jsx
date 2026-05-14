@@ -39,7 +39,6 @@ import { Edit, Delete, Add, FileUpload, FileDownload } from '@mui/icons-material
 import styled from 'styled-components';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import CircularMasivaModal from '../components/CircularMasivaModal';
 import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
@@ -202,7 +201,6 @@ const RolesManagementPage = () => {
     const [bulkLoading, setBulkLoading] = useState(false);
 
     const [, setSchoolGrades] = useState([]);
-    const [openCircularModal, setOpenCircularModal] = useState(false);
     // bulk editors removed
 
 
@@ -1110,14 +1108,6 @@ const RolesManagementPage = () => {
                     >
                         Añadir Usuario
                     </Button>
-                    <Button
-                        variant="contained"
-                        color="secondary"
-                        startIcon={<FileUpload />}
-                        onClick={() => setOpenCircularModal(true)}
-                    >
-                        Enviar Circular Masiva
-                    </Button>
                     
                     <Button
                         variant="outlined"
@@ -1763,14 +1753,6 @@ const RolesManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            {/* Modal Circular Masiva */}
-            <CircularMasivaModal
-                open={openCircularModal}
-                onClose={() => setOpenCircularModal(false)}
-                schools={schools}
-                onSuccess={() => {}}
-            />
 
             {/* Reporte de rutas eliminado */}
 
