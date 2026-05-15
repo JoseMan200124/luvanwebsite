@@ -721,6 +721,10 @@ const SchoolPaymentsPage = () => {
             const form = new FormData();
             form.append('receipt', file);
             if (displayDate) form.append('displayDate', displayDate);
+            if (registerPaymentTarget?.id) form.append('paymentId', registerPaymentTarget.id);
+            if (registerPaymentTarget?.schoolId) form.append('schoolId', registerPaymentTarget.schoolId);
+            if (registerPaymentTarget?.cicloEscolarId) form.append('cicloEscolarId', registerPaymentTarget.cicloEscolarId);
+            if (registerPaymentTarget?.User?.FamilyDetail?.id) form.append('familyDetailId', registerPaymentTarget.User.FamilyDetail.id);
 
             const res = await api.post(`/parents/${userId}/receipts`, form, {
                 headers: { 'Content-Type': 'multipart/form-data' }
@@ -742,7 +746,7 @@ const SchoolPaymentsPage = () => {
         } finally {
             setReceiptUploadLoading(false);
         }
-    }, [getRegisterReceiptUserId]);
+    }, [getRegisterReceiptUserId, registerPaymentTarget]);
 
     const [openReceiptDialog, setOpenReceiptDialog] = useState(false);
     const [receiptTarget, setReceiptTarget] = useState(null);
@@ -1691,6 +1695,9 @@ const SchoolPaymentsPage = () => {
                     // Si se está DESACTIVANDO, usar el nuevo endpoint para actualizar ambas tablas (FamilyDetail y NewPayment)
                     await api.post('/payments/v2/activate-auto-debit', { 
                         userId, 
+                        paymentId: payment?.id || payload?.payment?.id,
+                        schoolId: payment?.schoolId || payload?.payment?.schoolId,
+                        cicloEscolarId: payment?.cicloEscolarId || payload?.payment?.cicloEscolarId,
                         activateAutoDebit: false 
                     });
                 }
@@ -4107,9 +4114,12 @@ const SchoolPaymentsPage = () => {
                                         fullWidth
                                         onClick={async () => {
                                             try {
-                                                const { userId } = autoDebitPayload;
+                                                const { userId, payment } = autoDebitPayload;
                                                 await api.post('/payments/v2/activate-auto-debit', { 
                                                     userId,
+                                                    paymentId: payment?.id,
+                                                    schoolId: payment?.schoolId,
+                                                    cicloEscolarId: payment?.cicloEscolarId,
                                                     activateAutoDebit: true,
                                                     applyToCurrentMonth: true 
                                                 });
@@ -4145,9 +4155,12 @@ const SchoolPaymentsPage = () => {
                                         fullWidth
                                         onClick={async () => {
                                             try {
-                                                const { userId } = autoDebitPayload;
+                                                const { userId, payment } = autoDebitPayload;
                                                 await api.post('/payments/v2/activate-auto-debit', { 
                                                     userId,
+                                                    paymentId: payment?.id,
+                                                    schoolId: payment?.schoolId,
+                                                    cicloEscolarId: payment?.cicloEscolarId,
                                                     activateAutoDebit: true,
                                                     applyToCurrentMonth: false 
                                                 });

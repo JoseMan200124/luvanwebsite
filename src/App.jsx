@@ -27,6 +27,7 @@ import ParentPaymentPage from './pages/ParentPaymentPage';
 import ParentProtocolsPage from './pages/ParentProtocolsPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
 import CicloEscolarSelectionPage from './pages/CicloEscolarSelectionPage';
+import SchoolContextSelectionPage from './pages/SchoolContextSelectionPage';
 import SchoolDashboardPage from './pages/SchoolDashboardPage';
 import SchoolUsersPage from './pages/SchoolUsersPage';
 import SchoolBusesPage from './pages/SchoolBusesPage';
@@ -84,6 +85,15 @@ function App() {
 
                     {/* Forzar cambio de contraseña */}
                     <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
+
+                    <Route
+                        path="/select-context"
+                        element={
+                            <ProtectedRoute requireSchoolContext={false} redirectTo="/login">
+                                <SchoolContextSelectionPage />
+                            </ProtectedRoute>
+                        }
+                    />
 
                     {/* Contratos públicos */}
                     <Route path="/contracts"             element={<ContractsManagementPage />} />

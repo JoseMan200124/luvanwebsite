@@ -9,6 +9,7 @@ import Alert from '@mui/material/Alert';
 
 import { loginUser } from '../services/authService';
 import { initSocket, closeSocket } from '../services/socketService';
+import { clearStoredSchoolContext } from '../utils/schoolContext';
 
 export const AuthContext = createContext();
 
@@ -38,12 +39,12 @@ const AuthProvider = ({ children }) => {
     const resetTimer = useCallback(() => setSharedLastActivity(Date.now()), [setSharedLastActivity]);
 
     const logout = useCallback(() => {
-        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); } catch (e) {}
+        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
         closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
     }, [navigate]);
 
     const logoutByIdle = useCallback(() => {
-        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); } catch (e) {}
+        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
         closeSocket(); setAuth({ user: null, token: null }); setShowIdleSnackbar(true); navigate('/login');
     }, [navigate]);
 
@@ -58,7 +59,7 @@ const AuthProvider = ({ children }) => {
                 if (newToken) { localStorage.setItem('token', newToken); if (newRefresh) localStorage.setItem('refreshToken', newRefresh); setAuth(prev => ({ ...prev, token: newToken })); }
             }
         } catch (err) {
-            try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); } catch (e) {}
+            try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
             logout();
         }
     }, [logout]);
@@ -105,15 +106,17 @@ const AuthProvider = ({ children }) => {
                     setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: storedToken });
                 } else {
                     localStorage.removeItem('token');
+                    clearStoredSchoolContext();
                 }
             }
             const params = new URLSearchParams(location.search); const tokenFromOAuth = params.get('token');
             if (tokenFromOAuth) {
                 const decoded = jwtDecode(tokenFromOAuth);
+                clearStoredSchoolContext();
                 localStorage.setItem('token', tokenFromOAuth);
                 setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: tokenFromOAuth });
             }
-        } catch (e) { localStorage.removeItem('token'); }
+        } catch (e) { localStorage.removeItem('token'); clearStoredSchoolContext(); }
         setInitialLoad(false);
     }, [location]);
 
@@ -126,6 +129,7 @@ const AuthProvider = ({ children }) => {
             const { token, passwordExpired, refreshToken } = response.data; const decoded = jwtDecode(token);
             const restrictedRoles = [3, 8]; // allow Padres (3) and Colaboradores (8) to use this dialog
             if (!restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la página principal.`);
+            clearStoredSchoolContext();
             localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
             setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
             return { passwordExpired, roleId: decoded.roleId };
@@ -137,6 +141,7 @@ const AuthProvider = ({ children }) => {
             const response = await loginUser({ email, password });
             const { token, passwordExpired, refreshToken } = response.data; const decoded = jwtDecode(token);
             const restrictedRoles = [4,5]; if (restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la app móvil.`);
+            clearStoredSchoolContext();
             localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
             setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
             return { passwordExpired, roleId: decoded.roleId };

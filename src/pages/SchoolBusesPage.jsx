@@ -71,6 +71,10 @@ const SchoolBusesPage = () => {
     const currentCicloEscolar = schoolData?.cicloEscolar || schoolData?.CicloEscolar || stateCicloEscolar;
     const currentSchool = schoolData || stateSchool;
     const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
+    const currentSchoolCycleId = String(stateCicloEscolarId || currentSchool?.cicloEscolarId || '').trim();
+    const currentOperationStatus = String(currentSchool?.operationStatus || 'ACTIVE').trim().toUpperCase();
+    const isPreparationMode = currentOperationStatus !== 'ACTIVE';
+    const assignmentModeLabel = isPreparationMode ? 'Preparación sin operación' : 'Operación activa';
 
     const fetchSchoolData = useCallback(async () => {
         if (!schoolId) return;
@@ -134,7 +138,8 @@ const SchoolBusesPage = () => {
     const fetchPilots = useCallback(async () => {
         if (!schoolId) return;
         try {
-            const url = `/users/pilots?schoolId=${schoolId}`;
+            const cycleParam = currentSchoolCycleId ? `&cicloEscolarId=${encodeURIComponent(currentSchoolCycleId)}` : '';
+            const url = `/users/pilots?schoolId=${schoolId}${cycleParam}`;
             const response = await api.get(url, {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
@@ -144,12 +149,13 @@ const SchoolBusesPage = () => {
             console.error('Error fetching pilots:', err);
             setAvailablePilots([]);
         }
-    }, [auth.token, schoolId]);
+    }, [auth.token, schoolId, currentSchoolCycleId]);
 
     const fetchMonitors = useCallback(async () => {
         if (!schoolId) return;
         try {
-            const url = `/users/monitors?schoolId=${schoolId}`;
+            const cycleParam = currentSchoolCycleId ? `&cicloEscolarId=${encodeURIComponent(currentSchoolCycleId)}` : '';
+            const url = `/users/monitors?schoolId=${schoolId}${cycleParam}`;
             const response = await api.get(url, {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
@@ -159,12 +165,13 @@ const SchoolBusesPage = () => {
             console.error('Error fetching monitors:', err);
             setAvailableMonitors([]);
         }
-    }, [auth.token, schoolId]);
+    }, [auth.token, schoolId, currentSchoolCycleId]);
 
     const fetchRouteAssignments = useCallback(async () => {
         if (!schoolId) return;
         try {
-            const response = await api.get(`/route-assignments?schoolId=${schoolId}`, {
+            const cycleParam = currentSchoolCycleId ? `&cicloEscolarId=${encodeURIComponent(currentSchoolCycleId)}` : '';
+            const response = await api.get(`/route-assignments?schoolId=${schoolId}${cycleParam}`, {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             const assignments = response.data.assignments || response.data || [];
@@ -185,7 +192,7 @@ const SchoolBusesPage = () => {
         } catch (err) {
             console.error('Error fetching route assignments:', err);
         }
-    }, [auth.token, schoolId]);
+    }, [auth.token, schoolId, currentSchoolCycleId]);
 
     useEffect(() => {
         if (auth.token && schoolId) {
@@ -434,6 +441,7 @@ const SchoolBusesPage = () => {
                         await api.put(`/buses/${desiredData.busId}`, {
                             routeNumber: routeNumber,
                             schoolId: parseInt(schoolId),
+                            cicloEscolarId: currentSchoolCycleId || null,
                             pilotId: desiredData.pilotId,
                             monitoraId: desiredData.monitoraId
                         }, {
@@ -463,6 +471,7 @@ const SchoolBusesPage = () => {
                             await api.put(`/buses/${desiredData.busId}`, {
                                 routeNumber: routeNumber,
                                 schoolId: parseInt(schoolId),
+                                cicloEscolarId: currentSchoolCycleId || null,
                                 pilotId: desiredData.pilotId,
                                 monitoraId: desiredData.monitoraId
                             }, {
@@ -485,6 +494,7 @@ const SchoolBusesPage = () => {
                         await api.put(`/buses/${desiredData.busId}`, {
                             routeNumber: routeNumber,
                             schoolId: parseInt(schoolId),
+                            cicloEscolarId: currentSchoolCycleId || null,
                             pilotId: desiredData.pilotId,
                             monitoraId: desiredData.monitoraId
                         }, {
@@ -513,18 +523,17 @@ const SchoolBusesPage = () => {
             }
 
             // Persist per-route assignments (no bus) as RouteAssignments
-            let routeAssignmentChanges = 0;
             for (const [routeNumber, data] of Object.entries(perRouteAssignments)) {
                 try {
                     await api.post('/route-assignments', {
                         schoolId: parseInt(schoolId),
+                        cicloEscolarId: currentSchoolCycleId || null,
                         routeNumber: routeNumber,
                         pilotId: data.pilotId,
                         monitoraId: data.monitoraId
                     }, {
                         headers: { Authorization: `Bearer ${auth.token}` }
                     });
-                    routeAssignmentChanges++;
                     successfulChanges.push(`Ruta ${routeNumber}: asignación por ruta guardada`);
                 } catch (err) {
                     console.error('Error saving route assignment:', err);
@@ -540,10 +549,10 @@ const SchoolBusesPage = () => {
                 // If no bus and no pilot/monitor, delete the route assignment
                 if (!hasBus && !rp && !rm) {
                     try {
-                        await api.delete(`/route-assignments?schoolId=${schoolId}&routeNumber=${routeNumber}`, {
+                        const cycleParam = currentSchoolCycleId ? `&cicloEscolarId=${encodeURIComponent(currentSchoolCycleId)}` : '';
+                        await api.delete(`/route-assignments?schoolId=${schoolId}&routeNumber=${routeNumber}${cycleParam}`, {
                             headers: { Authorization: `Bearer ${auth.token}` }
                         });
-                        routeAssignmentChanges++;
                         successfulChanges.push(`Ruta ${routeNumber}: asignación por ruta eliminada`);
                     } catch (err) {
                         // Ignore 404 errors (no assignment to delete)
@@ -565,7 +574,11 @@ const SchoolBusesPage = () => {
             } else if (successfulChanges.length === 0) {
                 setSnackbar({ open: true, message: 'No hay cambios que guardar', severity: 'info' });
             } else {
-                setSnackbar({ open: true, message: 'Asignaciones guardadas exitosamente', severity: 'success' });
+                setSnackbar({
+                    open: true,
+                    message: isPreparationMode ? 'Asignaciones de preparación guardadas' : 'Asignaciones guardadas exitosamente',
+                    severity: 'success'
+                });
             }
             
             // Solo refrescar si hubo cambios exitosos
@@ -748,11 +761,26 @@ const SchoolBusesPage = () => {
                         <DirectionsBus sx={{ fontSize: 40 }} />
                         <Box>
                             <Typography variant="h4">Asignación de Buses - {currentSchool?.name || 'Cargando...'}</Typography>
-                            <Typography variant="body2">Ciclo Escolar {currentCycleLabel}</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                <Typography variant="body2">Ciclo Escolar {currentCycleLabel}</Typography>
+                                <Chip
+                                    label={assignmentModeLabel}
+                                    size="small"
+                                    color={isPreparationMode ? 'warning' : 'success'}
+                                    variant="filled"
+                                    sx={{ bgcolor: isPreparationMode ? 'warning.main' : 'success.main', color: 'white' }}
+                                />
+                            </Box>
                         </Box>
                     </Box>
                 </CardContent>
             </HeaderCard>
+
+            {isPreparationMode && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                    Este colegio no está operando. Las asignaciones se guardarán para preparación del ciclo y no deberían usarse como operación vigente.
+                </Alert>
+            )}
 
             <Card>
                 <CardContent>
@@ -928,8 +956,8 @@ const SchoolBusesPage = () => {
                                                 <TableCell>
                                                     {(assignedBusId || routePilotAssignments[routeNumber] || routeMonitorAssignments[routeNumber]) ? (
                                                         <Chip 
-                                                            label="Asignado" 
-                                                            color="success" 
+                                                            label={isPreparationMode ? 'Preparado' : 'Asignado'}
+                                                            color={isPreparationMode ? 'warning' : 'success'}
                                                             size="small"
                                                         />
                                                     ) : (
@@ -963,7 +991,7 @@ const SchoolBusesPage = () => {
                                 • Los pilotos y monitoras se pueden asignar también sin un bus; se guardarán como asignaciones de ruta
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
-                                • Los pilotos y monitoras deben pertenecer al mismo colegio
+                                • Los pilotos y monitoras deben pertenecer al mismo colegio y ciclo escolar
                             </Typography>
                         </Box>
                     )}

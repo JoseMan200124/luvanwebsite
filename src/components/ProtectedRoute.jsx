@@ -1,14 +1,16 @@
 // src/components/ProtectedRoute.jsx
 
 import React, { useContext } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import { PermissionsContext } from '../context/PermissionsProvider';
 import { CircularProgress } from '@mui/material';
+import { hasStoredSchoolContext, isSchoolContextRequiredRole } from '../utils/schoolContext';
 
-const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '/admin/dashboard' }) => {
+const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '/admin/dashboard', requireSchoolContext = true }) => {
     const { auth, initialLoad } = useContext(AuthContext);
     const { hasPermission, permissionsLoaded, loading } = useContext(PermissionsContext);
+    const location = useLocation();
 
     // 1) Si todavía estamos cargando (por ej. chequeando token en localStorage),
     //    mostramos un spinner
@@ -41,6 +43,10 @@ const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '
 
     const userRoleName = auth.user?.role || 'Desconocido';
     const userRoleId = auth.user?.roleId;
+
+    if (requireSchoolContext && isSchoolContextRequiredRole(userRoleId) && !hasStoredSchoolContext()) {
+        return <Navigate to="/select-context" replace state={{ nextPath: `${location.pathname}${location.search}` }} />;
+    }
 
     // 4) Si se proporciona moduleKey, verificar permisos en BD
     // Nota: el provider muestra loading mientras carga, así que aquí normalmente ya estará cargado.
