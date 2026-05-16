@@ -19,7 +19,6 @@ import {
     Checkbox,
     Tooltip,
     IconButton as MuiIconButton,
-    Divider,
     List,
     ListItem,
     ListItemText,
@@ -157,15 +156,10 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const family = localPayment?.User?.FamilyDetail || payment?.User?.FamilyDetail || {};
     const finalStatus = ((localPayment || payment)?.finalStatus || '').toString().toUpperCase();
     const isDeleted = finalStatus === 'ELIMINADO' || !!family.deleted;
+    const activePayment = localPayment || payment || {};
+    const isGlobalPenaltyFrozen = !!activePayment.penaltyGlobalFrozen;
+    const frozenPenaltyPeriodsCount = Number(activePayment.frozenPenaltyPeriodsCount || 0);
 
-    // Derive frozen state from per-period data (penaltyFrozenAt removed from NewPayment model)
-    const hasFrozenPeriods = React.useMemo(() => {
-        const p = localPayment || payment;
-        try {
-            const raw = p?.unpaidPeriods ? (typeof p.unpaidPeriods === 'string' ? JSON.parse(p.unpaidPeriods) : p.unpaidPeriods) : [];
-            return Array.isArray(raw) && raw.some(pp => pp.penaltyFrozen);
-        } catch { return false; }
-    }, [localPayment, payment]);
     const [autoDebit, setAutoDebit] = useState(!!family.autoDebit || false);
     const [requiresInvoice, setRequiresInvoice] = useState(!!family.requiresInvoice || false);
     const [discount, setDiscount] = useState(family.specialFee ?? family.discount ?? 0);
@@ -227,6 +221,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [openExonerateDialog, setOpenExonerateDialog] = useState(false);
     const [openDiscountModal, setOpenDiscountModal] = useState(false);
     const [exonerateAmount, setExonerateAmount] = useState('');
+    const [globalFreezeDialogMode, setGlobalFreezeDialogMode] = useState(null);
+    const [globalFreezeReason, setGlobalFreezeReason] = useState('');
 
     // Delete confirmation dialog
     const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
@@ -352,7 +348,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     const handleAction = (name, payload = {}) => {
         // Prevent mutating actions for deleted families
-        const mutating = [
+        const mutating = new Set([
             'exoneratePenalty',
             'addTransaction',
             'updateReceiptNumber',
@@ -362,11 +358,13 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             'toggleFreezePenalty',
             'freezePenalty',
             'unfreezePenalty',
+            'freezeGlobalPenalty',
+            'unfreezeGlobalPenalty',
             'payPenalty',
             'discountPenalty',
             'deletePayment'
-        ];
-        if (isDeleted && mutating.includes(name)) {
+        ]);
+        if (isDeleted && mutating.has(name)) {
             // silently ignore or optionally show a client-side message
             return;
         }
@@ -374,7 +372,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         // If this action modifies payment history on the server, invalidate client's cached pages for this user
         try {
             const paymentId = payment?.id;
-            if (paymentId && mutating.includes(name)) {
+            if (paymentId && mutating.has(name)) {
                 // clear all cache entries for this paymentId
                 const prefix = `${paymentId}:`;
                 for (const k of Array.from(histCacheRef.current.keys())) {
@@ -387,7 +385,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         }
 
         // Optimistic UI updates for certain actions
-        if (name === 'toggleFreezePenalty' || name === 'freezePenalty' || name === 'unfreezePenalty') {
+        if (name === 'toggleFreezePenalty' || name === 'freezePenalty' || name === 'unfreezePenalty' || name === 'freezeGlobalPenalty' || name === 'unfreezeGlobalPenalty') {
             // Refresh from parent instead of optimistic update on removed field
         }
 
@@ -479,6 +477,43 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     // compute total after discount (clamp to zero)
     const parsedDiscount = Number(discount || 0) || 0;
     const totalAfterDiscount = Math.max(0, Number(computedTariff || 0) - parsedDiscount);
+
+    const handleOpenGlobalFreezeDialog = (mode) => {
+        setGlobalFreezeDialogMode(mode);
+        setGlobalFreezeReason('');
+    };
+
+    const handleCloseGlobalFreezeDialog = () => {
+        setGlobalFreezeDialogMode(null);
+        setGlobalFreezeReason('');
+    };
+
+    const handleConfirmGlobalFreezeAction = async () => {
+        if (globalFreezeDialogMode === 'freeze') {
+            const reason = globalFreezeReason.trim();
+            if (!reason) return;
+            try {
+                const currentDate = await dateService.getCurrentDate();
+                handleAction('freezeGlobalPenalty', {
+                    freezeDate: currentDate.format('YYYY-MM-DD'),
+                    reason,
+                    notes: reason
+                });
+            } catch (error) {
+                console.error('Error getting current date:', error);
+                handleAction('freezeGlobalPenalty', {
+                    freezeDate: moment().format('YYYY-MM-DD'),
+                    reason,
+                    notes: reason
+                });
+            }
+        } else if (globalFreezeDialogMode === 'unfreeze') {
+            handleAction('unfreezeGlobalPenalty', {
+                notes: 'Mora global descongelada desde hoy'
+            });
+        }
+        handleCloseGlobalFreezeDialog();
+    };
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" fullScreen={isMobile} PaperProps={{ sx: { m: { xs: 0, sm: 2 }, maxHeight: { xs: '100dvh', sm: 'calc(100% - 64px)' } } }}>
@@ -593,37 +628,78 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
                 <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
                     <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) handleAction('receipts'); }} disabled={isDeleted}>Boletas</Button>
-                    {/* Freeze/Unfreeze penalty button - disponible para todos los pagos */}
+                    {isGlobalPenaltyFrozen && (
+                        <Chip size="small" color="warning" label="Mora global congelada" />
+                    )}
+                    {frozenPenaltyPeriodsCount > 0 && (
+                        <Chip size="small" color="info" variant="outlined" label={`${frozenPenaltyPeriodsCount} período(s) congelado(s)`} />
+                    )}
                     <Button 
                         variant="outlined" 
-                        color={hasFrozenPeriods ? "success" : "primary"}
-                        startIcon={hasFrozenPeriods ? <PlayArrowIcon /> : <PauseIcon />}
-                        onClick={async () => {
+                        color={isGlobalPenaltyFrozen ? "success" : "primary"}
+                        startIcon={isGlobalPenaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
+                        onClick={() => {
                             if (isDeleted) return;
-                            if (hasFrozenPeriods) {
-                                handleAction('unfreezePenalty');
-                            } else {
-                                // Freeze with current date from backend (simulated or real)
-                                try {
-                                    const currentDate = await dateService.getCurrentDate();
-                                    const today = currentDate.format('YYYY-MM-DD');
-                                    handleAction('freezePenalty', { freezeDate: today });
-                                } catch (error) {
-                                    console.error('Error getting current date:', error);
-                                    // Fallback to local date if service fails
-                                    const today = moment().format('YYYY-MM-DD');
-                                    handleAction('freezePenalty', { freezeDate: today });
-                                }
-                            }
+                            handleOpenGlobalFreezeDialog(isGlobalPenaltyFrozen ? 'unfreeze' : 'freeze');
                         }}
                         disabled={isDeleted}
                     >
-                        {hasFrozenPeriods ? 'Reanudar Mora' : 'Congelar Mora'}
+                        {isGlobalPenaltyFrozen ? 'Descongelar mora global' : 'Congelar mora global'}
                     </Button>
                     {/* State changes handled elsewhere; action buttons removed */}
                     {/* Delete/Revert payment */}
                     <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) setOpenDeleteDialog(true); }} disabled={isDeleted}>Revertir pago</Button>
                 </Box>
+
+                <Dialog open={!!globalFreezeDialogMode} onClose={handleCloseGlobalFreezeDialog} maxWidth="xs" fullWidth fullScreen={isMobile}>
+                    <DialogTitle>
+                        {globalFreezeDialogMode === 'freeze' ? 'Congelar mora global' : 'Descongelar mora global'}
+                    </DialogTitle>
+                    <DialogContent>
+                        {globalFreezeDialogMode === 'freeze' ? (
+                            <Stack spacing={2} sx={{ mt: 1 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    Esta acción pausa la mora de la familia completa. Los períodos actuales y futuros no generarán nueva mora hasta descongelar.
+                                </Typography>
+                                <TextField
+                                    label="Razón"
+                                    value={globalFreezeReason}
+                                    onChange={(event) => setGlobalFreezeReason(event.target.value)}
+                                    fullWidth
+                                    required
+                                    multiline
+                                    minRows={2}
+                                    autoFocus
+                                />
+                                <Typography variant="caption" color="text.secondary">
+                                    Mora actual: Q {Number(activePayment.penaltyDue || 0).toFixed(2)}
+                                </Typography>
+                            </Stack>
+                        ) : (
+                            <Stack spacing={1.5} sx={{ mt: 1 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    La mora volverá a generarse desde hoy. No se cobrará retroactivo por los días en que estuvo congelada.
+                                </Typography>
+                                {activePayment.penaltyGlobalFrozenAt && (
+                                    <Typography variant="caption" color="text.secondary">
+                                        Congelada desde: {moment.parseZone(activePayment.penaltyGlobalFrozenAt).format('DD/MM/YYYY')}
+                                    </Typography>
+                                )}
+                            </Stack>
+                        )}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCloseGlobalFreezeDialog}>Cancelar</Button>
+                        <Button
+                            variant="contained"
+                            color={globalFreezeDialogMode === 'unfreeze' ? 'success' : 'primary'}
+                            onClick={handleConfirmGlobalFreezeAction}
+                            disabled={globalFreezeDialogMode === 'freeze' && !globalFreezeReason.trim()}
+                        >
+                            Confirmar
+                        </Button>
+                    </DialogActions>
+                </Dialog>
 
                 {/* Exonerate Dialog */}
                 <Dialog open={openExonerateDialog} onClose={() => setOpenExonerateDialog(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>

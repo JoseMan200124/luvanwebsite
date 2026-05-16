@@ -22,9 +22,10 @@ import {
     MenuItem,
     Alert,
     CircularProgress,
-    Paper
+    Paper,
+    Tooltip
 } from '@mui/material';
-import { Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Add as AddIcon, Pause as PauseIcon, PlayArrow as PlayArrowIcon } from '@mui/icons-material';
 import moment from 'moment';
 import 'moment/locale/es';
 import api from '../../utils/axiosConfig';
@@ -56,6 +57,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleteBusy, setDeleteBusy] = useState(false);
+    const [freezeBusyPeriod, setFreezeBusyPeriod] = useState('');
 
     const currentPeriod = useMemo(() => moment().format('YYYY-MM'), []);
 
@@ -284,6 +286,43 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
         }
     };
 
+    const handleTogglePeriodFreeze = async (periodRecord) => {
+        const per = String(periodRecord?.period || '');
+        if (!paymentId || !per) return;
+
+        const isFrozen = !!periodRecord.penaltyFrozen;
+        setFreezeBusyPeriod(per);
+        setError('');
+        setSuccess('');
+
+        try {
+            if (isFrozen) {
+                await api.post('/payments/penalties/unfreeze', {
+                    paymentId,
+                    period: per,
+                    notes: `Mora del período ${per} descongelada manualmente`
+                });
+                setSuccess(`Mora del período ${per} descongelada.`);
+            } else {
+                await api.post('/payments/penalties/freeze', {
+                    paymentId,
+                    period: per,
+                    freezeDate: moment().format('YYYY-MM-DD'),
+                    notes: `Mora del período ${per} congelada manualmente`
+                });
+                setSuccess(`Mora del período ${per} congelada.`);
+            }
+
+            await refresh();
+            if (onChanged) onChanged();
+        } catch (e) {
+            console.error('Error toggling period penalty freeze', e);
+            setError(e?.response?.data?.error || e?.response?.data?.message || 'Error actualizando congelamiento de mora');
+        } finally {
+            setFreezeBusyPeriod('');
+        }
+    };
+
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
             <DialogTitle><strong>Gestionar Períodos</strong></DialogTitle>
@@ -494,8 +533,10 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                             const isCurrent = per === currentPeriod;
                             const status = String(p.status || '').toUpperCase();
                             const penaltyStatus = String(p.penaltyStatus || 'SIN_MORA').toUpperCase();
+                            const penaltyFrozen = !!p.penaltyFrozen;
                             const amountPaid = Number(p.amountPaid || 0);
                             const amountDue = Number(p.amountDue ?? p.netAmount ?? 0);
+                            const penaltyDue = Number(p.penaltyDue || 0);
 
                             const statusChipColor = (() => {
                                 if (status === 'PAGADO') return 'success';
@@ -544,21 +585,44 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                     key={per}
                                     sx={{ py: 1.25, px: 2, borderBottom: '1px dashed rgba(0,0,0,0.08)' }}
                                     secondaryAction={
-                                        <IconButton
-                                            edge="end"
-                                            title={deletable(p) ? 'Eliminar período' : 'No se puede eliminar (tiene pagos)'}
-                                            onClick={() => { if (deletable(p)) { setDeleteTarget(p); setDeleteConfirmText(''); } }}
-                                            disabled={!deletable(p) || deleteBusy}
-                                            sx={(theme) => ({
-                                                color: deletable(p) ? theme.palette.text.secondary : theme.palette.action.disabled,
-                                                '&:hover': deletable(p) ? {
-                                                    color: theme.palette.error.main,
-                                                    backgroundColor: alpha(theme.palette.error.main, 0.10)
-                                                } : undefined
-                                            })}
-                                        >
-                                            <DeleteIcon />
-                                        </IconButton>
+                                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+                                            <Tooltip title={penaltyFrozen ? 'Descongelar mora del período' : 'Congelar mora del período'}>
+                                                <span>
+                                                    <IconButton
+                                                        edge="end"
+                                                        onClick={() => handleTogglePeriodFreeze(p)}
+                                                        disabled={freezeBusyPeriod === per || deleteBusy}
+                                                        sx={(theme) => ({
+                                                            color: penaltyFrozen ? theme.palette.success.main : theme.palette.text.secondary,
+                                                            '&:hover': {
+                                                                color: penaltyFrozen ? theme.palette.success.dark : theme.palette.primary.main,
+                                                                backgroundColor: alpha(penaltyFrozen ? theme.palette.success.main : theme.palette.primary.main, 0.10)
+                                                            }
+                                                        })}
+                                                    >
+                                                        {penaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+                                            <Tooltip title={deletable(p) ? 'Eliminar período' : 'No se puede eliminar (tiene pagos)'}>
+                                                <span>
+                                                    <IconButton
+                                                        edge="end"
+                                                        onClick={() => { if (deletable(p)) { setDeleteTarget(p); setDeleteConfirmText(''); } }}
+                                                        disabled={!deletable(p) || deleteBusy || !!freezeBusyPeriod}
+                                                        sx={(theme) => ({
+                                                            color: deletable(p) ? theme.palette.text.secondary : theme.palette.action.disabled,
+                                                            '&:hover': deletable(p) ? {
+                                                                color: theme.palette.error.main,
+                                                                backgroundColor: alpha(theme.palette.error.main, 0.10)
+                                                            } : undefined
+                                                        })}
+                                                    >
+                                                        <DeleteIcon />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+                                        </Box>
                                     }
                                 >
                                     <ListItemText
@@ -582,6 +646,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                             variant={penaltyStatus === 'SIN_MORA' ? 'outlined' : 'filled'}
                                                         />
                                                     )}
+                                                    {penaltyFrozen && <Chip size="small" label="Mora congelada" color="info" variant="outlined" />}
                                                 </Box>
                                                 {isOverdue && (
                                                     <Typography
@@ -628,6 +693,11 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
                                                     Pagado: Q {amountPaid.toFixed(2)} · Pendiente: Q {amountDue.toFixed(2)}
                                                 </Typography>
+                                                {(penaltyDue > 0 || penaltyFrozen) && (
+                                                    <Typography variant="caption" color={penaltyFrozen ? 'info.main' : 'text.secondary'} sx={{ display: 'block', mt: 0.25 }}>
+                                                        Mora: Q {penaltyDue.toFixed(2)}{penaltyFrozen && p.penaltyFrozenAt ? ` · Congelada: ${moment.parseZone(p.penaltyFrozenAt).format('DD/MM/YYYY')}` : ''}
+                                                    </Typography>
+                                                )}
                                             </Box>
                                         }
                                     />

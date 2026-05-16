@@ -1676,6 +1676,26 @@ const SchoolPaymentsPage = () => {
                     notes: 'Mora reanudada manualmente'
                 });
                 setSnackbar({ open: true, message: 'Mora reanudada', severity: 'success' });
+            } else if (actionName === 'freezeGlobalPenalty') {
+                const reason = String(payload?.reason || '').trim();
+                if (!reason) {
+                    setSnackbar({ open: true, message: 'La razón es requerida para congelar mora global', severity: 'error' });
+                    return;
+                }
+
+                await api.post('/payments/penalties/freeze-global', {
+                    paymentId: payment.id,
+                    freezeDate: payload?.freezeDate,
+                    reason,
+                    notes: payload?.notes || reason
+                });
+                setSnackbar({ open: true, message: 'Mora global congelada', severity: 'success' });
+            } else if (actionName === 'unfreezeGlobalPenalty') {
+                await api.post('/payments/penalties/unfreeze-global', {
+                    paymentId: payment.id,
+                    notes: payload?.notes || 'Mora global descongelada desde hoy'
+                });
+                setSnackbar({ open: true, message: 'Mora global descongelada', severity: 'success' });
             } else if (actionName === 'suspend' || actionName === 'activate') {
                 // Cambiar status del payment usando endpoints V2
                 const endpoint = actionName === 'suspend' ? 'suspend' : 'activate';
