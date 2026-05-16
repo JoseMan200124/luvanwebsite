@@ -175,6 +175,8 @@ const CicloEscolarSelectionPage = () => {
     const [loading, setLoading] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [operationalConflict, setOperationalConflict] = useState(null);
+    const [billingConflict, setBillingConflict] = useState(null);
+    const [billingDecision, setBillingDecision] = useState({ action: 'SET_NEXT_MONTH_START', customStartDate: '', confirmText: '' });
     const [opStatusConfirm, setOpStatusConfirm] = useState({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
     
     // Estados para diálogos y acciones
@@ -813,6 +815,8 @@ const CicloEscolarSelectionPage = () => {
         setOpenEditDialog(false);
         setOpenEditSchedulesModal(false);
         setOperationalConflict(null);
+        setBillingConflict(null);
+        setBillingDecision({ action: 'SET_NEXT_MONTH_START', customStartDate: '', confirmText: '' });
         setSelectedSchool(null);
         setSelectedPrefillSchoolId('');
         setSchoolSchedules([]);
@@ -1038,7 +1042,7 @@ const CicloEscolarSelectionPage = () => {
     };
 
     // Función para guardar cambios
-    const handleSave = async () => {
+    const handleSave = async (extraPayload = {}) => {
         if (!selectedSchool) return;
 
         if (
@@ -1179,7 +1183,8 @@ const CicloEscolarSelectionPage = () => {
                 schoolYearEnd: schoolYearEnd || null,
                 cicloEscolarId: selectedCicloEscolarId || null,
                 operationStatus: selectedSchool.operationStatus || 'ACTIVE',
-                enrollmentStatus: selectedSchool.enrollmentStatus || 'OPEN'
+                enrollmentStatus: selectedSchool.enrollmentStatus || 'OPEN',
+                ...extraPayload
             };
 
             // Distinguish between create and update
@@ -1221,6 +1226,20 @@ const CicloEscolarSelectionPage = () => {
                 });
                 return;
             }
+            if (err.response?.status === 409 && responseData?.code === 'OPERATION_START_BILLING_CONFLICT') {
+                setBillingConflict(responseData);
+                setBillingDecision({
+                    action: 'SET_NEXT_MONTH_START',
+                    customStartDate: responseData.suggestedNextMonthStart || '',
+                    confirmText: ''
+                });
+                setSnackbar({
+                    open: true,
+                    message: responseData.message || 'Se requiere decidir desde qué fecha iniciará el cobro.',
+                    severity: 'warning'
+                });
+                return;
+            }
             setSnackbar({
                 open: true,
                 message: 'Error al guardar el colegio',
@@ -1229,6 +1248,43 @@ const CicloEscolarSelectionPage = () => {
         } finally {
             setSavingSchool(false);
         }
+    };
+
+    const handleApplyBillingDecision = async () => {
+        if (!billingConflict) return;
+
+        const action = billingDecision.action || 'SET_NEXT_MONTH_START';
+        const nextStartDate = action === 'SET_NEXT_MONTH_START'
+            ? billingConflict.suggestedNextMonthStart
+            : action === 'SET_CUSTOM_START_DATE'
+                ? billingDecision.customStartDate
+                : billingConflict.currentSchoolYearStart;
+
+        if (action !== 'KEEP_START_DATE' && !nextStartDate) {
+            setSnackbar({ open: true, message: 'Selecciona una fecha de inicio válida.', severity: 'warning' });
+            return;
+        }
+
+        const requiresConfirmation = action !== 'SET_NEXT_MONTH_START';
+        if (requiresConfirmation && billingDecision.confirmText !== 'CONFIRMAR') {
+            setSnackbar({ open: true, message: 'Escribe CONFIRMAR para continuar con esta decisión.', severity: 'warning' });
+            return;
+        }
+
+        if (nextStartDate) {
+            setSchoolYearStart(nextStartDate);
+        }
+        setBillingConflict(null);
+
+        await handleSave({
+            ...(nextStartDate ? { schoolYearStart: nextStartDate } : {}),
+            confirmBillingConflict: true,
+            operationStartBillingDecision: {
+                action,
+                schoolYearStart: nextStartDate || null,
+                confirmBillingConflict: true
+            }
+        });
     };
 
     // Función para limpiar mora
@@ -2359,7 +2415,7 @@ const CicloEscolarSelectionPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseEditDialog}>Cancelar</Button>
-                    <Button onClick={handleSave} variant="contained" color="primary" disabled={savingSchool}>
+                    <Button onClick={() => handleSave()} variant="contained" color="primary" disabled={savingSchool}>
                         {savingSchool ? <CircularProgress size={20} color="inherit" /> : (selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio')}
                     </Button>
                 </DialogActions>
@@ -2454,6 +2510,100 @@ const CicloEscolarSelectionPage = () => {
                 <DialogActions>
                     <Button onClick={() => setOperationalConflict(null)} variant="contained">
                         Entendido
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={!!billingConflict}
+                onClose={() => setBillingConflict(null)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Definir inicio de cobro</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        {billingConflict?.message || 'El ciclo anterior ya tiene cargos en el período actual.'}
+                    </DialogContentText>
+
+                    {Array.isArray(billingConflict?.conflictingCycles) && billingConflict.conflictingCycles.length > 0 && (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                            {billingConflict.conflictingCycles.map((school) => (
+                                <Alert key={`${school.id}-${school.period}`} severity="warning" variant="outlined">
+                                    <Typography variant="subtitle2">{school.name || `Colegio ${school.id}`}</Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {getCicloEscolarOptionLabel(school.cicloEscolar) || (school.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar')}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Período {school.period}: {school.periodCount || 0} cargos, Q{Number(school.totalNetAmount || 0).toFixed(2)}
+                                    </Typography>
+                                </Alert>
+                            ))}
+                        </Box>
+                    )}
+
+                    <FormControl fullWidth sx={{ mt: 2 }}>
+                        <InputLabel>Decisión</InputLabel>
+                        <Select
+                            value={billingDecision.action}
+                            label="Decisión"
+                            onChange={(event) => setBillingDecision((prev) => ({ ...prev, action: event.target.value, confirmText: '' }))}
+                        >
+                            <MenuItem value="SET_NEXT_MONTH_START">
+                                Iniciar cobro el próximo mes ({billingConflict?.suggestedNextMonthStart || 'fecha sugerida'})
+                            </MenuItem>
+                            <MenuItem value="KEEP_START_DATE">
+                                Mantener fecha actual y cobrar/prorratear {billingConflict?.currentPeriod || 'este período'}
+                            </MenuItem>
+                            <MenuItem value="SET_CUSTOM_START_DATE">Elegir otra fecha de inicio</MenuItem>
+                        </Select>
+                    </FormControl>
+
+                    {billingDecision.action === 'SET_CUSTOM_START_DATE' && (
+                        <TextField
+                            label="Nueva fecha de inicio"
+                            type="date"
+                            fullWidth
+                            sx={{ mt: 2 }}
+                            value={billingDecision.customStartDate || ''}
+                            onChange={(event) => setBillingDecision((prev) => ({ ...prev, customStartDate: event.target.value }))}
+                            InputLabelProps={{ shrink: true }}
+                        />
+                    )}
+
+                    {billingDecision.action !== 'SET_NEXT_MONTH_START' && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="warning" sx={{ mb: 1.5 }}>
+                                Esta decisión puede generar cargo o prorrateo del período que ya fue cobrado en otro ciclo.
+                            </Alert>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                placeholder="CONFIRMAR"
+                                value={billingDecision.confirmText}
+                                onChange={(event) => setBillingDecision((prev) => ({ ...prev, confirmText: event.target.value }))}
+                                error={billingDecision.confirmText.length > 0 && billingDecision.confirmText !== 'CONFIRMAR'}
+                                helperText={
+                                    billingDecision.confirmText.length > 0 && billingDecision.confirmText !== 'CONFIRMAR'
+                                        ? 'Escribe exactamente CONFIRMAR'
+                                        : 'Escribe CONFIRMAR para continuar'
+                                }
+                            />
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setBillingConflict(null)}>Cancelar</Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleApplyBillingDecision}
+                        disabled={
+                            savingSchool
+                            || (billingDecision.action === 'SET_CUSTOM_START_DATE' && !billingDecision.customStartDate)
+                            || (billingDecision.action !== 'SET_NEXT_MONTH_START' && billingDecision.confirmText !== 'CONFIRMAR')
+                        }
+                    >
+                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Aplicar decisión'}
                     </Button>
                 </DialogActions>
             </Dialog>
