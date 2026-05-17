@@ -42,6 +42,7 @@ import api from '../utils/axiosConfig';
 import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -214,6 +215,7 @@ const RolesManagementPage = () => {
     // Filtros
     const [roleFilter, setRoleFilter] = useState('');
     const [clientFilter, setClientFilter] = useState(null); // { type: 'Colegio'|'Corporación', id, name }
+    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
 
     // Roles allowed to be created from the "Añadir Usuario" dialog
     const allowedRolesForCreate = ['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar'];
@@ -248,15 +250,16 @@ const RolesManagementPage = () => {
             fetchAllPilots();
             fetchAllMonitoras();
         })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
         setPage(0);
-    }, [roleFilter, clientFilter, searchQuery]);
+    }, [roleFilter, clientFilter, searchQuery, selectedCicloEscolar]);
 
     const fetchAllPilots = async () => {
         try {
-            const resp = await api.get('/users/pilots');
+            const resp = await api.get('/users/pilots', { skipSchoolCycleContext: true });
             setAllPilots(resp.data.users || []);
         } catch (error) {
             console.error('[fetchAllPilots] Error:', error);
@@ -266,7 +269,7 @@ const RolesManagementPage = () => {
 
     const fetchAllMonitoras = async () => {
         try {
-            const resp = await api.get('/users/monitors');
+            const resp = await api.get('/users/monitors', { skipSchoolCycleContext: true });
             setAllMonitoras(resp.data.users || []);
         } catch (error) {
             console.error('[fetchAllMonitoras] Error:', error);
@@ -297,14 +300,15 @@ const RolesManagementPage = () => {
         try {
             const params = {
                 page,
-                limit: rowsPerPage
+                limit: rowsPerPage,
+                ...getCicloEscolarFilterParams(selectedCicloEscolar)
             };
             if (searchQuery) params.search = searchQuery;
             if (roleFilter) params.roleId = roleFilter;
             if (clientFilter && clientFilter.type === 'Colegio') params.schoolId = clientFilter.id;
             if (clientFilter && clientFilter.type === 'Corporación') params.corporationId = clientFilter.id;
 
-            const response = await api.get('/users/non-parents', { params });
+            const response = await api.get('/users/non-parents', { params, skipSchoolCycleContext: true });
             const data = response.data || {};
             setUsers(data.users || []);
             setTotalUsers(Number(data.count || 0));
@@ -318,7 +322,14 @@ const RolesManagementPage = () => {
     // Fetch when pagination or filters change
     useEffect(() => {
         fetchUsers();
-    }, [page, rowsPerPage, roleFilter, clientFilter, searchQuery]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, rowsPerPage, roleFilter, clientFilter, searchQuery, selectedCicloEscolar]);
+
+    useEffect(() => {
+        fetchSchools();
+        fetchCorporations();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedCicloEscolar]);
 
         // Register page-level refresh handler for global refresh control
         useRegisterPageRefresh(async () => {
@@ -327,7 +338,8 @@ const RolesManagementPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const resp = await api.get('/schools', { params: { allCycles: true, latestPerSchool: true } });
+            const cycleParams = getCicloEscolarFilterParams(selectedCicloEscolar);
+            const resp = await api.get('/schools', { params: { ...cycleParams, ...(cycleParams.allCycles ? { latestPerSchool: true } : {}) }, skipSchoolCycleContext: true });
             setSchools(resp.data.schools || []);
         } catch (err) {
             console.error('[fetchSchools] Error:', err);
@@ -337,7 +349,7 @@ const RolesManagementPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const resp = await api.get('/corporations', { params: { allCycles: true } });
+            const resp = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar), skipSchoolCycleContext: true });
             setCorporations(resp.data.corporations || []);
         } catch (err) {
             console.error('[fetchCorporations] Error:', err);
@@ -707,7 +719,7 @@ const RolesManagementPage = () => {
             let fetched = 0;
 
             // Decide params: when category is Colegio/Corporación ask backend to filter so attached supervisors/auxiliares are included
-            const baseParams = { page: 0, limit };
+            const baseParams = { page: 0, limit, ...getCicloEscolarFilterParams(selectedCicloEscolar) };
             if (category === 'Colegios') {
                 const schoolId = clientObj ? clientObj.id : null;
                 if (!schoolId) {
@@ -725,16 +737,16 @@ const RolesManagementPage = () => {
             }
 
             // Primera petición para saber el total (pedimos al backend según params)
-            let resp = await api.get('/users/non-parents', { params: baseParams });
+            let resp = await api.get('/users/non-parents', { params: baseParams, skipSchoolCycleContext: true });
             allUsers = resp.data.users || [];
-            total = resp.data.total || allUsers.length;
+            total = resp.data.count || resp.data.total || allUsers.length;
             fetched = allUsers.length;
 
             // Si hay más, sigue pidiendo en lotes conservando los mismos filtros
             while (fetched < total) {
                 page += 1;
                 const params = { ...baseParams, page };
-                const batchResp = await api.get('/users/non-parents', { params });
+                const batchResp = await api.get('/users/non-parents', { params, skipSchoolCycleContext: true });
                 const usersBatch = batchResp.data.users || [];
                 allUsers = allUsers.concat(usersBatch);
                 fetched += usersBatch.length;
@@ -1050,6 +1062,16 @@ const RolesManagementPage = () => {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     
+
+                    <CicloEscolarFilter
+                        value={selectedCicloEscolar}
+                        onChange={(value) => {
+                            setSelectedCicloEscolar(value);
+                            setClientFilter(null);
+                            setPage(0);
+                        }}
+                        sx={{ width: 220 }}
+                    />
 
                     <FormControl size="small" sx={{ width: 150 }}>
                         <InputLabel>Rol</InputLabel>
