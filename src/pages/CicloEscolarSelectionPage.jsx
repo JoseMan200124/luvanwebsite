@@ -1662,16 +1662,6 @@ const CicloEscolarSelectionPage = () => {
                                 <Grid item xs={12} sm={6} md={4} lg={3} key={school.id}>
                                     <SchoolCard>
                                         <CardContent sx={{ textAlign: 'center', py: 3 }}>
-                                            <Box sx={{ minHeight: 28, mb: 1, display: 'flex', justifyContent: 'center' }}>
-                                                {isPreviousCycleSchool(school) && (
-                                                    <Chip
-                                                        label="Ciclo anterior"
-                                                        size="small"
-                                                        color="warning"
-                                                        variant="filled"
-                                                    />
-                                                )}
-                                            </Box>
                                             <SchoolIcon 
                                                 sx={{ 
                                                     fontSize: 48, 
