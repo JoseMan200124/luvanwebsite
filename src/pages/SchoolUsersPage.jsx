@@ -2729,7 +2729,12 @@ const SchoolUsersPage = () => {
             </Dialog>
 
             {/* Modal: Carga masiva de horarios */}
-            <BulkScheduleModal open={openBulkScheduleDialog} onClose={() => setOpenBulkScheduleDialog(false)} schoolId={currentSchool?.id || schoolId} />
+            <BulkScheduleModal
+                open={openBulkScheduleDialog}
+                onClose={() => setOpenBulkScheduleDialog(false)}
+                schoolId={currentSchool?.id || schoolId}
+                cicloEscolarId={stateCicloEscolarId}
+            />
 
             {/* Diálogo de confirmación para eliminación de usuario */}
             <Dialog open={openDeleteConfirm} onClose={handleCancelDelete} maxWidth="xs" fullWidth>
