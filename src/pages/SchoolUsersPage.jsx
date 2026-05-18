@@ -1572,11 +1572,26 @@ const SchoolUsersPage = () => {
 
     const handleConfirmDelete = async () => {
         if (!selectedUser || !selectedUser.id) return;
+        const schoolIdToUse = currentSchool?.id || schoolId || stateSchool?.id;
+        if (!schoolIdToUse || !stateCicloEscolarId) {
+            setSnackbar({ open: true, message: 'No se pudo resolver el colegio y ciclo escolar para eliminar al usuario.', severity: 'error' });
+            return;
+        }
+
         try {
             setBulkLoading(true);
-            // This view requires a permanent (hard) deletion for users.
-            await api.delete(`/users/${selectedUser.id}`);
-            setSnackbar({ open: true, message: 'Usuario eliminado permanentemente', severity: 'success' });
+            const response = await api.delete(`/users/${selectedUser.id}/school-cycle`, {
+                data: {
+                    schoolId: schoolIdToUse,
+                    cicloEscolarId: stateCicloEscolarId,
+                    reason: 'Usuario eliminado desde gestión de familias por ciclo escolar'
+                }
+            });
+            setSnackbar({
+                open: true,
+                message: response?.data?.message || 'Usuario eliminado del ciclo escolar',
+                severity: 'success'
+            });
             setOpenDeleteConfirm(false);
             setSelectedUser(null);
             fetchUsers();
@@ -2738,10 +2753,10 @@ const SchoolUsersPage = () => {
 
             {/* Diálogo de confirmación para eliminación de usuario */}
             <Dialog open={openDeleteConfirm} onClose={handleCancelDelete} maxWidth="xs" fullWidth>
-                <DialogTitle>Eliminar Usuario</DialogTitle>
+                <DialogTitle>Eliminar del ciclo escolar</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        ¿Estás seguro que deseas eliminar al usuario <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>? Esta acción no es reversible.
+                        ¿Estás seguro que deseas eliminar a <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong> de este colegio y ciclo escolar?
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
