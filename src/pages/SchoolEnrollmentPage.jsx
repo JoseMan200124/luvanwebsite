@@ -699,6 +699,24 @@ const SchoolEnrollmentPage = () => {
                     >
                         Enviar
                     </Button>
+
+                    <Box
+                        sx={{
+                            mt: 2,
+                            p: 1.5,
+                            backgroundColor: '#f0f7f4',
+                            border: '1px solid #c8e6c9',
+                            borderRadius: 1,
+                            textAlign: 'center'
+                        }}
+                    >
+                        <Typography variant="caption" sx={{ color: '#555' }}>
+                            📧 El correo de confirmación será enviado desde{' '}
+                            <strong>haricodeoficial@gmail.com</strong>. Si no lo encuentras en tu
+                            bandeja de entrada, revisa tu carpeta de <em>spam</em> o{' '}
+                            <em>correo no deseado</em>.
+                        </Typography>
+                    </Box>
                 </form>
                 )}
 
