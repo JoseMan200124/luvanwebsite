@@ -17,12 +17,16 @@ import {
     Paper,
     Snackbar,
     Alert,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
     // FormControl, InputLabel, Select, MenuItem removed - replaced by Autocomplete
     TextField,
     Autocomplete,
     Chip
 } from '@mui/material';
-import { DirectionsBus, Save, Clear, ArrowBack, Refresh } from '@mui/icons-material';
+import { DirectionsBus, Save, Clear, ArrowBack, Refresh, ContentCopy } from '@mui/icons-material';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -65,6 +69,15 @@ const SchoolBusesPage = () => {
     const [schoolData, setSchoolData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [transferPreviewOpen, setTransferPreviewOpen] = useState(false);
+    const [previousCycleTransfer, setPreviousCycleTransfer] = useState({
+        loading: false,
+        transferring: false,
+        available: false,
+        assignments: [],
+        sourceSchool: null,
+        transferableCount: 0
+    });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
@@ -75,6 +88,31 @@ const SchoolBusesPage = () => {
     const currentOperationStatus = String(currentSchool?.operationStatus || 'ACTIVE').trim().toUpperCase();
     const isPreparationMode = currentOperationStatus !== 'ACTIVE';
     const assignmentModeLabel = isPreparationMode ? 'Preparación sin operación' : 'Operación activa';
+    const previousCycleTransferCount = previousCycleTransfer.transferableCount ?? previousCycleTransfer.assignments.length;
+    const previousCycleSkippedCount = Math.max(previousCycleTransfer.assignments.length - previousCycleTransferCount, 0);
+    const previousCycleLabel = previousCycleTransfer.sourceSchool?.cicloEscolar?.anio
+        || previousCycleTransfer.sourceSchool?.cicloEscolar?.label
+        || previousCycleTransfer.sourceSchool?.cicloEscolar?.nombre
+        || 'anterior';
+
+    const formatTransferUserOutcome = (assignment, userKey) => {
+        if (assignment.currentAssignment) return 'Sin cambios';
+
+        const user = assignment[userKey];
+        if (!user?.id) return 'Sin asignar';
+
+        const userName = user.name || user.email || `ID:${user.id}`;
+        if (user.willBeAssigned) return userName;
+
+        return `${userName} -> Sin asignar`;
+    };
+
+    const getTransferStatusLabel = (assignment) => {
+        if (assignment.currentAssignment) {
+            return `Omitida: ruta ocupada por ${assignment.currentAssignment.plate}`;
+        }
+        return 'Se transferirá';
+    };
 
     const fetchSchoolData = useCallback(async () => {
         if (!schoolId) return;
@@ -194,6 +232,50 @@ const SchoolBusesPage = () => {
         }
     }, [auth.token, schoolId, currentSchoolCycleId]);
 
+    const fetchPreviousCycleAssignments = useCallback(async () => {
+        if (!auth.token || !schoolId || !currentSchool || currentOperationStatus !== 'ACTIVE') {
+            setPreviousCycleTransfer(prev => ({
+                ...prev,
+                loading: false,
+                available: false,
+                assignments: [],
+                sourceSchool: null,
+                transferableCount: 0
+            }));
+            return;
+        }
+
+        setPreviousCycleTransfer(prev => ({ ...prev, loading: true }));
+        try {
+            const params = new URLSearchParams();
+            if (currentSchoolCycleId) params.set('cicloEscolarId', currentSchoolCycleId);
+            if (schoolRouteNumbers.length > 0) params.set('routeNumbers', schoolRouteNumbers.join(','));
+            const query = params.toString() ? `?${params.toString()}` : '';
+            const response = await api.get(`/buses/school/${schoolId}/previous-cycle-assignments${query}`, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            const data = response.data || {};
+            setPreviousCycleTransfer(prev => ({
+                ...prev,
+                loading: false,
+                available: Boolean(data.available),
+                assignments: Array.isArray(data.assignments) ? data.assignments : [],
+                sourceSchool: data.sourceSchool || null,
+                transferableCount: Number(data.transferableCount || 0)
+            }));
+        } catch (err) {
+            console.error('Error fetching previous cycle bus assignments:', err);
+            setPreviousCycleTransfer(prev => ({
+                ...prev,
+                loading: false,
+                available: false,
+                assignments: [],
+                sourceSchool: null,
+                transferableCount: 0
+            }));
+        }
+    }, [auth.token, schoolId, currentSchool, currentOperationStatus, currentSchoolCycleId, schoolRouteNumbers]);
+
     useEffect(() => {
         if (auth.token && schoolId) {
             setLoading(true);
@@ -201,6 +283,10 @@ const SchoolBusesPage = () => {
                 .finally(() => setLoading(false));
         }
     }, [auth.token, schoolId, fetchSchoolData, fetchBuses, fetchPilots, fetchMonitors, fetchRouteAssignments]);
+
+    useEffect(() => {
+        fetchPreviousCycleAssignments();
+    }, [fetchPreviousCycleAssignments]);
 
     const handleAssignmentChange = (routeNumber, newBusId) => {
         // Obtener el bus anterior asignado a esta ruta
@@ -598,6 +684,44 @@ const SchoolBusesPage = () => {
         }
     };
 
+    const handleTransferPreviousCycleAssignments = async () => {
+        if (!schoolId || previousCycleTransfer.transferring) return;
+
+        setTransferPreviewOpen(false);
+        setPreviousCycleTransfer(prev => ({ ...prev, transferring: true }));
+        try {
+            const response = await api.post(`/buses/school/${schoolId}/transfer-previous-cycle-assignments`, {
+                cicloEscolarId: currentSchoolCycleId || null,
+                routeNumbers: schoolRouteNumbers
+            }, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+            const transferredCount = Array.isArray(response.data?.transferred) ? response.data.transferred.length : 0;
+            const skippedCount = Array.isArray(response.data?.skipped) ? response.data.skipped.length : 0;
+            const skippedText = skippedCount > 0 ? ` (${skippedCount} rutas ya tenían asignación y se omitieron)` : '';
+
+            setSnackbar({
+                open: true,
+                message: transferredCount > 0
+                    ? `Se transfirieron ${transferredCount} asignaciones del ciclo anterior${skippedText}.`
+                    : (response.data?.message || 'No se transfirieron asignaciones.'),
+                severity: transferredCount > 0 ? 'success' : 'info'
+            });
+
+            await Promise.all([fetchBuses(), fetchRouteAssignments()]);
+            await fetchPreviousCycleAssignments();
+        } catch (err) {
+            console.error('Error transferring previous cycle bus assignments:', err);
+            setSnackbar({
+                open: true,
+                message: `Error al transferir asignaciones: ${err.response?.data?.message || err.message}`,
+                severity: 'error'
+            });
+        } finally {
+            setPreviousCycleTransfer(prev => ({ ...prev, transferring: false }));
+        }
+    };
+
     const handleClearAssignments = () => {
         setRouteBusAssignments({});
         setPilotAssignments({});
@@ -611,6 +735,7 @@ const SchoolBusesPage = () => {
         setLoading(true);
         try {
             await Promise.all([fetchSchoolData(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()]);
+            await fetchPreviousCycleAssignments();
             setSnackbar({ open: true, message: 'Datos actualizados', severity: 'success' });
         } catch (err) {
             console.error('Error refreshing data:', err);
@@ -779,6 +904,26 @@ const SchoolBusesPage = () => {
             {isPreparationMode && (
                 <Alert severity="warning" sx={{ mb: 2 }}>
                     Este colegio no está operando. Las asignaciones se guardarán para preparación del ciclo y no deberían usarse como operación vigente.
+                </Alert>
+            )}
+
+            {!isPreparationMode && previousCycleTransfer.available && previousCycleTransferCount > 0 && (
+                <Alert
+                    severity="info"
+                    sx={{ mb: 2 }}
+                    action={(
+                        <Button
+                            color="inherit"
+                            size="small"
+                            startIcon={previousCycleTransfer.transferring ? <CircularProgress size={16} color="inherit" /> : <ContentCopy />}
+                            onClick={() => setTransferPreviewOpen(true)}
+                            disabled={previousCycleTransfer.transferring || saving}
+                        >
+                            {previousCycleTransfer.transferring ? 'Transfiriendo...' : 'Revisar'}
+                        </Button>
+                    )}
+                >
+                    El ciclo {previousCycleLabel} tiene {previousCycleTransferCount} placas asignadas a rutas que pueden transferirse a este ciclo.
                 </Alert>
             )}
 
@@ -997,6 +1142,64 @@ const SchoolBusesPage = () => {
                     )}
                 </CardContent>
             </Card>
+
+            <Dialog
+                open={transferPreviewOpen}
+                onClose={() => setTransferPreviewOpen(false)}
+                maxWidth="lg"
+                fullWidth
+            >
+                <DialogTitle>Confirmar transferencia del ciclo anterior</DialogTitle>
+                <DialogContent>
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                        Se aplicarán {previousCycleTransferCount} cambios desde el ciclo {previousCycleLabel}. {previousCycleSkippedCount > 0 ? `${previousCycleSkippedCount} rutas se omitirán porque ya tienen una placa asignada.` : ''}
+                    </Alert>
+
+                    <TableContainer component={Paper} variant="outlined">
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell><strong>Ruta</strong></TableCell>
+                                    <TableCell><strong>Placa que quedará</strong></TableCell>
+                                    <TableCell><strong>Piloto que quedará</strong></TableCell>
+                                    <TableCell><strong>Monitora que quedará</strong></TableCell>
+                                    <TableCell><strong>Resultado</strong></TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {previousCycleTransfer.assignments.map((assignment) => (
+                                    <TableRow key={`${assignment.routeNumber}-${assignment.busId}`}>
+                                        <TableCell>Ruta {assignment.routeNumber}</TableCell>
+                                        <TableCell>{assignment.currentAssignment ? assignment.currentAssignment.plate : assignment.plate}</TableCell>
+                                        <TableCell>{formatTransferUserOutcome(assignment, 'pilot')}</TableCell>
+                                        <TableCell>{formatTransferUserOutcome(assignment, 'monitora')}</TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                size="small"
+                                                label={getTransferStatusLabel(assignment)}
+                                                color={assignment.currentAssignment ? 'warning' : 'success'}
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setTransferPreviewOpen(false)} disabled={previousCycleTransfer.transferring}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        variant="contained"
+                        startIcon={previousCycleTransfer.transferring ? <CircularProgress size={16} color="inherit" /> : <ContentCopy />}
+                        onClick={handleTransferPreviousCycleAssignments}
+                        disabled={previousCycleTransfer.transferring || previousCycleTransferCount === 0}
+                    >
+                        {previousCycleTransfer.transferring ? 'Transfiriendo...' : 'Aceptar y transferir'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             <Snackbar
                 open={snackbar.open}
