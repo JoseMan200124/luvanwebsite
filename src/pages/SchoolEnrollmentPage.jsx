@@ -12,6 +12,7 @@ import {
     Alert,
     Snackbar,
     Box,
+    Chip,
     Divider,
     CircularProgress,
     Autocomplete
@@ -62,6 +63,7 @@ const SchoolEnrollmentPage = () => {
 
     const [grades, setGrades] = useState([]);
     const [extraFields, setExtraFields] = useState([]);
+    const [schoolInfo, setSchoolInfo] = useState(null);
     const [enrollmentBlockedMessage, setEnrollmentBlockedMessage] = useState('');
 
     const [familyLastName, setFamilyLastName] = useState('');
@@ -159,14 +161,20 @@ const SchoolEnrollmentPage = () => {
         };
 
         try {
-            await api.post(`/public/schools/enroll/${schoolId}`, payload);
+            const response = await api.post(`/public/schools/enroll/${schoolId}`, payload, {
+                skipAuth: true,
+                skipSchoolCycleContext: true
+            });
+            const existingUserIdentity = !!response?.data?.existingUserIdentity;
             
             // Redirigir a la página de agradecimiento
             setTimeout(() => {
                 navigate('/thank-you', {
                     state: {
                         title: '¡Gracias por inscribirse!',
-                        body: 'En breve le llegará un correo electrónico con su usuario.',
+                        body: existingUserIdentity
+                            ? 'Tu familia quedó inscrita en este ciclo. Ingresa con la contraseña que ya usabas para tu usuario.'
+                            : 'En breve le llegará un correo electrónico con su usuario.',
                         footer: 'Transportes Luvan'
                     }
                 });
@@ -174,7 +182,9 @@ const SchoolEnrollmentPage = () => {
             
             setSnackbar({
                 open: true,
-                message: '¡Registro enviado correctamente!',
+                message: existingUserIdentity
+                    ? 'Registro enviado correctamente. Usa tu contraseña actual para ingresar.'
+                    : '¡Registro enviado correctamente!',
                 severity: 'success'
             });
 
@@ -212,11 +222,16 @@ const SchoolEnrollmentPage = () => {
     useEffect(() => {
         const fetchSchoolData = async () => {
             try {
-                const response = await api.get(`/schools/${schoolId}`);
+                const response = await api.get(`/schools/${schoolId}`, {
+                    skipAuth: true,
+                    skipSchoolCycleContext: true
+                });
                 
                 if (response.data?.school) {
                     const { school } = response.data;
-                    setEnrollmentBlockedMessage(school.canCreateNewUsers === false
+                    const enrollmentStatus = String(school.enrollmentStatus || 'OPEN').toUpperCase();
+                    setSchoolInfo(school);
+                    setEnrollmentBlockedMessage(school.canCreateNewUsers === false || enrollmentStatus === 'CLOSED'
                         ? (school.newUserCreationMessage || 'Este enlace pertenece a un ciclo anterior. Solicita el enlace del ciclo más reciente.')
                         : '');
                     setGrades(normalizeGrades(school.grades));
@@ -224,12 +239,14 @@ const SchoolEnrollmentPage = () => {
                     setExtraFields(parseArrayField(school.extraEnrollmentFields));
 
                 } else {
+                    setSchoolInfo(null);
                     setEnrollmentBlockedMessage('No se pudo validar el colegio para inscripción.');
                     setGrades([]);
                     setExtraFields([]);
                 }
             } catch (error) {
                 console.error('Error al obtener info del colegio:', error);
+                setSchoolInfo(null);
                 setSnackbar({
                     open: true,
                     message: 'No se pudieron obtener los datos del colegio.',
@@ -311,6 +328,28 @@ const SchoolEnrollmentPage = () => {
                 >
                     Formulario de Inscripción
                 </Typography>
+
+                {schoolInfo && (
+                    <Box sx={{ mb: 3, textAlign: 'center' }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                            {schoolInfo.name}
+                        </Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                            <Chip
+                                label={String(schoolInfo.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'Operando' : 'Sin operación'}
+                                color={String(schoolInfo.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'success' : 'default'}
+                                size="small"
+                                variant={String(schoolInfo.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'filled' : 'outlined'}
+                            />
+                            <Chip
+                                label={String(schoolInfo.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN' ? 'Inscripciones abiertas' : 'Inscripciones cerradas'}
+                                color={String(schoolInfo.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN' ? 'primary' : 'default'}
+                                size="small"
+                                variant={String(schoolInfo.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN' ? 'filled' : 'outlined'}
+                            />
+                        </Box>
+                    </Box>
+                )}
 
                 {enrollmentBlockedMessage ? (
                     <Alert severity="warning" sx={{ mb: 3 }}>

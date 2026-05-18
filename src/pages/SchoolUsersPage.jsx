@@ -1,5 +1,5 @@
 // src/pages/SchoolUsersPage.jsx
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { alpha } from '@mui/material/styles';
@@ -1137,39 +1137,41 @@ const SchoolUsersPage = () => {
     const [contracts, setContracts] = useState([]);
     const [schools, setSchools] = useState([]);
 
-    // Funciones auxiliares para determinar el estado de los usuarios
-    const isUserNew = (user) => {
-        if (!user.FamilyDetail) return false;
-        // Consider a family new only when `isNew` is explicitly true and
-        // the account was created within the last 21 days.
-        if (user.FamilyDetail.isNew === false) return false;
-        const createdAt = new Date(user.createdAt);
-        const now = new Date();
-        const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
-        return user.FamilyDetail.isNew === true && diffDays <= 21;
-    };
+    const userStatusById = useMemo(() => {
+        const familyLastNameCounts = new Map();
+        const now = Date.now();
 
-    const isFamilyLastNameDuplicated = (user, allUsers) => {
-        if (!user.FamilyDetail || !user.FamilyDetail.familyLastName) return false;
-        const lastName = normalizeKey(user.FamilyDetail.familyLastName);
-        if (!lastName) return false;
-        const count = allUsers.filter(
-            u =>
-                u.FamilyDetail &&
-                u.FamilyDetail.familyLastName &&
-                normalizeKey(u.FamilyDetail.familyLastName) === lastName
-        ).length;
-        return count > 1;
-    };
+        users.forEach((user) => {
+            const lastName = normalizeKey(user.FamilyDetail?.familyLastName || '');
+            if (!lastName) return;
+            familyLastNameCounts.set(lastName, (familyLastNameCounts.get(lastName) || 0) + 1);
+        });
+
+        return new Map(users.map((user) => {
+            const familyDetail = user.FamilyDetail;
+            if (!familyDetail) return [user.id, '-'];
+
+            if (familyDetail.isNew !== false && familyDetail.isNew === true) {
+                const createdAt = new Date(user.createdAt).getTime();
+                const diffDays = Number.isFinite(createdAt)
+                    ? (now - createdAt) / (1000 * 60 * 60 * 24)
+                    : Infinity;
+                if (diffDays <= 21) return [user.id, 'Nuevo'];
+            }
+
+            const lastName = normalizeKey(familyDetail.familyLastName || '');
+            if (lastName && (familyLastNameCounts.get(lastName) || 0) > 1) {
+                return [user.id, 'Duplicado'];
+            }
+
+            if (familyDetail.hasUpdatedData) return [user.id, 'Actualizado'];
+            return [user.id, '-'];
+        }));
+    }, [users]);
 
     const getUserStatus = useCallback((user) => {
-        // Estados ahora son: Nuevo, Duplicado, Actualizado
-        // Inactivo/Activo se manejan en el estado del servicio
-        if (isUserNew(user)) return 'Nuevo';
-        if (isFamilyLastNameDuplicated(user, users)) return 'Duplicado';
-        if (user.FamilyDetail && user.FamilyDetail.hasUpdatedData) return 'Actualizado';
-        return '-'; // Sin estado especial
-    }, [users]);
+        return userStatusById.get(user?.id) || '-';
+    }, [userStatusById]);
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -1570,11 +1572,26 @@ const SchoolUsersPage = () => {
 
     const handleConfirmDelete = async () => {
         if (!selectedUser || !selectedUser.id) return;
+        const schoolIdToUse = currentSchool?.id || schoolId || stateSchool?.id;
+        if (!schoolIdToUse || !stateCicloEscolarId) {
+            setSnackbar({ open: true, message: 'No se pudo resolver el colegio y ciclo escolar para eliminar al usuario.', severity: 'error' });
+            return;
+        }
+
         try {
             setBulkLoading(true);
-            // This view requires a permanent (hard) deletion for users.
-            await api.delete(`/users/${selectedUser.id}`);
-            setSnackbar({ open: true, message: 'Usuario eliminado permanentemente', severity: 'success' });
+            const response = await api.delete(`/users/${selectedUser.id}/school-cycle`, {
+                data: {
+                    schoolId: schoolIdToUse,
+                    cicloEscolarId: stateCicloEscolarId,
+                    reason: 'Usuario eliminado desde gestión de familias por ciclo escolar'
+                }
+            });
+            setSnackbar({
+                open: true,
+                message: response?.data?.message || 'Usuario eliminado del ciclo escolar',
+                severity: 'success'
+            });
             setOpenDeleteConfirm(false);
             setSelectedUser(null);
             fetchUsers();
@@ -2061,7 +2078,7 @@ const SchoolUsersPage = () => {
     })();
 
     // apply sorting to filteredUsers before pagination
-    const sortedUsers = (() => {
+    const sortedUsers = useMemo(() => {
         if (!sortBy) return filteredUsers;
         const copy = filteredUsers.slice();
         copy.sort((a, b) => {
@@ -2121,7 +2138,7 @@ const SchoolUsersPage = () => {
             return sortOrder === 'asc' ? cmp : -cmp;
         });
         return copy;
-    })();
+    }, [filteredUsers, sortBy, sortOrder, getUserStatus]);
 
     const paginatedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
@@ -2439,6 +2456,7 @@ const SchoolUsersPage = () => {
                                     <TableBody>
                                         {paginatedUsers.map((user) => {
                                             const serviceStatus = user.familyServiceStatus?.status || 'ACTIVE';
+                                            const userStatus = getUserStatus(user);
                                             const getServiceStatusChip = () => {
                                                 if (serviceStatus === 'ACTIVE') {
                                                     return <Chip label="Activo" size="small" color="success" />;
@@ -2489,12 +2507,12 @@ const SchoolUsersPage = () => {
                                                     </Typography>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {getUserStatus(user) === '-' ? (
+                                                    {userStatus === '-' ? (
                                                         <Typography variant="body2" color="textSecondary">-</Typography>
                                                     ) : (
                                                         <Chip
-                                                            label={getUserStatus(user)}
-                                                            color={getStatusColor(getUserStatus(user))}
+                                                            label={userStatus}
+                                                            color={getStatusColor(userStatus)}
                                                             size="small"
                                                         />
                                                     )}
@@ -2726,14 +2744,19 @@ const SchoolUsersPage = () => {
             </Dialog>
 
             {/* Modal: Carga masiva de horarios */}
-            <BulkScheduleModal open={openBulkScheduleDialog} onClose={() => setOpenBulkScheduleDialog(false)} schoolId={currentSchool?.id || schoolId} />
+            <BulkScheduleModal
+                open={openBulkScheduleDialog}
+                onClose={() => setOpenBulkScheduleDialog(false)}
+                schoolId={currentSchool?.id || schoolId}
+                cicloEscolarId={stateCicloEscolarId}
+            />
 
             {/* Diálogo de confirmación para eliminación de usuario */}
             <Dialog open={openDeleteConfirm} onClose={handleCancelDelete} maxWidth="xs" fullWidth>
-                <DialogTitle>Eliminar Usuario</DialogTitle>
+                <DialogTitle>Eliminar del ciclo escolar</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        ¿Estás seguro que deseas eliminar al usuario <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong>? Esta acción no es reversible.
+                        ¿Estás seguro que deseas eliminar a <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong> de este colegio y ciclo escolar?
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>

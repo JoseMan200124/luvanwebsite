@@ -12,12 +12,14 @@ import {
 import {
     DirectionsBusFilled as DirectionsBusFilledIcon,
     Logout as LogoutIcon,
-    ArrowBack as ArrowBackIcon
+    ArrowBack as ArrowBackIcon,
+    SwapHoriz as SwapHorizIcon
 } from '@mui/icons-material';
 import { styled } from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import { useNavigate, useLocation } from 'react-router-dom';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
+import { getStoredSchoolContext, isSchoolContextRequiredRole } from '../utils/schoolContext';
 
 const BrandBox = styled(Box)`
     display: flex;
@@ -30,6 +32,8 @@ export default function ParentNavbar() {
     const navigate         = useNavigate();
     const location         = useLocation();
     const displayName      = auth?.user?.name || 'Padre de Familia';
+    const selectedContext  = getStoredSchoolContext();
+    const showContextSwitcher = isSchoolContextRequiredRole(auth?.user?.roleId);
 
     const handleLogout = () => {
         logout();
@@ -39,6 +43,15 @@ export default function ParentNavbar() {
     const onBack = () => {
         // Regresa al dashboard de padres
         navigate('/parent/dashboard');
+    };
+
+    const handleChangeContext = () => {
+        navigate('/select-context', {
+            state: {
+                nextPath: location.pathname,
+                forceChoice: true
+            }
+        });
     };
 
     // Mostrar botón “volver” si estamos en la página de subir boleta
@@ -64,6 +77,23 @@ export default function ParentNavbar() {
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    {selectedContext?.schoolName && (
+                        <Box sx={{ mr: 2, display: { xs: 'none', md: 'block' }, textAlign: 'right' }}>
+                            <Typography variant="caption" sx={{ display: 'block', opacity: 0.8, lineHeight: 1 }}>
+                                Contexto
+                            </Typography>
+                            <Typography variant="body2" sx={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {selectedContext.schoolName}
+                            </Typography>
+                        </Box>
+                    )}
+                    {showContextSwitcher && (
+                        <Tooltip title="Cambiar colegio y ciclo">
+                            <IconButton onClick={handleChangeContext} size="large" sx={{ color: '#FFF' }}>
+                                <SwapHorizIcon />
+                            </IconButton>
+                        </Tooltip>
+                    )}
                     <Typography
                         variant="subtitle1"
                         sx={{ mr: 1, display: { xs: 'none', sm: 'block' } }}

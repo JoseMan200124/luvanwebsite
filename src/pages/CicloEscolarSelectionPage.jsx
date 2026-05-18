@@ -60,11 +60,12 @@ import SubmissionPreview from './SubmissionPreview';
 import ExcelJS from 'exceljs';
 import moment from 'moment';
 import PermissionGuard from '../components/PermissionGuard';
-import { DEFAULT_SCHEDULE_CODES, ensureSchedules, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
+import { DEFAULT_SCHEDULE_CODES, ensureSchedules } from '../utils/scheduleConfig';
 import EditSchedulesModal from '../components/modals/EditSchedulesModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
 import { getCicloEscolarOptionLabel, getCiclosEscolares } from '../services/cicloEscolarService';
+import { clearStoredSchoolContext, setStoredSchoolContext } from '../utils/schoolContext';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -148,6 +149,21 @@ const StyledAccordionSummary = styled(AccordionSummary)`
     }
 `;
 
+const operationStatusMeta = {
+    ACTIVE: { label: 'Operando', color: 'success' },
+    INACTIVE: { label: 'Sin operación', color: 'default' }
+};
+
+const enrollmentStatusMeta = {
+    OPEN: { label: 'Inscripciones abiertas', color: 'primary' },
+    CLOSED: { label: 'Inscripciones cerradas', color: 'default' }
+};
+
+const getStatusMeta = (map, value) => {
+    const normalized = String(value || '').trim().toUpperCase();
+    return map[normalized] || { label: normalized || 'Sin estado', color: 'default' };
+};
+
 const CicloEscolarSelectionPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -158,6 +174,10 @@ const CicloEscolarSelectionPage = () => {
     const [cyclesLoading, setCyclesLoading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const [operationalConflict, setOperationalConflict] = useState(null);
+    const [billingConflict, setBillingConflict] = useState(null);
+    const [billingDecision, setBillingDecision] = useState({ action: 'SET_NEXT_MONTH_START', customStartDate: '', confirmText: '' });
+    const [opStatusConfirm, setOpStatusConfirm] = useState({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
     
     // Estados para diálogos y acciones
     const [selectedSchool, setSelectedSchool] = useState(null);
@@ -166,7 +186,6 @@ const CicloEscolarSelectionPage = () => {
     const [prefillSchools, setPrefillSchools] = useState([]);
     const [prefillSchoolsLoading, setPrefillSchoolsLoading] = useState(false);
     const [selectedPrefillSchoolId, setSelectedPrefillSchoolId] = useState('');
-    const [cycleMigrationConfirmation, setCycleMigrationConfirmation] = useState(null);
     const [openEditSchedulesModal, setOpenEditSchedulesModal] = useState(false);
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissions, setSubmissions] = useState([]);
@@ -176,8 +195,6 @@ const CicloEscolarSelectionPage = () => {
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
-    const [bulkMigrationConfirmation, setBulkMigrationConfirmation] = useState(null);
-    const [bulkSelectedRows, setBulkSelectedRows] = useState(new Set());
     
     // Estados para edición de colegio
     const [schoolSchedules, setSchoolSchedules] = useState([]);
@@ -242,6 +259,11 @@ const CicloEscolarSelectionPage = () => {
         return ensureSchedules([], DEFAULT_SCHEDULE_CODES); // new school — seed defaults
     };
 
+    const getDefaultOperationStatusForNewSchool = () => {
+        if (!selectedCicloEscolarId || !defaultCicloEscolar?.id) return 'ACTIVE';
+        return String(selectedCicloEscolarId) === String(defaultCicloEscolar.id) ? 'ACTIVE' : 'INACTIVE';
+    };
+
     const parseArrayField = (value) => {
         if (Array.isArray(value)) return value;
         if (typeof value === 'string' && value.trim()) {
@@ -270,7 +292,9 @@ const CicloEscolarSelectionPage = () => {
         bankName: '',
         bankAccount: '',
         dailyPenalty: 0,
-        penaltyPaused: false
+        penaltyPaused: false,
+        operationStatus: getDefaultOperationStatusForNewSchool(),
+        enrollmentStatus: 'OPEN'
     });
 
     const normalizeRouteSchedulesFromSchool = (school, routeNumbers) => {
@@ -333,7 +357,9 @@ const CicloEscolarSelectionPage = () => {
             bankName: source.bankName || '',
             bankAccount: source.bankAccount || '',
             dailyPenalty: source.dailyPenalty ?? 0,
-            penaltyPaused: !!source.penaltyPaused
+            penaltyPaused: !!source.penaltyPaused,
+            operationStatus: getDefaultOperationStatusForNewSchool(),
+            enrollmentStatus: source.enrollmentStatus || 'OPEN'
         } : buildEmptySchoolDraft());
         setSchoolSchedules(schedules);
         setSchoolGrades(parseArrayField(source.grades));
@@ -425,7 +451,9 @@ const CicloEscolarSelectionPage = () => {
                     studentsCount: Number(school.studentsCount) || 0,
                     // Penalty fields defaults
                     dailyPenalty: Number(school.dailyPenalty) || 0,
-                    penaltyPaused: !!school.penaltyPaused
+                    penaltyPaused: !!school.penaltyPaused,
+                    operationStatus: school.operationStatus || 'ACTIVE',
+                    enrollmentStatus: school.enrollmentStatus || 'OPEN'
                 };
             });
             setSchools(processedSchools);
@@ -492,6 +520,7 @@ const CicloEscolarSelectionPage = () => {
         const nextCicloEscolarId = event.target.value;
         setSelectedCicloEscolarId(nextCicloEscolarId);
         localStorage.setItem('selectedCicloEscolarId', String(nextCicloEscolarId));
+        clearStoredSchoolContext({ preserveCycle: true });
     };
 
     const handleSchoolSelect = (school) => {
@@ -502,6 +531,15 @@ const CicloEscolarSelectionPage = () => {
             cicloEscolarId,
             ...(cicloEscolar ? { cicloEscolar } : {})
         };
+        setStoredSchoolContext({
+            schoolId: school.id,
+            school: schoolWithCicloEscolar,
+            cicloEscolarId,
+            cicloEscolar,
+            status: 'ACTIVE',
+            operationStatus: school.operationStatus || 'ACTIVE',
+            enrollmentStatus: school.enrollmentStatus || 'OPEN'
+        });
         navigate(`/admin/escuelas/ciclo/${cicloEscolarId}/${school.id}`, {
             state: {
                 cicloEscolarId,
@@ -551,7 +589,9 @@ const CicloEscolarSelectionPage = () => {
             bankName: bankNameValue,
             bankAccount: bankAccountValue,
             dailyPenalty: dailyPenaltyValue,
-            penaltyPaused: penaltyPausedValue
+            penaltyPaused: penaltyPausedValue,
+            operationStatus: school.operationStatus || 'ACTIVE',
+            enrollmentStatus: school.enrollmentStatus || 'OPEN'
         });
 
         let parsedSchedules = [];
@@ -709,8 +749,6 @@ const CicloEscolarSelectionPage = () => {
     const handleOpenBulkUpload = () => {
         setBulkFile(null);
         setBulkResults(null);
-        setBulkMigrationConfirmation(null);
-        setBulkSelectedRows(new Set());
         setOpenBulkDialog(true);
     };
     const handleCloseBulkDialog = () => {
@@ -720,26 +758,16 @@ const CicloEscolarSelectionPage = () => {
         const file = e.target.files?.[0];
         setBulkFile(file || null);
         setBulkResults(null);
-        setBulkMigrationConfirmation(null);
-        setBulkSelectedRows(new Set());
     };
-    const submitBulkUpload = async ({ confirmCycleMigration = false, confirmedRows = [] } = {}) => {
+    const submitBulkUpload = async () => {
         if (!bulkFile) return;
         setBulkLoading(true);
-        if (!confirmCycleMigration) {
-            setBulkResults(null);
-            setBulkMigrationConfirmation(null);
-            setBulkSelectedRows(new Set());
-        }
+        setBulkResults(null);
         try {
             const formData = new FormData();
             formData.append('file', bulkFile);
             if (selectedCicloEscolarId) {
                 formData.append('cicloEscolarId', selectedCicloEscolarId);
-            }
-            if (confirmCycleMigration) {
-                formData.append('confirmCycleMigration', 'true');
-                formData.append('confirmedMigrationRows', JSON.stringify(confirmedRows));
             }
             const resp = await api.post('/schools/bulk-upload', formData, {
                 headers: {
@@ -748,42 +776,17 @@ const CicloEscolarSelectionPage = () => {
                 }
             });
             setBulkResults(resp.data || null);
-            setBulkMigrationConfirmation(null);
-            setBulkSelectedRows(new Set());
             // Refresh list after upload
             fetchSchoolsByYear();
             setSnackbar({ open: true, message: 'Carga masiva procesada', severity: 'success' });
         } catch (err) {
             console.error('Error al subir colegios masivamente:', err);
-            const responseData = err.response?.data;
-            if (err.response?.status === 409 && responseData?.bulk && responseData?.code === 'SCHOOL_CYCLE_MIGRATION_CONFIRMATION_REQUIRED') {
-                const pendingRows = Array.isArray(responseData.pendingRows) ? responseData.pendingRows : [];
-                setBulkMigrationConfirmation(responseData);
-                setBulkSelectedRows(new Set(pendingRows.map((row) => Number(row.row)).filter(Boolean)));
-                setBulkResults(responseData);
-                setSnackbar({ open: true, message: 'Revisa los colegios que requieren confirmación de traslado.', severity: 'warning' });
-                return;
-            }
             setSnackbar({ open: true, message: 'Error al procesar la carga masiva', severity: 'error' });
         } finally {
             setBulkLoading(false);
         }
     };
     const handleUploadBulk = () => submitBulkUpload();
-    const handleToggleBulkMigrationRow = (rowNumber) => {
-        setBulkSelectedRows((prev) => {
-            const next = new Set(prev);
-            if (next.has(rowNumber)) next.delete(rowNumber);
-            else next.add(rowNumber);
-            return next;
-        });
-    };
-    const handleConfirmBulkMigration = () => {
-        submitBulkUpload({
-            confirmCycleMigration: true,
-            confirmedRows: Array.from(bulkSelectedRows)
-        });
-    };
 
     // Add school handler (reuse existing edit dialog)
     const handleAddSchool = () => {
@@ -811,7 +814,9 @@ const CicloEscolarSelectionPage = () => {
     const handleCloseEditDialog = () => {
         setOpenEditDialog(false);
         setOpenEditSchedulesModal(false);
-        setCycleMigrationConfirmation(null);
+        setOperationalConflict(null);
+        setBillingConflict(null);
+        setBillingDecision({ action: 'SET_NEXT_MONTH_START', customStartDate: '', confirmText: '' });
         setSelectedSchool(null);
         setSelectedPrefillSchoolId('');
         setSchoolSchedules([]);
@@ -899,6 +904,15 @@ const CicloEscolarSelectionPage = () => {
 
     // Funciones para manejar cambios en el formulario de edición
     const handleInputChange = (e) => {
+        if (e.target.name === 'operationStatus') {
+            setOpStatusConfirm({
+                open: true,
+                pendingValue: e.target.value,
+                schoolName: selectedSchool?.name || 'este colegio',
+                confirmText: ''
+            });
+            return;
+        }
         setSelectedSchool((prev) => ({
             ...prev,
             [e.target.name]: e.target.value,
@@ -1027,47 +1041,8 @@ const CicloEscolarSelectionPage = () => {
         });
     };
 
-    const isSchoolCycleMigrationConfirmation = (error) => {
-        const responseData = error?.response?.data;
-        return error?.response?.status === 409 && responseData?.code === 'SCHOOL_CYCLE_MIGRATION_CONFIRMATION_REQUIRED';
-    };
-
-    const handleConfirmCycleMigration = async () => {
-        if (!cycleMigrationConfirmation?.payload) return;
-
-        setSavingSchool(true);
-        try {
-            const response = await api.post('/schools', {
-                ...cycleMigrationConfirmation.payload,
-                confirmCycleMigration: true
-            }, {
-                headers: { Authorization: `Bearer ${auth.token}` },
-            });
-
-            const transfer = response.data?.cycleMigrationTransfer;
-            const hasTransfer = transfer && Object.values(transfer).some((value) => Number(value) > 0);
-            setSnackbar({
-                open: true,
-                message: hasTransfer ? 'Colegio creado y relaciones actualizadas al nuevo ciclo.' : 'Colegio creado exitosamente',
-                severity: 'success'
-            });
-            setCycleMigrationConfirmation(null);
-            fetchSchoolsByYear();
-            handleCloseEditDialog();
-        } catch (err) {
-            console.error('Error al confirmar traslado de ciclo:', err);
-            setSnackbar({
-                open: true,
-                message: 'Error al crear el colegio con traslado de ciclo',
-                severity: 'error'
-            });
-        } finally {
-            setSavingSchool(false);
-        }
-    };
-
     // Función para guardar cambios
-    const handleSave = async () => {
+    const handleSave = async (extraPayload = {}) => {
         if (!selectedSchool) return;
 
         if (
@@ -1145,7 +1120,6 @@ const CicloEscolarSelectionPage = () => {
             // Don't block, just skip them silently during normalization
         }
 
-        let attemptedPayload = null;
         setSavingSchool(true);
         try {
             // Normalize schedules: filter out entries without code, preserve days
@@ -1207,9 +1181,11 @@ const CicloEscolarSelectionPage = () => {
                 // school year bounds
                 schoolYearStart: schoolYearStart || null,
                 schoolYearEnd: schoolYearEnd || null,
-                cicloEscolarId: selectedCicloEscolarId || null
+                cicloEscolarId: selectedCicloEscolarId || null,
+                operationStatus: selectedSchool.operationStatus || 'ACTIVE',
+                enrollmentStatus: selectedSchool.enrollmentStatus || 'OPEN',
+                ...extraPayload
             };
-            attemptedPayload = payload;
 
             // Distinguish between create and update
             if (selectedSchool.id) {
@@ -1225,16 +1201,13 @@ const CicloEscolarSelectionPage = () => {
                 });
             } else {
                 // Create new school
-                const createResponse = await api.post('/schools', payload, {
+                await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
 
-                const transfer = createResponse.data?.cycleMigrationTransfer;
-                const hasTransfer = transfer && Object.values(transfer).some((value) => Number(value) > 0);
-                
                 setSnackbar({
                     open: true,
-                    message: hasTransfer ? 'Colegio creado y relaciones actualizadas al nuevo ciclo.' : 'Colegio creado exitosamente',
+                    message: 'Colegio creado exitosamente',
                     severity: 'success'
                 });
             }
@@ -1243,12 +1216,27 @@ const CicloEscolarSelectionPage = () => {
             handleCloseEditDialog();
         } catch (err) {
             console.error('Error al guardar el colegio:', err);
-            if (!selectedSchool?.id && attemptedPayload && isSchoolCycleMigrationConfirmation(err)) {
-                setCycleMigrationConfirmation({
+            const responseData = err.response?.data;
+            if (err.response?.status === 409 && responseData?.code === 'OPERATIONAL_SCHOOL_CONFLICT') {
+                setOperationalConflict(responseData);
+                setSnackbar({
                     open: true,
-                    payload: attemptedPayload,
-                    message: err.response.data?.message || '',
-                    impact: err.response.data?.impact || null
+                    message: responseData.message || 'Ya existe un ciclo de este colegio en operación.',
+                    severity: 'warning'
+                });
+                return;
+            }
+            if (err.response?.status === 409 && responseData?.code === 'OPERATION_START_BILLING_CONFLICT') {
+                setBillingConflict(responseData);
+                setBillingDecision({
+                    action: 'SET_NEXT_MONTH_START',
+                    customStartDate: responseData.suggestedNextMonthStart || '',
+                    confirmText: ''
+                });
+                setSnackbar({
+                    open: true,
+                    message: responseData.message || 'Se requiere decidir desde qué fecha iniciará el cobro.',
+                    severity: 'warning'
                 });
                 return;
             }
@@ -1260,6 +1248,43 @@ const CicloEscolarSelectionPage = () => {
         } finally {
             setSavingSchool(false);
         }
+    };
+
+    const handleApplyBillingDecision = async () => {
+        if (!billingConflict) return;
+
+        const action = billingDecision.action || 'SET_NEXT_MONTH_START';
+        const nextStartDate = action === 'SET_NEXT_MONTH_START'
+            ? billingConflict.suggestedNextMonthStart
+            : action === 'SET_CUSTOM_START_DATE'
+                ? billingDecision.customStartDate
+                : billingConflict.currentSchoolYearStart;
+
+        if (action !== 'KEEP_START_DATE' && !nextStartDate) {
+            setSnackbar({ open: true, message: 'Selecciona una fecha de inicio válida.', severity: 'warning' });
+            return;
+        }
+
+        const requiresConfirmation = action !== 'SET_NEXT_MONTH_START';
+        if (requiresConfirmation && billingDecision.confirmText !== 'CONFIRMAR') {
+            setSnackbar({ open: true, message: 'Escribe CONFIRMAR para continuar con esta decisión.', severity: 'warning' });
+            return;
+        }
+
+        if (nextStartDate) {
+            setSchoolYearStart(nextStartDate);
+        }
+        setBillingConflict(null);
+
+        await handleSave({
+            ...(nextStartDate ? { schoolYearStart: nextStartDate } : {}),
+            confirmBillingConflict: true,
+            operationStartBillingDecision: {
+                action,
+                schoolYearStart: nextStartDate || null,
+                confirmBillingConflict: true
+            }
+        });
     };
 
     // Función para limpiar mora
@@ -1332,6 +1357,28 @@ const CicloEscolarSelectionPage = () => {
         } finally {
             setClearingPenalty(false);
         }
+    };
+
+    const renderSchoolStatusChips = (school) => {
+        const operation = getStatusMeta(operationStatusMeta, school.operationStatus || 'ACTIVE');
+        const enrollment = getStatusMeta(enrollmentStatusMeta, school.enrollmentStatus || 'OPEN');
+
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
+                <Chip
+                    label={operation.label}
+                    size="small"
+                    color={operation.color}
+                    variant={String(school.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'filled' : 'outlined'}
+                />
+                <Chip
+                    label={enrollment.label}
+                    size="small"
+                    color={enrollment.color}
+                    variant={String(school.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN' ? 'filled' : 'outlined'}
+                />
+            </Box>
+        );
     };
 
     return (
@@ -1539,44 +1586,6 @@ const CicloEscolarSelectionPage = () => {
                             </Typography>
                         </Box>
                     )}
-                    {bulkMigrationConfirmation && (
-                        <Box sx={{ mt: 2 }}>
-                            <Alert severity="warning">
-                                <Typography sx={{ fontWeight: 600, mb: 1 }}>
-                                    Colegios encontrados en ciclos anteriores
-                                </Typography>
-                                <Typography variant="body2" sx={{ mb: 1 }}>
-                                    Marca los colegios que deseas crear en el ciclo seleccionado y trasladar sus relaciones operativas.
-                                </Typography>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    {(bulkMigrationConfirmation.pendingRows || []).map((row) => {
-                                        const counts = row.impact?.counts || {};
-                                        return (
-                                            <FormControlLabel
-                                                key={row.row}
-                                                control={
-                                                    <Checkbox
-                                                        checked={bulkSelectedRows.has(Number(row.row))}
-                                                        onChange={() => handleToggleBulkMigrationRow(Number(row.row))}
-                                                    />
-                                                }
-                                                label={
-                                                    <Box>
-                                                        <Typography variant="body2">
-                                                            Fila {row.row}: {row.name}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            {Number(counts.pilotsToMove || 0)} pilotos, {Number(counts.monitorasToMove || 0)} monitoras, {Number(counts.busesToUnassign || 0)} buses, {Number(counts.routeAssignmentsToClear || 0)} rutas afectadas
-                                                        </Typography>
-                                                    </Box>
-                                                }
-                                            />
-                                        );
-                                    })}
-                                </Box>
-                            </Alert>
-                        </Box>
-                    )}
                     {bulkResults && (
                         <Box sx={{ mt: 2 }}>
                             <Alert severity="info">
@@ -1585,9 +1594,6 @@ const CicloEscolarSelectionPage = () => {
                                 </Typography>
                                 <Typography>
                                     <strong>Duplicados ignorados:</strong> {bulkResults.duplicateCount || 0}
-                                </Typography>
-                                <Typography>
-                                    <strong>No procesados por selección:</strong> {bulkResults.skippedCount || 0}
                                 </Typography>
                                 <Typography>
                                     <strong>Errores:</strong> {bulkResults.errorsCount || 0}
@@ -1601,20 +1607,6 @@ const CicloEscolarSelectionPage = () => {
                                             {bulkResults.duplicateRows.map((duplicate) => (
                                                 <li key={`duplicate-${duplicate.row}`}>
                                                     Fila {duplicate.row}: {duplicate.name || 'Sin nombre'} - {duplicate.reason}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </>
-                                )}
-                                {bulkResults.skippedRows && bulkResults.skippedRows.length > 0 && (
-                                    <>
-                                        <Typography sx={{ mt: 1 }}>
-                                            <strong>No procesados:</strong>
-                                        </Typography>
-                                        <ul>
-                                            {bulkResults.skippedRows.map((skipped) => (
-                                                <li key={`skipped-${skipped.row}`}>
-                                                    Fila {skipped.row}: {skipped.name || 'Sin nombre'} - {skipped.reason}
                                                 </li>
                                             ))}
                                         </ul>
@@ -1636,12 +1628,12 @@ const CicloEscolarSelectionPage = () => {
                 <DialogActions>
                     <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
                     <Button
-                        onClick={bulkMigrationConfirmation ? handleConfirmBulkMigration : handleUploadBulk}
+                        onClick={handleUploadBulk}
                         variant="contained"
-                        color={bulkMigrationConfirmation ? 'warning' : 'primary'}
+                        color="primary"
                         disabled={!bulkFile || bulkLoading}
                     >
-                        {bulkMigrationConfirmation ? 'Procesar selección' : 'Subir'}
+                        Subir
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -1670,16 +1662,6 @@ const CicloEscolarSelectionPage = () => {
                                 <Grid item xs={12} sm={6} md={4} lg={3} key={school.id}>
                                     <SchoolCard>
                                         <CardContent sx={{ textAlign: 'center', py: 3 }}>
-                                            <Box sx={{ minHeight: 28, mb: 1, display: 'flex', justifyContent: 'center' }}>
-                                                {isPreviousCycleSchool(school) && (
-                                                    <Chip
-                                                        label="Ciclo anterior"
-                                                        size="small"
-                                                        color="warning"
-                                                        variant="filled"
-                                                    />
-                                                )}
-                                            </Box>
                                             <SchoolIcon 
                                                 sx={{ 
                                                     fontSize: 48, 
@@ -1708,6 +1690,8 @@ const CicloEscolarSelectionPage = () => {
                                             >
                                                 {school.city}
                                             </Typography>
+
+                                            {renderSchoolStatusChips(school)}
 
                                             {/* Total de Alumnos */}
                                             <Typography 
@@ -1773,7 +1757,7 @@ const CicloEscolarSelectionPage = () => {
                                                 borderTop: '1px solid #e0e0e0',
                                                 pt: 1.5
                                             }}>
-                                                <Tooltip title={school.canCreateNewUsers === false ? 'Solo disponible en el ciclo más reciente' : 'Copiar enlace de inscripción'}>
+                                                <Tooltip title={school.canCreateNewUsers === false ? (school.newUserCreationMessage || 'Inscripciones cerradas para este colegio') : 'Copiar enlace de inscripción'}>
                                                     <span>
                                                         <IconButton 
                                                             size="small"
@@ -1953,6 +1937,35 @@ const CicloEscolarSelectionPage = () => {
                                     onChange={handleInputChange}
                                     placeholder="https://wa.me/123456789?text=Hola"
                                 />
+                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                                    <FormControl fullWidth>
+                                        <InputLabel>Estado operativo</InputLabel>
+                                        <Select
+                                            name="operationStatus"
+                                            value={selectedSchool?.operationStatus || 'ACTIVE'}
+                                            label="Estado operativo"
+                                            onChange={handleInputChange}
+                                        >
+                                            <MenuItem value="ACTIVE">Operando</MenuItem>
+                                            <MenuItem value="INACTIVE">Sin operación</MenuItem>
+                                        </Select>
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 0.5 }}>
+                                            Se pedirá confirmación al cambiar este estado.
+                                        </Typography>
+                                    </FormControl>
+                                    <FormControl fullWidth>
+                                        <InputLabel>Estado de inscripción</InputLabel>
+                                        <Select
+                                            name="enrollmentStatus"
+                                            value={selectedSchool?.enrollmentStatus || 'OPEN'}
+                                            label="Estado de inscripción"
+                                            onChange={handleInputChange}
+                                        >
+                                            <MenuItem value="OPEN">Inscripciones abiertas</MenuItem>
+                                            <MenuItem value="CLOSED">Inscripciones cerradas</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                </Box>
                             </Box>
                         </AccordionDetails>
                     </StyledAccordion>
@@ -2392,55 +2405,195 @@ const CicloEscolarSelectionPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseEditDialog}>Cancelar</Button>
-                    <Button onClick={handleSave} variant="contained" color="primary" disabled={savingSchool}>
+                    <Button onClick={() => handleSave()} variant="contained" color="primary" disabled={savingSchool}>
                         {savingSchool ? <CircularProgress size={20} color="inherit" /> : (selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio')}
                     </Button>
                 </DialogActions>
             </Dialog>
 
+            {/* Diálogo de confirmación para cambio de estado operativo */}
             <Dialog
-                open={!!cycleMigrationConfirmation?.open}
-                onClose={() => !savingSchool && setCycleMigrationConfirmation(null)}
+                open={opStatusConfirm.open}
+                onClose={() => setOpStatusConfirm(s => ({ ...s, open: false, confirmText: '' }))}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle>
+                    {opStatusConfirm.pendingValue === 'ACTIVE' ? 'Activar operación' : 'Desactivar operación'}
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ mb: 2 }}>
+                        Estás a punto de {opStatusConfirm.pendingValue === 'ACTIVE' ? 'poner en operación' : 'sacar de operación'} a{' '}
+                        <strong>{opStatusConfirm.schoolName}</strong>.
+                        {opStatusConfirm.pendingValue === 'ACTIVE' && (
+                            <>
+                                {' '}Si otro ciclo del mismo colegio ya está operando, el cambio será bloqueado.
+                            </>
+                        )}
+                    </DialogContentText>
+                    <DialogContentText sx={{ mb: 1.5 }}>
+                        Para confirmar, escribe <strong>CONFIRMAR</strong> en el campo de abajo:
+                    </DialogContentText>
+                    <TextField
+                        autoFocus
+                        fullWidth
+                        size="small"
+                        placeholder="CONFIRMAR"
+                        value={opStatusConfirm.confirmText}
+                        onChange={(e) => setOpStatusConfirm(s => ({ ...s, confirmText: e.target.value }))}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && opStatusConfirm.confirmText === 'CONFIRMAR') {
+                                setSelectedSchool(prev => ({ ...prev, operationStatus: opStatusConfirm.pendingValue }));
+                                setOpStatusConfirm({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
+                            }
+                        }}
+                        error={opStatusConfirm.confirmText.length > 0 && opStatusConfirm.confirmText !== 'CONFIRMAR'}
+                        helperText={
+                            opStatusConfirm.confirmText.length > 0 && opStatusConfirm.confirmText !== 'CONFIRMAR'
+                                ? 'Escribe exactamente CONFIRMAR'
+                                : ' '
+                        }
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpStatusConfirm(s => ({ ...s, open: false, confirmText: '' }))}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color={opStatusConfirm.pendingValue === 'ACTIVE' ? 'success' : 'warning'}
+                        disabled={opStatusConfirm.confirmText !== 'CONFIRMAR'}
+                        onClick={() => {
+                            setSelectedSchool(prev => ({ ...prev, operationStatus: opStatusConfirm.pendingValue }));
+                            setOpStatusConfirm({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
+                        }}
+                    >
+                        {opStatusConfirm.pendingValue === 'ACTIVE' ? 'Activar' : 'Desactivar'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={!!operationalConflict}
+                onClose={() => setOperationalConflict(null)}
                 maxWidth="sm"
                 fullWidth
             >
-                <DialogTitle>Confirmar traslado al nuevo ciclo</DialogTitle>
+                <DialogTitle>Ya hay un colegio operando</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        {cycleMigrationConfirmation?.message || 'Ya existe un colegio con este nombre en un ciclo escolar anterior.'}
+                        {operationalConflict?.message || 'Desactiva manualmente el colegio que está operando antes de activar este ciclo.'}
                     </DialogContentText>
-                    <Alert severity="warning" sx={{ mt: 2, mb: 2 }}>
-                        Si continúas, el colegio anterior quedará archivado y se aplicarán estos cambios operativos:
-                    </Alert>
-                    <Box component="ul" sx={{ pl: 3, my: 0 }}>
-                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.pilotsToMove || 0)} pilotos se moverán al colegio del ciclo nuevo.</li>
-                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.monitorasToMove || 0)} monitoras se moverán al colegio del ciclo nuevo.</li>
-                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.busesToUnassign || 0)} buses quedarán sin ruta/colegio para poder reasignarlos.</li>
-                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.routeAssignmentsToClear || 0)} asignaciones de ruta del colegio anterior se limpiarán.</li>
-                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.supervisorsToMove || 0)} supervisores apuntarán al colegio del ciclo nuevo.</li>
-                        <li>{Number(cycleMigrationConfirmation?.impact?.counts?.auxiliariesToMove || 0)} auxiliares apuntarán al colegio del ciclo nuevo.</li>
-                    </Box>
-                    <Alert severity="info" sx={{ mt: 2 }}>
-                        <strong>Importante:</strong> Solo se está moviendo el colegio asignado a estos usuarios al nuevo ciclo. Las asignaciones de buses (placas, monitoras y pilotos asignados a rutas) <strong>no se transfieren automáticamente</strong> y deberán configurarse nuevamente en el nuevo ciclo.
-                    </Alert>
-                    {Array.isArray(cycleMigrationConfirmation?.impact?.oldSchools) && cycleMigrationConfirmation.impact.oldSchools.length > 0 && (
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }}>
-                            {cycleMigrationConfirmation.impact.oldSchools.map((school) => (
-                                <Chip
-                                    key={school.id}
-                                    label={`${school.name} (${getCicloEscolarOptionLabel(school.cicloEscolar) || 'sin ciclo'})`}
-                                    size="small"
-                                    color="warning"
-                                    variant="outlined"
-                                />
+                    {Array.isArray(operationalConflict?.conflictingSchools) && operationalConflict.conflictingSchools.length > 0 && (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                            {operationalConflict.conflictingSchools.map((school) => (
+                                <Alert key={school.id} severity="warning" variant="outlined">
+                                    <Typography variant="subtitle2">{school.name || `Colegio ${school.id}`}</Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {getCicloEscolarOptionLabel(school.cicloEscolar) || (school.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar')}
+                                    </Typography>
+                                </Alert>
                             ))}
                         </Box>
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setCycleMigrationConfirmation(null)} disabled={savingSchool}>Cancelar</Button>
-                    <Button onClick={handleConfirmCycleMigration} variant="contained" color="warning" disabled={savingSchool}>
-                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Aceptar y crear'}
+                    <Button onClick={() => setOperationalConflict(null)} variant="contained">
+                        Entendido
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={!!billingConflict}
+                onClose={() => setBillingConflict(null)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Definir inicio de cobro</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        {billingConflict?.message || 'El ciclo anterior ya tiene cargos en el período actual.'}
+                    </DialogContentText>
+
+                    {Array.isArray(billingConflict?.conflictingCycles) && billingConflict.conflictingCycles.length > 0 && (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                            {billingConflict.conflictingCycles.map((school) => (
+                                <Alert key={`${school.id}-${school.period}`} severity="warning" variant="outlined">
+                                    <Typography variant="subtitle2">{school.name || `Colegio ${school.id}`}</Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {getCicloEscolarOptionLabel(school.cicloEscolar) || (school.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar')}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Período {school.period}: {school.periodCount || 0} cargos, Q{Number(school.totalNetAmount || 0).toFixed(2)}
+                                    </Typography>
+                                </Alert>
+                            ))}
+                        </Box>
+                    )}
+
+                    <FormControl fullWidth sx={{ mt: 2 }}>
+                        <InputLabel>Decisión</InputLabel>
+                        <Select
+                            value={billingDecision.action}
+                            label="Decisión"
+                            onChange={(event) => setBillingDecision((prev) => ({ ...prev, action: event.target.value, confirmText: '' }))}
+                        >
+                            <MenuItem value="SET_NEXT_MONTH_START">
+                                Iniciar cobro el próximo mes ({billingConflict?.suggestedNextMonthStart || 'fecha sugerida'})
+                            </MenuItem>
+                            <MenuItem value="KEEP_START_DATE">
+                                Mantener fecha actual y cobrar/prorratear {billingConflict?.currentPeriod || 'este período'}
+                            </MenuItem>
+                            <MenuItem value="SET_CUSTOM_START_DATE">Elegir otra fecha de inicio</MenuItem>
+                        </Select>
+                    </FormControl>
+
+                    {billingDecision.action === 'SET_CUSTOM_START_DATE' && (
+                        <TextField
+                            label="Nueva fecha de inicio"
+                            type="date"
+                            fullWidth
+                            sx={{ mt: 2 }}
+                            value={billingDecision.customStartDate || ''}
+                            onChange={(event) => setBillingDecision((prev) => ({ ...prev, customStartDate: event.target.value }))}
+                            InputLabelProps={{ shrink: true }}
+                        />
+                    )}
+
+                    {billingDecision.action !== 'SET_NEXT_MONTH_START' && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="warning" sx={{ mb: 1.5 }}>
+                                Esta decisión puede generar cargo o prorrateo del período que ya fue cobrado en otro ciclo.
+                            </Alert>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                placeholder="CONFIRMAR"
+                                value={billingDecision.confirmText}
+                                onChange={(event) => setBillingDecision((prev) => ({ ...prev, confirmText: event.target.value }))}
+                                error={billingDecision.confirmText.length > 0 && billingDecision.confirmText !== 'CONFIRMAR'}
+                                helperText={
+                                    billingDecision.confirmText.length > 0 && billingDecision.confirmText !== 'CONFIRMAR'
+                                        ? 'Escribe exactamente CONFIRMAR'
+                                        : 'Escribe CONFIRMAR para continuar'
+                                }
+                            />
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setBillingConflict(null)}>Cancelar</Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleApplyBillingDecision}
+                        disabled={
+                            savingSchool
+                            || (billingDecision.action === 'SET_CUSTOM_START_DATE' && !billingDecision.customStartDate)
+                            || (billingDecision.action !== 'SET_NEXT_MONTH_START' && billingDecision.confirmText !== 'CONFIRMAR')
+                        }
+                    >
+                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Aplicar decisión'}
                     </Button>
                 </DialogActions>
             </Dialog>

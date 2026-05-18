@@ -14,7 +14,8 @@ const WRITE_METHODS = new Set(['post', 'put', 'patch']);
 const getCycleContext = () => {
     return {
         token: localStorage.getItem('token'),
-        selectedCicloEscolarId: localStorage.getItem('selectedCicloEscolarId')
+        selectedCicloEscolarId: localStorage.getItem('selectedCicloEscolarId'),
+        selectedSchoolId: localStorage.getItem('selectedSchoolId')
     };
 };
 
@@ -42,34 +43,48 @@ const isJsonBody = (data) => {
 };
 
 const CYCLE_OVERRIDE_KEYS = new Set(['allCycles', 'cicloEscolarId', 'ciclo_escolar_id']);
+const SCHOOL_OVERRIDE_KEYS = new Set(['schoolId', 'school_id']);
 
-const hasCycleOverrideInParams = (params) => {
+const hasOverrideInParams = (params, overrideKeys) => {
     if (!params || typeof params !== 'object') return false;
     if (params instanceof URLSearchParams) {
-        return Array.from(CYCLE_OVERRIDE_KEYS).some((key) => params.has(key));
+        return Array.from(overrideKeys).some((key) => params.has(key));
     }
     const keys = Object.keys(params);
-    return keys.some((key) => CYCLE_OVERRIDE_KEYS.has(key));
+    return keys.some((key) => overrideKeys.has(key));
 };
 
-const hasCycleOverrideInUrl = (url = '') => {
+const hasOverrideInUrl = (url = '', overrideKeys) => {
     const queryIndex = String(url).indexOf('?');
     if (queryIndex === -1) return false;
 
     const searchParams = new URLSearchParams(String(url).slice(queryIndex + 1));
-    return Array.from(CYCLE_OVERRIDE_KEYS).some((key) => searchParams.has(key));
+    return Array.from(overrideKeys).some((key) => searchParams.has(key));
 };
 
 const hasExplicitCycleOverride = (config) => {
-    if (hasCycleOverrideInUrl(config.url || '')) return true;
-    if (hasCycleOverrideInParams(config.params)) return true;
-    if (isJsonBody(config.data) && hasCycleOverrideInParams(config.data)) return true;
+    if (hasOverrideInUrl(config.url || '', CYCLE_OVERRIDE_KEYS)) return true;
+    if (hasOverrideInParams(config.params, CYCLE_OVERRIDE_KEYS)) return true;
+    if (isJsonBody(config.data) && hasOverrideInParams(config.data, CYCLE_OVERRIDE_KEYS)) return true;
+    return false;
+};
+
+const hasExplicitSchoolOverride = (config) => {
+    if (hasOverrideInUrl(config.url || '', SCHOOL_OVERRIDE_KEYS)) return true;
+    if (hasOverrideInParams(config.params, SCHOOL_OVERRIDE_KEYS)) return true;
+    if (isJsonBody(config.data) && hasOverrideInParams(config.data, SCHOOL_OVERRIDE_KEYS)) return true;
     return false;
 };
 
 const injectCycleHeaders = (config, cycleContext) => {
     if (cycleContext.selectedCicloEscolarId) {
         config.headers['X-Ciclo-Escolar-Id'] = cycleContext.selectedCicloEscolarId;
+    }
+};
+
+const injectSchoolHeaders = (config, cycleContext) => {
+    if (cycleContext.selectedSchoolId) {
+        config.headers['X-School-Id'] = cycleContext.selectedSchoolId;
     }
 };
 
@@ -80,6 +95,13 @@ const injectCycleParams = (config, cycleContext) => {
     }
 };
 
+const injectSchoolParams = (config, cycleContext) => {
+    const params = ensureObjectParams(config);
+    if (cycleContext.selectedSchoolId && !('schoolId' in params)) {
+        params.schoolId = cycleContext.selectedSchoolId;
+    }
+};
+
 const injectCycleBody = (config, cycleContext) => {
     if (!isJsonBody(config.data)) return;
     if (cycleContext.selectedCicloEscolarId && !('cicloEscolarId' in config.data)) {
@@ -87,24 +109,45 @@ const injectCycleBody = (config, cycleContext) => {
     }
 };
 
+const injectSchoolBody = (config, cycleContext) => {
+    if (!isJsonBody(config.data)) return;
+    if (cycleContext.selectedSchoolId && !('schoolId' in config.data)) {
+        config.data.schoolId = cycleContext.selectedSchoolId;
+    }
+};
+
 const applyRequestConfig = (config) => {
     const cycleContext = getCycleContext();
     const method = (config.method || 'get').toLowerCase();
     const url = (config.url || '').toString();
+    config.headers = config.headers || {};
 
-    if (cycleContext.token) {
+    if (!config.skipAuth && cycleContext.token) {
         config.headers.Authorization = `Bearer ${cycleContext.token}`;
     }
 
-    if (!shouldInjectCycleContext(url)) return config;
-    if (hasExplicitCycleOverride(config)) return config;
+    if (config.skipSchoolCycleContext) return config;
 
-    injectCycleHeaders(config, cycleContext);
-    if (method === 'get') {
-        injectCycleParams(config, cycleContext);
+    if (!shouldInjectCycleContext(url)) return config;
+
+    if (!hasExplicitCycleOverride(config)) {
+        injectCycleHeaders(config, cycleContext);
+        if (method === 'get') {
+            injectCycleParams(config, cycleContext);
+        }
+        if (WRITE_METHODS.has(method)) {
+            injectCycleBody(config, cycleContext);
+        }
     }
-    if (WRITE_METHODS.has(method)) {
-        injectCycleBody(config, cycleContext);
+
+    if (!hasExplicitSchoolOverride(config)) {
+        injectSchoolHeaders(config, cycleContext);
+        if (method === 'get') {
+            injectSchoolParams(config, cycleContext);
+        }
+        if (WRITE_METHODS.has(method)) {
+            injectSchoolBody(config, cycleContext);
+        }
     }
     return config;
 };

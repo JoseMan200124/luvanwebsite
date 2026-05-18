@@ -2,7 +2,8 @@
 import React, { useState, useCallback, useRef, useContext, useEffect } from 'react';
 import {
     Box, Typography, Button, Card, CardContent,
-    Snackbar, Alert, CircularProgress, Container, Modal, useMediaQuery, useTheme
+    Snackbar, Alert, CircularProgress, Container, Modal, useMediaQuery, useTheme,
+    Divider, Stack, Chip
 } from '@mui/material';
 import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
@@ -17,6 +18,8 @@ const PreviewImg  = styled.img`
     object-fit:contain; margin-top:16px; border-radius:8px;
 `;
 
+const money = (value) => `Q ${Number(value || 0).toFixed(2)}`;
+
 const ParentPaymentPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -28,6 +31,8 @@ const ParentPaymentPage = () => {
     const [loading, setLoading] = useState(false);
     const [snackbar,setSnackbar]= useState({ open:false, msg:'', sev:'success' });
     const [openCam, setOpenCam] = useState(false);
+    const [familyAccount, setFamilyAccount] = useState(null);
+    const [familyAccountLoading, setFamilyAccountLoading] = useState(false);
 
     // Determinar si la suspensión es por falta de contrato
     const [isSuspendedForNoContract, setIsSuspendedForNoContract] = useState(false);
@@ -52,6 +57,28 @@ const ParentPaymentPage = () => {
             .catch(() => setIsSuspendedForNoContract(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isSuspended, auth?.user?.id]);
+
+    useEffect(() => {
+        const userId = auth?.user?.id;
+        if (!userId) return;
+
+        let mounted = true;
+        setFamilyAccountLoading(true);
+        api.get(`/payments/family-account/${userId}`)
+            .then((res) => {
+                if (!mounted) return;
+                setFamilyAccount(res?.data?.familyAccount || null);
+            })
+            .catch(() => {
+                if (!mounted) return;
+                setFamilyAccount(null);
+            })
+            .finally(() => {
+                if (mounted) setFamilyAccountLoading(false);
+            });
+
+        return () => { mounted = false; };
+    }, [auth?.user?.id]);
 
     const webcamRef = useRef(null);
     const videoConstraints = {
@@ -151,6 +178,44 @@ const ParentPaymentPage = () => {
                     </Box>
 
                     <CardContent>
+                        <Box sx={{ mb: 3 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                                Estado de Cuenta Familiar
+                            </Typography>
+
+                            {familyAccountLoading ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <CircularProgress size={18} />
+                                    <Typography variant="body2" color="text.secondary">Cargando cuenta...</Typography>
+                                </Box>
+                            ) : familyAccount ? (
+                                <>
+                                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1.5 }}>
+                                        <Chip label={`Saldo: ${money(familyAccount.totals?.balanceDue)}`} color="warning" variant="outlined" />
+                                        <Chip label={`Mora: ${money(familyAccount.totals?.penaltyDue)}`} color="error" variant="outlined" />
+                                        <Chip label={`Crédito: ${money(familyAccount.totals?.creditBalance)}`} color="success" variant="outlined" />
+                                    </Stack>
+                                    {(familyAccount.payments || []).map((payment) => (
+                                        <Box key={payment.id} sx={{ py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                                {payment.school?.name || payment.School?.name || 'Colegio'}
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary" display="block">
+                                                {payment.cicloEscolar?.nombre || payment.cicloEscolar?.label || payment.CicloEscolar?.nombre || `Ciclo ${payment.cicloEscolarId || ''}`}
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                Saldo {money(payment.balanceDue)} · Mora {money(payment.penaltyDue)} · Crédito {money(payment.creditBalance)}
+                                            </Typography>
+                                        </Box>
+                                    ))}
+                                </>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">No hay registros de pago activos.</Typography>
+                            )}
+                        </Box>
+
+                        <Divider sx={{ mb: 3 }} />
+
                         <Typography mb={2} align="center">
                             Selecciona una imagen o haz una foto con tu cámara.
                         </Typography>

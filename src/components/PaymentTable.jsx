@@ -40,6 +40,8 @@ const paymentShape = PropTypes.shape({
     requiresInvoice: PropTypes.bool,
     finalStatus: PropTypes.string,
     serviceStatus: PropTypes.string,
+    penaltyGlobalFrozen: PropTypes.bool,
+    frozenPenaltyPeriodsCount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 });
 
 const getPaymentViewModel = (payment = {}) => {
@@ -59,6 +61,8 @@ const getPaymentViewModel = (payment = {}) => {
         status,
         serviceStatus,
         isDeleted: status === 'ELIMINADO' || !!family.deleted,
+        penaltyGlobalFrozen: !!payment.penaltyGlobalFrozen,
+        frozenPenaltyPeriodsCount: Number(payment.frozenPenaltyPeriodsCount || 0),
     };
 };
 

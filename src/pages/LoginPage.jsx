@@ -23,7 +23,12 @@ import logoLuvan from '../assets/img/logo-sin-fondo.png';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import { modules } from '../modules';
+import {
+    getDefaultPathForRole,
+    isSchoolContextRequiredRole,
+    normalizeSchoolContext,
+    setStoredSchoolContext
+} from '../utils/schoolContext';
 
 // Animaciones ...
 const moveUp = keyframes`
@@ -164,14 +169,31 @@ const LoginPage = () => {
                 return;
             }
 
-            /* ----------- redirección según rol -------------- */
-            if (roleId === 3) {
-                navigate('/parent/dashboard');
-            } else if (roleId === 8) {
-                navigate('/colaborador/dashboard');
-            } else {
-                navigate('/admin/dashboard');
+            const targetPath = getDefaultPathForRole(roleId);
+
+            if (isSchoolContextRequiredRole(roleId)) {
+                const contextsResponse = await api.get('/auth/me/contexts', { skipSchoolCycleContext: true });
+                const contexts = Array.isArray(contextsResponse.data?.contexts)
+                    ? contextsResponse.data.contexts.map(normalizeSchoolContext).filter((context) => context.schoolId && context.cicloEscolarId)
+                    : [];
+
+                if (contexts.length === 1) {
+                    setStoredSchoolContext(contexts[0]);
+                    navigate(targetPath);
+                } else if (contexts.length > 1) {
+                    navigate('/select-context', { replace: true, state: { nextPath: targetPath, forceChoice: true } });
+                } else {
+                    throw new Error('Tu usuario no tiene un colegio o ciclo escolar activo asignado. Contacta al administrador.');
+                }
+
+                setSnackbarMessage('¡Inicio de sesión exitoso!');
+                setSnackbarSeverity('success');
+                setOpenSnackbar(true);
+                return;
             }
+
+            /* ----------- redirección según rol -------------- */
+            navigate(targetPath);
 
             setSnackbarMessage('¡Inicio de sesión exitoso!');
             setSnackbarSeverity('success');

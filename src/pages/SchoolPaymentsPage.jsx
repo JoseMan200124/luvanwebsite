@@ -721,6 +721,10 @@ const SchoolPaymentsPage = () => {
             const form = new FormData();
             form.append('receipt', file);
             if (displayDate) form.append('displayDate', displayDate);
+            if (registerPaymentTarget?.id) form.append('paymentId', registerPaymentTarget.id);
+            if (registerPaymentTarget?.schoolId) form.append('schoolId', registerPaymentTarget.schoolId);
+            if (registerPaymentTarget?.cicloEscolarId) form.append('cicloEscolarId', registerPaymentTarget.cicloEscolarId);
+            if (registerPaymentTarget?.User?.FamilyDetail?.id) form.append('familyDetailId', registerPaymentTarget.User.FamilyDetail.id);
 
             const res = await api.post(`/parents/${userId}/receipts`, form, {
                 headers: { 'Content-Type': 'multipart/form-data' }
@@ -742,7 +746,7 @@ const SchoolPaymentsPage = () => {
         } finally {
             setReceiptUploadLoading(false);
         }
-    }, [getRegisterReceiptUserId]);
+    }, [getRegisterReceiptUserId, registerPaymentTarget]);
 
     const [openReceiptDialog, setOpenReceiptDialog] = useState(false);
     const [receiptTarget, setReceiptTarget] = useState(null);
@@ -1672,6 +1676,26 @@ const SchoolPaymentsPage = () => {
                     notes: 'Mora reanudada manualmente'
                 });
                 setSnackbar({ open: true, message: 'Mora reanudada', severity: 'success' });
+            } else if (actionName === 'freezeGlobalPenalty') {
+                const reason = String(payload?.reason || '').trim();
+                if (!reason) {
+                    setSnackbar({ open: true, message: 'La razón es requerida para congelar mora global', severity: 'error' });
+                    return;
+                }
+
+                await api.post('/payments/penalties/freeze-global', {
+                    paymentId: payment.id,
+                    freezeDate: payload?.freezeDate,
+                    reason,
+                    notes: payload?.notes || reason
+                });
+                setSnackbar({ open: true, message: 'Mora global congelada', severity: 'success' });
+            } else if (actionName === 'unfreezeGlobalPenalty') {
+                await api.post('/payments/penalties/unfreeze-global', {
+                    paymentId: payment.id,
+                    notes: payload?.notes || 'Mora global descongelada desde hoy'
+                });
+                setSnackbar({ open: true, message: 'Mora global descongelada', severity: 'success' });
             } else if (actionName === 'suspend' || actionName === 'activate') {
                 // Cambiar status del payment usando endpoints V2
                 const endpoint = actionName === 'suspend' ? 'suspend' : 'activate';
@@ -1691,6 +1715,9 @@ const SchoolPaymentsPage = () => {
                     // Si se está DESACTIVANDO, usar el nuevo endpoint para actualizar ambas tablas (FamilyDetail y NewPayment)
                     await api.post('/payments/v2/activate-auto-debit', { 
                         userId, 
+                        paymentId: payment?.id || payload?.payment?.id,
+                        schoolId: payment?.schoolId || payload?.payment?.schoolId,
+                        cicloEscolarId: payment?.cicloEscolarId || payload?.payment?.cicloEscolarId,
                         activateAutoDebit: false 
                     });
                 }
@@ -4107,9 +4134,12 @@ const SchoolPaymentsPage = () => {
                                         fullWidth
                                         onClick={async () => {
                                             try {
-                                                const { userId } = autoDebitPayload;
+                                                const { userId, payment } = autoDebitPayload;
                                                 await api.post('/payments/v2/activate-auto-debit', { 
                                                     userId,
+                                                    paymentId: payment?.id,
+                                                    schoolId: payment?.schoolId,
+                                                    cicloEscolarId: payment?.cicloEscolarId,
                                                     activateAutoDebit: true,
                                                     applyToCurrentMonth: true 
                                                 });
@@ -4145,9 +4175,12 @@ const SchoolPaymentsPage = () => {
                                         fullWidth
                                         onClick={async () => {
                                             try {
-                                                const { userId } = autoDebitPayload;
+                                                const { userId, payment } = autoDebitPayload;
                                                 await api.post('/payments/v2/activate-auto-debit', { 
                                                     userId,
+                                                    paymentId: payment?.id,
+                                                    schoolId: payment?.schoolId,
+                                                    cicloEscolarId: payment?.cicloEscolarId,
                                                     activateAutoDebit: true,
                                                     applyToCurrentMonth: false 
                                                 });

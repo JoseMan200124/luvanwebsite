@@ -15,7 +15,7 @@ function ExcelIcon(props) {
   );
 }
 
-export default function BulkScheduleModal({ open, onClose, schoolId }) {
+export default function BulkScheduleModal({ open, onClose, schoolId, cicloEscolarId }) {
   const [families, setFamilies] = useState([]);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -46,7 +46,11 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
     let cancelled = false;
     const load = async () => {
       try {
-        const resp = await api.get(`/bulk-schedule/families/${schoolId}${includeInactive ? '?includeInactive=true' : ''}`);
+        const params = new URLSearchParams();
+        if (includeInactive) params.set('includeInactive', 'true');
+        if (cicloEscolarId) params.set('cicloEscolarId', cicloEscolarId);
+        const query = params.toString();
+        const resp = await api.get(`/bulk-schedule/families/${schoolId}${query ? `?${query}` : ''}`);
         if (cancelled) return;
         const raw = resp.data.families || [];
         const normalized = raw.map(f => ({
@@ -62,7 +66,11 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
         console.error('bulk-schedule/families error', err && err.response ? err.response.status : err);
         // Fallback: try existing parents endpoint which lists families by school
         try {
-          const alt = await api.get(`/parents/school/${schoolId}${includeInactive ? '?includeInactive=true' : ''}`);
+          const params = new URLSearchParams();
+          if (includeInactive) params.set('includeInactive', 'true');
+          if (cicloEscolarId) params.set('cicloEscolarId', cicloEscolarId);
+          const query = params.toString();
+          const alt = await api.get(`/parents/school/${schoolId}${query ? `?${query}` : ''}`);
           if (cancelled) return;
           // parent endpoint returns { families: [...] } or { data: { families } }
           const altFamilies = alt.data.families || alt.data?.families || alt.data?.data || alt.data || [];
@@ -85,7 +93,7 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
     };
     load();
     return () => { cancelled = true; };
-  }, [open, schoolId, includeInactive]);
+  }, [open, schoolId, cicloEscolarId, includeInactive]);
 
   const toggleFamily = (id) => {
     setSelected(s => {
@@ -104,6 +112,7 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
         const ids = Array.from(selected);
         const params = new URLSearchParams();
         if (includeInactive) params.set('includeInactive', 'true');
+        if (cicloEscolarId) params.set('cicloEscolarId', cicloEscolarId);
         params.set('includeSchedules', 'true');
         if (ids.length > 0) params.set('familyIds', ids.join(','));
         const resp = await api.get(`/bulk-schedule/families/${schoolId}?${params.toString()}`);
@@ -373,6 +382,8 @@ export default function BulkScheduleModal({ open, onClose, schoolId }) {
     try {
       const fd = new FormData();
       fd.append('excelFile', uploadFile);
+      fd.append('schoolId', schoolId);
+      if (cicloEscolarId) fd.append('cicloEscolarId', cicloEscolarId);
       const resp = await api.post('/bulk-schedule/upload-schedule-update', fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
