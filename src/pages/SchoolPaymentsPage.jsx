@@ -758,6 +758,7 @@ const SchoolPaymentsPage = () => {
     const [payPenaltyBoleta, setPayPenaltyBoleta] = useState('');
     const [payPenaltyAccount, setPayPenaltyAccount] = useState('');
     const [payPenaltyDate, setPayPenaltyDate] = useState(moment().format('YYYY-MM-DD'));
+    const [payPenaltyUseCredit, setPayPenaltyUseCredit] = useState(false);
 
     // Exonerate/Discount Penalty dialog states
     const [openDiscountPenaltyDialog, setOpenDiscountPenaltyDialog] = useState(false);
@@ -820,6 +821,7 @@ const SchoolPaymentsPage = () => {
         setPayPenaltyBoleta(payment.receiptNumber || '');
         setPayPenaltyAccount(payment.bankAccountNumber || (school ? school.bankAccount : '') || '');
         setPayPenaltyAmount('');
+        setPayPenaltyUseCredit(false);
         setDiscountPenaltyAmount('');
         setIsExonerating(false);
         setExonerateAmount('');
@@ -3729,8 +3731,43 @@ const SchoolPaymentsPage = () => {
                                                     })()}
                                                 </Typography>
                                             </Box>
+                                            {dialogCredito > 0 && (
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                    <Typography variant="body2" sx={{ color: 'success.main' }}>Crédito disponible:</Typography>
+                                                    <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>Q {dialogCredito.toFixed(2)}</Typography>
+                                                </Box>
+                                            )}
                                         </Box>
                                     </Box>
+
+                                    {/* Toggle: Usar crédito disponible */}
+                                    {effectivePenaltyDue > 0 && dialogCredito > 0 && !isExonerating && (
+                                        <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
+                                            <Button
+                                                size="small"
+                                                variant={!payPenaltyUseCredit ? 'contained' : 'outlined'}
+                                                onClick={() => {
+                                                    setPayPenaltyUseCredit(false);
+                                                    setPayPenaltyAmount('');
+                                                }}
+                                                fullWidth
+                                            >
+                                                Pago con boleta
+                                            </Button>
+                                            <Button
+                                                size="small"
+                                                variant={payPenaltyUseCredit ? 'contained' : 'outlined'}
+                                                color="success"
+                                                onClick={() => {
+                                                    setPayPenaltyUseCredit(true);
+                                                    setPayPenaltyAmount(Math.min(dialogCredito, effectivePenaltyDue).toFixed(2));
+                                                }}
+                                                fullWidth
+                                            >
+                                                Usar crédito (Q {Math.min(dialogCredito, effectivePenaltyDue).toFixed(2)})
+                                            </Button>
+                                        </Box>
+                                    )}
 
                                     {/* Toggle de Exoneración Completa */}
                                     {effectivePenaltyDue > 0 && (
@@ -3743,16 +3780,12 @@ const SchoolPaymentsPage = () => {
                                                 onChange={(e) => {
                                                     setIsExonerating(e.target.checked);
                                                     if (e.target.checked) {
-                                                        // Cuando se activa exoneración completa:
-                                                        // - Monto a pagar = 0
-                                                        // - Número de boleta = 004
-                                                        // - Exonerar mora = total de la mora
+                                                        setPayPenaltyUseCredit(false);
                                                         setPayPenaltyAmount('0');
                                                         setPayPenaltyBoleta('004');
                                                         setDiscountPenaltyAmount(effectivePenaltyDue.toString());
                                                         setExonerateAmount(effectivePenaltyDue.toString());
                                                     } else {
-                                                        // Limpiar campos al desactivar
                                                         setPayPenaltyAmount('');
                                                         setPayPenaltyBoleta('');
                                                         setDiscountPenaltyAmount('');
@@ -3766,25 +3799,48 @@ const SchoolPaymentsPage = () => {
 
                                     {/* Formulario de pago de mora (siempre visible, pero algunos campos bloqueados cuando está exonerando) */}
                                     <TextField
-                                        label="Monto a Pagar"
+                                        label={payPenaltyUseCredit ? 'Crédito a aplicar (Q)' : 'Monto a Pagar'}
                                         type="number"
                                         fullWidth
                                         value={payPenaltyAmount}
                                         onChange={(e) => setPayPenaltyAmount(e.target.value)}
-                                        inputProps={{ min: 0, step: '0.01', max: effectivePenaltyDue }}
+                                        inputProps={{ min: 0, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
                                         sx={{ mb: 2 }}
                                         disabled={effectivePenaltyDue === 0 || isExonerating}
-                                        helperText={isExonerating ? "Exoneración completa: No se realizará pago" : ""}
+                                        helperText={isExonerating ? 'Exoneración completa: No se realizará pago' : payPenaltyUseCredit ? `Máximo del crédito: Q ${dialogCredito.toFixed(2)}` : ''}
                                     />
-                                    <TextField
-                                        label="Fecha del Pago"
-                                        type="date"
-                                        fullWidth
-                                        InputLabelProps={{ shrink: true }}
-                                        value={payPenaltyDate}
-                                        onChange={(e) => setPayPenaltyDate(e.target.value)}
-                                        sx={{ mb: 2 }}
-                                    />
+                                    {payPenaltyUseCredit && (() => {
+                                        const cashRem = Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100);
+                                        return cashRem > 0 ? (
+                                            <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffb74d' }}>
+                                                <Typography variant="body2" sx={{ color: 'warning.dark' }}>
+                                                    ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: Q {cashRem.toFixed(2)}</strong>
+                                                </Typography>
+                                            </Box>
+                                        ) : (
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                                                ℹ️ El crédito cubre toda la mora. No se requiere boleta.
+                                            </Typography>
+                                        );
+                                    })()}
+                                    {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
+                                        <>
+                                            {payPenaltyUseCredit && (
+                                                <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'block', mb: 1, mt: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                                    📋 Datos del pago restante (Q {Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100).toFixed(2)})
+                                                </Typography>
+                                            )}
+                                            <TextField
+                                                label={payPenaltyUseCredit ? `Fecha de pago del restante` : 'Fecha del Pago'}
+                                                type="date"
+                                                fullWidth
+                                                InputLabelProps={{ shrink: true }}
+                                                value={payPenaltyDate}
+                                                onChange={(e) => setPayPenaltyDate(e.target.value)}
+                                                sx={{ mb: 2 }}
+                                            />
+                                        </>
+                                    )}
                                     
                                     {/* Alert retroactivo por período */}
                                     {retroactivePenaltyCalc && retroactivePenaltyCalc.periods && retroactivePenaltyCalc.periods.some(p => p.daysLate > 0) && (
@@ -3851,26 +3907,39 @@ const SchoolPaymentsPage = () => {
                                         </Box>
                                     )}
                                     
-                                    <TextField
-                                        label="Número de Boleta"
-                                        fullWidth
-                                        value={payPenaltyBoleta}
-                                        onChange={(e) => setPayPenaltyBoleta(e.target.value)}
-                                        sx={{ mb: 2 }}
-                                        disabled={isExonerating}
-                                        helperText={isExonerating ? "004 - Exoneración completa" : ""}
-                                    />
-                                    <TextField
-                                        label="Exonerar Mora (Q)"
-                                        type="number"
-                                        fullWidth
-                                        value={discountPenaltyAmount}
-                                        onChange={(e) => setDiscountPenaltyAmount(e.target.value)}
-                                        inputProps={{ min: 0, step: '0.01', max: effectivePenaltyDue }}
-                                        sx={{ mb: 2 }}
-                                        disabled={effectivePenaltyDue === 0 || isExonerating}
-                                        helperText={isExonerating ? "Exoneración del monto completo de la mora" : ""}
-                                    />
+                                    {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
+                                        <TextField
+                                            label="Número de Boleta"
+                                            fullWidth
+                                            value={payPenaltyBoleta}
+                                            onChange={(e) => setPayPenaltyBoleta(e.target.value)}
+                                            sx={{ mb: 2 }}
+                                            disabled={isExonerating}
+                                            required={payPenaltyUseCredit && !isExonerating}
+                                            error={payPenaltyUseCredit && !isExonerating && !payPenaltyBoleta && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0}
+                                            helperText={
+                                                isExonerating
+                                                    ? '004 - Exoneración completa'
+                                                    : payPenaltyUseCredit && !payPenaltyBoleta && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0
+                                                        ? 'Ingrese el número de boleta para registrar el pago del restante'
+                                                        : ''
+                                            }
+                                        />
+                                    )}
+                                    {!payPenaltyUseCredit && (
+                                        <TextField
+                                            label="Exonerar Mora (Q)"
+                                            type="number"
+                                            fullWidth
+                                            value={discountPenaltyAmount}
+                                            onChange={(e) => setDiscountPenaltyAmount(e.target.value)}
+                                            inputProps={{ min: 0, step: '0.01', max: effectivePenaltyDue }}
+                                            sx={{ mb: 2 }}
+                                            disabled={effectivePenaltyDue === 0 || isExonerating}
+                                            helperText={isExonerating ? 'Exoneración del monto completo de la mora' : ''}
+                                        />
+                                    )}
+                                    {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
                                     <FormControl fullWidth sx={{ mb: 2 }}>
                                         <InputLabel>Número de Cuenta</InputLabel>
                                         <Select
@@ -3911,6 +3980,7 @@ const SchoolPaymentsPage = () => {
                                                 })()}
                                         </Select>
                                     </FormControl>
+                                    )}
 
                                     {effectivePenaltyDue > 0 ? (
                                         <Box sx={{ mt: 2, p: 2, bgcolor: '#fff3cd', borderRadius: 1, border: '1px solid #ffc107' }}>
@@ -3957,55 +4027,76 @@ const SchoolPaymentsPage = () => {
                                 
                                 {/* Botón para Pago de Mora */}
                                 {paymentTab === 1 && (
-                                    <Button variant="contained" color={isExonerating ? "success" : "warning"} onClick={async () => {
-                                        // Obtener valores de los campos
-                                        const amt = Number(payPenaltyAmount || 0);
+                                    <Button variant="contained" color={isExonerating ? 'success' : payPenaltyUseCredit ? 'success' : 'warning'} onClick={async () => {
+                                        const creditAmt = payPenaltyUseCredit ? Number(payPenaltyAmount || 0) : 0;
+                                        const cashRemainder = payPenaltyUseCredit
+                                            ? Math.max(0, Math.round((effectivePenaltyDue - creditAmt) * 100) / 100)
+                                            : 0;
+                                        const amt = payPenaltyUseCredit ? cashRemainder : Number(payPenaltyAmount || 0);
                                         const discount = Number(discountPenaltyAmount || 0);
-                                        
-                                        // Validar monto - permitir 0 si hay descuento/exoneración
-                                        if (Number.isNaN(amt) || amt < 0) {
-                                            setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
-                                            return;
+
+                                        if (payPenaltyUseCredit) {
+                                            if (!creditAmt || Number.isNaN(creditAmt) || creditAmt <= 0) {
+                                                setSnackbar({ open: true, message: 'Ingrese un monto de crédito válido', severity: 'error' });
+                                                return;
+                                            }
+                                            if (creditAmt > dialogCredito) {
+                                                setSnackbar({ open: true, message: `El crédito a aplicar excede el disponible (Q${dialogCredito.toFixed(2)})`, severity: 'error' });
+                                                return;
+                                            }
+                                        } else {
+                                            if (Number.isNaN(amt) || amt < 0) {
+                                                setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
+                                                return;
+                                            }
+                                            if (amt === 0 && discount === 0) {
+                                                setSnackbar({ open: true, message: 'Debe ingresar un monto de pago o de exoneración', severity: 'error' });
+                                                return;
+                                            }
+                                            const total = amt + discount;
+                                            if (total > effectivePenaltyDue) {
+                                                setSnackbar({ open: true, message: `El monto total (pago + exoneración) excede la mora adeudada (Q${effectivePenaltyDue.toFixed(2)})`, severity: 'error' });
+                                                return;
+                                            }
                                         }
-                                        
-                                        // Validar que al menos uno tenga valor (pago o exoneración)
-                                        if (amt === 0 && discount === 0) {
-                                            setSnackbar({ open: true, message: 'Debe ingresar un monto de pago o de exoneración', severity: 'error' });
-                                            return;
-                                        }
-                                        
-                                        // Validar que la suma no exceda la mora
-                                        const total = amt + discount;
-                                        if (total > effectivePenaltyDue) {
-                                            setSnackbar({ open: true, message: `El monto total (pago + exoneración) excede la mora adeudada (Q${effectivePenaltyDue.toFixed(2)})`, severity: 'error' });
-                                            return;
-                                        }
-                                        
+
                                         try {
-                                            const payloadData = {
-                                                paymentId: registerPaymentTarget.id,
-                                                amount: amt,
-                                                extraordinaryDiscount: discount || 0,
-                                                realPaymentDate: payPenaltyDate,
-                                                receiptNumber: payPenaltyBoleta,
-                                                bankAccount: payPenaltyAccount,
-                                                notes: discount > 0 ? `Descuento/Exoneración de mora: Q${discount.toFixed(2)}` : null,
-                                                source: 'manual'
-                                            };
-                                            console.log('[PAY PENALTY] Enviando payload:', payloadData);
-                                            
-                                            const response = await api.post('/payments/pay-penalty', payloadData);
-                                            console.log('[PAY PENALTY] Respuesta recibida:', response.data);
-                                            
-                                            setSnackbar({ 
-                                                open: true, 
-                                                message: isExonerating 
-                                                    ? `Mora exonerada: Q${discount.toFixed(2)}` 
-                                                    : 'Pago de mora registrado exitosamente', 
-                                                severity: 'success' 
-                                            });
+                                            if (payPenaltyUseCredit) {
+                                                await api.post('/payments/v2/use-credit', {
+                                                    paymentId: registerPaymentTarget.id,
+                                                    amount: creditAmt,
+                                                    targetType: 'PENALTY'
+                                                });
+                                                if (cashRemainder > 0) {
+                                                    await api.post('/payments/pay-penalty', {
+                                                        paymentId: registerPaymentTarget.id,
+                                                        amount: cashRemainder,
+                                                        realPaymentDate: payPenaltyDate,
+                                                        receiptNumber: payPenaltyBoleta,
+                                                        bankAccount: payPenaltyAccount,
+                                                        source: 'manual'
+                                                    });
+                                                    setSnackbar({ open: true, message: `Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${cashRemainder.toFixed(2)}) aplicados a mora`, severity: 'success' });
+                                                } else {
+                                                    setSnackbar({ open: true, message: 'Crédito aplicado a mora exitosamente', severity: 'success' });
+                                                }
+                                            } else {
+                                                const payloadData = {
+                                                    paymentId: registerPaymentTarget.id,
+                                                    amount: amt,
+                                                    extraordinaryDiscount: discount || 0,
+                                                    realPaymentDate: payPenaltyDate,
+                                                    receiptNumber: payPenaltyBoleta,
+                                                    bankAccount: payPenaltyAccount,
+                                                    notes: discount > 0 ? `Descuento/Exoneración de mora: Q${discount.toFixed(2)}` : null,
+                                                    source: 'manual'
+                                                };
+                                                await api.post('/payments/pay-penalty', payloadData);
+                                                setSnackbar({ open: true, message: isExonerating ? `Mora exonerada: Q${discount.toFixed(2)}` : 'Pago de mora registrado exitosamente', severity: 'success' });
+                                            }
                                             setOpenRegisterDialog(false);
                                             setIsExonerating(false);
+                                            setPayPenaltyUseCredit(false);
                                             setPayPenaltyAmount('');
                                             setPayPenaltyBoleta('');
                                             setPayPenaltyAccount('');
@@ -4013,38 +4104,28 @@ const SchoolPaymentsPage = () => {
                                             setDiscountPenaltyAmount('');
                                             setExonerateAmount('');
                                             setPaymentTab(0);
-                                            // Refrescar datos
                                             await fetchAllPayments(statusFilter, search);
                                         } catch (err) {
                                             console.error('Error procesando mora:', err);
-                                            const errorMsg = err.response?.data?.message || 'Error al procesar el pago de mora';
+                                            const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al procesar el pago de mora';
                                             setSnackbar({ open: true, message: errorMsg, severity: 'error' });
                                         }
                                     }} disabled={uploadedReceiptsLoading || regHistLoading || effectivePenaltyDue === 0 || (() => {
-                                        // Validar campos requeridos para habilitar el botón
+                                        if (isExonerating) return !payPenaltyDate || !payPenaltyAccount;
+                                        if (payPenaltyUseCredit) {
+                                            const cAmt = Number(payPenaltyAmount || 0);
+                                            if (!cAmt || cAmt <= 0 || cAmt > dialogCredito) return true;
+                                            const cRem = Math.max(0, Math.round((effectivePenaltyDue - cAmt) * 100) / 100);
+                                            if (cRem > 0) return !payPenaltyBoleta || !payPenaltyDate || !payPenaltyAccount;
+                                            return false;
+                                        }
                                         const amt = Number(payPenaltyAmount || 0);
                                         const discount = Number(discountPenaltyAmount || 0);
-                                        
-                                        // Si es exoneración completa, solo validar fecha y cuenta
-                                        if (isExonerating) {
-                                            return !payPenaltyDate || !payPenaltyAccount;
-                                        }
-                                        
-                                        // Para pago normal: validar monto + fecha + boleta + cuenta
-                                        // Al menos debe tener monto de pago O descuento
-                                        if (amt === 0 && discount === 0) {
-                                            return true; // Deshabilitar si no hay monto
-                                        }
-                                        
-                                        // Si hay monto de pago, validar que haya boleta
-                                        if (amt > 0 && !payPenaltyBoleta) {
-                                            return true; // Deshabilitar si falta boleta
-                                        }
-                                        
-                                        // Validar fecha y cuenta (siempre requeridos)
+                                        if (amt === 0 && discount === 0) return true;
+                                        if (amt > 0 && !payPenaltyBoleta) return true;
                                         return !payPenaltyDate || !payPenaltyAccount;
                                     })()}>
-                                        {isExonerating ? 'Confirmar Exoneración' : 'Registrar Pago de Mora'}
+                                        {isExonerating ? 'Confirmar Exoneración' : payPenaltyUseCredit && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago de Mora'}
                                     </Button>
                                 )}
                             </DialogActions>
@@ -4229,47 +4310,110 @@ const SchoolPaymentsPage = () => {
                                     <Typography variant="body2" sx={{ mb: 1 }}>
                                         <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> Q {effectivePenaltyDue.toFixed(2)}
                                     </Typography>
+                                    {dialogCredito > 0 && (
+                                        <Typography variant="body2" sx={{ color: 'success.main' }}>
+                                            <strong>Crédito disponible:</strong> Q {dialogCredito.toFixed(2)}
+                                        </Typography>
+                                    )}
                                     {hasFrozenPeriods && (
-                                        <Typography variant="caption" color="text.secondary">
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                                             ❄️ {dialogPenaltyPeriods.filter(p => p.penaltyFrozen).length} período(s) con mora congelada
                                         </Typography>
                                     )}
                                     {!hasFrozenPeriods && (
-                                        <Typography variant="caption" color="text.secondary">
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                                             💡 Puedes pagar esta mora por separado antes de pagar la tarifa completa.
                                         </Typography>
                                     )}
                                 </Box>
-                                <TextField 
-                                    fullWidth 
-                                    label="Monto a Pagar (Q)" 
-                                    type="number" 
-                                    value={payPenaltyAmount} 
-                                    onChange={(e) => setPayPenaltyAmount(e.target.value)}
-                                    sx={{ mb: 2 }}
-                                />
-                                <TextField 
-                                    fullWidth 
-                                    label="Fecha de Pago" 
-                                    type="date" 
-                                    value={payPenaltyDate} 
-                                    onChange={(e) => setPayPenaltyDate(e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    sx={{ mb: 2 }}
-                                />
-                                <TextField 
-                                    fullWidth 
-                                    label="Número de Boleta" 
-                                    value={payPenaltyBoleta} 
-                                    onChange={(e) => setPayPenaltyBoleta(e.target.value)}
-                                    sx={{ mb: 2 }}
-                                />
-                                <TextField 
-                                    fullWidth 
-                                    label="Número de Cuenta Bancaria" 
-                                    value={payPenaltyAccount} 
-                                    onChange={(e) => setPayPenaltyAccount(e.target.value)}
-                                />
+                                {/* Toggle método de pago si hay crédito disponible */}
+                                {dialogCredito > 0 && (
+                                    <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
+                                        <Button
+                                            size="small"
+                                            variant={!payPenaltyUseCredit ? 'contained' : 'outlined'}
+                                            onClick={() => {
+                                                setPayPenaltyUseCredit(false);
+                                                setPayPenaltyAmount('');
+                                            }}
+                                            fullWidth
+                                        >
+                                            Pago con boleta
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            variant={payPenaltyUseCredit ? 'contained' : 'outlined'}
+                                            color="success"
+                                            onClick={() => {
+                                                setPayPenaltyUseCredit(true);
+                                                const maxCredit = Math.min(dialogCredito, effectivePenaltyDue);
+                                                setPayPenaltyAmount(maxCredit.toFixed(2));
+                                            }}
+                                            fullWidth
+                                        >
+                                            Usar crédito (Q {Math.min(dialogCredito, effectivePenaltyDue).toFixed(2)})
+                                        </Button>
+                                    </Box>
+                                )}
+                                {(() => {
+                                    const creditAmt = Number(payPenaltyAmount || 0);
+                                    const cashRemainder = payPenaltyUseCredit
+                                        ? Math.max(0, Math.round((effectivePenaltyDue - creditAmt) * 100) / 100)
+                                        : 0;
+                                    const showBoletaFields = !payPenaltyUseCredit || cashRemainder > 0;
+                                    return (
+                                        <>
+                                            <TextField
+                                                fullWidth
+                                                label={payPenaltyUseCredit ? 'Crédito a aplicar (Q)' : 'Monto a Pagar (Q)'}
+                                                type="number"
+                                                value={payPenaltyAmount}
+                                                onChange={(e) => setPayPenaltyAmount(e.target.value)}
+                                                inputProps={{ min: 0.01, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
+                                                helperText={payPenaltyUseCredit ? `Máximo del crédito: Q ${dialogCredito.toFixed(2)}` : undefined}
+                                                sx={{ mb: 2 }}
+                                            />
+                                            {payPenaltyUseCredit && cashRemainder > 0 && (
+                                                <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffb74d' }}>
+                                                    <Typography variant="body2" sx={{ color: 'warning.dark' }}>
+                                                        ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: Q {cashRemainder.toFixed(2)}</strong>
+                                                    </Typography>
+                                                </Box>
+                                            )}
+                                            {payPenaltyUseCredit && cashRemainder <= 0 && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                                                    ℹ️ El crédito cubre toda la mora. No se requiere boleta.
+                                                </Typography>
+                                            )}
+                                            {showBoletaFields && (
+                                                <>
+                                                    <TextField
+                                                        fullWidth
+                                                        label={payPenaltyUseCredit ? `Fecha de pago del restante (Q ${cashRemainder.toFixed(2)})` : 'Fecha de Pago'}
+                                                        type="date"
+                                                        value={payPenaltyDate}
+                                                        onChange={(e) => setPayPenaltyDate(e.target.value)}
+                                                        InputLabelProps={{ shrink: true }}
+                                                        sx={{ mb: 2 }}
+                                                    />
+                                                    <TextField
+                                                        fullWidth
+                                                        label="Número de Boleta"
+                                                        value={payPenaltyBoleta}
+                                                        onChange={(e) => setPayPenaltyBoleta(e.target.value)}
+                                                        sx={{ mb: 2 }}
+                                                    />
+                                                    <TextField
+                                                        fullWidth
+                                                        label="Número de Cuenta Bancaria"
+                                                        value={payPenaltyAccount}
+                                                        onChange={(e) => setPayPenaltyAccount(e.target.value)}
+                                                    />
+                                                </>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </DialogContent>
                             <DialogActions>
                                 <Button onClick={() => {
@@ -4278,32 +4422,76 @@ const SchoolPaymentsPage = () => {
                                     setPayPenaltyBoleta('');
                                     setPayPenaltyAccount('');
                                     setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+                                    setPayPenaltyUseCredit(false);
                                 }}>Cancelar</Button>
-                                <Button variant="contained" onClick={async () => {
-                                    const amt = Number(payPenaltyAmount || 0);
-                                    if (!amt || Number.isNaN(amt) || amt <= 0) {
-                                        setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
-                                        return;
-                                    }
+                                <Button variant="contained" color={payPenaltyUseCredit ? 'success' : 'primary'} onClick={async () => {
+                                    const creditAmt = payPenaltyUseCredit ? Number(payPenaltyAmount || 0) : 0;
+                                    const cashAmt = payPenaltyUseCredit
+                                        ? Math.max(0, Math.round((effectivePenaltyDue - creditAmt) * 100) / 100)
+                                        : Number(payPenaltyAmount || 0);
                                     const currentPenalty = Number(registerPaymentTarget?.penaltyDue || 0);
-                                    if (amt > currentPenalty) {
-                                        setSnackbar({ open: true, message: `El monto excede la mora adeudada (Q${currentPenalty.toFixed(2)})`, severity: 'error' });
-                                        return;
+
+                                    // Validaciones
+                                    if (payPenaltyUseCredit) {
+                                        if (!creditAmt || Number.isNaN(creditAmt) || creditAmt <= 0) {
+                                            setSnackbar({ open: true, message: 'Ingrese un monto de crédito válido', severity: 'error' });
+                                            return;
+                                        }
+                                        if (creditAmt > dialogCredito) {
+                                            setSnackbar({ open: true, message: `El crédito a aplicar excede el disponible (Q${dialogCredito.toFixed(2)})`, severity: 'error' });
+                                            return;
+                                        }
+                                        if (creditAmt + cashAmt > currentPenalty + 0.005) {
+                                            setSnackbar({ open: true, message: `El total excede la mora adeudada (Q${currentPenalty.toFixed(2)})`, severity: 'error' });
+                                            return;
+                                        }
+                                    } else {
+                                        if (!cashAmt || Number.isNaN(cashAmt) || cashAmt <= 0) {
+                                            setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
+                                            return;
+                                        }
+                                        if (cashAmt > currentPenalty) {
+                                            setSnackbar({ open: true, message: `El monto excede la mora adeudada (Q${currentPenalty.toFixed(2)})`, severity: 'error' });
+                                            return;
+                                        }
                                     }
+
                                     try {
-                                        // Usar endpoint pay-penalty que maneja tanto mora congelada como acumulada
-                                        await api.post(`/payments/${registerPaymentTarget.id}/pay-penalty`, {
-                                            amountPaid: amt,
-                                            receiptNumber: payPenaltyBoleta,
-                                            bankAccountNumber: payPenaltyAccount,
-                                            paidAt: payPenaltyDate
-                                        });
-                                        setSnackbar({ open: true, message: 'Pago de mora registrado exitosamente', severity: 'success' });
+                                        if (payPenaltyUseCredit) {
+                                            // 1. Aplicar crédito a mora
+                                            await api.post('/payments/v2/use-credit', {
+                                                paymentId: registerPaymentTarget.id,
+                                                amount: creditAmt,
+                                                targetType: 'PENALTY'
+                                            });
+                                            // 2. Si hay restante, pagar con boleta
+                                            if (cashAmt > 0) {
+                                                await api.post(`/payments/${registerPaymentTarget.id}/pay-penalty`, {
+                                                    amountPaid: cashAmt,
+                                                    receiptNumber: payPenaltyBoleta,
+                                                    bankAccountNumber: payPenaltyAccount,
+                                                    paidAt: payPenaltyDate
+                                                });
+                                                setSnackbar({ open: true, message: `Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${cashAmt.toFixed(2)}) aplicados a mora`, severity: 'success' });
+                                            } else {
+                                                setSnackbar({ open: true, message: 'Crédito aplicado a mora exitosamente', severity: 'success' });
+                                            }
+                                        } else {
+                                            // Pago en efectivo/boleta
+                                            await api.post(`/payments/${registerPaymentTarget.id}/pay-penalty`, {
+                                                amountPaid: cashAmt,
+                                                receiptNumber: payPenaltyBoleta,
+                                                bankAccountNumber: payPenaltyAccount,
+                                                paidAt: payPenaltyDate
+                                            });
+                                            setSnackbar({ open: true, message: 'Pago de mora registrado exitosamente', severity: 'success' });
+                                        }
                                         setOpenPayPenaltyDialog(false);
                                         setPayPenaltyAmount('');
                                         setPayPenaltyBoleta('');
                                         setPayPenaltyAccount('');
                                         setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+                                        setPayPenaltyUseCredit(false);
                                         // Refrescar datos
                                         await fetchAllPayments(statusFilter, search);
                                         // Actualizar el registerPaymentTarget con los datos frescos
@@ -4314,10 +4502,10 @@ const SchoolPaymentsPage = () => {
                                     } catch (err) {
                                         console.error('Error pagando mora:', err);
                                         console.error('Error response:', err.response?.data);
-                                        const errorMsg = err.response?.data?.message || 'Error al registrar pago de mora';
+                                        const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al registrar pago de mora';
                                         setSnackbar({ open: true, message: errorMsg, severity: 'error' });
                                     }
-                                }}>Registrar Pago</Button>
+                                }}>{payPenaltyUseCredit && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago'}</Button>
                             </DialogActions>
                         </Dialog>
 
