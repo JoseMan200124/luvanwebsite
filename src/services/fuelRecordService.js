@@ -6,7 +6,7 @@ import api from '../utils/axiosConfig';
  * @param {Object} filters - Filtros para la consulta
  * @param {number} filters.schoolId - ID del colegio
  * @param {number} filters.busId - ID del bus
- * @param {string} filters.fuelingReason - Razón del abastecimiento (ruta, mecanico, excursion, admin)
+ * @param {string} filters.fuelingReason - Razón del abastecimiento (ruta, mecanico, excursion, admin, suplente)
  * @param {string} filters.startDate - Fecha inicial (YYYY-MM-DD)
  * @param {string} filters.endDate - Fecha final (YYYY-MM-DD)
  * @param {number} filters.page - Página
@@ -127,7 +127,8 @@ export const FUELING_REASONS = {
     'ruta': 'Ruta Normal',
     'mecanico': 'Visita al Mecánico',
     'excursion': 'Excursión/Evento',
-    'admin': 'Administrativo'
+    'admin': 'Administrativo',
+    'suplente': 'Suplente'
 };
 
 /**
