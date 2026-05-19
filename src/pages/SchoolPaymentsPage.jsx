@@ -759,6 +759,7 @@ const SchoolPaymentsPage = () => {
     const [payPenaltyAccount, setPayPenaltyAccount] = useState('');
     const [payPenaltyDate, setPayPenaltyDate] = useState(moment().format('YYYY-MM-DD'));
     const [payPenaltyUseCredit, setPayPenaltyUseCredit] = useState(false);
+    const [payPenaltyBoletaAmount, setPayPenaltyBoletaAmount] = useState('');
 
     // Exonerate/Discount Penalty dialog states
     const [openDiscountPenaltyDialog, setOpenDiscountPenaltyDialog] = useState(false);
@@ -822,6 +823,7 @@ const SchoolPaymentsPage = () => {
         setPayPenaltyAccount(payment.bankAccountNumber || (school ? school.bankAccount : '') || '');
         setPayPenaltyAmount('');
         setPayPenaltyUseCredit(false);
+        setPayPenaltyBoletaAmount('');
         setDiscountPenaltyAmount('');
         setIsExonerating(false);
         setExonerateAmount('');
@@ -3749,6 +3751,7 @@ const SchoolPaymentsPage = () => {
                                                 onClick={() => {
                                                     setPayPenaltyUseCredit(false);
                                                     setPayPenaltyAmount('');
+                                                    setPayPenaltyBoletaAmount('');
                                                 }}
                                                 fullWidth
                                             >
@@ -3759,8 +3762,11 @@ const SchoolPaymentsPage = () => {
                                                 variant={payPenaltyUseCredit ? 'contained' : 'outlined'}
                                                 color="success"
                                                 onClick={() => {
+                                                    const creditToApply = Math.min(dialogCredito, effectivePenaltyDue);
+                                                    const remainder = Math.max(0, Math.round((effectivePenaltyDue - creditToApply) * 100) / 100);
                                                     setPayPenaltyUseCredit(true);
-                                                    setPayPenaltyAmount(Math.min(dialogCredito, effectivePenaltyDue).toFixed(2));
+                                                    setPayPenaltyAmount(creditToApply.toFixed(2));
+                                                    setPayPenaltyBoletaAmount(remainder.toFixed(2));
                                                 }}
                                                 fullWidth
                                             >
@@ -3803,7 +3809,14 @@ const SchoolPaymentsPage = () => {
                                         type="number"
                                         fullWidth
                                         value={payPenaltyAmount}
-                                        onChange={(e) => setPayPenaltyAmount(e.target.value)}
+                                        onChange={(e) => {
+                                            setPayPenaltyAmount(e.target.value);
+                                            if (payPenaltyUseCredit) {
+                                                const newCredit = Number(e.target.value || 0);
+                                                const newRem = Math.max(0, Math.round((effectivePenaltyDue - newCredit) * 100) / 100);
+                                                setPayPenaltyBoletaAmount(newRem.toFixed(2));
+                                            }
+                                        }}
                                         inputProps={{ min: 0, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
                                         sx={{ mb: 2 }}
                                         disabled={effectivePenaltyDue === 0 || isExonerating}
@@ -3827,8 +3840,22 @@ const SchoolPaymentsPage = () => {
                                         <>
                                             {payPenaltyUseCredit && (
                                                 <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'block', mb: 1, mt: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                                    📋 Datos del pago restante (Q {Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100).toFixed(2)})
+                                                    📋 Datos del pago restante
                                                 </Typography>
+                                            )}
+                                            {payPenaltyUseCredit && (
+                                                <TextField
+                                                    label="Monto a pagar con boleta (Q)"
+                                                    type="number"
+                                                    fullWidth
+                                                    value={payPenaltyBoletaAmount}
+                                                    onChange={(e) => setPayPenaltyBoletaAmount(e.target.value)}
+                                                    inputProps={{ min: 0, step: '0.01' }}
+                                                    sx={{ mb: 2 }}
+                                                    required
+                                                    error={!payPenaltyBoletaAmount || Number(payPenaltyBoletaAmount) <= 0}
+                                                    helperText={!payPenaltyBoletaAmount || Number(payPenaltyBoletaAmount) <= 0 ? 'Ingrese el monto a pagar con boleta' : ''}
+                                                />
                                             )}
                                             <TextField
                                                 label={payPenaltyUseCredit ? `Fecha de pago del restante` : 'Fecha del Pago'}
@@ -4029,10 +4056,8 @@ const SchoolPaymentsPage = () => {
                                 {paymentTab === 1 && (
                                     <Button variant="contained" color={isExonerating ? 'success' : payPenaltyUseCredit ? 'success' : 'warning'} onClick={async () => {
                                         const creditAmt = payPenaltyUseCredit ? Number(payPenaltyAmount || 0) : 0;
-                                        const cashRemainder = payPenaltyUseCredit
-                                            ? Math.max(0, Math.round((effectivePenaltyDue - creditAmt) * 100) / 100)
-                                            : 0;
-                                        const amt = payPenaltyUseCredit ? cashRemainder : Number(payPenaltyAmount || 0);
+                                        const boletaAmt = payPenaltyUseCredit ? Number(payPenaltyBoletaAmount || 0) : 0;
+                                        const amt = payPenaltyUseCredit ? boletaAmt : Number(payPenaltyAmount || 0);
                                         const discount = Number(discountPenaltyAmount || 0);
 
                                         if (payPenaltyUseCredit) {
@@ -4067,16 +4092,16 @@ const SchoolPaymentsPage = () => {
                                                     amount: creditAmt,
                                                     targetType: 'PENALTY'
                                                 });
-                                                if (cashRemainder > 0) {
+                                                if (boletaAmt > 0) {
                                                     await api.post('/payments/pay-penalty', {
                                                         paymentId: registerPaymentTarget.id,
-                                                        amount: cashRemainder,
+                                                        amount: boletaAmt,
                                                         realPaymentDate: payPenaltyDate,
                                                         receiptNumber: payPenaltyBoleta,
                                                         bankAccount: payPenaltyAccount,
                                                         source: 'manual'
                                                     });
-                                                    setSnackbar({ open: true, message: `Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${cashRemainder.toFixed(2)}) aplicados a mora`, severity: 'success' });
+                                                    setSnackbar({ open: true, message: `Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${boletaAmt.toFixed(2)}) aplicados a mora`, severity: 'success' });
                                                 } else {
                                                     setSnackbar({ open: true, message: 'Crédito aplicado a mora exitosamente', severity: 'success' });
                                                 }
@@ -4097,6 +4122,7 @@ const SchoolPaymentsPage = () => {
                                             setOpenRegisterDialog(false);
                                             setIsExonerating(false);
                                             setPayPenaltyUseCredit(false);
+                                            setPayPenaltyBoletaAmount('');
                                             setPayPenaltyAmount('');
                                             setPayPenaltyBoleta('');
                                             setPayPenaltyAccount('');
@@ -4116,7 +4142,11 @@ const SchoolPaymentsPage = () => {
                                             const cAmt = Number(payPenaltyAmount || 0);
                                             if (!cAmt || cAmt <= 0 || cAmt > dialogCredito) return true;
                                             const cRem = Math.max(0, Math.round((effectivePenaltyDue - cAmt) * 100) / 100);
-                                            if (cRem > 0) return !payPenaltyBoleta || !payPenaltyDate || !payPenaltyAccount;
+                                            if (cRem > 0) {
+                                                const bAmt = Number(payPenaltyBoletaAmount || 0);
+                                                if (!bAmt || bAmt <= 0) return true;
+                                                return !payPenaltyBoleta || !payPenaltyDate || !payPenaltyAccount;
+                                            }
                                             return false;
                                         }
                                         const amt = Number(payPenaltyAmount || 0);
@@ -4125,7 +4155,7 @@ const SchoolPaymentsPage = () => {
                                         if (amt > 0 && !payPenaltyBoleta) return true;
                                         return !payPenaltyDate || !payPenaltyAccount;
                                     })()}>
-                                        {isExonerating ? 'Confirmar Exoneración' : payPenaltyUseCredit && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago de Mora'}
+                                        {isExonerating ? 'Confirmar Exoneración' : payPenaltyUseCredit && Number(payPenaltyBoletaAmount || 0) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago de Mora'}
                                     </Button>
                                 )}
                             </DialogActions>
