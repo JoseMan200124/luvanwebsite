@@ -188,7 +188,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     const [file, setFile] = useState(null);
 
     const [sending, setSending] = useState(false);
-    const [sendPush, setSendPush] = useState(false);
+    const [sendEmail, setSendEmail] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [selectedRoles, setSelectedRoles] = useState([]);
     const [padreFilters, setPadreFilters] = useState({ ...EMPTY_PADRE_FILTERS });
@@ -273,6 +273,11 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
     const schoolOptions = useMemo(
         () => (Array.isArray(schools) ? schools : []).map((s) => ({ value: String(s.id), label: s.name })),
+        [schools]
+    );
+
+    const schoolIdsForAll = useMemo(
+        () => (Array.isArray(schools) ? schools : []).map((s) => String(s.id)).filter(Boolean),
         [schools]
     );
 
@@ -384,9 +389,10 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     // ==========================================
     useEffect(() => {
         const loadPreview = async () => {
-            if (selectedSchool === 'all') return;
-            if (!currentSchool) return;
-            if (selectedRoutes.length === 0) return;
+            if (selectedSchool !== 'all') {
+                if (!currentSchool) return;
+                if (selectedRoutes.length === 0) return;
+            }
 
             // Si no hay roles, NO pedimos preview al backend: en UI debe verse todo en 0.
             if (!selectedRoles || selectedRoles.length === 0) {
@@ -395,13 +401,13 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             }
 
             // If parents role is selected and there is no schedule, we cannot build preview.
-            if (!selectedSchedule && selectedRoles.includes('parents')) {
+            if (selectedSchool !== 'all' && !selectedSchedule && selectedRoles.includes('parents')) {
                 setPreview(null);
                 return;
             }
 
             // si se seleccionó un horario y está en 0, no pedimos preview
-            if (selectedSchedule && Number(scheduleCounts[selectedSchedule] || 0) <= 0) {
+            if (selectedSchool !== 'all' && selectedSchedule && Number(scheduleCounts[selectedSchedule] || 0) <= 0) {
                 setPreview(null);
                 return;
             }
@@ -411,9 +417,10 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
             try {
                 const resp = await api.post('/mail/send-circular/preview', {
-                    schoolId: currentSchool.id,
-                    routeNumbers: selectedRoutes,
-                    scheduleCode: selectedSchedule,
+                    schoolId: selectedSchool,
+                    schoolIds: selectedSchool === 'all' ? schoolIdsForAll : undefined,
+                    routeNumbers: selectedSchool === 'all' ? [] : selectedRoutes,
+                    scheduleCode: selectedSchool === 'all' ? undefined : selectedSchedule,
                     recipientRoles: selectedRoles,
                     padreFilters: padreSelected ? padreFilters : undefined,
                 });
@@ -475,6 +482,9 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             formData.append('subject', subject);
             formData.append('body', message);
             formData.append('schoolId', selectedSchool);
+            if (selectedSchool === 'all') {
+                formData.append('schoolIds', JSON.stringify(schoolIdsForAll));
+            }
             formData.append('useSmtp', true);
 
             if (selectedSchool !== 'all' && selectedRoutes.length > 0) {
@@ -489,7 +499,11 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                 formData.append('padreFilters', JSON.stringify(padreFilters));
             }
 
-            if (sendPush) formData.append('sendPush', true);
+            // Push SIEMPRE
+            formData.append('sendPush', 'true');
+
+            // Correo opcional
+            formData.append('sendEmail', sendEmail ? 'true' : 'false');
 
             if (file) formData.append('file', file);
 
@@ -509,7 +523,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             setSelectedSchedule('');
             setScheduleCounts(DEFAULT_COUNTS);
             setPreview(null);
-            setSendPush(false);
+            setSendEmail(false);
             setPadreFilters({ ...EMPTY_PADRE_FILTERS });
             onClose();
         } catch (error) {
@@ -543,9 +557,11 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                 allowAll
                                 allLabel="Todos"
                             />
-                            <FormHelperText>
-                                Flujo: 1) Rutas ➜ 2) Horario ➜ 3) Roles ➜ 4) Vista previa ➜ Enviar.
-                            </FormHelperText>
+                            {selectedSchool !== 'all' && (
+                                <FormHelperText>
+                                    Flujo: 1) Rutas ➜ 2) Horario ➜ 3) Roles ➜ 4) Vista previa ➜ Enviar.
+                                </FormHelperText>
+                            )}
                         </Box>
 
                         <Divider />
@@ -688,7 +704,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                         )}
 
                         {/* 3) Roles */}
-                        {selectedSchool !== 'all' && selectedRoutes.length > 0 && (
+                        {(selectedSchool === 'all' || (selectedSchool !== 'all' && selectedRoutes.length > 0)) && (
                             <Accordion
                                 disableGutters
                                 elevation={0}
@@ -707,7 +723,9 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                         '&.Mui-expanded': { minHeight: 48 },
                                     }}
                                 >
-                                    <Typography variant="subtitle1" fontWeight={600}>3) Roles</Typography>
+                                    <Typography variant="subtitle1" fontWeight={600}>
+                                        {selectedSchool === 'all' ? '1) Roles' : '3) Roles'}
+                                    </Typography>
                                 </AccordionSummary>
 
                                 <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 2 }}>
@@ -776,7 +794,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                         )}
 
                         {/* 4) Vista previa */}
-                        {selectedSchool !== 'all' && selectedRoutes.length > 0 && (
+                        {(selectedSchool === 'all' || selectedRoutes.length > 0) && (
                             <Accordion
                                 disableGutters
                                 elevation={0}
@@ -799,7 +817,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                 </AccordionSummary>
 
                                 <AccordionDetails sx={{ pt: 2 }}>
-                                    {selectedRoles.includes('parents') && !selectedSchedule ? (
+                                    {selectedSchool !== 'all' && selectedRoles.includes('parents') && !selectedSchedule ? (
                                         <Alert severity="warning">Selecciona un horario para ver la vista previa.</Alert>
                                     ) : previewLoading ? (
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -810,6 +828,12 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                         <Alert severity="info">No hay vista previa para esa combinación.</Alert>
                                     ) : (
                                         <>
+                                            {selectedSchool !== 'all' && (
+                                                <Alert severity="info" sx={{ mb: 1 }}>
+                                                    La vista previa muestra los destinatarios según los roles seleccionados para este colegio.
+                                                </Alert>
+                                            )}
+
                                             <Stack spacing={0.5}>
                                                 <Typography variant="body2" fontWeight={700}>
                                                     Totales (únicos) a enviar:
@@ -889,13 +913,17 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
                         <FormControl component="fieldset" variant="standard">
                             <Stack direction="row" spacing={1} alignItems="center">
-                                <Checkbox checked={sendPush} onChange={(e) => setSendPush(e.target.checked)} disabled={selectedSchool === 'all'} />
-                                <Typography variant="body2">Enviar notificación push además del correo</Typography>
+                                <Checkbox
+                                    checked={sendEmail}
+                                    onChange={(e) => setSendEmail(e.target.checked)}
+                                />
+                                <Typography variant="body2">Enviar correo (opcional)</Typography>
                             </Stack>
                             <FormHelperText>
-                                Activa para enviar una notificación push a los mismos destinatarios de la circular (requiere colegio seleccionado).
+                                Enviar correo es opcional, al no marcar esta opción no se enviará correo y solo se enviará notificación push.
                             </FormHelperText>
                         </FormControl>
+
                     </Box>
                 </DialogContent>
 

@@ -78,6 +78,7 @@ const PermissionsManagementPage = () => {
             category: 'Reportes y Estadísticas',
             icon: <ViewModuleIcon />,
             modules: [
+                { key: 'circulares-admin-listar', label: 'Historial de Circulares' },
                 { key: 'reportes-uso', label: 'Reportes de Uso' },
                 { key: 'estadisticas-financieras', label: 'Estadísticas Financieras' },
             ]

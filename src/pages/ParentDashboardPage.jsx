@@ -48,6 +48,9 @@ import {
   ExpandMore as ExpandMoreIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  Notifications as NotificationsIcon,
+  DocumentScanner,
+  AttachEmail,
 } from '@mui/icons-material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { styled } from 'twin.macro';
@@ -864,6 +867,24 @@ const ParentDashboardPage = () => {
                 fullWidth
                 size="large"
                 variant="contained"
+                sx={{
+                  height: 56,
+                  bgcolor: 'info.dark',
+                  '&:hover': { bgcolor: 'info.main' },
+                }}
+                startIcon={<AttachEmail />}
+                sx={{ height: 56 }}
+                onClick={() => navigate('/parent/circulares')}
+              >
+                Circulares
+              </Button>
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                size="large"
+                variant="contained"
                 color="primary"
                 startIcon={<DescriptionIcon />}
                 sx={{ height: 56 }}
@@ -874,22 +895,7 @@ const ParentDashboardPage = () => {
               </Button>
             </Grid>
 
-            <Grid item xs={12} sm={4}>
-              <Button
-                fullWidth
-                size="large"
-                variant="contained"
-                startIcon={<InfoIcon />}
-                sx={{
-                  height: 56,
-                  bgcolor: 'info.dark',
-                  '&:hover': { bgcolor: 'info.main' },
-                }}
-                onClick={() => setOpenContactDialog(true)}
-              >
-                Contáctanos
-              </Button>
-            </Grid>
+            
           </Grid>
         </MuiBox>
 
