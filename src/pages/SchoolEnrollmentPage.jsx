@@ -436,11 +436,13 @@ const SchoolEnrollmentPage = () => {
                                 required
                             />
                             <Autocomplete
-                                options={grades}
+                                options={[{ name: 'PENDIENTE' }, ...grades]}
                                 getOptionLabel={getGradeName}
                                 isOptionEqualToValue={(option, value) => getGradeName(option) === getGradeName(value)}
                                 value={
-                                    grades.find((g) => getGradeName(g) === st.grade) || null
+                                    st.grade === 'PENDIENTE'
+                                        ? { name: 'PENDIENTE' }
+                                        : grades.find((g) => getGradeName(g) === st.grade) || null
                                 }
                                 onChange={(event, newValue) =>
                                     handleChangeStudentField(
@@ -455,6 +457,9 @@ const SchoolEnrollmentPage = () => {
                                         label={`Grado del alumno #${index + 1}`}
                                         margin="normal"
                                         required
+                                        helperText={st.grade === 'PENDIENTE'
+                                            ? 'Alumno sin grado: será asignado manualmente por un administrador.'
+                                            : ''}
                                     />
                                 )}
                             />
