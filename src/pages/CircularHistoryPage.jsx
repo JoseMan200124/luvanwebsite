@@ -6,12 +6,14 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Grid,
   IconButton,
+  ListSubheader,
   MenuItem,
   Paper,
   Table,
@@ -24,13 +26,17 @@ import {
   TextField,
   Tooltip,
   Typography,
+  Stack,
 } from '@mui/material';
 import {
   Close as CloseIcon,
   GetApp as DownloadIcon,
+  ExpandLess as ExpandLessIcon,
+  ExpandMore as ExpandMoreIcon,
   Refresh as RefreshIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import moment from 'moment-timezone';
@@ -39,6 +45,7 @@ import tw from 'twin.macro';
 
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE } from '../components/CicloEscolarFilter';
+import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -70,25 +77,16 @@ const formatDateTime = (dateString) => {
   }
 };
 
-const parseJsonMaybe = (value) => {
-  if (value == null) return null;
-  if (typeof value === 'object') return value;
-  if (typeof value === 'string' && value.trim()) {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  return null;
+const getRecipientLabel = (recipient) => {
+  const name = safeStr(recipient?.name) || `Usuario ${recipient?.id}`;
+  const email = safeStr(recipient?.email) || 'Sin correo';
+  return `${name} - ${email}`;
 };
 
-const getTotalUnique = (counts) => {
-  const parsed = parseJsonMaybe(counts);
-  if (!parsed) return null;
-  const v = parsed.totalUnique;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+const getRecipientRoleLabel = (role) => {
+  const normalizedRole = safeStr(role).toLowerCase();
+  if (normalizedRole === 'padre' || normalizedRole === 'padres') return 'Familia';
+  return safeStr(role) || 'Sin rol';
 };
 
 const CircularHistoryPage = () => {
@@ -107,11 +105,61 @@ const CircularHistoryPage = () => {
   const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(() => localStorage.getItem('selectedCicloEscolarId') || ALL_CYCLES_VALUE);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
+  const [sortBy, setSortBy] = useState('sentAt');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const [detail, setDetail] = useState(null);
+  const [recipientSearch, setRecipientSearch] = useState('');
+  const [recipientsOpen, setRecipientsOpen] = useState(false);
+
+  const availableSchools = useMemo(() => {
+    if (selectedCicloEscolar === ALL_CYCLES_VALUE) return schools;
+
+    return schools.filter((school) => String(school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? '') === String(selectedCicloEscolar));
+  }, [schools, selectedCicloEscolar]);
+
+  const groupedSchools = useMemo(() => {
+    const groups = new Map();
+
+    availableSchools.forEach((school) => {
+      const cycle = school?.cicloEscolar || {};
+      const cycleId = String(school?.cicloEscolarId ?? cycle?.id ?? selectedCicloEscolar ?? '').trim();
+      const cycleLabel = getCicloEscolarOptionLabel(cycle) || (cycleId ? `Ciclo ${cycleId}` : 'Ciclo escolar');
+      const groupKey = cycleId || cycleLabel;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          cycleId,
+          cycleLabel,
+          schools: [],
+        });
+      }
+
+      groups.get(groupKey).schools.push(school);
+    });
+
+    return Array.from(groups.values()).map((group) => ({
+      ...group,
+      schools: [...group.schools].sort((a, b) => safeStr(a?.name).localeCompare(safeStr(b?.name), 'es', { sensitivity: 'base' })),
+    }));
+  }, [availableSchools, selectedCicloEscolar]);
+
+  const effectiveSelectedSchool = useMemo(() => {
+    if (selectedSchool === ALL_CLIENTS_VALUE) return ALL_CLIENTS_VALUE;
+    const exists = availableSchools.some((school) => String(school?.id) === String(selectedSchool));
+    return exists ? String(selectedSchool) : ALL_CLIENTS_VALUE;
+  }, [availableSchools, selectedSchool]);
+
+  useEffect(() => {
+    if (selectedSchool === ALL_CLIENTS_VALUE) return;
+    if (effectiveSelectedSchool === selectedSchool) return;
+
+    setSelectedSchool(ALL_CLIENTS_VALUE);
+    localStorage.setItem('selectedSchoolId', ALL_CLIENTS_VALUE);
+  }, [effectiveSelectedSchool, selectedSchool]);
 
   const listParams = useMemo(() => {
     const params = {
@@ -119,7 +167,9 @@ const CircularHistoryPage = () => {
       pageSize: rowsPerPage,
       // Evita que axiosConfig inyecte el contexto automáticamente.
       // 'all' significa: sin filtro por cliente.
-      schoolId: selectedSchool || ALL_CLIENTS_VALUE,
+      schoolId: effectiveSelectedSchool || ALL_CLIENTS_VALUE,
+      sortBy,
+      sortDirection: String(sortDirection || 'desc').toUpperCase(),
     };
 
     const query = safeStr(q);
@@ -133,7 +183,7 @@ const CircularHistoryPage = () => {
     if (endDate) params.endDate = moment(endDate).endOf('day').toDate().toISOString();
 
     return params;
-  }, [page, rowsPerPage, q, selectedSchool, selectedCicloEscolar, startDate, endDate]);
+  }, [page, rowsPerPage, q, effectiveSelectedSchool, selectedCicloEscolar, startDate, endDate, sortBy, sortDirection]);
 
   const fetchSchools = useCallback(async () => {
     try {
@@ -187,6 +237,34 @@ const CircularHistoryPage = () => {
     setPage(0);
   };
 
+  const handleRequestSort = (property) => {
+    const isAsc = sortBy === property && sortDirection === 'asc';
+    setSortDirection(isAsc ? 'desc' : 'asc');
+    setSortBy(property);
+    setPage(0);
+  };
+
+  const filteredRecipientGroups = useMemo(() => {
+    const groups = Array.isArray(detail?.recipientGroups) ? detail.recipientGroups : [];
+    const query = safeStr(recipientSearch).toLowerCase();
+
+    if (!query) return groups;
+
+    return groups
+      .map((group) => {
+        const users = Array.isArray(group?.users) ? group.users : [];
+        const filteredUsers = users.filter((user) => {
+          const haystack = [group?.schoolName, user?.name, user?.email, user?.role]
+            .map((value) => safeStr(value).toLowerCase())
+            .join(' ');
+          return haystack.includes(query);
+        });
+
+        return { ...group, users: filteredUsers };
+      })
+      .filter((group) => group.users.length > 0);
+  }, [detail?.recipientGroups, recipientSearch]);
+
   const openDetail = async (uuid) => {
     const id = safeStr(uuid);
     if (!id) return;
@@ -195,6 +273,8 @@ const CircularHistoryPage = () => {
     setDetailLoading(true);
     setDetailError('');
     setDetail(null);
+    setRecipientSearch('');
+    setRecipientsOpen(false);
 
     try {
       const res = await api.get(`/circulars/admin/${id}`);
@@ -214,6 +294,8 @@ const CircularHistoryPage = () => {
     setDetail(null);
     setDetailError('');
     setDetailLoading(false);
+    setRecipientSearch('');
+    setRecipientsOpen(false);
   };
 
   const downloadAttachment = async (attachmentUuid) => {
@@ -297,13 +379,7 @@ const CircularHistoryPage = () => {
               <Typography variant="body2" color="text.secondary">Circulares enviadas desde el sistema</Typography>
             </Box>
 
-            <Tooltip title="Refrescar">
-              <span>
-                <IconButton onClick={handleRefresh} disabled={loading}>
-                  <RefreshIcon />
-                </IconButton>
-              </span>
-            </Tooltip>
+            
           </Box>
 
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -355,18 +431,42 @@ const CircularHistoryPage = () => {
                 fullWidth
                 size="small"
                 label="Cliente"
-                value={selectedSchool || ALL_CLIENTS_VALUE}
+                value={effectiveSelectedSchool || ALL_CLIENTS_VALUE}
                 onChange={(e) => {
-                  setSelectedSchool(String(e.target.value || ALL_CLIENTS_VALUE));
+                  const nextValue = String(e.target.value || ALL_CLIENTS_VALUE);
+                  setSelectedSchool(nextValue);
+                  localStorage.setItem('selectedSchoolId', nextValue);
                   setPage(0);
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      maxHeight: 250,
+                      overflow: 'auto',
+                    },
+                  },
                 }}
               >
                 <MenuItem value={ALL_CLIENTS_VALUE}>Todos</MenuItem>
-                {schools.map((s) => (
-                  <MenuItem key={s.id} value={String(s.id)}>
-                    {safeStr(s.name) || `Colegio ${s.id}`}
-                  </MenuItem>
-                ))}
+                {groupedSchools.map((group) => [
+                  <ListSubheader
+                    key={`header-${group.cycleId || group.cycleLabel}`}
+                    disableSticky
+                    sx={{
+                      lineHeight: 1.6,
+                      color: '#1976d2',
+                      fontWeight: 800,
+                      bgcolor: 'background.paper',
+                    }}
+                  >
+                    {group.cycleLabel}
+                  </ListSubheader>,
+                  ...group.schools.map((s) => (
+                    <MenuItem key={s.id} value={String(s.id)} sx={{ pl: 3 }}>
+                      {safeStr(s.name) || `Colegio ${s.id}`}
+                    </MenuItem>
+                  )),
+                ])}
               </TextField>
             </Grid>
 
@@ -391,11 +491,34 @@ const CircularHistoryPage = () => {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 800 }}>Enviada</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Asunto</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Colegio</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="right">Destinatarios</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="center">Adjunto</TableCell>
+                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'sentAt' ? sortDirection : false}>
+                  <TableSortLabel
+                    active={sortBy === 'sentAt'}
+                    direction={sortBy === 'sentAt' ? sortDirection : 'desc'}
+                    onClick={() => handleRequestSort('sentAt')}
+                  >
+                    Enviada
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'subject' ? sortDirection : false}>
+                  <TableSortLabel
+                    active={sortBy === 'subject'}
+                    direction={sortBy === 'subject' ? sortDirection : 'asc'}
+                    onClick={() => handleRequestSort('subject')}
+                  >
+                    Asunto
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'school' ? sortDirection : false}>
+                  <TableSortLabel
+                    active={sortBy === 'school'}
+                    direction={sortBy === 'school' ? sortDirection : 'asc'}
+                    onClick={() => handleRequestSort('school')}
+                  >
+                    Colegio
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 800 }} align="center">Archivo adjunto</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="right">Acciones</TableCell>
               </TableRow>
             </TableHead>
@@ -403,7 +526,7 @@ const CircularHistoryPage = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={5}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
                       <CircularProgress size={28} />
                     </Box>
@@ -411,7 +534,7 @@ const CircularHistoryPage = () => {
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={5}>
                     <Box sx={{ textAlign: 'center', py: 4 }}>
                       <Typography variant="body2" color="text.secondary">No hay circulares para mostrar.</Typography>
                     </Box>
@@ -426,13 +549,37 @@ const CircularHistoryPage = () => {
                         {safeStr(r.subject) || 'Circular'}
                       </Typography>
                     </TableCell>
-                    <TableCell>{safeStr(r.school?.name) || '—'}</TableCell>
-                    <TableCell align="right">{getTotalUnique(r.counts) ?? '—'}</TableCell>
+                    <TableCell>
+                      {safeStr(r.school?.name) ? (
+                        safeStr(r.school?.name)
+                      ) : (
+                        <Chip
+                          label="Todos los colegios"
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          sx={{ fontWeight: 700 }}
+                        />
+                      )}
+                    </TableCell>
                     <TableCell align="center">{r.hasAttachment ? 'Sí' : 'No'}</TableCell>
                     <TableCell align="right">
                       <Tooltip title="Ver detalle">
                         <span>
-                          <IconButton onClick={() => openDetail(r.uuid)} size="small">
+                          <IconButton
+                            onClick={() => openDetail(r.uuid)}
+                            size="small"
+                            sx={{
+                              color: 'primary.main',
+                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                              transition: 'all 200ms ease-in-out',
+                              '&:hover': {
+                                backgroundColor: 'rgba(25, 118, 210, 0.16)',
+                                color: 'primary.dark',
+                                transform: 'scale(1.1)',
+                              },
+                            }}
+                          >
                             <VisibilityIcon fontSize="small" />
                           </IconButton>
                         </span>
@@ -484,7 +631,130 @@ const CircularHistoryPage = () => {
           ) : (
             <>
               <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+                  <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
+                    Destinatarios
+                  </Typography>
+
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    onClick={() => setRecipientsOpen((value) => !value)}
+                    endIcon={
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: recipientsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 200ms',
+                        }}
+                      />
+                    }
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                      borderColor: 'rgba(25, 118, 210, 0.24)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                        borderColor: 'primary.main',
+                      },
+                      whiteSpace: 'nowrap',
+                    }}
+                    aria-label={recipientsOpen ? 'Ocultar destinatarios' : 'Mostrar destinatarios'}
+                  >
+                    {recipientsOpen ? 'Ocultar' : 'Mostrar'}
+                  </Button>
+                </Box>
+
+                {recipientsOpen && (
+                  <>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Buscar destinatario"
+                      value={recipientSearch}
+                      onChange={(e) => setRecipientSearch(e.target.value)}
+                      placeholder="Nombre, correo, rol o colegio"
+                      sx={{ mb: 1.5 }}
+                    />
+
+                    <Box
+                      sx={{
+                        maxHeight: 360,
+                        overflowY: 'auto',
+                        pr: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 2,
+                        p: 1.5,
+                        backgroundColor: 'background.paper',
+                      }}
+                    >
+                      {filteredRecipientGroups.length > 0 ? (
+                        <Stack spacing={2}>
+                          {filteredRecipientGroups.map((group) => (
+                            <Box key={String(group.schoolId || group.schoolName)}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
+                                <Chip
+                                  label={group.schoolName || 'Sin colegio'}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                  sx={{ fontWeight: 700 }}
+                                />
+                                <Typography variant="caption" color="text.secondary">
+                                  {group.users.length} usuario{group.users.length === 1 ? '' : 's'}
+                                </Typography>
+                              </Box>
+
+                              <Stack spacing={1}>
+                                {group.users.map((recipient) => (
+                                  <Box
+                                    key={recipient.id}
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'flex-start',
+                                      justifyContent: 'space-between',
+                                      gap: 2,
+                                      p: 1.25,
+                                      border: '1px solid',
+                                      borderColor: 'divider',
+                                      borderRadius: 2,
+                                      flexWrap: 'wrap',
+                                    }}
+                                  >
+                                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                          {getRecipientLabel(recipient)}
+                                        </Typography>
+                                        <Chip
+                                          size="small"
+                                          label={getRecipientRoleLabel(recipient.role)}
+                                          variant="filled"
+                                          color="default"
+                                          sx={{ fontWeight: 700 }}
+                                        />
+                                      </Box>
+                                    </Box>
+                                  </Box>
+                                ))}
+                              </Stack>
+                            </Box>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No hay destinatarios que coincidan con la búsqueda.
+                        </Typography>
+                      )}
+                    </Box>
+                  </>
+                )}
+              </Box>
+
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
                   Mensaje
                 </Typography>
                 <Box sx={{ '& p': { marginTop: 0 } }}>
@@ -493,8 +763,8 @@ const CircularHistoryPage = () => {
               </Box>
 
               <Box>
-                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                  Adjuntos
+                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
+                  Archivo adjunto
                 </Typography>
 
                 {Array.isArray(detail?.attachments) && detail.attachments.length > 0 ? (

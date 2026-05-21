@@ -544,6 +544,18 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
                 <DialogContent dividers>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 0.5 }}>
+                        <Alert 
+                            severity="info" 
+                            sx={{ 
+                                py: 1, 
+                                px: 1.5, 
+                                '& .MuiAlert-icon': { mt: '2px' },
+                                fontSize: '0.875rem',
+                            }}
+                        >
+                            Las circulares estarán disponibles en el historial de circulares del sistema y en la app/web para las familias que quieran consultar las circulares recibidas.
+                        </Alert>
+
                         <Typography variant="subtitle2" color="text.secondary" sx={{ mb: -1 }}>
                             Alcance
                         </Typography>
@@ -920,7 +932,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                 <Typography variant="body2">Enviar correo (opcional)</Typography>
                             </Stack>
                             <FormHelperText>
-                                Enviar correo es opcional, al no marcar esta opción no se enviará correo y solo se enviará notificación push.
+                                Enviar correo es opcional, al marcar esta opción se enviará correo electrónico a los destinatarios.
                             </FormHelperText>
                         </FormControl>
 
