@@ -32,11 +32,14 @@ import {
     DialogContent,
     DialogActions,
     Button,
+    Snackbar,
+    Alert,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { 
     Refresh as RefreshIcon, 
+    Edit as EditIcon,
     Visibility as VisibilityIcon,
     LocalGasStation as GasIcon 
 } from '@mui/icons-material';
@@ -47,6 +50,7 @@ import {
     getFuelStatistics, 
     getFuelRecordById,
     createFuelRecordWeb,
+    updateFuelRecord,
     FUELING_REASONS,
     FUEL_TYPES
 } from '../services/fuelRecordService';
@@ -86,6 +90,20 @@ const FuelRecordsPage = () => {
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState(null);
+
+    // Editar registro
+    const [editOpen, setEditOpen] = useState(false);
+    const [updating, setUpdating] = useState(false);
+    const [editSnackbar, setEditSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const [editForm, setEditForm] = useState({
+        fuelingReason: '',
+        fuelType: '',
+        pricePerGallon: '',
+        gallonage: '',
+        recordDateDate: moment(),
+        recordDateTime: moment().format('HH:mm'),
+        notes: ''
+    });
 
     // Crear registro
     const [createOpen, setCreateOpen] = useState(false);
@@ -443,6 +461,112 @@ const FuelRecordsPage = () => {
     const handleCloseDetails = () => {
         setDetailsOpen(false);
         setSelectedRecord(null);
+    };
+
+    const buildEditFormFromRecord = (record) => {
+        const recordMoment = moment(record?.recordDate);
+        return {
+            fuelingReason: record?.fuelingReason || '',
+            fuelType: record?.fuelType || '',
+            pricePerGallon: record?.pricePerGallon !== undefined && record?.pricePerGallon !== null ? String(record.pricePerGallon) : '',
+            gallonage: record?.gallonage !== undefined && record?.gallonage !== null ? String(record.gallonage) : '',
+            recordDateDate: recordMoment.isValid() ? recordMoment : moment(),
+            recordDateTime: recordMoment.isValid() ? recordMoment.format('HH:mm') : moment().format('HH:mm'),
+            notes: record?.notes || ''
+        };
+    };
+
+    const handleOpenEdit = (record) => {
+        if (!record || !record.canEdit) return;
+        setSelectedRecord(record);
+        setEditForm(buildEditFormFromRecord(record));
+        setEditOpen(true);
+        setDetailsOpen(false);
+    };
+
+    const handleCloseEdit = () => {
+        setEditOpen(false);
+        setUpdating(false);
+        setEditForm({
+            fuelingReason: '',
+            fuelType: '',
+            pricePerGallon: '',
+            gallonage: '',
+            recordDateDate: moment(),
+            recordDateTime: moment().format('HH:mm'),
+            notes: ''
+        });
+    };
+
+    const handleEditChange = (field, value) => {
+        setEditForm(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleEditSubmit = async () => {
+        if (!selectedRecord) {
+            setEditSnackbar({ open: true, message: 'No se pudo cargar el registro a editar.', severity: 'error' });
+            return;
+        }
+
+        const required = ['fuelingReason', 'fuelType', 'pricePerGallon', 'gallonage'];
+        for (const key of required) {
+            if (editForm[key] === '' || editForm[key] === null || editForm[key] === undefined) {
+                setEditSnackbar({ open: true, message: 'Por favor complete los campos requeridos.', severity: 'error' });
+                return;
+            }
+        }
+
+        let recordDateIso = null;
+        if (editForm.recordDateDate && editForm.recordDateTime) {
+            const datePart = moment(editForm.recordDateDate);
+            const timePart = moment(editForm.recordDateTime, 'HH:mm');
+            if (datePart.isValid() && timePart.isValid()) {
+                datePart.hour(timePart.hour());
+                datePart.minute(timePart.minute());
+                datePart.second(0);
+                recordDateIso = datePart.toISOString();
+            }
+        }
+
+        const payload = {
+            fuelingReason: editForm.fuelingReason,
+            fuelType: editForm.fuelType,
+            busId: selectedRecord.busId,
+            schoolId: selectedRecord.schoolId || undefined,
+            corporationId: selectedRecord.corporationId || undefined,
+            pilotId: selectedRecord.pilotId || undefined,
+            routeNumber: selectedRecord.routeNumber || undefined,
+            pricePerGallon: Number(editForm.pricePerGallon),
+            gallonage: Number(editForm.gallonage),
+            recordDate: recordDateIso || new Date().toISOString(),
+            notes: editForm.notes || undefined,
+        };
+
+        try {
+            setUpdating(true);
+            const response = await updateFuelRecord(selectedRecord.id, payload);
+            if (response && response.success) {
+                handleCloseEdit();
+                handleCloseDetails();
+                await Promise.all([fetchFuelRecords(), fetchStatistics()]);
+                setEditSnackbar({ open: true, message: 'Registro actualizado exitosamente', severity: 'success' });
+            } else {
+                setEditSnackbar({
+                    open: true,
+                    message: response?.message || 'No se pudo actualizar el registro.',
+                    severity: 'error'
+                });
+            }
+        } catch (error) {
+            console.error('Error al actualizar registro:', error);
+            setEditSnackbar({
+                open: true,
+                message: 'Error al actualizar el registro. Revise la consola.',
+                severity: 'error'
+            });
+        } finally {
+            setUpdating(false);
+        }
     };
 
     const getFuelingReasonColor = (reason) => {
@@ -924,6 +1048,17 @@ const FuelRecordsPage = () => {
                                                             <VisibilityIcon />
                                                         </IconButton>
                                                     </Tooltip>
+                                                    {record.canEdit && (
+                                                        <Tooltip title="Editar registro">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={() => handleOpenEdit(record)}
+                                                                color="secondary"
+                                                            >
+                                                                <EditIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -1222,11 +1357,144 @@ const FuelRecordsPage = () => {
                         )}
                     </DialogContent>
                     <DialogActions>
+                        {selectedRecord?.canEdit && (
+                            <Button onClick={() => handleOpenEdit(selectedRecord)} variant="outlined" color="secondary">
+                                Editar
+                            </Button>
+                        )}
                         <Button onClick={handleCloseDetails} color="primary">
                             Cerrar
                         </Button>
                     </DialogActions>
                 </Dialog>
+
+                {/* Modal de Edición */}
+                <Dialog
+                    open={editOpen}
+                    onClose={handleCloseEdit}
+                    maxWidth="sm"
+                    fullWidth
+                >
+                    <DialogTitle>Editar Registro de Combustible</DialogTitle>
+                    <DialogContent dividers>
+                        {selectedRecord && (
+                            <Box mb={2}>
+                                <Typography variant="body2" color="textSecondary">
+                                    Cliente: {selectedRecord.school?.name || selectedRecord.corporation?.name || 'N/A'}
+                                </Typography>
+                                <Typography variant="body2" color="textSecondary">
+                                    Bus: {selectedRecord.plate || 'N/A'}
+                                </Typography>
+                            </Box>
+                        )}
+                        <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Razón de Abastecimiento</InputLabel>
+                                    <Select
+                                        value={editForm.fuelingReason}
+                                        label="Razón de Abastecimiento"
+                                        onChange={(e) => handleEditChange('fuelingReason', e.target.value)}
+                                    >
+                                        <MenuItem value="">Seleccione</MenuItem>
+                                        {Object.entries(FUELING_REASONS).map(([key, label]) => (
+                                            <MenuItem key={key} value={key}>{label}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Tipo Combustible</InputLabel>
+                                    <Select
+                                        value={editForm.fuelType}
+                                        label="Tipo Combustible"
+                                        onChange={(e) => handleEditChange('fuelType', e.target.value)}
+                                    >
+                                        <MenuItem value="">Seleccione</MenuItem>
+                                        {Object.entries(FUEL_TYPES).map(([key, label]) => (
+                                            <MenuItem key={key} value={key}>{label}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    label="Galones"
+                                    type="number"
+                                    fullWidth
+                                    value={editForm.gallonage}
+                                    onChange={(e) => handleEditChange('gallonage', e.target.value)}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    label="Precio por Galón"
+                                    type="number"
+                                    fullWidth
+                                    value={editForm.pricePerGallon}
+                                    onChange={(e) => handleEditChange('pricePerGallon', e.target.value)}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <DatePicker
+                                    label="Fecha"
+                                    value={editForm.recordDateDate}
+                                    onChange={(newValue) => handleEditChange('recordDateDate', newValue)}
+                                    renderInput={(params) => <TextField fullWidth {...params} />}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    label="Hora"
+                                    type="time"
+                                    value={editForm.recordDateTime}
+                                    onChange={(e) => handleEditChange('recordDateTime', e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    fullWidth
+                                />
+                            </Grid>
+
+                            <Grid item xs={12}>
+                                <TextField
+                                    label="Notas (opcional)"
+                                    fullWidth
+                                    multiline
+                                    minRows={2}
+                                    value={editForm.notes}
+                                    onChange={(e) => handleEditChange('notes', e.target.value)}
+                                />
+                            </Grid>
+                        </Grid>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCloseEdit} disabled={updating}>Cancelar</Button>
+                        <Button onClick={handleEditSubmit} variant="contained" color="primary" disabled={updating}>
+                            {updating ? 'Guardando...' : 'Guardar cambios'}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                <Snackbar
+                    open={editSnackbar.open}
+                    autoHideDuration={3500}
+                    onClose={() => setEditSnackbar((prev) => ({ ...prev, open: false }))}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                >
+                    <Alert
+                        onClose={() => setEditSnackbar((prev) => ({ ...prev, open: false }))}
+                        severity={editSnackbar.severity}
+                        variant="filled"
+                        sx={{ width: '100%' }}
+                    >
+                        {editSnackbar.message}
+                    </Alert>
+                </Snackbar>
             </Container>
         </LocalizationProvider>
     );
