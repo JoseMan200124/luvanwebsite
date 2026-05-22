@@ -225,7 +225,8 @@ const BusesManagementPage = () => {
     const fetchBuses = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/buses', {
+            const response = await api.get('/buses?includeDecommissioned=true', {
+                skipSchoolCycleContext: true,
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             const data = response.data;
@@ -263,7 +264,8 @@ const BusesManagementPage = () => {
             capacity: '',
             description: '',
             files: [],
-            inWorkshop: false
+            inWorkshop: false,
+            decommissioned: false
         });
         setOpenDialog(true);
     };
@@ -275,7 +277,11 @@ const BusesManagementPage = () => {
             capacity: bus.capacity || '',
             description: bus.description || '',
             files: bus.files || [],
-            inWorkshop: bus.inWorkshop || false
+            inWorkshop: bus.inWorkshop || false,
+            decommissioned: bus.decommissioned || false,
+            school: bus.school || null,
+            corporation: bus.corporation || null,
+            routeNumber: bus.routeNumber || bus.route || bus.route_num || ''
         });
         setOpenDialog(true);
     };
@@ -425,6 +431,7 @@ const BusesManagementPage = () => {
             formData.append('capacity', selectedBus.capacity);
             formData.append('description', selectedBus.description);
             formData.append('inWorkshop', selectedBus.inWorkshop);
+            formData.append('decommissioned', selectedBus.decommissioned);
 
             if (selectedBus.files && selectedBus.files.length > 0) {
                 Array.from(selectedBus.files).forEach((file) => {
@@ -575,9 +582,10 @@ const BusesManagementPage = () => {
         if (availabilityFilter === 'assigned' && !assigned) return false;
         if (availabilityFilter === 'unassigned' && assigned) return false;
 
-        // inWorkshop filter
+        // state filter
         if (inWorkshopFilter === 'in' && !bus.inWorkshop) return false;
-        if (inWorkshopFilter === 'out' && bus.inWorkshop) return false;
+        if (inWorkshopFilter === 'out' && (bus.inWorkshop || bus.decommissioned)) return false;
+        if (inWorkshopFilter === 'decommissioned' && !bus.decommissioned) return false;
 
         return true;
     });
@@ -687,6 +695,14 @@ const BusesManagementPage = () => {
     const sortedBuses = stableSort(filteredBuses, getComparator(order, orderBy));
 
     // =================== RENDER ===================
+    const selectedBusHasAssignment = Boolean(
+        selectedBus?.school ||
+        selectedBus?.corporation ||
+        selectedBus?.routeNumber ||
+        selectedBus?.route ||
+        selectedBus?.route_num
+    );
+
     return (
         <BusesContainer>
             <Typography variant="h4" gutterBottom>
@@ -757,6 +773,7 @@ const BusesManagementPage = () => {
                             <MenuItem value="all">Todos</MenuItem>
                             <MenuItem value="in">En taller</MenuItem>
                             <MenuItem value="out">Disponible</MenuItem>
+                            <MenuItem value="decommissioned">Dado de baja</MenuItem>
                         </Select>
                     </FormControl>
                 </Box>
@@ -813,12 +830,18 @@ const BusesManagementPage = () => {
                                         <MobileField>
                                             <MobileLabel>Estado</MobileLabel>
                                             <MobileValue>
-                                                {bus.inWorkshop ? (
+                                                {bus.decommissioned ? (
+                                                    <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
+                                                        DADO DE BAJA
+                                                    </Typography>
+                                                ) : bus.inWorkshop ? (
                                                     <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
                                                         EN TALLER
                                                     </Typography>
                                                 ) : (
-                                                    'Disponible'
+                                                    <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                        DISPONIBLE
+                                                    </Typography>
                                                 )}
                                             </MobileValue>
                                         </MobileField>
@@ -949,12 +972,18 @@ const BusesManagementPage = () => {
                                                         {getAssignmentText(bus)}
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Estado">
-                                                        {bus.inWorkshop ? (
+                                                        {bus.decommissioned ? (
+                                                            <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
+                                                                DADO DE BAJA
+                                                            </Typography>
+                                                        ) : bus.inWorkshop ? (
                                                             <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
                                                                 EN TALLER
                                                             </Typography>
                                                         ) : (
-                                                            'Disponible'
+                                                            <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                                DISPONIBLE
+                                                            </Typography>
                                                         )}
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell
@@ -1092,7 +1121,8 @@ const BusesManagementPage = () => {
                                 onChange={(e) =>
                                     setSelectedBus((prev) => ({
                                         ...prev,
-                                        inWorkshop: e.target.checked
+                                        inWorkshop: e.target.checked,
+                                        decommissioned: e.target.checked ? false : prev.decommissioned
                                     }))
                                 }
                                 color="primary"
@@ -1101,6 +1131,31 @@ const BusesManagementPage = () => {
                         label="¿En taller?"
                         sx={{ mt: 1 }}
                     />
+
+                    {/* Switch para dar de baja */}
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={selectedBus ? selectedBus.decommissioned : false}
+                                disabled={selectedBusHasAssignment}
+                                onChange={(e) =>
+                                    setSelectedBus((prev) => ({
+                                        ...prev,
+                                        decommissioned: e.target.checked,
+                                        inWorkshop: e.target.checked ? false : prev.inWorkshop
+                                    }))
+                                }
+                                color="error"
+                            />
+                        }
+                        label="Dar de baja"
+                        sx={{ mt: 1 }}
+                    />
+                    {selectedBusHasAssignment && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            Este bus tiene una asignación activa. Para darlo de baja no debe tener una asignación.
+                        </Typography>
+                    )}
 
                     <input
                         accept="application/pdf,image/jpeg,image/png"
