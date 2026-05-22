@@ -16,6 +16,7 @@ import SupervisorsManagementPage from './pages/SupervisorsManagementPage';
 import AuxiliaresManagementPage from './pages/AuxiliaresManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
+import CircularHistoryPage from './pages/CircularHistoryPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import RouteHistoryPage from './pages/RouteHistoryPage';
 // ✅ REMOVIDO: import ActivityLogPage from './pages/ActivityLogPage';
@@ -93,6 +94,13 @@ export const modules = [
                 name: 'Historial de Recorridos de Rutas',
                 path: 'historial-recorridos-rutas',
                 component: RouteHistoryPage,
+                roles: ['Administrador', 'Gestor'],
+            },
+            {
+                key: 'circulares-admin-listar',
+                name: 'Historial de Circulares',
+                path: 'circulares',
+                component: CircularHistoryPage,
                 roles: ['Administrador', 'Gestor'],
             },
         ],

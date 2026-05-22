@@ -25,6 +25,7 @@ import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import ParentProtocolsPage from './pages/ParentProtocolsPage';
+import ParentCircularsPage from './pages/ParentCircularsPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
 import CicloEscolarSelectionPage from './pages/CicloEscolarSelectionPage';
 import SchoolContextSelectionPage from './pages/SchoolContextSelectionPage';
@@ -313,6 +314,18 @@ function App() {
                                 redirectTo="/parent/dashboard"
                             >
                                 <ParentProtocolsPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/parent/circulares"
+                        element={
+                            <ProtectedRoute
+                                moduleKey={'circulares-padre-listar'}
+                                redirectTo="/parent/dashboard"
+                            >
+                                <ParentCircularsPage />
                             </ProtectedRoute>
                         }
                     />
