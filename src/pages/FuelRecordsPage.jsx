@@ -95,7 +95,13 @@ const FuelRecordsPage = () => {
     const [editOpen, setEditOpen] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [editSnackbar, setEditSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const [editSchools, setEditSchools] = useState([]);
+    const [editCorporations, setEditCorporations] = useState([]);
+    const [editBuses, setEditBuses] = useState([]);
+    const [editRecordCycleId, setEditRecordCycleId] = useState(null);
     const [editForm, setEditForm] = useState({
+        client: null,
+        busId: '',
         fuelingReason: '',
         fuelType: '',
         pricePerGallon: '',
@@ -463,9 +469,45 @@ const FuelRecordsPage = () => {
         setSelectedRecord(null);
     };
 
+    const loadEditReferenceData = async (cicloEscolarId) => {
+        try {
+            const params = cicloEscolarId ? { cicloEscolarId: String(cicloEscolarId), includeArchived: true } : { includeArchived: true };
+            const [schoolsResponse, corporationsResponse, busesResponse] = await Promise.all([
+                api.get('/schools', { params }),
+                api.get('/corporations', { params: cicloEscolarId ? { cicloEscolarId: String(cicloEscolarId) } : {} }),
+                api.get('/buses/simple')
+            ]);
+
+            const schoolsData = Array.isArray(schoolsResponse.data) ? schoolsResponse.data : (schoolsResponse.data?.schools || []);
+            const corporationsData = Array.isArray(corporationsResponse.data) ? corporationsResponse.data : (corporationsResponse.data?.corporations || []);
+            const busesData = Array.isArray(busesResponse.data) ? busesResponse.data : (busesResponse.data?.buses || []);
+
+            const normalizedCycleId = cicloEscolarId !== undefined && cicloEscolarId !== null && cicloEscolarId !== '' ? String(cicloEscolarId) : '';
+            const inSameCycle = (item) => {
+                const itemCycleId = item?.cicloEscolarId ?? item?.cicloEscolar?.id ?? item?.school?.cicloEscolarId ?? item?.school?.cicloEscolar?.id ?? null;
+                if (!normalizedCycleId) return itemCycleId === null || itemCycleId === undefined || itemCycleId === '';
+                return String(itemCycleId) === normalizedCycleId;
+            };
+
+            setEditSchools(schoolsData.filter(inSameCycle));
+            setEditCorporations(corporationsData.filter(inSameCycle));
+            setEditBuses(busesData);
+        } catch (error) {
+            console.error('Error al cargar datos de edición:', error);
+            setEditSchools([]);
+            setEditCorporations([]);
+            setEditBuses([]);
+        }
+    };
+
     const buildEditFormFromRecord = (record) => {
         const recordMoment = moment(record?.recordDate);
+        const client = record?.schoolId
+            ? { type: 'school', id: record.schoolId, label: record?.school?.name || 'Colegio' }
+            : (record?.corporationId ? { type: 'corp', id: record.corporationId, label: record?.corporation?.name || 'Corporación' } : null);
         return {
+            client,
+            busId: record?.busId ? String(record.busId) : '',
             fuelingReason: record?.fuelingReason || '',
             fuelType: record?.fuelType || '',
             pricePerGallon: record?.pricePerGallon !== undefined && record?.pricePerGallon !== null ? String(record.pricePerGallon) : '',
@@ -478,8 +520,20 @@ const FuelRecordsPage = () => {
 
     const handleOpenEdit = (record) => {
         if (!record || !record.canEdit) return;
+        const recordCycleId = record?.cicloEscolarId
+            ?? record?.cicloEscolar?.id
+            ?? record?.school?.cicloEscolarId
+            ?? record?.school?.cicloEscolar?.id
+            ?? record?.corporation?.cicloEscolarId
+            ?? record?.corporation?.cicloEscolar?.id
+            ?? null;
         setSelectedRecord(record);
+        setEditRecordCycleId(recordCycleId);
+        setEditSchools([]);
+        setEditCorporations([]);
+        setEditBuses([]);
         setEditForm(buildEditFormFromRecord(record));
+        loadEditReferenceData(recordCycleId);
         setEditOpen(true);
         setDetailsOpen(false);
     };
@@ -487,7 +541,13 @@ const FuelRecordsPage = () => {
     const handleCloseEdit = () => {
         setEditOpen(false);
         setUpdating(false);
+        setEditRecordCycleId(null);
+        setEditSchools([]);
+        setEditCorporations([]);
+        setEditBuses([]);
         setEditForm({
+            client: null,
+            busId: '',
             fuelingReason: '',
             fuelType: '',
             pricePerGallon: '',
@@ -499,6 +559,10 @@ const FuelRecordsPage = () => {
     };
 
     const handleEditChange = (field, value) => {
+        if (field === 'client') {
+            setEditForm(prev => ({ ...prev, client: value }));
+            return;
+        }
         setEditForm(prev => ({ ...prev, [field]: value }));
     };
 
@@ -508,7 +572,7 @@ const FuelRecordsPage = () => {
             return;
         }
 
-        const required = ['fuelingReason', 'fuelType', 'pricePerGallon', 'gallonage'];
+        const required = ['client', 'busId', 'fuelingReason', 'fuelType', 'pricePerGallon', 'gallonage'];
         for (const key of required) {
             if (editForm[key] === '' || editForm[key] === null || editForm[key] === undefined) {
                 setEditSnackbar({ open: true, message: 'Por favor complete los campos requeridos.', severity: 'error' });
@@ -531,11 +595,10 @@ const FuelRecordsPage = () => {
         const payload = {
             fuelingReason: editForm.fuelingReason,
             fuelType: editForm.fuelType,
-            busId: selectedRecord.busId,
-            schoolId: selectedRecord.schoolId || undefined,
-            corporationId: selectedRecord.corporationId || undefined,
+            busId: Number(editForm.busId),
+            schoolId: editForm.client?.type === 'school' ? Number(editForm.client.id) : undefined,
+            corporationId: editForm.client?.type === 'corp' ? Number(editForm.client.id) : undefined,
             pilotId: selectedRecord.pilotId || undefined,
-            routeNumber: selectedRecord.routeNumber || undefined,
             pricePerGallon: Number(editForm.pricePerGallon),
             gallonage: Number(editForm.gallonage),
             recordDate: recordDateIso || new Date().toISOString(),
@@ -585,6 +648,59 @@ const FuelRecordsPage = () => {
             currency: 'GTQ',
         }).format(amount || 0);
     };
+
+    const editClientOptions = [
+        ...editSchools
+            .filter((school) => {
+                const schoolCycleId = school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? null;
+                return editRecordCycleId ? String(schoolCycleId) === String(editRecordCycleId) : schoolCycleId === null || schoolCycleId === undefined;
+            })
+            .map((school) => ({ label: `${school.name} (Colegio)`, type: 'school', id: school.id })),
+        ...editCorporations
+            .filter((corporation) => {
+                const corporationCycleId = corporation?.cicloEscolarId ?? corporation?.cicloEscolar?.id ?? null;
+                return editRecordCycleId ? String(corporationCycleId) === String(editRecordCycleId) : corporationCycleId === null || corporationCycleId === undefined;
+            })
+            .map((corporation) => ({ label: `${corporation.name} (Corporación)`, type: 'corp', id: corporation.id })),
+    ];
+
+    const editPlateOptions = [...new Set(editBuses.map((bus) => bus.plate).filter(Boolean))]
+        .sort((firstPlate, secondPlate) => String(firstPlate).localeCompare(String(secondPlate)));
+
+    const selectedRecordBus = selectedRecord?.bus || null;
+    const selectedRecordBusId = selectedRecord?.busId != null ? String(selectedRecord.busId) : (selectedRecordBus?.id != null ? String(selectedRecordBus.id) : '');
+    const selectedRecordBusPlate = selectedRecord?.plate || selectedRecordBus?.plate || '';
+
+    const editBusOptions = selectedRecordBusPlate
+        ? (() => {
+            const currentOptions = editPlateOptions.map((plate) => {
+                const bus = editBuses.find((item) => item.plate === plate);
+                return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
+            });
+            const hasCurrentBus = currentOptions.some((option) => String(option.id) === selectedRecordBusId || option.plate === selectedRecordBusPlate);
+            if (hasCurrentBus) return currentOptions;
+            return [
+                { label: selectedRecordBusPlate, id: selectedRecordBusId, plate: selectedRecordBusPlate },
+                ...currentOptions,
+            ];
+        })()
+        : editPlateOptions.map((plate) => {
+            const bus = editBuses.find((item) => item.plate === plate);
+            return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
+        });
+
+    const selectedEditClientValue = editForm.client
+        ? editClientOptions.find((option) => option.type === editForm.client.type && String(option.id) === String(editForm.client.id)) || editForm.client
+        : null;
+
+    const selectedEditBusValue = editForm.busId
+        ? (() => {
+            const bus = editBuses.find((item) => String(item.id) === String(editForm.busId))
+                || selectedRecordBus
+                || null;
+            return bus ? { label: bus.plate, id: String(bus.id), plate: bus.plate } : null;
+        })()
+        : null;
 
     // Crear registro: handlers
     const handleCloseCreate = () => {
@@ -1388,6 +1504,33 @@ const FuelRecordsPage = () => {
                             </Box>
                         )}
                         <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                            <Grid item xs={12} sm={6}>
+                                <Autocomplete
+                                    options={editClientOptions}
+                                    value={selectedEditClientValue}
+                                    onChange={(e, newValue) => handleEditChange('client', newValue)}
+                                    getOptionLabel={(option) => option?.label || ''}
+                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
+                                    fullWidth
+                                    isOptionEqualToValue={(opt, val) => opt?.type === val?.type && String(opt?.id) === String(val?.id)}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <Autocomplete
+                                    options={editPlateOptions.map((plate) => {
+                                        const bus = editBuses.find((item) => item.plate === plate);
+                                        return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
+                                    })}
+                                    value={selectedEditBusValue}
+                                    onChange={(e, newValue) => handleEditChange('busId', newValue ? String(newValue.id) : '')}
+                                    getOptionLabel={(option) => option?.label || ''}
+                                    renderInput={(params) => <TextField {...params} label="Placa / Bus" variant="outlined" />}
+                                    fullWidth
+                                    isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
+                                />
+                            </Grid>
+
                             <Grid item xs={12} sm={6}>
                                 <FormControl fullWidth>
                                     <InputLabel>Razón de Abastecimiento</InputLabel>
