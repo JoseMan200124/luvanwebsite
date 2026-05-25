@@ -12,7 +12,6 @@ import {
     Logout as LogoutIcon,
     Settings,
     Home as HomeIcon,
-    History as HistoryIcon
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import { PermissionsContext } from '../context/PermissionsProvider';
@@ -139,7 +138,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                 const popY = getPopoutPosition(el);
                 setHoveredItem({ idx, popY });
             } catch (e) {
-                setHoveredItem({ idx, popY: HEADER_OFFSET + idx * ITEM_HEIGHT });
+                setHoveredItem({ idx, popY: HEADER_OFFSET });
             }
         }
     };
@@ -188,20 +187,6 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                             </RouterLink>
                         )}
 
-                        {/* Enlace a Historial (sin restricción por ahora) */}
-                        <RouterLink
-                            to="/admin/historial"
-                            onClick={handleLinkClick}
-                            style={{ textDecoration: 'none', color: 'inherit' }}
-                        >
-                            <MenuItem>
-                                <div tw="flex items-center">
-                                    <HistoryIcon tw="mr-2" />
-                                    {isOpen && <span>Historial</span>}
-                                </div>
-                            </MenuItem>
-                        </RouterLink>
-
                         {/* Módulos dinámicos */}
                         {modules.map((module, idx) => {
                             // Para módulos con submódulos, verificar si tiene acceso a alguno
@@ -229,7 +214,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                     >
                                         <div tw="flex items-center">
                                             {module.icon && <module.icon tw="mr-2" />}
-                                            {isOpen && <span>{module.name}</span>}
+                                            {isOpen && <span> {module.name}</span>}
                                         </div>
                                         {isOpen && hasSubs && (isOpenMenu ? <ExpandLess /> : <ExpandMore />)}
                                     </MenuItem>
