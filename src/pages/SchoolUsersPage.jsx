@@ -126,7 +126,12 @@ const SchoolUsersPage = () => {
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openRouteTypeModal, setOpenRouteTypeModal] = useState(false);
     const [openStudentScheduleModal, setOpenStudentScheduleModal] = useState(false);
-    const [openSendContractDialog, setOpenSendContractDialog] = useState(false);
+    const [openFamilyMessageDialog, setOpenFamilyMessageDialog] = useState(false);
+    const [familyMessageChannel, setFamilyMessageChannel] = useState('');
+    const [familyMessageTitle, setFamilyMessageTitle] = useState('');
+    const [familyMessageBody, setFamilyMessageBody] = useState('');
+    const [familyMessageFile, setFamilyMessageFile] = useState(null);
+    const [familyMessageSending, setFamilyMessageSending] = useState(false);
     const [openSchoolSelectDialog, setOpenSchoolSelectDialog] = useState(false);
     
     // Estados para diferentes operaciones
@@ -1614,9 +1619,105 @@ const SchoolUsersPage = () => {
         setOpenStudentScheduleModal(true);
     };
 
-    const handleSendContract = (user) => {
+    const resetFamilyMessageDialog = useCallback(() => {
+        setFamilyMessageChannel('');
+        setFamilyMessageTitle('');
+        setFamilyMessageBody('');
+        setFamilyMessageFile(null);
+        setFamilyMessageSending(false);
+    }, []);
+
+    const handleSendCommunication = (user) => {
         setSelectedUser(user);
-        setOpenSendContractDialog(true);
+        resetFamilyMessageDialog();
+        setOpenFamilyMessageDialog(true);
+    };
+
+    const handleCloseFamilyMessageDialog = () => {
+        setOpenFamilyMessageDialog(false);
+        resetFamilyMessageDialog();
+    };
+
+    const handleSendFamilyMessage = async () => {
+        if (!selectedUser?.id) {
+            setSnackbar({ open: true, message: 'No se pudo identificar la familia destino.', severity: 'error' });
+            return;
+        }
+
+        if (!familyMessageChannel) {
+            setSnackbar({ open: true, message: 'Selecciona si quieres enviar correo o notificación push.', severity: 'warning' });
+            return;
+        }
+
+        if (!familyMessageTitle.trim()) {
+            setSnackbar({ open: true, message: 'El título es requerido.', severity: 'warning' });
+            return;
+        }
+
+        if (!familyMessageBody.trim()) {
+            setSnackbar({ open: true, message: 'El cuerpo del mensaje es requerido.', severity: 'warning' });
+            return;
+        }
+
+        try {
+            setFamilyMessageSending(true);
+
+            if (familyMessageChannel === 'email') {
+                const formData = new FormData();
+                formData.append('userId', String(selectedUser.id));
+                formData.append('subject', familyMessageTitle.trim());
+                formData.append('body', familyMessageBody.trim());
+                formData.append('useSmtp', 'true');
+                if (familyMessageFile) {
+                    formData.append('file', familyMessageFile);
+                }
+
+                await api.post('/mail/send-direct-family', formData, {
+                    headers: {
+                        Authorization: `Bearer ${auth.token}`,
+                        'Content-Type': 'multipart/form-data'
+                    }
+                });
+
+                setSnackbar({ open: true, message: 'Correo enviado a la familia.', severity: 'success' });
+            } else {
+                await api.post('/notifications', {
+                    type: 'manual',
+                    sendPush: true,
+                    title: familyMessageTitle.trim(),
+                    message: familyMessageBody.trim(),
+                    cicloEscolarId: stateCicloEscolarId ? Number(stateCicloEscolarId) : null,
+                    metadata: {
+                        source: 'school-users-direct-family',
+                        channel: 'push',
+                        targetUserId: Number(selectedUser.id),
+                        schoolId: selectedUser.school || schoolId || currentSchool?.id ? Number(selectedUser.school || schoolId || currentSchool?.id) : null,
+                        cicloEscolarId: stateCicloEscolarId ? Number(stateCicloEscolarId) : null,
+                    },
+                    targetingCriteria: {
+                        userIds: [Number(selectedUser.id)],
+                        ...(stateCicloEscolarId ? { cicloEscolarId: Number(stateCicloEscolarId) } : {})
+                    }
+                }, {
+                    headers: {
+                        Authorization: `Bearer ${auth.token}`,
+                    }
+                });
+
+                setSnackbar({ open: true, message: 'Notificación push enviada a la familia.', severity: 'success' });
+            }
+
+            handleCloseFamilyMessageDialog();
+        } catch (err) {
+            console.error('[handleSendFamilyMessage] Error:', err);
+            setSnackbar({
+                open: true,
+                message: err?.response?.data?.message || 'No se pudo enviar la comunicación.',
+                severity: 'error'
+            });
+        } finally {
+            setFamilyMessageSending(false);
+        }
     };
 
     const handleSaveUser = async () => {
@@ -2560,7 +2661,7 @@ const SchoolUsersPage = () => {
                                                                         </IconButton>
                                                                     );
                                                                 })()}
-                                                                <IconButton size="small" onClick={() => handleSendContract(user)}>
+                                                                <IconButton size="small" onClick={() => handleSendCommunication(user)} title="Enviar comunicación">
                                                                     <Mail fontSize="small" />
                                                                 </IconButton>
                                                             </>
@@ -2845,34 +2946,180 @@ const SchoolUsersPage = () => {
                 }}
             />
 
-            {/* Diálogo para envío de contrato */}
-            <Dialog open={openSendContractDialog} onClose={() => setOpenSendContractDialog(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Enviar Contrato Manualmente</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        Selecciona el contrato que deseas enviar a <strong>{selectedUser?.name}</strong>.
-                    </DialogContentText>
-                    <FormControl fullWidth sx={{ mt: 2 }}>
-                        <InputLabel>Contrato</InputLabel>
-                        <Select
-                            value=""
-                            label="Contrato"
-                        >
-                            {Array.isArray(contracts) && contracts
-                                .filter(c => c.schoolId === null || Number(c.schoolId) === Number(selectedUser?.school))
-                                .map((contract) => (
-                                    <MenuItem key={contract.uuid} value={contract.uuid}>
-                                        {contract.title}
-                                    </MenuItem>
-                                ))}
-                        </Select>
-                    </FormControl>
+            {/* Diálogo para envío de comunicación a una familia */}
+            <Dialog
+                open={openFamilyMessageDialog}
+                onClose={handleCloseFamilyMessageDialog}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 3,
+                        overflow: 'hidden',
+                        boxShadow: '0 18px 60px rgba(0, 0, 0, 0.22)',
+                    }
+                }}
+            >
+                <Box sx={{ background: 'linear-gradient(135deg, #16324f 0%, #1e88e5 100%)', color: 'white', px: 3, py: 2.25 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
+                        Enviar comunicación a la familia
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.92 }}>
+                        Escribe el mensaje para <strong>{selectedUser?.name || selectedUser?.email || 'la familia'}</strong> y elige el tipo de envío.
+                    </Typography>
+                </Box>
+
+                <DialogContent sx={{ p: 3, background: 'linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)' }}>
+                    {!familyMessageChannel ? (
+                        <Box>
+                            <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                                Tipo de envío
+                            </Typography>
+                            <Grid container spacing={1.5}>
+                                <Grid item xs={12} md={6}>
+                                    <Button
+                                        fullWidth
+                                        variant="contained"
+                                        onClick={() => setFamilyMessageChannel('email')}
+                                        sx={{
+                                            height: 48,
+                                            borderRadius: 2,
+                                            textTransform: 'none',
+                                            fontWeight: 700,
+                                            boxShadow: '0 8px 20px rgba(25, 118, 210, 0.25)',
+                                            background: 'linear-gradient(135deg, #1976d2 0%, #4f9df7 100%)',
+                                            '&:hover': {
+                                                background: 'linear-gradient(135deg, #1565c0 0%, #3b8ce6 100%)',
+                                            },
+                                        }}
+                                    >
+                                        Correo electrónico
+                                    </Button>
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                    <Button
+                                        fullWidth
+                                        variant="outlined"
+                                        onClick={() => setFamilyMessageChannel('push')}
+                                        sx={{
+                                            height: 48,
+                                            borderRadius: 2,
+                                            textTransform: 'none',
+                                            fontWeight: 700,
+                                            borderWidth: 1.5,
+                                            backgroundColor: 'rgba(30, 136, 229, 0.04)',
+                                            '&:hover': {
+                                                borderWidth: 1.5,
+                                                backgroundColor: 'rgba(30, 136, 229, 0.08)',
+                                            },
+                                        }}
+                                    >
+                                        Notificación
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Box>
+                    ) : (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 1.5, borderRadius: 2, backgroundColor: familyMessageChannel === 'email' ? 'rgba(25,118,210,0.08)' : 'rgba(46,125,50,0.08)', border: '1px solid', borderColor: familyMessageChannel === 'email' ? 'rgba(25,118,210,0.20)' : 'rgba(46,125,50,0.20)' }}>
+                                    <Box>
+                                        <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                                            {familyMessageChannel === 'email' ? 'Modo correo' : 'Modo notificación'}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {familyMessageChannel === 'email'
+                                                ? 'Puedes incluir un archivo adjunto.'
+                                                : 'Se enviará como mensaje directo.'}
+                                        </Typography>
+                                    </Box>
+                                    <Button
+                                        size="small"
+                                        variant="text"
+                                        onClick={() => setFamilyMessageChannel('')}
+                                        sx={{ textTransform: 'none', fontWeight: 700 }}
+                                    >
+                                        Cambiar
+                                    </Button>
+                                </Box>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Título"
+                                    value={familyMessageTitle}
+                                    onChange={(e) => setFamilyMessageTitle(e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Mensaje"
+                                    value={familyMessageBody}
+                                    onChange={(e) => setFamilyMessageBody(e.target.value)}
+                                    multiline
+                                    minRows={4}
+                                    required
+                                />
+                            </Grid>
+                            {familyMessageChannel === 'email' && (
+                                <Grid item xs={12}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                                        <Button
+                                            size="small"
+                                            variant="outlined"
+                                            component="label"
+                                            sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700, height: 36 }}
+                                        >
+                                            Adjuntar archivo
+                                            <input
+                                                type="file"
+                                                hidden
+                                                onChange={(e) => setFamilyMessageFile(e.target.files?.[0] || null)}
+                                            />
+                                        </Button>
+                                        {familyMessageFile ? (
+                                            <Chip
+                                                size="small"
+                                                label={familyMessageFile.name}
+                                                onDelete={() => setFamilyMessageFile(null)}
+                                                sx={{ maxWidth: '100%' }}
+                                            />
+                                        ) : (
+                                            <Typography variant="caption" color="text.secondary">
+                                                Sin archivo adjunto
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                </Grid>
+                            )}
+                        </Grid>
+                    )}
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenSendContractDialog(false)}>Cancelar</Button>
-                    <Button variant="contained" color="primary">
-                        Enviar
+                <DialogActions sx={{ px: 3, py: 2, gap: 1, backgroundColor: '#fff' }}>
+                    <Button
+                        onClick={handleCloseFamilyMessageDialog}
+                        disabled={familyMessageSending}
+                        size="small"
+                        sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}
+                    >
+                        Cancelar
                     </Button>
+                    {familyMessageChannel && (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleSendFamilyMessage}
+                            disabled={familyMessageSending}
+                            size="small"
+                            sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700, px: 2.25, boxShadow: 'none' }}
+                        >
+                            {familyMessageSending ? 'Enviando...' : 'Enviar'}
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 
