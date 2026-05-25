@@ -1,24 +1,32 @@
 /* eslint-disable react/prop-types */
 /* global globalThis */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import copy from 'copy-to-clipboard';
 import moment from 'moment';
 import {
     Alert,
+    Badge,
     Box,
     Button,
     Chip,
     CircularProgress,
+    Collapse,
     Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
     Divider,
+    FormControl,
     FormControlLabel,
     IconButton,
     InputAdornment,
+    InputLabel,
+    LinearProgress,
+    MenuItem,
     Paper,
+    Select,
+    Skeleton,
     Stack,
     Switch,
     Table,
@@ -50,6 +58,28 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import api from '../utils/axiosConfig';
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
+const ACTION_OPTIONS = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT'];
+
+// Static sx objects — declared once outside components to prevent re-creation per render
+const SX = {
+    monoPre: {
+        m: 0, px: 1.25, py: 1,
+        width: '100%', maxWidth: 420, maxHeight: 128, overflow: 'auto',
+        bgcolor: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 1.5,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+        fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+    },
+    dialogPre: {
+        m: 0, p: 2, minHeight: 220, maxHeight: '65vh', overflow: 'auto',
+        bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 2,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+    },
+    cmpCellMono: {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+    }
+};
 
 const createEmptyFilters = () => ({
     action: '',
@@ -60,7 +90,7 @@ const createEmptyFilters = () => ({
     q: ''
 });
 
-const actionOptions = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT'];
+
 
 const buildParams = (filters, page, pageSize) => {
     const params = { page, pageSize };
@@ -132,14 +162,14 @@ const formatDisplayedRows = ({ from, to, count }) => {
     return `${from}-${to} de ${totalLabel}`;
 };
 
-function CopyIconButton({ text, size = 'small', buttonLabel = 'Copiar' }) {
+const CopyIconButton = React.memo(function CopyIconButton({ text, size = 'small', buttonLabel = 'Copiar' }) {
     const [copied, setCopied] = useState(false);
 
-    const handleCopy = () => {
+    const handleCopy = useCallback(() => {
         copy(stringifyValue(text));
         setCopied(true);
         globalThis.setTimeout(() => setCopied(false), 1200);
-    };
+    }, [text]);
 
     return (
         <Tooltip title={copied ? 'Copiado' : buttonLabel}>
@@ -156,17 +186,17 @@ function CopyIconButton({ text, size = 'small', buttonLabel = 'Copiar' }) {
             </span>
         </Tooltip>
     );
-}
+});
 
-function StatTile({ label, value, detail, tone = 'default' }) {
-    const toneStyles = {
-        default: { bgcolor: '#ffffff', borderColor: '#d8dee6', color: '#1f2937' },
-        info: { bgcolor: '#eef6ff', borderColor: '#b6d9ff', color: '#075985' },
-        success: { bgcolor: '#eefaf2', borderColor: '#bde8ca', color: '#166534' },
-        warning: { bgcolor: '#fff8e6', borderColor: '#ffe0a3', color: '#92400e' },
-        danger: { bgcolor: '#fff1f2', borderColor: '#fecdd3', color: '#991b1b' }
-    };
+const TONE_STYLES = {
+    default: { bgcolor: '#ffffff', borderColor: '#d8dee6', color: '#1f2937' },
+    info:    { bgcolor: '#eef6ff', borderColor: '#b6d9ff', color: '#075985' },
+    success: { bgcolor: '#eefaf2', borderColor: '#bde8ca', color: '#166534' },
+    warning: { bgcolor: '#fff8e6', borderColor: '#ffe0a3', color: '#92400e' },
+    danger:  { bgcolor: '#fff1f2', borderColor: '#fecdd3', color: '#991b1b' }
+};
 
+const StatTile = React.memo(function StatTile({ label, value, detail, tone = 'default' }) {
     return (
         <Box
             sx={{
@@ -177,7 +207,7 @@ function StatTile({ label, value, detail, tone = 'default' }) {
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                ...toneStyles[tone]
+                ...TONE_STYLES[tone]
             }}
         >
             <Typography variant="caption" sx={{ color: 'inherit', opacity: 0.76, fontWeight: 700, textTransform: 'uppercase' }}>
@@ -193,9 +223,9 @@ function StatTile({ label, value, detail, tone = 'default' }) {
             )}
         </Box>
     );
-}
+});
 
-function DiffText({ parts, side }) {
+const DiffText = React.memo(function DiffText({ parts, side }) {
     if (!parts) return null;
     const highlight = side === 'a' ? '#fecaca' : '#bbf7d0';
 
@@ -208,32 +238,16 @@ function DiffText({ parts, side }) {
             <span>{parts.suf}</span>
         </>
     );
-}
+});
 
-function JsonPreview({ value, label, onOpen }) {
+const JsonPreview = React.memo(function JsonPreview({ value, label, onOpen }) {
     const hasValue = value != null && value !== '';
 
     return (
-        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 320 }}>
+        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 280 }}>
             <Box
                 component="pre"
-                sx={{
-                    m: 0,
-                    px: 1.25,
-                    py: 1,
-                    width: '100%',
-                    maxWidth: 420,
-                    maxHeight: 128,
-                    overflow: 'auto',
-                    bgcolor: '#f8fafc',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 1.5,
-                    color: hasValue ? '#111827' : '#9ca3af',
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                    fontSize: 12,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word'
-                }}
+                sx={{ ...SX.monoPre, color: hasValue ? '#111827' : '#9ca3af' }}
             >
                 {hasValue ? stringifyValue(value, true) : '-'}
             </Box>
@@ -249,7 +263,7 @@ function JsonPreview({ value, label, onOpen }) {
             </Stack>
         </Stack>
     );
-}
+});
 
 export default function AdminAuditHidden() {
     const [items, setItems] = useState([]);
@@ -262,12 +276,15 @@ export default function AdminAuditHidden() {
 
     const [filters, setFilters] = useState(createEmptyFilters);
     const [appliedFilters, setAppliedFilters] = useState(createEmptyFilters);
+    const [filtersOpen, setFiltersOpen] = useState(true);
 
     const [cmpA, setCmpA] = useState('');
     const [cmpB, setCmpB] = useState('');
     const [cmpRows, setCmpRows] = useState([]);
     const [optIgnoreWs, setOptIgnoreWs] = useState(false);
     const [optIgnoreCase, setOptIgnoreCase] = useState(false);
+
+    const abortRef = useRef(null);
 
     const activeFilterCount = useMemo(() => countActiveFilters(appliedFilters), [appliedFilters]);
     const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
@@ -289,15 +306,20 @@ export default function AdminAuditHidden() {
     }, [cmpRows]);
 
     const fetchData = useCallback(async (targetPage = page, targetPageSize = pageSize, activeFilters = appliedFilters) => {
+        if (abortRef.current) abortRef.current.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         setLoading(true);
         setError('');
         try {
             const { data } = await api.get('/audit', {
-                params: buildParams(activeFilters, targetPage, targetPageSize)
+                params: buildParams(activeFilters, targetPage, targetPageSize),
+                signal: controller.signal
             });
             setItems(data.items || []);
             setTotal(data.total || 0);
         } catch (err) {
+            if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
             console.error(err);
             setError(err?.response?.data?.message || err?.message || 'Error al cargar auditoría.');
         } finally {
@@ -313,9 +335,9 @@ export default function AdminAuditHidden() {
         setFilters((current) => ({ ...current, [key]: value }));
     };
 
-    const openModal = (title, content, isJson = false) => {
+    const openModal = useCallback((title, content, isJson = false) => {
         setModal({ open: true, title, content, isJson });
-    };
+    }, []);
 
     const closeModal = () => setModal((current) => ({ ...current, open: false }));
 
@@ -543,10 +565,14 @@ export default function AdminAuditHidden() {
                     </Box>
                 </Paper>
 
-                <Paper component="form" onSubmit={onSearch} elevation={0} sx={{ p: { xs: 2, md: 3 }, border: '1px solid #d8dee6', borderRadius: 2 }}>
-                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2} sx={{ mb: 2 }}>
+                <Paper component="form" onSubmit={onSearch} elevation={0} sx={{ border: '1px solid #d8dee6', borderRadius: 2, overflow: 'hidden' }}>
+                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2} sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
                         <Stack direction="row" spacing={1.25} alignItems="center">
-                            <FilterAltIcon color="primary" />
+                            <Badge badgeContent={activeFilterCount} color="primary" invisible={activeFilterCount === 0}>
+                                <IconButton size="small" onClick={() => setFiltersOpen((o) => !o)} aria-label="Expandir filtros">
+                                    <FilterAltIcon color={activeFilterCount > 0 ? 'primary' : 'action'} />
+                                </IconButton>
+                            </Badge>
                             <Box>
                                 <Typography variant="h6" sx={{ fontWeight: 800 }}>
                                     Filtros
@@ -560,72 +586,75 @@ export default function AdminAuditHidden() {
                             <Button type="submit" variant="contained" startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <SearchIcon />} disabled={loading}>
                                 Filtrar
                             </Button>
-                            <Button type="button" variant="outlined" startIcon={<ClearIcon />} onClick={clearFilters}>
+                            <Button type="button" variant="outlined" startIcon={<ClearIcon />} onClick={clearFilters} disabled={activeFilterCount === 0}>
                                 Limpiar
                             </Button>
                         </Stack>
                     </Stack>
-
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(6, minmax(0, 1fr))' }, gap: 2 }}>
-                        <TextField
-                            size="small"
-                            label="Acción"
-                            value={filters.action}
-                            onChange={(event) => updateFilter('action', event.target.value)}
-                            placeholder="CREATE/UPDATE/DELETE"
-                            slotProps={{ htmlInput: { list: 'audit-action-options' } }}
-                        />
-                        <TextField
-                            size="small"
-                            label="Entidad"
-                            value={filters.entity}
-                            onChange={(event) => updateFilter('entity', event.target.value)}
-                            placeholder="User, Payment, ..."
-                        />
-                        <TextField
-                            size="small"
-                            label="Usuario ID"
-                            value={filters.performedBy}
-                            onChange={(event) => updateFilter('performedBy', event.target.value)}
-                            placeholder="123"
-                        />
-                        <TextField
-                            size="small"
-                            type="date"
-                            label="Desde"
-                            value={filters.from}
-                            onChange={(event) => updateFilter('from', event.target.value)}
-                            slotProps={{ inputLabel: { shrink: true } }}
-                        />
-                        <TextField
-                            size="small"
-                            type="date"
-                            label="Hasta"
-                            value={filters.to}
-                            onChange={(event) => updateFilter('to', event.target.value)}
-                            slotProps={{ inputLabel: { shrink: true } }}
-                        />
-                        <TextField
-                            size="small"
-                            label="Ruta, IP o texto"
-                            value={filters.q}
-                            onChange={(event) => updateFilter('q', event.target.value)}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <SearchIcon fontSize="small" />
-                                        </InputAdornment>
-                                    )
-                                }
-                            }}
-                        />
-                    </Box>
-                    <datalist id="audit-action-options">
-                        {actionOptions.map((action) => (
-                            <option key={action} value={action} />
-                        ))}
-                    </datalist>
+                    <Collapse in={filtersOpen} timeout="auto">
+                        <Divider />
+                        <Box sx={{ px: { xs: 2, md: 3 }, py: 2.5, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(6, minmax(0, 1fr))' }, gap: 2 }}>
+                            <FormControl size="small" fullWidth>
+                                <InputLabel id="audit-action-label">Acción</InputLabel>
+                                <Select
+                                    labelId="audit-action-label"
+                                    label="Acción"
+                                    value={filters.action}
+                                    onChange={(event) => updateFilter('action', event.target.value)}
+                                >
+                                    <MenuItem value=""><em>Todas</em></MenuItem>
+                                    {ACTION_OPTIONS.map((action) => (
+                                        <MenuItem key={action} value={action}>{action}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                            <TextField
+                                size="small"
+                                label="Entidad"
+                                value={filters.entity}
+                                onChange={(event) => updateFilter('entity', event.target.value)}
+                                placeholder="User, Payment, ..."
+                            />
+                            <TextField
+                                size="small"
+                                label="Usuario ID"
+                                value={filters.performedBy}
+                                onChange={(event) => updateFilter('performedBy', event.target.value)}
+                                placeholder="123"
+                            />
+                            <TextField
+                                size="small"
+                                type="date"
+                                label="Desde"
+                                value={filters.from}
+                                onChange={(event) => updateFilter('from', event.target.value)}
+                                slotProps={{ inputLabel: { shrink: true } }}
+                            />
+                            <TextField
+                                size="small"
+                                type="date"
+                                label="Hasta"
+                                value={filters.to}
+                                onChange={(event) => updateFilter('to', event.target.value)}
+                                slotProps={{ inputLabel: { shrink: true } }}
+                            />
+                            <TextField
+                                size="small"
+                                label="Ruta, IP o texto"
+                                value={filters.q}
+                                onChange={(event) => updateFilter('q', event.target.value)}
+                                slotProps={{
+                                    input: {
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <SearchIcon fontSize="small" />
+                                            </InputAdornment>
+                                        )
+                                    }
+                                }}
+                            />
+                        </Box>
+                    </Collapse>
                 </Paper>
 
                 <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, border: '1px solid #d8dee6', borderRadius: 2 }}>
@@ -729,7 +758,7 @@ export default function AdminAuditHidden() {
                 )}
 
                 <Paper elevation={0} sx={{ border: '1px solid #d8dee6', borderRadius: 2, overflow: 'hidden' }}>
-                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2} sx={{ p: 2 }}>
+                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2} sx={{ px: 2.5, pt: 2.5, pb: 1.5 }}>
                         <Box>
                             <Typography variant="h6" sx={{ fontWeight: 800 }}>
                                 Registros
@@ -738,56 +767,51 @@ export default function AdminAuditHidden() {
                                 Página {page} de {totalPages} · {pageStats.users} usuario{pageStats.users === 1 ? '' : 's'} visible{pageStats.users === 1 ? '' : 's'}
                             </Typography>
                         </Box>
-                        {loading && (
-                            <Stack direction="row" spacing={1} alignItems="center" sx={{ color: '#2563eb' }}>
-                                <CircularProgress size={18} />
-                                <Typography variant="body2">Cargando</Typography>
-                            </Stack>
-                        )}
                     </Stack>
+
+                    <Box sx={{ height: 3 }}>
+                        {loading && items.length > 0 && <LinearProgress />}
+                    </Box>
+
                     <Divider />
 
                     <TableContainer sx={{ maxHeight: { xs: 'calc(100dvh - 260px)', sm: 'calc(100vh - 220px)' }, minHeight: 260, overflowX: 'auto' }}>
-                        <Table stickyHeader size="small" sx={{ minWidth: 1480 }}>
+                        <Table stickyHeader size="small" sx={{ minWidth: 1560 }}>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell>Fecha</TableCell>
-                                    <TableCell>Acción</TableCell>
-                                    <TableCell>Entidad</TableCell>
-                                    <TableCell>Usuario</TableCell>
-                                    <TableCell>Ruta</TableCell>
-                                    <TableCell>User agent</TableCell>
-                                    <TableCell>Antes</TableCell>
-                                    <TableCell>Después</TableCell>
-                                    <TableCell align="center">#</TableCell>
-                                    <TableCell align="right">Acciones</TableCell>
+                                    <TableCell sx={{ minWidth: 130 }}>Fecha</TableCell>
+                                    <TableCell sx={{ minWidth: 110 }}>Acción</TableCell>
+                                    <TableCell sx={{ minWidth: 160 }}>Entidad</TableCell>
+                                    <TableCell sx={{ minWidth: 190 }}>Usuario</TableCell>
+                                    <TableCell sx={{ minWidth: 110, display: { xs: 'none', lg: 'table-cell' } }}>IP / Método</TableCell>
+                                    <TableCell sx={{ minWidth: 240 }}>Ruta</TableCell>
+                                    <TableCell sx={{ minWidth: 200, display: { xs: 'none', xl: 'table-cell' } }}>User agent</TableCell>
+                                    <TableCell sx={{ minWidth: 320 }}>Antes</TableCell>
+                                    <TableCell sx={{ minWidth: 320 }}>Después</TableCell>
+                                    <TableCell align="center" sx={{ width: 60 }}>#</TableCell>
+                                    <TableCell align="right" sx={{ minWidth: 90 }}>Acciones</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {items.map((row) => (
-                                    <AuditTableRow
-                                        key={getAuditId(row) || `${row.entity}-${row.entityId}-${row.createdAt}`}
-                                        row={row}
-                                        onOpenModal={openModal}
-                                        onDeleteOne={deleteOne}
-                                        onDeleteGroup={deleteGroup}
-                                    />
-                                ))}
+                                {loading && items.length === 0
+                                    ? Array.from({ length: Math.min(pageSize, 8) }, (_, i) => <SkeletonRow key={`sk-${i}`} />)
+                                    : items.map((row) => (
+                                        <AuditTableRow
+                                            key={getAuditId(row) || `${row.entity}-${row.entityId}-${row.createdAt}`}
+                                            row={row}
+                                            onOpenModal={openModal}
+                                            onDeleteOne={deleteOne}
+                                            onDeleteGroup={deleteGroup}
+                                        />
+                                    ))
+                                }
 
                                 {items.length === 0 && !loading && (
                                     <TableRow>
-                                        <TableCell colSpan={10} align="center" sx={{ py: 8 }}>
-                                            <DataObjectIcon sx={{ fontSize: 44, color: '#94a3b8', mb: 1 }} />
-                                            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Sin resultados</Typography>
-                                            <Typography variant="body2" sx={{ color: '#64748b' }}>Ajusta los filtros o recarga la auditoría.</Typography>
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-
-                                {loading && items.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={10} align="center" sx={{ py: 8 }}>
-                                            <CircularProgress />
+                                        <TableCell colSpan={11} align="center" sx={{ py: 10 }}>
+                                            <DataObjectIcon sx={{ fontSize: 48, color: '#cbd5e1', mb: 1.5 }} />
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#475569' }}>Sin resultados</Typography>
+                                            <Typography variant="body2" sx={{ color: '#94a3b8', mt: 0.5 }}>Ajusta los filtros o recarga la auditoría.</Typography>
                                         </TableCell>
                                     </TableRow>
                                 )}
@@ -824,23 +848,7 @@ export default function AdminAuditHidden() {
                 </DialogTitle>
                 <DialogContent dividers sx={{ bgcolor: '#f8fafc' }}>
                     {modal.isJson ? (
-                        <Box
-                            component="pre"
-                            sx={{
-                                m: 0,
-                                p: 2,
-                                minHeight: 220,
-                                maxHeight: '65vh',
-                                overflow: 'auto',
-                                bgcolor: '#ffffff',
-                                border: '1px solid #e2e8f0',
-                                borderRadius: 2,
-                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                                fontSize: 13,
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word'
-                            }}
-                        >
+                        <Box component="pre" sx={SX.dialogPre}>
                             {stringifyValue(modal.content, true) || '-'}
                         </Box>
                     ) : (
@@ -862,7 +870,25 @@ export default function AdminAuditHidden() {
     );
 }
 
-function ComparisonResultRow({ row, index }) {
+function SkeletonRow() {
+    return (
+        <TableRow>
+            <TableCell><Skeleton variant="text" width={90} /><Skeleton variant="text" width={60} /></TableCell>
+            <TableCell><Skeleton variant="rounded" width={70} height={22} /></TableCell>
+            <TableCell><Skeleton variant="text" width={100} /><Skeleton variant="text" width={50} /></TableCell>
+            <TableCell><Skeleton variant="text" width={120} /><Skeleton variant="text" width={40} /></TableCell>
+            <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}><Skeleton variant="text" width={90} /></TableCell>
+            <TableCell><Skeleton variant="text" width={180} /></TableCell>
+            <TableCell sx={{ display: { xs: 'none', xl: 'table-cell' } }}><Skeleton variant="text" width={160} /></TableCell>
+            <TableCell><Skeleton variant="rounded" width={280} height={60} /></TableCell>
+            <TableCell><Skeleton variant="rounded" width={280} height={60} /></TableCell>
+            <TableCell><Skeleton variant="rounded" width={32} height={22} sx={{ mx: 'auto' }} /></TableCell>
+            <TableCell><Skeleton variant="rounded" width={32} height={32} sx={{ ml: 'auto' }} /></TableCell>
+        </TableRow>
+    );
+}
+
+const ComparisonResultRow = React.memo(function ComparisonResultRow({ row, index }) {
     const chipProps = getComparisonChipProps(row.type);
     const leftContent = row.type === 'diff' && row.parts ? <DiffText parts={row.parts.a} side="a" /> : row.left;
     const rightContent = row.type === 'diff' && row.parts ? <DiffText parts={row.parts.b} side="b" /> : row.right;
@@ -870,26 +896,10 @@ function ComparisonResultRow({ row, index }) {
     return (
         <TableRow hover>
             <TableCell sx={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{index + 1}</TableCell>
-            <TableCell
-                sx={{
-                    bgcolor: getComparisonCellBackground(row.type, 'a'),
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                    fontSize: 12,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word'
-                }}
-            >
+            <TableCell sx={{ ...SX.cmpCellMono, bgcolor: getComparisonCellBackground(row.type, 'a') }}>
                 {leftContent}
             </TableCell>
-            <TableCell
-                sx={{
-                    bgcolor: getComparisonCellBackground(row.type, 'b'),
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                    fontSize: 12,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word'
-                }}
-            >
+            <TableCell sx={{ ...SX.cmpCellMono, bgcolor: getComparisonCellBackground(row.type, 'b') }}>
                 {rightContent}
             </TableCell>
             <TableCell>
@@ -897,59 +907,75 @@ function ComparisonResultRow({ row, index }) {
             </TableCell>
         </TableRow>
     );
-}
+});
 
-function AuditTableRow({ row, onOpenModal, onDeleteOne, onDeleteGroup }) {
+const AuditTableRow = React.memo(function AuditTableRow({ row, onOpenModal, onDeleteOne, onDeleteGroup }) {
     const auditId = getAuditId(row);
     const groupCount = row._count || 1;
     const userIdLabel = row.user?.id ? `#${row.user.id}` : '';
+    const createdAt = moment(row.createdAt);
+
+    const handleOpenBefore  = useCallback(() => onOpenModal(`Antes — ${row.entity} #${row.entityId}`, row.before, true),  [onOpenModal, row.entity, row.entityId, row.before]);
+    const handleOpenAfter   = useCallback(() => onOpenModal(`Después — ${row.entity} #${row.entityId}`, row.after,  true),  [onOpenModal, row.entity, row.entityId, row.after]);
+    const handleOpenAgent   = useCallback(() => onOpenModal('User Agent completo', row.userAgent, false), [onOpenModal, row.userAgent]);
+    const handleDeleteOne   = useCallback(() => onDeleteOne(auditId),  [onDeleteOne, auditId]);
+    const handleDeleteGroup = useCallback(() => onDeleteGroup(row._ids), [onDeleteGroup, row._ids]);
 
     return (
         <TableRow
             hover
-            sx={{
-                '& td:first-of-type': {
-                    borderLeft: '4px solid',
-                    borderLeftColor: getRowAccentColor(row.action)
-                }
-            }}
+            sx={{ '& td:first-of-type': { borderLeft: '4px solid', borderLeftColor: getRowAccentColor(row.action) } }}
         >
             <TableCell sx={{ whiteSpace: 'nowrap', color: '#334155' }}>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {moment(row.createdAt).format('YYYY-MM-DD')}
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#64748b' }}>
-                    {moment(row.createdAt).format('HH:mm:ss')}
-                </Typography>
+                <Tooltip title={createdAt.fromNow()}>
+                    <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            {createdAt.format('YYYY-MM-DD')}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>
+                            {createdAt.format('HH:mm:ss')}
+                        </Typography>
+                    </Box>
+                </Tooltip>
             </TableCell>
             <TableCell>
                 <Chip size="small" color={getActionColor(row.action)} variant="outlined" label={row.action || '-'} />
             </TableCell>
-            <TableCell sx={{ minWidth: 160 }}>
+            <TableCell>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>{row.entity || '-'}</Typography>
                 <Typography variant="caption" sx={{ color: '#64748b' }}>{row.entityId ?? '-'}</Typography>
             </TableCell>
-            <TableCell sx={{ minWidth: 190 }}>
+            <TableCell>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>{row.user?.name || '-'}</Typography>
                 <Typography variant="caption" sx={{ color: '#64748b' }}>{userIdLabel}</Typography>
             </TableCell>
-            <TableCell sx={{ minWidth: 240, maxWidth: 360 }}>
+            <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>
+                <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: '#475569' }}>
+                    {row.ip || '-'}
+                </Typography>
+                {row.method && (
+                    <Typography variant="caption" sx={{ display: 'block', color: '#94a3b8' }}>
+                        {row.method}
+                    </Typography>
+                )}
+            </TableCell>
+            <TableCell sx={{ maxWidth: 360 }}>
                 <Tooltip title={row.path || ''}>
                     <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {row.path || '-'}
                     </Typography>
                 </Tooltip>
             </TableCell>
-            <TableCell sx={{ minWidth: 260, maxWidth: 360 }}>
-                <Stack direction="row" spacing={1} alignItems="center">
+            <TableCell sx={{ maxWidth: 320, display: { xs: 'none', xl: 'table-cell' } }}>
+                <Stack direction="row" spacing={0.5} alignItems="center">
                     <Tooltip title={row.userAgent || ''}>
-                        <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, color: '#475569' }}>
                             {row.userAgent || '-'}
                         </Typography>
                     </Tooltip>
                     <Tooltip title="Ver user agent">
                         <span>
-                            <IconButton size="small" disabled={!row.userAgent} onClick={() => onOpenModal('User Agent completo', row.userAgent, false)} aria-label="Ver user agent">
+                            <IconButton size="small" disabled={!row.userAgent} onClick={handleOpenAgent} aria-label="Ver user agent">
                                 <VisibilityIcon fontSize="inherit" />
                             </IconButton>
                         </span>
@@ -957,31 +983,23 @@ function AuditTableRow({ row, onOpenModal, onDeleteOne, onDeleteGroup }) {
                 </Stack>
             </TableCell>
             <TableCell>
-                <JsonPreview
-                    value={row.before}
-                    label="antes"
-                    onOpen={() => onOpenModal(`Antes - ${row.entity} #${row.entityId}`, row.before, true)}
-                />
+                <JsonPreview value={row.before} label="antes"    onOpen={handleOpenBefore} />
             </TableCell>
             <TableCell>
-                <JsonPreview
-                    value={row.after}
-                    label="después"
-                    onOpen={() => onOpenModal(`Después - ${row.entity} #${row.entityId}`, row.after, true)}
-                />
+                <JsonPreview value={row.after}  label="después" onOpen={handleOpenAfter} />
             </TableCell>
             <TableCell align="center">
                 <Chip size="small" color={groupCount > 1 ? 'primary' : 'default'} variant={groupCount > 1 ? 'filled' : 'outlined'} label={groupCount} />
             </TableCell>
             <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                 <Tooltip title="Eliminar log">
-                    <IconButton size="small" color="error" onClick={() => onDeleteOne(auditId)} aria-label="Eliminar log">
+                    <IconButton size="small" color="error" onClick={handleDeleteOne} aria-label="Eliminar log">
                         <DeleteOutlineIcon fontSize="inherit" />
                     </IconButton>
                 </Tooltip>
                 {Array.isArray(row._ids) && row._ids.length > 1 && (
                     <Tooltip title="Eliminar grupo">
-                        <IconButton size="small" color="error" onClick={() => onDeleteGroup(row._ids)} aria-label="Eliminar grupo">
+                        <IconButton size="small" color="error" onClick={handleDeleteGroup} aria-label="Eliminar grupo">
                             <DeleteSweepIcon fontSize="inherit" />
                         </IconButton>
                     </Tooltip>
@@ -989,4 +1007,4 @@ function AuditTableRow({ row, onOpenModal, onDeleteOne, onDeleteGroup }) {
             </TableCell>
         </TableRow>
     );
-}
+});
