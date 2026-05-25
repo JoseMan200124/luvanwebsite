@@ -5,8 +5,8 @@ import {
     CalendarMonth,
     BarChart,
     People,
-    Security,
-    Smartphone
+    Smartphone,
+    History
 } from '@mui/icons-material';
 
 import RolesManagementPage from './pages/RolesManagementPage';
@@ -32,6 +32,7 @@ import RouteTimeLogsPage from './pages/RouteTimeLogsPage';
 import FuelRecordsPage from './pages/FuelRecordsPage';
 import CorporationsPage from './pages/CorporationsPage';
 import AssignmentHistoryPage from './pages/AssignmentHistoryPage';
+import HistoricalDataPage from './pages/HistoricalDataPage';
 
 export const modules = [
     {
@@ -44,14 +45,12 @@ export const modules = [
                 name: 'Usuarios',
                 path: 'usuarios',
                 component: RolesManagementPage,
-                roles: ['Administrador', 'Gestor'],
             },
             {
                 key: 'solicitudes-usuarios',
                 name: 'Solicitudes Usuarios',
                 path: 'solicitudes-usuarios',
                 component: RequestsPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor', 'Auxiliar'],
             },
         ],
     },
@@ -65,7 +64,6 @@ export const modules = [
                 name: 'Colegios',
                 path: 'colegios',
                 component: CicloEscolarSelectionPage,
-                roles: ['Administrador', 'Gestor'],
             },
             {
                 key: 'ciclos-escolares',
@@ -73,35 +71,30 @@ export const modules = [
                 path: 'ciclos-escolares',
                 component: CiclosEscolaresPage,
                 icon: CalendarMonth,
-                roles: ['Administrador', 'Gestor'],
             },
             {
                 key: 'corporaciones',
                 name: 'Corporaciones',
                 path: 'corporaciones',
                 component: CorporationsPage,
-                roles: ['Administrador', 'Gestor'],
             },
             {
                 key: 'buses',
                 name: 'Buses',
                 path: 'buses',
                 component: BusesManagementPage,
-                roles: ['Administrador', 'Gestor'],
             },
             {
                 key: 'historial-recorridos-rutas',
                 name: 'Historial de Recorridos de Rutas',
                 path: 'historial-recorridos-rutas',
                 component: RouteHistoryPage,
-                roles: ['Administrador', 'Gestor'],
             },
             {
                 key: 'circulares-admin-listar',
                 name: 'Historial de Circulares',
                 path: 'circulares',
                 component: CircularHistoryPage,
-                roles: ['Administrador', 'Gestor'],
             },
         ],
     },
@@ -115,14 +108,12 @@ export const modules = [
                 name: 'Reportes de Uso',
                 path: 'reportes-uso',
                 component: ReportsUsagePage,
-                roles: ['Administrador', 'Gestor'],
             },
             {
                 key: 'estadisticas-financieras',
                 name: 'Estadísticas Financieras',
                 path: 'estadisticas-financieras',
                 component: FinancialStatisticsPage,
-                roles: ['Administrador', 'Gestor'],
             },
         ],
     },
@@ -136,28 +127,24 @@ export const modules = [
                 name: 'Monitores',
                 path: 'monitores',
                 component: MonitorsManagementPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor', 'Auxiliar'],
             },
             {
                 key: 'pilotos',
                 name: 'Pilotos',
                 path: 'pilotos',
                 component: PilotsManagementPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
                 key: 'supervisores',
                 name: 'Supervisores',
                 path: 'supervisores',
                 component: SupervisorsManagementPage,
-                roles: ['Administrador', 'Gestor'],
             },
             {
                 key: 'auxiliares',
                 name: 'Auxiliares',
                 path: 'auxiliares',
                 component: AuxiliaresManagementPage,
-                roles: ['Administrador', 'Gestor'],
             },
         ],
     },
@@ -171,63 +158,61 @@ export const modules = [
                 name: 'Asistencias',
                 path: 'asistencias',
                 component: AttendanceManagementPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
                 key: 'incidentes-conducta',
                 name: 'Reportes de Conducta',
                 path: 'incidentes-conducta',
                 component: StudentIncidentsPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
                 key: 'incidentes-buses',
                 name: 'Incidentes de Buses',
                 path: 'incidentes-buses',
                 component: BusIncidentsPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
                 key: 'emergencias-buses',
                 name: 'Emergencias de Buses',
                 path: 'emergencias-buses',
                 component: BusEmergenciesPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
                 key: 'solicitudes-mecanica',
                 name: 'Solicitudes de Mecánica',
                 path: 'solicitudes-mecanica',
                 component: MechanicRequestsPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
                 key: 'horarios-rutas',
                 name: 'Horarios de Rutas',
                 path: 'horarios-rutas',
                 component: RouteTimeLogsPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
             {
                 key: 'registros-combustible',
                 name: 'Registros de Combustible',
                 path: 'registros-combustible',
                 component: FuelRecordsPage,
-                roles: ['Administrador', 'Gestor', 'Supervisor'],
             },
         ],
     },
     {
-        key: 'seguridad-auditoria',
-        name: 'Seguridad y Auditoría',
-        icon: Security,
+        key: 'historiales',
+        name: 'Historiales',
+        icon: History,
         submodules: [
+            {
+                key: 'historial-ciclos',
+                name: 'Historial de Ciclos Escolares',
+                path: 'historial',
+                component: HistoricalDataPage,
+            },
             {
                 key: 'historial-asignaciones',
                 name: 'Historial de Asignaciones',
                 path: 'historial-asignaciones',
                 component: AssignmentHistoryPage,
-                roles: ['Administrador', 'Gestor'],
             },
         ],
     },

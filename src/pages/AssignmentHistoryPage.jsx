@@ -17,6 +17,7 @@ import {
     MenuItem,
     Select,
     FormControl,
+    FormHelperText,
     InputLabel,
     Grid,
     IconButton,
@@ -28,13 +29,218 @@ import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import moment from 'moment-timezone';
-import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
 
 const formatGuatemalaDatetime = (dateString) => {
     if (!dateString) return '—';
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
+};
+
+// ─── Pure helpers ────────────────────────────────────────────────────────────
+
+const safeParseJson = (v) => {
+    if (!v) return {};
+    if (typeof v === 'object') return v;
+    try {
+        const parsed = JSON.parse(v);
+        return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    } catch {
+        return {};
+    }
+};
+
+/** "Colegio X — Ruta 5" or just the client name, or just "Ruta 5" */
+const clientRouteLabel = (o) => {
+    if (!o || Object.keys(o).length === 0) return null;
+    const client = o.schoolName || o.corporationName || null;
+    const route = o.routeNumber ? `Ruta ${o.routeNumber}` : null;
+    if (client && route) return `${client} \u2014 ${route}`;
+    return client || route || null;
+};
+
+/** "Ruta 5 (Colegio X)" */
+const routeLabel = (o) => {
+    if (!o?.routeNumber) return null;
+    const suffix = o.schoolName || o.corporationName || '';
+    const base = `Ruta ${o.routeNumber}`;
+    return suffix ? `${base} (${suffix})` : base;
+};
+
+// Dispatch map: assignmentType → function that returns { subject, fromText, toText }
+const CHANGE_SUMMARY_MAP = {
+    bus_pilot: (prev, next, rec) => ({
+        subject: `Bus ${prev.busPlate || next.busPlate || rec.bus?.plate || rec.busId || '?'}`,
+        fromText: prev.pilotName || null,
+        toText: next.pilotName || null,
+    }),
+    bus_monitora: (prev, next, rec) => ({
+        subject: `Bus ${prev.busPlate || next.busPlate || rec.bus?.plate || rec.busId || '?'}`,
+        fromText: prev.monitoraName || null,
+        toText: next.monitoraName || null,
+    }),
+    bus_school: (prev, next, rec) => {
+        const prevLabel = clientRouteLabel(Object.keys(prev).length ? prev : null);
+        const nextLabel = clientRouteLabel(Object.keys(next).length ? next : null);
+        // Bus swap on the same route: the bus itself is what changed, not the school/route
+        if (prev.busPlate && next.busPlate && prev.busPlate !== next.busPlate && prevLabel === nextLabel) {
+            return {
+                subject: prevLabel || `Ruta ${rec.routeNumber || '?'}`,
+                fromText: `Bus ${prev.busPlate}`,
+                toText: `Bus ${next.busPlate}`,
+            };
+        }
+        return {
+            subject: `Bus ${prev.busPlate || next.busPlate || rec.bus?.plate || rec.busId || '?'}`,
+            fromText: prevLabel,
+            toText: nextLabel,
+        };
+    },
+    bus_corporation: (prev, next, rec) => {
+        const prevLabel = clientRouteLabel(Object.keys(prev).length ? prev : null);
+        const nextLabel = clientRouteLabel(Object.keys(next).length ? next : null);
+        // Bus swap on the same route: the bus itself is what changed, not the corporation/route
+        if (prev.busPlate && next.busPlate && prev.busPlate !== next.busPlate && prevLabel === nextLabel) {
+            return {
+                subject: prevLabel || `Ruta ${rec.routeNumber || '?'}`,
+                fromText: `Bus ${prev.busPlate}`,
+                toText: `Bus ${next.busPlate}`,
+            };
+        }
+        return {
+            subject: `Bus ${prev.busPlate || next.busPlate || rec.bus?.plate || rec.busId || '?'}`,
+            fromText: prevLabel,
+            toText: nextLabel,
+        };
+    },
+    pilot_school: (prev, next, rec) => ({
+        subject: prev.pilotName || next.pilotName || rec.user?.name || `Piloto #${rec.userId || '?'}`,
+        fromText: prev.schoolName || null,
+        toText: next.schoolName || null,
+    }),
+    pilot_corporation: (prev, next, rec) => ({
+        subject: prev.pilotName || next.pilotName || rec.user?.name || `Piloto #${rec.userId || '?'}`,
+        fromText: prev.corporationName || null,
+        toText: next.corporationName || null,
+    }),
+    pilot_route: (prev, next, rec) => ({
+        subject: prev.pilotName || next.pilotName || rec.user?.name || `Piloto #${rec.userId || '?'}`,
+        fromText: routeLabel(prev),
+        toText: routeLabel(next),
+    }),
+    monitora_school: (prev, next, rec) => ({
+        subject: prev.monitoraName || next.monitoraName || rec.user?.name || `Monitora #${rec.userId || '?'}`,
+        fromText: prev.schoolName || null,
+        toText: next.schoolName || null,
+    }),
+    monitora_corporation: (prev, next, rec) => ({
+        subject: prev.monitoraName || next.monitoraName || rec.user?.name || `Monitora #${rec.userId || '?'}`,
+        fromText: prev.corporationName || null,
+        toText: next.corporationName || null,
+    }),
+    monitora_route: (prev, next, rec) => ({
+        subject: prev.monitoraName || next.monitoraName || rec.user?.name || `Monitora #${rec.userId || '?'}`,
+        fromText: routeLabel(prev),
+        toText: routeLabel(next),
+    }),
+    school_pilot: (prev, next, rec) => ({
+        subject: prev.schoolName || next.schoolName || rec.school?.name || `Colegio #${rec.schoolId || '?'}`,
+        fromText: prev.pilotName || null,
+        toText: next.pilotName || null,
+    }),
+    school_monitora: (prev, next, rec) => ({
+        subject: prev.schoolName || next.schoolName || rec.school?.name || `Colegio #${rec.schoolId || '?'}`,
+        fromText: prev.monitoraName || null,
+        toText: next.monitoraName || null,
+    }),
+    corporation_pilot: (prev, next, rec) => ({
+        subject: prev.corporationName || next.corporationName || rec.corporation?.name || `Corporaci\u00f3n #${rec.corporationId || '?'}`,
+        fromText: prev.pilotName || null,
+        toText: next.pilotName || null,
+    }),
+    corporation_monitora: (prev, next, rec) => ({
+        subject: prev.corporationName || next.corporationName || rec.corporation?.name || `Corporaci\u00f3n #${rec.corporationId || '?'}`,
+        fromText: prev.monitoraName || null,
+        toText: next.monitoraName || null,
+    }),
+    route_pilot: (prev, next, rec) => {
+        const client = prev.schoolName || next.schoolName || rec.school?.name ||
+            prev.corporationName || next.corporationName || rec.corporation?.name || '';
+        const rn = rec.routeNumber || prev.routeNumber || next.routeNumber;
+        const routeBase = rn ? `Ruta ${rn}` : 'Ruta';
+        return {
+            subject: client ? `${routeBase} \u2014 ${client}` : routeBase,
+            fromText: prev.pilotName || null,
+            toText: next.pilotName || null,
+        };
+    },
+    route_monitora: (prev, next, rec) => {
+        const client = prev.schoolName || next.schoolName || rec.school?.name ||
+            prev.corporationName || next.corporationName || rec.corporation?.name || '';
+        const rn = rec.routeNumber || prev.routeNumber || next.routeNumber;
+        const routeBase = rn ? `Ruta ${rn}` : 'Ruta';
+        return {
+            subject: client ? `${routeBase} \u2014 ${client}` : routeBase,
+            fromText: prev.monitoraName || null,
+            toText: next.monitoraName || null,
+        };
+    },
+};
+
+const computeChangeSummary = (record) => {
+    const prev = safeParseJson(record.previousValue);
+    const next = safeParseJson(record.newValue);
+    const handler = CHANGE_SUMMARY_MAP[record.assignmentType];
+    if (!handler) return { subject: '\u2014', fromText: null, toText: null };
+    return handler(prev, next, record);
+};
+
+const renderReassignmentDetail = (fromText, toText) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <Box sx={{
+            display: 'inline-flex', alignItems: 'center',
+            px: 1, py: 0.25, borderRadius: 1,
+            border: '1px solid', borderColor: 'error.light',
+            color: 'error.dark', bgcolor: 'rgba(211,47,47,0.07)'
+        }}>
+            <Typography variant="body2" sx={{ textDecoration: 'line-through' }}>
+                {fromText || '—'}
+            </Typography>
+        </Box>
+        <Typography variant="body1" color="text.secondary" fontWeight="bold">→</Typography>
+        <Box sx={{
+            display: 'inline-flex', alignItems: 'center',
+            px: 1, py: 0.25, borderRadius: 1,
+            border: '1px solid', borderColor: 'success.light',
+            color: 'success.dark', bgcolor: 'rgba(46,125,50,0.07)'
+        }}>
+            <Typography variant="body2" fontWeight="medium">
+                {toText || '—'}
+            </Typography>
+        </Box>
+    </Box>
+);
+
+const renderChangeDetailCell = (ctype, fromText, toText) => {
+    if (ctype === 'reassignment') {
+        return renderReassignmentDetail(fromText, toText);
+    }
+    if (ctype === 'assignment') {
+        return (
+            <Typography variant="body2" sx={{ color: 'success.dark', fontWeight: 'medium' }}>
+                {toText || '—'}
+            </Typography>
+        );
+    }
+    if (ctype === 'unassignment') {
+        return (
+            <Typography variant="body2" sx={{ color: 'error.main', textDecoration: 'line-through' }}>
+                {fromText || '—'}
+            </Typography>
+        );
+    }
+    return <Typography variant="body2" color="text.secondary">—</Typography>;
 };
 
 const AssignmentHistoryPage = () => {
@@ -91,6 +297,8 @@ const AssignmentHistoryPage = () => {
         'unassignment': 'error',
         'reassignment': 'warning'
     };
+
+    const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
     useEffect(() => {
         fetchHistory();
@@ -166,111 +374,6 @@ const AssignmentHistoryPage = () => {
         setPage(0);
     };
 
-    const renderChangeDescription = (record) => {
-        const changeType = record.changeType;
-
-        const parseJson = (v) => {
-            if (!v) return {};
-            if (typeof v === 'object') return v;
-            try {
-                return JSON.parse(v);
-            } catch (e) {
-                return {};
-            }
-        };
-
-        const prev = parseJson(record.previousValue);
-        const next = parseJson(record.newValue);
-
-        // Helper para representar un objeto anterior/nuevo de forma amigable
-        const friendly = (o) => {
-            if (!o || Object.keys(o).length === 0) return '—';
-            if (o.pilotName) return `Piloto: ${o.pilotName}`;
-            if (o.monitoraName) return `Monitora: ${o.monitoraName}`;
-            if (o.busPlate) return `Bus: ${o.busPlate}`;
-            if (o.schoolName) return `${o.schoolName}${o.routeNumber ? ` (Ruta ${o.routeNumber})` : ''}`;
-            if (o.corporationName) return `${o.corporationName}${o.routeNumber ? ` (Ruta ${o.routeNumber})` : ''}`;
-            if (o.routeNumber) return `Ruta ${o.routeNumber}`;
-            return '—';
-        };
-
-        // Generar descripción simple y directa basada en los datos disponibles
-        let entity = '';
-        let change = '';
-
-        // Identificar la entidad principal
-        if (next.busPlate || prev.busPlate) {
-            entity = `Bus: ${next.busPlate || prev.busPlate}`;
-        } else if (next.pilotName || prev.pilotName) {
-            entity = `Piloto: ${next.pilotName || prev.pilotName}`;
-        } else if (next.monitoraName || prev.monitoraName) {
-            entity = `Monitora: ${next.monitoraName || prev.monitoraName}`;
-        } else if (next.routeNumber || prev.routeNumber) {
-            const rNum = next.routeNumber || prev.routeNumber;
-            const client = next.schoolName || next.corporationName || prev.schoolName || prev.corporationName;
-            entity = client ? `Ruta ${rNum} - ${client}` : `Ruta ${rNum}`;
-        } else if (next.schoolName || prev.schoolName) {
-            entity = `Colegio: ${next.schoolName || prev.schoolName}`;
-        } else if (next.corporationName || prev.corporationName) {
-            entity = `Corporación: ${next.corporationName || prev.corporationName}`;
-        }
-
-        // Generar descripción del cambio basada en el tipo
-        if (changeType === 'assignment') {
-            // Asignación nueva
-            if (next.pilotName) change = `Piloto asignado: ${next.pilotName}`;
-            else if (next.monitoraName) change = `Monitora asignada: ${next.monitoraName}`;
-            else if (next.schoolName) {
-                const route = next.routeNumber ? ` (Ruta ${next.routeNumber})` : '';
-                change = `Colegio asignado: ${next.schoolName}${route}`;
-            }
-            else if (next.corporationName) {
-                const route = next.routeNumber ? ` (Ruta ${next.routeNumber})` : '';
-                change = `Corporación asignada: ${next.corporationName}${route}`;
-            }
-            else if (next.routeNumber) {
-                const client = next.schoolName || next.corporationName || '';
-                change = `Ruta asignada: ${next.routeNumber}${client ? ` (${client})` : ''}`;
-            }
-        } else if (changeType === 'unassignment') {
-            // Desasignación
-            if (prev.pilotName) change = `Piloto removido: ${prev.pilotName}`;
-            else if (prev.monitoraName) change = `Monitora removida: ${prev.monitoraName}`;
-            else if (prev.schoolName) {
-                const route = prev.routeNumber ? ` (Ruta ${prev.routeNumber})` : '';
-                change = `Colegio removido: ${prev.schoolName}${route}`;
-            }
-            else if (prev.corporationName) {
-                const route = prev.routeNumber ? ` (Ruta ${prev.routeNumber})` : '';
-                change = `Corporación removida: ${prev.corporationName}${route}`;
-            }
-            else if (prev.routeNumber) {
-                const client = prev.schoolName || prev.corporationName || '';
-                change = `Ruta removida: ${prev.routeNumber}${client ? ` (${client})` : ''}`;
-            }
-        } else if (changeType === 'reassignment') {
-            // Reasignación
-            if (prev.pilotName && next.pilotName) {
-                change = `Piloto: ${prev.pilotName} → ${next.pilotName}`;
-            } else if (prev.monitoraName && next.monitoraName) {
-                change = `Monitora: ${prev.monitoraName} → ${next.monitoraName}`;
-            } else if (prev.schoolName && next.schoolName) {
-                change = `Colegio: ${prev.schoolName} → ${next.schoolName}`;
-            } else if (prev.corporationName && next.corporationName) {
-                change = `Corporación: ${prev.corporationName} → ${next.corporationName}`;
-            } else if (prev.routeNumber && next.routeNumber) {
-                change = `Ruta: ${prev.routeNumber} → ${next.routeNumber}`;
-            }
-        }
-
-        return {
-            entity: entity || '—',
-            change: change || '—',
-            before: friendly(prev),
-            after: friendly(next)
-        };
-    };
-
     return (
         <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -302,8 +405,38 @@ const AssignmentHistoryPage = () => {
                                     setCorporationId('');
                                     setPage(0);
                                 }}
+                                label="Ciclo escolar de colegios"
+                                allLabel="Todos los ciclos"
                                 size="small"
                             />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6} md={3}>
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Colegio</InputLabel>
+                                <Select
+                                    value={schoolId}
+                                    onChange={(e) => {
+                                        setSchoolId(e.target.value);
+                                        setPage(0);
+                                    }}
+                                    label="Colegio"
+                                >
+                                    <MenuItem value="">
+                                        {isSpecificCicloEscolarSelected ? 'Todos los colegios del ciclo' : 'Todos los colegios'}
+                                    </MenuItem>
+                                    {schools.map((school) => (
+                                        <MenuItem key={school.id} value={school.id}>
+                                            {school.name}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                                <FormHelperText>
+                                    {isSpecificCicloEscolarSelected && !schoolId
+                                        ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
+                                        : 'Las opciones dependen del ciclo escolar seleccionado.'}
+                                </FormHelperText>
+                            </FormControl>
                         </Grid>
 
                         <Grid item xs={12} sm={6} md={3}>
@@ -311,7 +444,10 @@ const AssignmentHistoryPage = () => {
                                 <InputLabel>Tipo de Asignación</InputLabel>
                                 <Select
                                     value={assignmentType}
-                                    onChange={(e) => setAssignmentType(e.target.value)}
+                                    onChange={(e) => {
+                                        setAssignmentType(e.target.value);
+                                        setPage(0);
+                                    }}
                                     label="Tipo de Asignación"
                                 >
                                     <MenuItem value="">Todos</MenuItem>
@@ -327,7 +463,10 @@ const AssignmentHistoryPage = () => {
                                 <InputLabel>Bus</InputLabel>
                                 <Select
                                     value={busId}
-                                    onChange={(e) => setBusId(e.target.value)}
+                                    onChange={(e) => {
+                                        setBusId(e.target.value);
+                                        setPage(0);
+                                    }}
                                     label="Bus"
                                 >
                                     <MenuItem value="">Todos</MenuItem>
@@ -342,28 +481,13 @@ const AssignmentHistoryPage = () => {
 
                         <Grid item xs={12} sm={6} md={3}>
                             <FormControl fullWidth size="small">
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={schoolId}
-                                    onChange={(e) => setSchoolId(e.target.value)}
-                                    label="Colegio"
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {schools.map((school) => (
-                                        <MenuItem key={school.id} value={school.id}>
-                                            {school.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-
-                        <Grid item xs={12} sm={6} md={3}>
-                            <FormControl fullWidth size="small">
                                 <InputLabel>Corporación</InputLabel>
                                 <Select
                                     value={corporationId}
-                                    onChange={(e) => setCorporationId(e.target.value)}
+                                    onChange={(e) => {
+                                        setCorporationId(e.target.value);
+                                        setPage(0);
+                                    }}
                                     label="Corporación"
                                 >
                                     <MenuItem value="">Todas</MenuItem>
@@ -419,21 +543,20 @@ const AssignmentHistoryPage = () => {
                     ) : (
                         <>
                             <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
-                                <Table sx={{ minWidth: 860 }}>
+                                <Table sx={{ minWidth: 900 }}>
                                     <TableHead>
-                                        <TableRow>
-                                            <TableCell>Fecha</TableCell>
-                                            <TableCell>Entidad</TableCell>
-                                            <TableCell>Tipo de Cambio</TableCell>
-                                            <TableCell>Antes</TableCell>
-                                            <TableCell>Después</TableCell>
-                                            <TableCell>Modificado Por</TableCell>
+                                        <TableRow sx={{ bgcolor: 'grey.50' }}>
+                                            <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Fecha</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Tipo</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Sujeto</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Detalle del Cambio</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Modificado Por</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
                                         {history.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} align="center">
+                                                <TableCell colSpan={5} align="center">
                                                     <Typography variant="body2" color="textSecondary">
                                                         No hay registros para mostrar
                                                     </Typography>
@@ -441,40 +564,39 @@ const AssignmentHistoryPage = () => {
                                             </TableRow>
                                         ) : (
                                             history.map((record) => {
-                                                const description = renderChangeDescription(record);
+                                                const { subject, fromText, toText } = computeChangeSummary(record);
+                                                const ctype = record.changeType;
                                                 return (
                                                     <TableRow key={record.id} hover>
-                                                        <TableCell>
+                                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                                             <Typography variant="body2">
                                                                 {formatGuatemalaDatetime(record.createdAt)}
                                                             </Typography>
                                                         </TableCell>
                                                         <TableCell>
+                                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                                <Chip
+                                                                    label={changeTypeLabels[ctype] || ctype}
+                                                                    color={changeTypeColors[ctype] || 'default'}
+                                                                    size="small"
+                                                                    sx={{ width: 'fit-content' }}
+                                                                />
+                                                                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                                                                    {assignmentTypeLabels[record.assignmentType] || record.assignmentType}
+                                                                </Typography>
+                                                            </Box>
+                                                        </TableCell>
+                                                        <TableCell>
                                                             <Typography variant="body2" fontWeight="medium">
-                                                                {description.entity}
-                                                            </Typography>
-                                                        </TableCell>
-                                                        {/* JSON debug column removed for end-user view */}
-                                                        <TableCell>
-                                                            <Chip
-                                                                label={changeTypeLabels[record.changeType] || record.changeType}
-                                                                color={changeTypeColors[record.changeType] || 'default'}
-                                                                size="small"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Typography variant="body2" color="text.secondary">
-                                                                {description.before}
+                                                                {subject}
                                                             </Typography>
                                                         </TableCell>
                                                         <TableCell>
-                                                            <Typography variant="body2" fontWeight="medium" color="text.primary">
-                                                                {description.after}
-                                                            </Typography>
+                                                            {renderChangeDetailCell(ctype, fromText, toText)}
                                                         </TableCell>
                                                         <TableCell>
                                                             <Typography variant="body2">
-                                                                {record.changedByUser?.name || '—'}
+                                                                {record.changedByUser?.name || '\u2014'}
                                                             </Typography>
                                                         </TableCell>
                                                     </TableRow>

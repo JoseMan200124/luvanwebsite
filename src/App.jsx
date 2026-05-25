@@ -26,7 +26,6 @@ import ParentDashboardPage from './pages/ParentDashboardPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import ParentProtocolsPage from './pages/ParentProtocolsPage';
 import ParentCircularsPage from './pages/ParentCircularsPage';
-import HistoricalDataPage from './pages/HistoricalDataPage';
 import CicloEscolarSelectionPage from './pages/CicloEscolarSelectionPage';
 import SchoolContextSelectionPage from './pages/SchoolContextSelectionPage';
 import SchoolDashboardPage from './pages/SchoolDashboardPage';
@@ -50,19 +49,17 @@ function App() {
     /* Rutas dinámicas de módulos (panel administrativo)      */
     /* ------------------------------------------------------ */
     const renderDynamicRoutes = () => {
-        let routes = [];
+        const routes = [];
         modules.forEach((module) => {
             module.submodules.forEach((submodule) => {
+                const C = submodule.component;
                 routes.push(
                     <Route
                         key={submodule.path}
                         path={submodule.path}
                         element={
-                            <ProtectedRoute 
-                                roles={submodule.roles}
-                                moduleKey={submodule.key}
-                            >
-                                <submodule.component />
+                            <ProtectedRoute moduleKey={submodule.key}>
+                                <C />
                             </ProtectedRoute>
                         }
                     />
@@ -135,16 +132,6 @@ function App() {
                     >
                         <Route index             element={<DefaultAdminRoute />} />
                         <Route path="dashboard"  element={<Dashboard />} />
-
-                        {/* Historial de Ciclos Escolares */}
-                        <Route
-                            path="historial"
-                            element={
-                                <ProtectedRoute>
-                                    <HistoricalDataPage />
-                                </ProtectedRoute>
-                            }
-                        />
 
                         {renderDynamicRoutes()}
 
