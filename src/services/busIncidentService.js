@@ -66,6 +66,10 @@ export const getBusIncidentStatistics = async (filters = {}) => {
 };
 
 /**
+ * Obtener todos los incidentes (para export/descarga) sin paginación (intenta traer muchos)
+ * @param {Object} filters - Filtros para la consulta
+ */
+/**
  * Tipos de falla disponibles
  */
 export const FAILURE_TYPES = {

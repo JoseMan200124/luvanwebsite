@@ -43,6 +43,7 @@ import {
     HelpOutline as OtherIcon,
     CheckCircle as CheckCircleIcon,
     Cancel as CancelIcon,
+    PictureAsPdf as PictureAsPdfIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
@@ -54,6 +55,7 @@ import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolar
 moment.tz.setDefault('America/Guatemala');
 
 const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
+const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
 const BusIncidentsPage = () => {
     const [incidents, setIncidents] = useState([]);
@@ -97,6 +99,7 @@ const BusIncidentsPage = () => {
         byTipo: {},
         withImpact: 0,
     });
+    const [exportingPdf, setExportingPdf] = useState(false);
 
     useEffect(() => {
         fetchSchools();
@@ -200,7 +203,13 @@ const BusIncidentsPage = () => {
             if (selectedCorporation) filters.corporationId = selectedCorporation;
             if (selectedPlate) filters.plate = selectedPlate;
             if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedTipoFalla) filters.tipoFalla = selectedTipoFalla;
+            if (selectedTipoFalla) {
+                if (selectedTipoFalla === NO_FAILURES_FILTER_VALUE) {
+                    filters.noFallas = true;
+                } else {
+                    filters.tipoFalla = selectedTipoFalla;
+                }
+            }
             if (selectedTipo) filters.tipo = selectedTipo;
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
@@ -276,6 +285,59 @@ const BusIncidentsPage = () => {
 
     const handleRefresh = () => {
         fetchIncidents();
+    };
+
+    const handleExportPDF = async () => {
+        setExportingPdf(true);
+        try {
+            const filters = {
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
+            };
+            if (selectedSchool) filters.schoolId = selectedSchool;
+            if (selectedCorporation) filters.corporationId = selectedCorporation;
+            if (selectedPlate) filters.plate = selectedPlate;
+            if (selectedRoute) filters.routeNumber = selectedRoute;
+            if (selectedTipoFalla) filters.tipoFalla = selectedTipoFalla;
+            if (selectedTipo) filters.tipo = selectedTipo;
+            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
+            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+
+            const resp = await api.get('/reports/bus-incidents/pdf', { params: filters, responseType: 'blob' });
+            const contentType = String(resp.headers['content-type'] || '').toLowerCase();
+
+            const blob = resp.data instanceof Blob ? resp.data : new Blob([resp.data], { type: contentType || 'application/pdf' });
+            if (!contentType.includes('application/pdf')) {
+                const txt = await blob.text();
+                let message = 'No se pudo generar el PDF.';
+                try { const parsed = JSON.parse(txt); message = parsed?.message || parsed?.error || message; } catch (_) { message = (txt || '').slice(0,240); }
+                alert(`Error generando PDF: ${message}`);
+                return;
+            }
+
+            // Validate PDF header
+            const headerBuf = await blob.slice(0,5).arrayBuffer();
+            const header = new TextDecoder('utf-8').decode(headerBuf);
+            if (header !== '%PDF-') {
+                const txt = await blob.text();
+                alert('El archivo recibido no es un PDF válido. ' + (txt || '').slice(0,240));
+                return;
+            }
+
+            const url = window.URL.createObjectURL(blob);
+            const filename = `mapeo_fallas_${filters.startDate || 'sin-inicio'}_${filters.endDate || 'sin-fin'}.pdf`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error descargando PDF:', error);
+            alert('Error al descargar el PDF. Revisar consola.');
+        } finally {
+            setExportingPdf(false);
+        }
     };
 
     const handleViewDetails = async (incidentId) => {
@@ -369,6 +431,43 @@ const BusIncidentsPage = () => {
                     <Typography variant="body2" color="textSecondary">
                         Visualiza y analiza los incidentes y accidentes reportados en los buses
                     </Typography>
+                    <Box
+                        mt={2}
+                        display="flex"
+                        flexWrap="wrap"
+                        alignItems="center"
+                        gap={1.5}
+                    >
+                        <Button
+                            variant="contained"
+                            onClick={handleExportPDF}
+                            disabled={exportingPdf}
+                            startIcon={<PictureAsPdfIcon />}
+                            sx={{
+                                borderRadius: 999,
+                                px: 2.5,
+                                py: 1.1,
+                                textTransform: 'none',
+                                fontWeight: 800,
+                                letterSpacing: 0.2,
+                                background: 'linear-gradient(135deg, #1f4e79 0%, #2f6ea8 100%)',
+                                boxShadow: '0 10px 24px rgba(31, 78, 121, 0.28)',
+                                '&:hover': {
+                                    background: 'linear-gradient(135deg, #173c5d 0%, #255d8f 100%)',
+                                    boxShadow: '0 12px 28px rgba(31, 78, 121, 0.34)',
+                                },
+                                '&:disabled': {
+                                    background: 'linear-gradient(135deg, #93b2cb 0%, #b4c9db 100%)',
+                                    color: '#fff',
+                                }
+                            }}
+                        >
+                            {exportingPdf ? 'Generando PDF...' : 'Generar Reporte PDF'}
+                        </Button>
+                        <Typography variant="body2" color="textSecondary" sx={{ maxWidth: 460, lineHeight: 1.35 }}>
+                            La generación del reporte toma en cuenta los filtros aplicados.
+                        </Typography>
+                    </Box>
                 </Box>
 
                 {/* Estadísticas */}
@@ -542,6 +641,7 @@ const BusIncidentsPage = () => {
                                     MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
+                                    <MenuItem value={NO_FAILURES_FILTER_VALUE}>Sin fallas</MenuItem>
                                     {Object.entries(FAILURE_TYPES).map(([key, label]) => (
                                         <MenuItem key={key} value={key}>
                                             {label}
@@ -680,7 +780,7 @@ const BusIncidentsPage = () => {
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
                                                 <TableCell>
-                                                    {moment(incident.fecha).format('DD/MM/YYYY HH:mm')}
+                                                    {moment(incident.fecha).format('DD/MM/YYYY hh:mm A')}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Chip 
@@ -802,7 +902,7 @@ const BusIncidentsPage = () => {
                                         Fecha y Hora
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {moment(selectedIncident.fecha).format('DD/MM/YYYY HH:mm')}
+                                        {moment(selectedIncident.fecha).format('DD/MM/YYYY hh:mm A')}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
