@@ -198,11 +198,13 @@ const SchoolDashboardPage = () => {
             });
             
             const summary = response.data.summary || {};
+            // Prefer `count` (número real de familias con ese estado), fallback a suma de tipos de ruta
+            const total = summary.count ?? ((summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0));
             setUserSummary({
                 completa: summary.completa || 0,
                 mediaAM: summary.mediaAM || 0,
                 mediaPM: summary.mediaPM || 0,
-                total: (summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0)
+                total
             });
         } catch (err) {
             console.error('Error fetching user summary:', err);
@@ -226,9 +228,8 @@ const SchoolDashboardPage = () => {
             const mediaAM = summary.mediaAM || 0;
             const mediaPM = summary.mediaPM || 0;
             const inactive = summary.inactive || 0;
-            // The backend returns `summary.total` as the sum of route-type counters.
-            // Prefer that value; fall back to the sum of route-types (exclude inactive)
-            const total = typeof summary.total === 'number' ? summary.total : (completa + mediaAM + mediaPM);
+            // Prefer `count` (todos los estudiantes no eliminados de esas familias), fallback a suma de tipos
+            const total = summary.count ?? (typeof summary.total === 'number' ? summary.total : (completa + mediaAM + mediaPM));
             setStudentSummary({
                 completa,
                 mediaAM,
@@ -255,14 +256,24 @@ const SchoolDashboardPage = () => {
                     api.get(`/parents/summary/${schoolId}`, {
                         headers: { Authorization: `Bearer ${auth.token}` },
                         params: buildSchoolCycleParams({ serviceStatus: s })
-                    }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
+                    }).then(r => {
+                        const summary = r.data.summary || {};
+                        // Prefer `count` (número real de familias con ese estado, sin depender del routeType)
+                        const total = summary.count ?? ((summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0));
+                        return { status: s, total, inactive: summary.inactive || 0 };
+                    })
                     .catch(() => ({ status: s, total: 0, inactive: 0 }))
                 )),
                 Promise.all(allStatuses.map(s =>
                     api.get(`/students/summary/${schoolId}`, {
                         headers: { Authorization: `Bearer ${auth.token}` },
                         params: buildSchoolCycleParams({ serviceStatus: s })
-                    }).then(r => ({ status: s, total: (r.data.summary?.completa || 0) + (r.data.summary?.mediaAM || 0) + (r.data.summary?.mediaPM || 0), inactive: r.data.summary?.inactive || 0 }))
+                    }).then(r => {
+                        const summary = r.data.summary || {};
+                        // Prefer `count` (todos los estudiantes no eliminados de esas familias)
+                        const total = summary.count ?? ((summary.completa || 0) + (summary.mediaAM || 0) + (summary.mediaPM || 0));
+                        return { status: s, total, inactive: summary.inactive || 0 };
+                    })
                     .catch(() => ({ status: s, total: 0, inactive: 0 }))
                 ))
             ]);
