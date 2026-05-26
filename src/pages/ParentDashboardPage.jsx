@@ -50,6 +50,7 @@ import {
   ChevronRight as ChevronRightIcon,
   Notifications as NotificationsIcon,
   DocumentScanner,
+  CreditCard as CreditCardIcon,
   AttachEmail,
 } from '@mui/icons-material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -999,46 +1000,15 @@ const ParentDashboardPage = () => {
                           Actualizar Mis Datos
                         </Button>
                       </Grid>
-                      <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
-                      <Grid item xs={12}>
-                        <Typography variant="subtitle2" sx={{ color: 'primary.main', fontWeight: 700 }}>Información de Depósito</Typography>
-                      </Grid>
-
-                      {nonEmpty(parentInfo.bankName) && (
-                        <Grid item xs={12}>
-                          <Typography variant="body2"><strong>Banco:</strong> {parentInfo.bankName}</Typography>
-                        </Grid>
-                      )}
-                      {nonEmpty(parentInfo.bankAccount) && (
-                        <Grid item xs={12}>
-                          <Typography variant="body2"><strong>Cuenta Bancaria:</strong> {parentInfo.bankAccount}</Typography>
-                        </Grid>
-                      )}
-                      {nonEmpty(parentInfo.duePaymentDay) && (
-                        <Grid item xs={12}>
-                          <Typography variant="body2"><strong>Fecha Máxima de Pago:</strong> {parentInfo.duePaymentDay} de cada mes</Typography>
-                        </Grid>
-                      )}
-                      {nonEmpty(parentInfo.transportFeeComplete) && (
-                        <Grid item xs={12}>
-                          <Typography variant="body2"><strong>Cuota de Transporte Completa (Q):</strong> {parentInfo.transportFeeComplete}</Typography>
-                        </Grid>
-                      )}
-                      {nonEmpty(parentInfo.transportFeeHalf) && (
-                        <Grid item xs={12}>
-                          <Typography variant="body2"><strong>Cuota de Transporte Media (Q):</strong> {parentInfo.transportFeeHalf}</Typography>
-                        </Grid>
-                      )}
-
                       <Grid item xs={12} sx={{ mt: 1, textAlign: 'center' }}>
                         <Button
-                          variant="contained"
-                          size="small"
-                          startIcon={<CloudUploadIcon />}
+                          variant="outlined"
+                          fullWidth
+                          startIcon={<CreditCardIcon />}
                           onClick={() => navigate('/parent/payment')}
                           disabled={isSuspendedForNoContract}
                         >
-                          Subir Boleta de Pago
+                          Información de Pagos
                         </Button>
                       </Grid>
                     </Grid>
