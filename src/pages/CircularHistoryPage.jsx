@@ -101,7 +101,7 @@ const CircularHistoryPage = () => {
 
   const [q, setQ] = useState('');
   const [schools, setSchools] = useState([]);
-  const [selectedSchool, setSelectedSchool] = useState(() => localStorage.getItem('selectedSchoolId') || ALL_CLIENTS_VALUE);
+  const [selectedSchool, setSelectedSchool] = useState(ALL_CLIENTS_VALUE);
   const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(() => localStorage.getItem('selectedCicloEscolarId') || ALL_CYCLES_VALUE);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
@@ -158,7 +158,6 @@ const CircularHistoryPage = () => {
     if (effectiveSelectedSchool === selectedSchool) return;
 
     setSelectedSchool(ALL_CLIENTS_VALUE);
-    localStorage.setItem('selectedSchoolId', ALL_CLIENTS_VALUE);
   }, [effectiveSelectedSchool, selectedSchool]);
 
   const listParams = useMemo(() => {
@@ -435,7 +434,6 @@ const CircularHistoryPage = () => {
                 onChange={(e) => {
                   const nextValue = String(e.target.value || ALL_CLIENTS_VALUE);
                   setSelectedSchool(nextValue);
-                  localStorage.setItem('selectedSchoolId', nextValue);
                   setPage(0);
                 }}
                 MenuProps={{

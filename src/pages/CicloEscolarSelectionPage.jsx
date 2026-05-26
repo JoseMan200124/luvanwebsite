@@ -65,7 +65,7 @@ import EditSchedulesModal from '../components/modals/EditSchedulesModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
 import { getCicloEscolarOptionLabel, getCiclosEscolares } from '../services/cicloEscolarService';
-import { clearStoredSchoolContext, setStoredSchoolContext } from '../utils/schoolContext';
+import { clearStoredSchoolContext } from '../utils/schoolContext';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -531,15 +531,6 @@ const CicloEscolarSelectionPage = () => {
             cicloEscolarId,
             ...(cicloEscolar ? { cicloEscolar } : {})
         };
-        setStoredSchoolContext({
-            schoolId: school.id,
-            school: schoolWithCicloEscolar,
-            cicloEscolarId,
-            cicloEscolar,
-            status: 'ACTIVE',
-            operationStatus: school.operationStatus || 'ACTIVE',
-            enrollmentStatus: school.enrollmentStatus || 'OPEN'
-        });
         navigate(`/admin/escuelas/ciclo/${cicloEscolarId}/${school.id}`, {
             state: {
                 cicloEscolarId,
