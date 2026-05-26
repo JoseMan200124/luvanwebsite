@@ -3,7 +3,7 @@
 import axios from 'axios';
 
 const API_URL = 'https://api.transportesluvan.com/api';
-//const API_URL = 'http://localhost:3001/api';
+
 
 const api = axios.create({
     baseURL: API_URL,
@@ -11,9 +11,24 @@ const api = axios.create({
 
 const WRITE_METHODS = new Set(['post', 'put', 'patch']);
 
+// Roles that have a fixed school context and require automatic school injection (parent=3, colaborador=8)
+const SCHOOL_CONTEXT_ROLE_IDS = new Set([3, 8]);
+
+const getTokenRoleId = (token) => {
+    if (!token) return null;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload?.roleId ?? null;
+    } catch {
+        return null;
+    }
+};
+
 const getCycleContext = () => {
+    const token = localStorage.getItem('token');
     return {
-        token: localStorage.getItem('token'),
+        token,
+        roleId: getTokenRoleId(token),
         selectedCicloEscolarId: localStorage.getItem('selectedCicloEscolarId'),
         selectedSchoolId: localStorage.getItem('selectedSchoolId')
     };
@@ -140,7 +155,9 @@ const applyRequestConfig = (config) => {
         }
     }
 
-    if (!hasExplicitSchoolOverride(config)) {
+    // Only auto-inject school context for roles that have a fixed school (parent/colaborador).
+    // Admin users manage their own schoolId filtering explicitly per request.
+    if (!hasExplicitSchoolOverride(config) && SCHOOL_CONTEXT_ROLE_IDS.has(Number(cycleContext.roleId))) {
         injectSchoolHeaders(config, cycleContext);
         if (method === 'get') {
             injectSchoolParams(config, cycleContext);
