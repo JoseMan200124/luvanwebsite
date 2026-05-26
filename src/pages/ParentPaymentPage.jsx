@@ -1044,7 +1044,7 @@ const ParentPaymentPage = () => {
                             <InfoOutlinedIcon sx={{ color: '#92400E', fontSize: 18, mt: 0.1 }} />
                             <Typography sx={{ color: '#78350F', fontSize: 13, lineHeight: 1.55 }}>
                                 <Box component="span" sx={{ fontWeight: 900, color: '#92400E' }}>Sección en desarrollo.</Box>{' '}
-                                Si notas algún dato incorrecto o experimentas algún problema, por favor comunícanoslo al correo haricodeoficial@gmail.com.
+                                Si notas algún dato incorrecto o experimentas algún problema, por favor comunícanoslo al correo <strong>facturacion@transportesluvansa.onmicrosoft.com</strong>
                             </Typography>
                         </Box>
 
