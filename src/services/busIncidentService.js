@@ -49,6 +49,16 @@ export const deleteBusIncident = async (id) => {
 };
 
 /**
+ * Actualizar la descripción de un incidente
+ * @param {number} id - ID del incidente
+ * @param {string} descripcion - Nueva descripción
+ */
+export const updateBusIncidentDescription = async (id, descripcion) => {
+    const response = await api.patch(`/bus-incidents/${id}/description`, { descripcion });
+    return response.data;
+};
+
+/**
  * Obtener estadísticas de incidentes
  * @param {Object} filters - Filtros para las estadísticas
  */

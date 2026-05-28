@@ -29,6 +29,7 @@ import {
     DialogContent,
     DialogActions,
     Button,
+    TextField,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -44,11 +45,13 @@ import {
     CheckCircle as CheckCircleIcon,
     Cancel as CancelIcon,
     PictureAsPdf as PictureAsPdfIcon,
+    Edit as EditIcon,
+    Save as SaveIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
-import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
+import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, updateBusIncidentDescription, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
@@ -91,6 +94,11 @@ const BusIncidentsPage = () => {
     // Modal de eliminación
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteId, setDeleteId] = useState(null);
+
+    // Edición de descripción
+    const [editingDescription, setEditingDescription] = useState(false);
+    const [descriptionValue, setDescriptionValue] = useState('');
+    const [savingDescription, setSavingDescription] = useState(false);
 
     // Estadísticas
     const [statistics, setStatistics] = useState({
@@ -357,6 +365,34 @@ const BusIncidentsPage = () => {
     const handleCloseDetails = () => {
         setDetailsOpen(false);
         setSelectedIncident(null);
+        setEditingDescription(false);
+        setDescriptionValue('');
+    };
+
+    const handleStartEditDescription = () => {
+        setDescriptionValue(selectedIncident?.descripcion || '');
+        setEditingDescription(true);
+    };
+
+    const handleCancelEditDescription = () => {
+        setEditingDescription(false);
+        setDescriptionValue('');
+    };
+
+    const handleSaveDescription = async () => {
+        if (!selectedIncident) return;
+        setSavingDescription(true);
+        try {
+            await updateBusIncidentDescription(selectedIncident.id, descriptionValue);
+            setSelectedIncident(prev => ({ ...prev, descripcion: descriptionValue }));
+            setEditingDescription(false);
+            setDescriptionValue('');
+        } catch (error) {
+            console.error('Error al guardar descripción:', error);
+            alert('Error al guardar la descripción');
+        } finally {
+            setSavingDescription(false);
+        }
     };
 
     const handleSort = (column) => {
@@ -1019,14 +1055,58 @@ const BusIncidentsPage = () => {
                                     </Grid>
                                 )}
                                 <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Descripción del Incidente
-                                    </Typography>
-                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                                        <Typography variant="body1">
-                                            {selectedIncident.descripcion || 'Sin descripción'}
+                                    <Box display="flex" alignItems="center" gap={1}>
+                                        <Typography variant="subtitle2" color="textSecondary">
+                                            Descripción del Incidente
                                         </Typography>
-                                    </Paper>
+                                        {!editingDescription && (
+                                            <Tooltip title="Editar descripción">
+                                                <IconButton size="small" onClick={handleStartEditDescription}>
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        )}
+                                    </Box>
+                                    {editingDescription ? (
+                                        <Box mt={1}>
+                                            <TextField
+                                                fullWidth
+                                                multiline
+                                                minRows={3}
+                                                value={descriptionValue}
+                                                onChange={(e) => setDescriptionValue(e.target.value)}
+                                                variant="outlined"
+                                                size="small"
+                                                disabled={savingDescription}
+                                            />
+                                            <Box display="flex" gap={1} mt={1}>
+                                                <Button
+                                                    variant="contained"
+                                                    size="small"
+                                                    startIcon={savingDescription ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                                                    onClick={handleSaveDescription}
+                                                    disabled={savingDescription}
+                                                >
+                                                    Guardar
+                                                </Button>
+                                                <Button
+                                                    variant="outlined"
+                                                    size="small"
+                                                    startIcon={<CancelIcon />}
+                                                    onClick={handleCancelEditDescription}
+                                                    disabled={savingDescription}
+                                                >
+                                                    Cancelar
+                                                </Button>
+                                            </Box>
+                                        </Box>
+                                    ) : (
+                                        <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
+                                            <Typography variant="body1">
+                                                {selectedIncident.descripcion || 'Sin descripción'}
+                                            </Typography>
+                                        </Paper>
+                                    )}
                                 </Grid>
                             </Grid>
                         ) : (
