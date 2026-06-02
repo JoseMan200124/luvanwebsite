@@ -1281,7 +1281,7 @@ const SchoolPaymentsPage = () => {
             // Title centered
             doc.setFontSize(16);
             doc.setFont(undefined, 'bold');
-            doc.text('Estado de cuentas- Historial de Transacciones', headerCenterX, headerTopY + 30, { align: 'center' });
+            doc.text('Estado de cuentas - Historial de Transacciones', headerCenterX, headerTopY + 30, { align: 'center' });
             doc.setFontSize(9);
             doc.setFont(undefined, 'normal');
             doc.text(`Generado: ${moment().format('YYYY-MM-DD HH:mm')}`, headerCenterX, headerTopY + 46, { align: 'center' });
@@ -1549,7 +1549,8 @@ const SchoolPaymentsPage = () => {
                     doc.rect(rrX, rrY, rrW, rrH, 'FD');
                 }
                 doc.setTextColor(...textColor);
-                doc.text(label, x + w / 2, y, { align: 'center' });
+                const textY = rrY + rrH / 2 + 1;
+                doc.text(label, x + w / 2, textY, { align: 'center', baseline: 'middle' });
                 doc.setTextColor(0, 0, 0);
                 doc.setFont(undefined, 'normal');
             };
@@ -1598,7 +1599,7 @@ const SchoolPaymentsPage = () => {
             const metricCards = [
                 { label: 'Tarifa pendiente', value: moneyCard(totals?.balanceDue || 0) },
                 { label: 'Mora pendiente', value: moneyCard(totals?.penaltyDue || 0) },
-                { label: 'Crédito', value: moneyCard(totals?.creditBalance || 0) },
+                { label: 'Crédito a favor', value: moneyCard(totals?.creditBalance || 0) },
                 { label: 'Períodos pendientes', value: String(totals?.unpaidPeriodsCount || 0) },
             ];
 
@@ -1627,10 +1628,13 @@ const SchoolPaymentsPage = () => {
                 doc.text(String(metricCards[i].value || '-'), x + 10, cardY + 38);
             }
             doc.setFont(undefined, 'normal');
-            cursorY = cardY + cardH + 22;
+            cursorY = cardY + cardH + 30;
 
-                // Space before existing table
-                cursorY += 6;
+            // Separator before the transaction history table
+            doc.setDrawColor(220, 220, 220);
+            doc.setLineWidth(0.6);
+            doc.line(40, cursorY - 8, pageWidth - 40, cursorY - 8);
+            cursorY += 10;
             } catch (pdfSectionError) {
                 console.error('[handleDownloadHistory] Error rendering additional PDF sections:', pdfSectionError);
                 // Revert to cursor before attempt so main table renders in expected place
@@ -1718,85 +1722,73 @@ const SchoolPaymentsPage = () => {
                 }
             }
 
-            const formatPaidDate = (d) => {
+            const formatTransactionDate = (d) => {
                 if (!d) return '';
                 const m = moment.parseZone(d);
                 if (!m.isValid()) return '';
-                const day = m.date();
-                const abbr = monthAbbrLower[m.month()] || '';
-                return abbr ? `${day}-${abbr}` : String(day);
+                return m.locale('es').format('DD-MMM-YYYY').toLowerCase();
             };
-
-            let totalTarifa = 0;
-            let totalDesc = 0;
-            let totalFaltante = 0;
+            const formatTransactionType = (type) => {
+                const t = String(type || '').trim().toUpperCase();
+                if (t === 'TARIFA' || t === 'PAYMENT') return 'Tarifa';
+                if (t === 'MORA' || t === 'PENALTY') return 'Mora';
+                if (t === 'CREDITO' || t === 'CREDIT' || t === 'CREDITO AUTOMATICO' || t === 'AUTOCREDIT') return 'Crédito Automático';
+                if (t === 'DEBITO' || t === 'DEBIT' || t === 'DEBITO AUTOMATICO' || t === 'AUTODEBIT') return 'Débito Automático';
+                return (type || 'Transacción').toString().replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+            };
 
             let bodyRows = [];
 
             if (!noTransactions && !noPeriods) {
-                bodyRows = periodAlloc.map(p => {
-                const mm = moment(`${p.period}-01`, 'YYYY-MM-DD');
-                const mes = mm.isValid() ? (monthNamesUpper[mm.month()] || p.period) : (p.period || '');
+                const txRows = (Array.isArray(transactions) ? transactions : [])
+                    .filter(tx => Number(tx?.amount || 0) !== 0 || String(tx?.receiptNumber || '').trim())
+                    .map(tx => {
+                        const amount = Number(tx?.amount || 0) || 0;
+                        const date = formatTransactionDate(tx?.realPaymentDate || tx?.createdAt || tx?.registeredAt || tx?.paidAt);
+                        const type = formatTransactionType(tx?.type || tx?.transactionType || 'Tarifa');
+                        const discount = Number(tx?.extraordinaryDiscount || tx?.discountApplied || tx?.discount || 0) || 0;
+                        const receipt = String(tx?.receiptNumber || tx?.boleta || tx?.reference || '').trim();
+                        return [date, type, money(amount), money(discount), receipt || '-'];
+                    });
 
-                const tarifaV = Number(p.originalAmount || 0);
-                const descV = Number(p.discountApplied || 0);
-                const faltanteV = Number(p.amountDue || 0);
-
-                totalTarifa += tarifaV;
-                totalDesc += descV;
-                totalFaltante += faltanteV;
-
-                const hasPayment = Number(p.amountPaid || 0) > 0 || Number(p.appliedSim || 0) > 0;
-                const fecha = (hasPayment && p.paidAt) ? formatPaidDate(p.paidAt) : '';
-                const montoRaw = Number(p.amountPaid || 0) > 0 ? Number(p.amountPaid || 0) : Number(p.appliedSim || 0);
-                const monto = hasPayment ? money(montoRaw) : '';
-                const boleta = (hasPayment && p.receiptNumber) ? (p.receiptNumber || '') : '';
-                const faltante = faltanteV > 0 ? money(faltanteV) : '-';
-
-                return [mes, money(tarifaV), money(descV), fecha, monto, boleta, faltante];
-                });
-
-                // TOTAL row
-                bodyRows.push(['TOTAL', money(totalTarifa), money(totalDesc), '', '', '', money(totalFaltante)]);
+                if (txRows.length > 0) {
+                    bodyRows = txRows;
+                } else {
+                    bodyRows = periodAlloc.map(p => {
+                        const fecha = formatTransactionDate(p.paidAt || p.dueDate || p.period);
+                        const tarifaV = Number(p.originalAmount || 0);
+                        const descV = Number(p.discountApplied || 0);
+                        const montoRaw = Number(p.amountPaid || 0) > 0 ? Number(p.amountPaid || 0) : Number(p.appliedSim || 0);
+                        const boleta = (p.receiptNumber) ? String(p.receiptNumber) : '-';
+                        return [fecha || '-', 'Tarifa', money(montoRaw), money(descV), boleta];
+                    });
+                }
             } else if (noTransactions) {
-                bodyRows = [[{ content: 'No hay transacciones registradas.', colSpan: 7, styles: { halign: 'center' } }]];
+                bodyRows = [[{ content: 'No hay transacciones registradas.', colSpan: 5, styles: { halign: 'center' } }]];
             } else {
-                bodyRows = [[{ content: 'No se encontraron períodos para mostrar', colSpan: 7, styles: { halign: 'center' } }]];
+                bodyRows = [[{ content: 'No se encontraron períodos para mostrar', colSpan: 5, styles: { halign: 'center' } }]];
             }
 
             // Main periods table: compute column widths to fit available space
             const periodsAvailable = Math.floor(pageWidth - 40 - 40);
-            const periodsColSpec = [98, 64, 72, 52, 58, 84, 70];
+            const periodsColSpec = [88, 92, 66, 78, 78];
             const periodsColWidths = computeColumnWidths(periodsColSpec, periodsAvailable);
             autoTable(doc, {
                 startY: cursorY,
                 margin: { left: 40, right: 40 },
                 tableWidth: periodsAvailable,
-                head: [[ 'MES', 'TARIFA', 'DESCUENTOS', 'FECHA', 'MONTO', 'BOLETA', 'FALTANTE' ]],
+                head: [[ 'FECHA', 'TIPO', 'MONTO', 'DESCUENTOS EXTRA.', 'N° BOLETA' ]],
                 body: bodyRows,
-                styles: { fontSize: 8.5, textColor: 0, cellPadding: 4, lineColor: GRID, lineWidth: 1, overflow: 'linebreak' },
+                styles: { fontSize: 8.2, textColor: 0, cellPadding: 4, lineColor: GRID, lineWidth: 1, overflow: 'linebreak' },
                 headStyles: { fillColor: GREEN, textColor: 0, halign: 'center', fontStyle: 'bold', lineColor: GRID, lineWidth: 1 },
                 columnStyles: {
-                    0: { halign: 'left', cellWidth: periodsColWidths[0] },
-                    1: { halign: 'right', cellWidth: periodsColWidths[1] },
-                    2: { halign: 'right', cellWidth: periodsColWidths[2] },
+                    0: { halign: 'center', cellWidth: periodsColWidths[0] },
+                    1: { halign: 'center', cellWidth: periodsColWidths[1] },
+                    2: { halign: 'center', cellWidth: periodsColWidths[2] },
                     3: { halign: 'center', cellWidth: periodsColWidths[3] },
-                    4: { halign: 'right', cellWidth: periodsColWidths[4] },
-                    5: { halign: 'center', cellWidth: periodsColWidths[5] },
-                    6: { halign: 'right', cellWidth: periodsColWidths[6] }
+                    4: { halign: 'center', cellWidth: periodsColWidths[4] }
                 },
                 theme: 'grid',
-                didParseCell: (data) => {
-                    // Resaltar total faltante en rojo
-                    const isTotalRow = data.row && data.row.index === bodyRows.length - 1;
-                    if (isTotalRow && data.column && data.column.index === 6) {
-                        data.cell.styles.textColor = [244, 67, 54];
-                        data.cell.styles.fontStyle = 'bold';
-                    }
-                    if (isTotalRow) {
-                        data.cell.styles.fontStyle = 'bold';
-                    }
-                },
                 // no footer page numbers
             });
 
@@ -1947,7 +1939,8 @@ const SchoolPaymentsPage = () => {
                         const totalPending = amountDue + penaltyDue;
 
                         const headerY = Number(cursorY) || 52;
-                        const headerH = 26;
+                        const headerH = 28;
+                        const headerLineY = headerY + 14;
                         doc.setFillColor(245, 245, 245);
                         doc.setDrawColor(200, 200, 200);
                         doc.setLineWidth(0.8);
@@ -1956,125 +1949,141 @@ const SchoolPaymentsPage = () => {
                         doc.setFont(undefined, 'bold');
                         doc.setFontSize(11);
                         doc.setTextColor(0, 0, 0);
-                        doc.text(displayPeriodName, 50, headerY + 16);
+                        doc.text(displayPeriodName, pageWidth / 2, headerLineY + 5, { align: 'center' });
                         doc.setFont(undefined, 'normal');
                         doc.setFontSize(8);
                         doc.setTextColor(100);
-                        doc.text(`Vence: ${formatDateDMY(dueDate)}`, 50, headerY + 26);
-                        drawStatusBadge(pageWidth - 50, headerY + 18, effectiveStatus);
+                        doc.text(`Vencimiento: ${formatDateDMY(dueDate)}`, 52, headerLineY + 3);
+                        drawStatusBadge(pageWidth - 50, headerLineY + 6, effectiveStatus);
                         doc.setTextColor(0, 0, 0);
 
                         cursorY = headerY + headerH + 10;
+                        doc.setDrawColor(225, 225, 225);
+                        doc.setLineWidth(0.6);
+                        doc.line(40, cursorY, pageWidth - 40, cursorY);
+                        cursorY += 12;
 
                         doc.setFont(undefined, 'bold');
                         doc.setFontSize(9);
                         doc.text('SERVICIO', 50, cursorY);
-                        cursorY += 7;
+                        cursorY += 15;
                         doc.setFont(undefined, 'normal');
                         doc.setFontSize(8);
                         doc.setTextColor(80);
                         doc.text('Tipo de ruta:', 50, cursorY);
                         doc.text(periodRouteType, pageWidth - 50, cursorY, { align: 'right' });
-                        cursorY += 7;
+                        cursorY += 12;
                         doc.text('Estudiantes:', 50, cursorY);
                         doc.text(String(studentsCountValue), pageWidth - 50, cursorY, { align: 'right' });
-                        cursorY += 11;
+                        cursorY += 12;
+                        doc.setDrawColor(230, 230, 230);
+                        doc.setLineWidth(0.6);
+                        doc.line(42, cursorY - 4, pageWidth - 42, cursorY - 4);
+                        cursorY += 12;
 
                         doc.setFont(undefined, 'bold');
                         doc.setFontSize(9);
                         doc.setTextColor(0, 0, 0);
                         doc.text('TARIFA', 50, cursorY);
-                        cursorY += 7;
+                        cursorY += 15;
                         doc.setFont(undefined, 'normal');
                         doc.setFontSize(8);
                         doc.setTextColor(80);
                         doc.text('Tarifa base:', 50, cursorY);
                         doc.text(money(originalAmount), pageWidth - 50, cursorY, { align: 'right' });
-                        cursorY += 7;
+                        cursorY += 12;
                         if (discountApplied > 0) {
                             doc.text('Descuento familiar:', 50, cursorY);
                             doc.setTextColor(21, 128, 61);
                             doc.text(`- ${money(discountApplied)}`, pageWidth - 50, cursorY, { align: 'right' });
-                            cursorY += 7;
+                            cursorY += 12;
                         }
                         if (extraDiscount > 0) {
                             doc.setTextColor(80);
                             doc.text('Descuento extraordinario:', 50, cursorY);
                             doc.setTextColor(21, 128, 61);
                             doc.text(`- ${money(extraDiscount)}`, pageWidth - 50, cursorY, { align: 'right' });
-                            cursorY += 7;
+                            cursorY += 12;
                         }
                         doc.setTextColor(80);
                         doc.text('Tarifa neta:', 50, cursorY);
                         doc.setTextColor(0, 0, 0);
                         doc.text(money(netAmount), pageWidth - 50, cursorY, { align: 'right' });
-                        cursorY += 7;
+                        cursorY += 12;
                         doc.setTextColor(80);
                         doc.text('Pagado:', 50, cursorY);
                         doc.setTextColor(21, 128, 61);
                         doc.text(money(amountPaid), pageWidth - 50, cursorY, { align: 'right' });
-                        cursorY += 11;
+                        cursorY += 12;
+                        doc.setDrawColor(230, 230, 230);
+                        doc.setLineWidth(0.6);
+                        doc.line(42, cursorY - 4, pageWidth - 42, cursorY - 4);
+                        cursorY += 12;
 
                         if (hasMora) {
                             doc.setFont(undefined, 'bold');
                             doc.setFontSize(9);
                             doc.setTextColor(0, 0, 0);
                             doc.text('MORA', 50, cursorY);
-                            cursorY += 7;
+                            cursorY += 15;
                             doc.setFont(undefined, 'normal');
                             doc.setFontSize(8);
                             doc.setTextColor(80);
                             if (penaltyAccrualBaseAmount > 0) {
                                 doc.text('Mora por día:', 50, cursorY);
                                 doc.text(money(penaltyAccrualBaseAmount), pageWidth - 50, cursorY, { align: 'right' });
-                                cursorY += 7;
+                                cursorY += 12;
                             }
                             if (penaltyDays !== null) {
                                 doc.text('Días de mora:', 50, cursorY);
                                 doc.text(`${penaltyDays} ${penaltyDays === 1 ? 'día' : 'días'}`, pageWidth - 50, cursorY, { align: 'right' });
-                                cursorY += 7;
+                                cursorY += 12;
                             }
                             if (penaltyAmount > 0) {
                                 doc.text('Mora acumulada:', 50, cursorY);
                                 doc.text(money(penaltyAmount), pageWidth - 50, cursorY, { align: 'right' });
-                                cursorY += 7;
+                                cursorY += 12;
                             }
                             if (penaltyDiscountApplied > 0) {
                                 doc.text('Descuento extraordinario:', 50, cursorY);
                                 doc.setTextColor(21, 128, 61);
                                 doc.text(`- ${money(penaltyDiscountApplied)}`, pageWidth - 50, cursorY, { align: 'right' });
-                                cursorY += 7;
+                                cursorY += 12;
                             }
                             if (penaltyPaid > 0) {
                                 doc.setTextColor(80);
                                 doc.text('Mora pagada:', 50, cursorY);
                                 doc.setTextColor(21, 128, 61);
                                 doc.text(money(penaltyPaid), pageWidth - 50, cursorY, { align: 'right' });
-                                cursorY += 7;
+                                cursorY += 12;
                             }
                             doc.setTextColor(80);
                             doc.text('Mora pendiente:', 50, cursorY);
                             if (penaltyDue > 0) doc.setTextColor(244, 67, 54);
                             else doc.setTextColor(0, 0, 0);
                             doc.text(money(penaltyDue), pageWidth - 50, cursorY, { align: 'right' });
-                            cursorY += 11;
+                            cursorY += 12;
                             if (period?.penaltyFrozen) {
                                 doc.setTextColor(0, 0, 0);
                                 doc.text('Mora congelada', 50, cursorY);
-                                cursorY += 7;
+                                cursorY += 12;
                             }
                             if (period?.penaltyCleared) {
                                 doc.setTextColor(0, 0, 0);
                                 doc.text('Mora exonerada', 50, cursorY);
-                                cursorY += 7;
+                                cursorY += 12;
                             }
+                            doc.setDrawColor(230, 230, 230);
+                            doc.setLineWidth(0.6);
+                            doc.line(42, cursorY - 4, pageWidth - 42, cursorY - 4);
+                            cursorY += 12;
                         }
 
                         doc.setFont(undefined, 'bold');
                         doc.setFontSize(9);
                         doc.setTextColor(0, 0, 0);
                         doc.text('RESUMEN', 50, cursorY);
-                        cursorY += 7;
+                        cursorY += 15;
                         doc.setFont(undefined, 'normal');
                         doc.setFontSize(8);
                         doc.setTextColor(80);
@@ -2082,33 +2091,29 @@ const SchoolPaymentsPage = () => {
                         if (amountDue > 0) doc.setTextColor(244, 67, 54);
                         else doc.setTextColor(21, 128, 61);
                         doc.text(money(amountDue), pageWidth - 50, cursorY, { align: 'right' });
-                        cursorY += 7;
+                        cursorY += 12;
                         if (penaltyDue > 0) {
                             doc.text('Mora pendiente:', 50, cursorY);
                             doc.setTextColor(244, 67, 54);
                             doc.text(money(penaltyDue), pageWidth - 50, cursorY, { align: 'right' });
-                            cursorY += 7;
+                            cursorY += 12;
                         }
                         doc.setFont(undefined, 'bold');
                         if (totalPending > 0) doc.setTextColor(244, 67, 54);
                         else doc.setTextColor(21, 128, 61);
                         doc.text('Total a pagar:', 50, cursorY);
                         doc.text(money(totalPending), pageWidth - 50, cursorY, { align: 'right' });
-                        cursorY += 18;
+                        cursorY += 12;
+                        doc.setDrawColor(225, 225, 225);
+                        doc.setLineWidth(0.6);
+                        doc.line(40, cursorY + 2, pageWidth - 40, cursorY + 2);
+                        cursorY += 8;
                     }
                 } catch (err) {
                     console.error('[handleDownloadHistory] Error rendering period details:', err);
                 }
             }
 
-            try {
-                // Mostrar resumen breve en UI para depuración: cantidad de payments y periodDetails
-                const paymentsCount = Array.isArray(periodSourcePayments) ? periodSourcePayments.length : 0;
-                const periodsCount = Array.isArray(periodDetails) ? periodDetails.length : 0;
-                setSnackbar({ open: true, message: `DEBUG PDF: payments=${paymentsCount} periods=${periodsCount}`, severity: 'info' });
-            } catch (e) {
-                console.warn('[handleDownloadHistory] snackbar debug failed', e);
-            }
 
             // finalize and save
             const familyForName = (familyLastName && String(familyLastName).trim())
