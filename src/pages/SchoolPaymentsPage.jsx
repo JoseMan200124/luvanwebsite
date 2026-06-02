@@ -1102,11 +1102,19 @@ const SchoolPaymentsPage = () => {
 
             // Intentar traer el detalle completo del pago (incluye `periods`) para construir la tabla por MES.
             let paymentDetail = null;
+            let familyAccount = null;
             try {
                 const detailRes = await api.get(`/payments/by-user/${userId}`);
                 paymentDetail = detailRes?.data?.payment || null;
+                familyAccount = detailRes?.data?.familyAccount || null;
+
+                if (!Array.isArray(familyAccount?.payments) || familyAccount.payments.length === 0) {
+                    const accountRes = await api.get(`/payments/family-account/${userId}`);
+                    familyAccount = accountRes?.data?.familyAccount || familyAccount;
+                }
             } catch (e) {
                 paymentDetail = null;
+                familyAccount = null;
             }
 
             const attemptFetch = async (params) => {
@@ -1215,6 +1223,18 @@ const SchoolPaymentsPage = () => {
             // Build PDF
             const doc = new jsPDF({ unit: 'pt', format: 'a4' });
             const pageWidth = doc.internal.pageSize.width;
+            const pageHeight = doc.internal.pageSize.height;
+
+            const computeColumnWidths = (specWidths, availableWidth) => {
+                const totalSpec = specWidths.reduce((s, v) => s + (Number(v) || 0), 0) || 1;
+                const scaled = specWidths.map((w) => Math.floor((Number(w) || 0) * (availableWidth / totalSpec)));
+                const sumScaled = scaled.reduce((s, v) => s + v, 0);
+                if (sumScaled < availableWidth && scaled.length > 0) {
+                    // add remainder to last column
+                    scaled[scaled.length - 1] += (availableWidth - sumScaled);
+                }
+                return scaled;
+            };
 
             // Colores
             const GREEN = [146, 208, 80];
@@ -1380,6 +1400,9 @@ const SchoolPaymentsPage = () => {
             ];
 
             let summaryTableFinalY = rightStartY;
+            // compute available width for this mini-table
+            const summaryAvailable = Math.floor(pageWidth - rightLabelX - 40);
+            const summaryColWidths = computeColumnWidths([120, 95], summaryAvailable);
             autoTable(doc, {
                 startY: rightStartY - 2,
                 margin: { left: rightLabelX, right: 40 },
@@ -1388,8 +1411,8 @@ const SchoolPaymentsPage = () => {
                 theme: 'grid',
                 styles: { fontSize: 10, textColor: 0, cellPadding: 3.2, lineColor: GRID, lineWidth: 0.8 },
                 columnStyles: {
-                    0: { fontStyle: 'bold', fillColor: [245, 245, 245], cellWidth: 120 },
-                    1: { halign: 'right', cellWidth: 95 }
+                    0: { fontStyle: 'bold', fillColor: [245, 245, 245], cellWidth: summaryColWidths[0] },
+                    1: { halign: 'right', cellWidth: summaryColWidths[1] }
                 }
             });
             summaryTableFinalY = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY !== 'undefined')
@@ -1403,9 +1426,15 @@ const SchoolPaymentsPage = () => {
                 return [full, grade];
             });
 
+            const childTableStartY = Math.max(cursorY + 42);
+
+            // child table: compute widths fitting between left/right margins
+            const childAvailable = Math.floor(pageWidth - 40 - 40);
+            const childColWidths = computeColumnWidths([130, 60], Math.min(200, childAvailable));
             autoTable(doc, {
-                startY: cursorY + 36,
-                margin: { left: 40 },
+                startY: childTableStartY,
+                margin: { left: 40, right: 40 },
+                tableWidth: Math.min(200, childAvailable),
                 head: [
                     [{ content: 'HIJOS', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold', fontSize: 10, textColor: 0, fillColor: GREEN, lineColor: GRID, lineWidth: 1 } }],
                     ['Nombre', 'Grado']
@@ -1413,19 +1442,202 @@ const SchoolPaymentsPage = () => {
                 body: childTableBody.length > 0 ? childTableBody : [['-', '-']],
                 styles: { fontSize: 9, textColor: 0, cellPadding: 4, lineColor: GRID, lineWidth: 1 },
                 headStyles: { fillColor: GREEN, textColor: 0, halign: 'center', lineColor: GRID, lineWidth: 1 },
-                columnStyles: { 0: { cellWidth: 170 }, 1: { cellWidth: 70, halign: 'center' } },
-                tableWidth: 'auto',
+                columnStyles: { 0: { cellWidth: childColWidths[0] }, 1: { cellWidth: childColWidths[1], halign: 'center' } },
                 theme: 'grid',
             });
 
             const childrenTableFinalY = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY !== 'undefined')
                 ? doc.lastAutoTable.finalY
-                : cursorY + 120;
+                : childTableStartY + 120;
+            cursorY = Math.max(summaryTableFinalY, childrenTableFinalY) + 30;
 
             // Start the periods table below both summary + children tables
-            cursorY = Math.max(summaryTableFinalY, childrenTableFinalY) + 28;
 
-            // Periods table: construir desde `periods` si está disponible; fallback a unpaidPeriods (solo pendientes)
+            // Helpers for new sections
+            const monthNamesUpper = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+            const monthAbbrLower = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+            const ensureSpace = (requiredHeight) => {
+                const bottomMargin = 40;
+                if (cursorY + requiredHeight > pageHeight - bottomMargin) {
+                    doc.addPage();
+                    cursorY = 52;
+                }
+            };
+
+            const formatDateDMY = (d) => {
+                if (!d) return 'N/A';
+                const m = moment.parseZone(d);
+                return m.isValid() ? m.format('DD/MM/YYYY') : 'N/A';
+            };
+
+            const moneyCard = (v) => {
+                const num = Number(v || 0);
+                return `Q ${num.toFixed(2)}`;
+            };
+
+            const money = (v) => {
+                const num = Number(v || 0);
+                return `Q ${num.toFixed(2)}`;
+            };
+
+            const monthNamesTitle = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+            const formatPeriodName = (period, periodName) => {
+                // Prefer formatting from the `period` value (YYYY-MM). Fallback to periodName or raw.
+                const value = String(period || '').trim();
+                const match = /^(\d{4})-(\d{2})/.exec(value);
+                if (match) {
+                    const year = match[1];
+                    const monthIndex = Number(match[2]) - 1;
+                    const month = monthNamesTitle[monthIndex] || match[2];
+                    return `${month} ${year}`;
+                }
+                const name = (periodName || '').toString().trim();
+                return name || value || '-';
+            };
+
+            const resolveTotals = () => {
+                const totals = familyAccount?.totals || null;
+                if (totals) return totals;
+
+                const summaryArr = Array.isArray(periodsPayment?.periodsSummary) ? periodsPayment.periodsSummary : [];
+                const rawArr = Array.isArray(periodsPayment?.periods) ? periodsPayment.periods : [];
+                const periodsForCalc = summaryArr.length > 0 ? summaryArr : rawArr;
+
+                const balanceDue = (periodsForCalc || []).reduce((sum, p) => sum + (Number(p?.amountDue || 0) || 0), 0);
+                const penaltyDue = (periodsForCalc || []).reduce((sum, p) => sum + (Number(p?.penaltyDue || 0) || 0), 0);
+                const creditBalance = Number(periodsPayment?.creditBalance || payment?.creditBalance || 0) || 0;
+                const unpaidPeriodsCount = (periodsForCalc || []).reduce((sum, p) => sum + ((Number(p?.amountDue || 0) || 0) > 0 ? 1 : 0), 0);
+
+                return { balanceDue, penaltyDue, creditBalance, unpaidPeriodsCount };
+            };
+
+            const totals = resolveTotals();
+
+            const drawStatusBadge = (xRight, y, status) => {
+                const normalized = String(status || '').toUpperCase().trim() || 'PENDIENTE';
+                const label = (['CONFIRMADO', 'ADELANTADO', 'PAGADO'].includes(normalized)) ? 'PAGADO' : normalized;
+                const padX = 10;
+                const h = 16;
+                doc.setFontSize(9);
+                doc.setFont(undefined, 'bold');
+                const textW = Number(doc.getTextWidth(label)) || 0;
+                const safePadX = Number(padX) || 10;
+                const w = Math.max(54, textW + safePadX * 2);
+                const x = Number(xRight) - w;
+
+                let fill = [230, 230, 230];
+                let textColor = [0, 0, 0];
+                if (label === 'MORA') {
+                    fill = [244, 67, 54];
+                    textColor = [255, 255, 255];
+                } else if (label === 'PAGADO') {
+                    fill = GREEN;
+                    textColor = [0, 0, 0];
+                }
+
+                doc.setDrawColor(...GRID);
+                doc.setLineWidth(0.8);
+                doc.setFillColor(...fill);
+                const rrX = Number.isFinite(Number(x)) ? Number(x) : 40;
+                const rrY = Number.isFinite(Number(y - h + 3)) ? Number(y - h + 3) : Number(y);
+                const rrW = Number.isFinite(Number(w)) && Number(w) > 0 ? Number(w) : 54;
+                const rrH = Number.isFinite(Number(h)) && Number(h) > 0 ? Number(h) : 16;
+                try {
+                    doc.roundedRect(rrX, rrY, rrW, rrH, 6, 6, 'FD');
+                } catch (e) {
+                    doc.rect(rrX, rrY, rrW, rrH, 'FD');
+                }
+                doc.setTextColor(...textColor);
+                doc.text(label, x + w / 2, y, { align: 'center' });
+                doc.setTextColor(0, 0, 0);
+                doc.setFont(undefined, 'normal');
+            };
+
+            const drawSectionTitle = (title) => {
+                ensureSpace(34);
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'bold');
+                doc.text(title, 40, cursorY);
+                doc.setDrawColor(...GRID);
+                doc.setLineWidth(0.8);
+                const lx1 = 40;
+                const lx2 = Number.isFinite(Number(pageWidth)) ? Number(pageWidth) - 40 : 555;
+                doc.line(lx1, cursorY + 8, lx2, cursorY + 8);
+                cursorY += 22;
+            };
+
+            // === Resumen financiero (como vista de padres) ===
+            const preInsertCursor = cursorY;
+            try {
+                drawSectionTitle('Resumen financiero');
+            const schoolName = (periodsPayment?.School?.name || periodsPayment?.school?.name || familyPayment?.School?.name || familyPayment?.school?.name || 'Transporte Luvan').toString();
+            const cicloLabel = (periodsPayment?.CicloEscolar?.label || periodsPayment?.cicloEscolar?.label || periodsPayment?.CicloEscolar?.nombre || periodsPayment?.cicloEscolar?.nombre || '').toString();
+
+            const computedStatus = (familyPayment?.finalStatus || (Number(totals?.penaltyDue || 0) > 0 ? 'MORA' : 'PENDIENTE'));
+            ensureSpace(76);
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'bold');
+            doc.text(schoolName, 40, cursorY);
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'normal');
+            if (cicloLabel) {
+                doc.text(String(cicloLabel), 40, cursorY + 14);
+            }
+
+            cursorY += cicloLabel ? 26 : 18;
+
+            const cardGap = 10;
+            const cardsCount = 4;
+            const cardW = Number.isFinite(Number(pageWidth))
+                ? ((Number(pageWidth) - 80 - (cardGap * (cardsCount - 1))) / cardsCount)
+                : ((595 - 80 - (cardGap * (cardsCount - 1))) / cardsCount);
+            const cardH = 54;
+            const cardY = cursorY;
+
+            const metricCards = [
+                { label: 'Tarifa pendiente', value: moneyCard(totals?.balanceDue || 0) },
+                { label: 'Mora pendiente', value: moneyCard(totals?.penaltyDue || 0) },
+                { label: 'Crédito', value: moneyCard(totals?.creditBalance || 0) },
+                { label: 'Períodos pendientes', value: String(totals?.unpaidPeriodsCount || 0) },
+            ];
+
+            ensureSpace(cardH + 12);
+            for (let i = 0; i < metricCards.length; i++) {
+                const x = 40 + i * (cardW + cardGap);
+                doc.setDrawColor(...GRID);
+                doc.setLineWidth(0.8);
+                doc.setFillColor(255, 255, 255);
+                const sx = Number.isFinite(Number(x)) ? Number(x) : 40;
+                const sW = Number.isFinite(Number(cardW)) && Number(cardW) > 0 ? Number(cardW) : 100;
+                const sH = Number.isFinite(Number(cardH)) && Number(cardH) > 0 ? Number(cardH) : 40;
+                try {
+                    doc.roundedRect(sx, cardY, sW, sH, 8, 8, 'FD');
+                } catch (e) {
+                    doc.rect(sx, cardY, sW, sH, 'FD');
+                }
+
+                doc.setFontSize(8.5);
+                doc.setFont(undefined, 'normal');
+                doc.setTextColor(90);
+                doc.text(metricCards[i].label, x + 10, cardY + 16);
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(13);
+                doc.setFont(undefined, 'bold');
+                doc.text(String(metricCards[i].value || '-'), x + 10, cardY + 38);
+            }
+            doc.setFont(undefined, 'normal');
+            cursorY = cardY + cardH + 22;
+
+                // Space before existing table
+                cursorY += 6;
+            } catch (pdfSectionError) {
+                console.error('[handleDownloadHistory] Error rendering additional PDF sections:', pdfSectionError);
+                // Revert to cursor before attempt so main table renders in expected place
+                cursorY = preInsertCursor;
+            }
+
+            drawSectionTitle('Historial de Transacciones');
             const normalizePeriod = (p) => {
                 const periodKey = (p?.period || '').toString().slice(0, 7);
                 const originalAmount = Number(p?.originalAmount || p?.monthlyFee || 0) || 0;
@@ -1506,9 +1718,6 @@ const SchoolPaymentsPage = () => {
                 }
             }
 
-            const monthNamesUpper = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-            const monthAbbrLower = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-
             const formatPaidDate = (d) => {
                 if (!d) return '';
                 const m = moment.parseZone(d);
@@ -1516,11 +1725,6 @@ const SchoolPaymentsPage = () => {
                 const day = m.date();
                 const abbr = monthAbbrLower[m.month()] || '';
                 return abbr ? `${day}-${abbr}` : String(day);
-            };
-
-            const money = (v) => {
-                const num = Number(v || 0);
-                return `Q ${num.toFixed(2)}`;
             };
 
             let totalTarifa = 0;
@@ -1560,22 +1764,26 @@ const SchoolPaymentsPage = () => {
                 bodyRows = [[{ content: 'No se encontraron períodos para mostrar', colSpan: 7, styles: { halign: 'center' } }]];
             }
 
-            // Main periods table
+            // Main periods table: compute column widths to fit available space
+            const periodsAvailable = Math.floor(pageWidth - 40 - 40);
+            const periodsColSpec = [98, 64, 72, 52, 58, 84, 70];
+            const periodsColWidths = computeColumnWidths(periodsColSpec, periodsAvailable);
             autoTable(doc, {
                 startY: cursorY,
                 margin: { left: 40, right: 40 },
+                tableWidth: periodsAvailable,
                 head: [[ 'MES', 'TARIFA', 'DESCUENTOS', 'FECHA', 'MONTO', 'BOLETA', 'FALTANTE' ]],
                 body: bodyRows,
                 styles: { fontSize: 8.5, textColor: 0, cellPadding: 4, lineColor: GRID, lineWidth: 1, overflow: 'linebreak' },
                 headStyles: { fillColor: GREEN, textColor: 0, halign: 'center', fontStyle: 'bold', lineColor: GRID, lineWidth: 1 },
                 columnStyles: {
-                    0: { halign: 'left', cellWidth: 98 },
-                    1: { halign: 'right', cellWidth: 64 },
-                    2: { halign: 'right', cellWidth: 72 },
-                    3: { halign: 'center', cellWidth: 52 },
-                    4: { halign: 'right', cellWidth: 58 },
-                    5: { halign: 'center', cellWidth: 84 },
-                    6: { halign: 'right', cellWidth: 70 }
+                    0: { halign: 'left', cellWidth: periodsColWidths[0] },
+                    1: { halign: 'right', cellWidth: periodsColWidths[1] },
+                    2: { halign: 'right', cellWidth: periodsColWidths[2] },
+                    3: { halign: 'center', cellWidth: periodsColWidths[3] },
+                    4: { halign: 'right', cellWidth: periodsColWidths[4] },
+                    5: { halign: 'center', cellWidth: periodsColWidths[5] },
+                    6: { halign: 'right', cellWidth: periodsColWidths[6] }
                 },
                 theme: 'grid',
                 didParseCell: (data) => {
@@ -1589,14 +1797,318 @@ const SchoolPaymentsPage = () => {
                         data.cell.styles.fontStyle = 'bold';
                     }
                 },
-                didDrawPage: (data) => {
-                    const pageCount = doc.internal.getNumberOfPages();
-                    doc.setFontSize(8);
-                    doc.setTextColor(150);
-                    doc.text(`Página ${data.pageNumber} de ${pageCount}`, pageWidth / 2, doc.internal.pageSize.height - 18, { align: 'center' });
-                    doc.setTextColor(0, 0, 0);
-                }
+                // no footer page numbers
             });
+
+            const buildPaymentPeriods = (payment) => {
+                const sources = [
+                    payment?.periodsSummary,
+                    payment?.periods,
+                    payment?.PaymentPeriods,
+                    payment?.unpaidPeriods,
+                    payment?.penaltyPeriods,
+                ];
+                const byKey = new Map();
+
+                sources.forEach((source) => {
+                    if (!Array.isArray(source)) return;
+                    source.forEach((period) => {
+                        if (!period) return;
+                        const key = period.id || period.period || `${period.dueDate || ''}-${period.amountDue || ''}-${period.amountPaid || ''}`;
+                        if (!key) return;
+                        const existing = byKey.get(key) || {};
+                        byKey.set(key, {
+                            ...existing,
+                            ...period,
+                            paymentId: period.paymentId || payment?.id,
+                        });
+                    });
+                });
+
+                return Array.from(byKey.values());
+            };
+
+            const calculatePenaltyDays = (period) => {
+                if (period?.penaltyStartDate) {
+                    const endDate = period.penaltyFrozen && period.penaltyFrozenAt
+                        ? period.penaltyFrozenAt
+                        : new Date().toISOString().split('T')[0];
+                    const start = new Date(period.penaltyStartDate);
+                    const end = new Date(endDate);
+                    if (start.toString() !== 'Invalid Date' && end.toString() !== 'Invalid Date') {
+                        const msPerDay = 1000 * 60 * 60 * 24;
+                        const days = Math.max(0, Math.floor((end.getTime() - start.getTime()) / msPerDay));
+                        return days > 0 ? days : null;
+                    }
+                }
+                const dailyRate = Number(period?.penaltyAccrualBaseAmount || 0);
+                const penaltyAmount = Number(period?.penaltyAmount || 0);
+                if (dailyRate > 0 && penaltyAmount > 0) {
+                    const days = Math.round(penaltyAmount / dailyRate);
+                    return days > 0 ? days : null;
+                }
+                return null;
+            };
+
+            // DEBUG: mostrar fuentes antes de construir periodDetails
+            try {
+                console.debug('[PDF DEBUG] paymentDetail present:', !!paymentDetail, 'familyAccount.payments length:', Array.isArray(familyAccount?.payments) ? familyAccount.payments.length : 0);
+                if (Array.isArray(familyAccount?.payments) && familyAccount.payments.length > 0) {
+                    console.debug('[PDF DEBUG] familyAccount.payments sample:', familyAccount.payments.slice(0, 3).map(p => ({ id: p.id, periodsCount: (Array.isArray(p.periods) ? p.periods.length : 0) })));
+                }
+                if (paymentDetail) {
+                    console.debug('[PDF DEBUG] paymentDetail sample:', { id: paymentDetail.id, periodsCount: (Array.isArray(paymentDetail.periods) ? paymentDetail.periods.length : 0) });
+                }
+            } catch (e) {
+                console.warn('[PDF DEBUG] error while logging sources', e);
+            }
+
+            const periodSourcePayments = [
+                paymentDetail,
+                ...(Array.isArray(familyAccount?.payments) ? familyAccount.payments : []),
+            ].filter(Boolean);
+
+            const rawPeriodDetails = periodSourcePayments
+                .flatMap((paymentItem) => buildPaymentPeriods(paymentItem))
+                .filter(Boolean);
+
+            // Normalize period key to YYYY-MM when possible and dedupe globally across payments
+            const normalizePeriodKey = (p) => {
+                if (!p) return null;
+                const rawPeriod = String(p.period || '').trim();
+                if (rawPeriod) {
+                    const m = /^(\d{4})-(\d{2})/.exec(rawPeriod);
+                    if (m) return `${m[1]}-${m[2]}`;
+                    const tryMoment = moment(rawPeriod);
+                    if (tryMoment.isValid()) return tryMoment.format('YYYY-MM');
+                }
+
+                const candidateDate = p.dueDate || p.paidAt || p.createdAt || p.paymentDate || '';
+                if (candidateDate) {
+                    const mm = moment(candidateDate);
+                    if (mm.isValid()) return mm.format('YYYY-MM');
+                }
+
+                if (p.id) return `id:${p.id}`;
+                // final fallback
+                return `${p.dueDate || ''}-${p.amountDue || ''}`;
+            };
+
+            const mergedByKey = new Map();
+            rawPeriodDetails.forEach((p) => {
+                if (!p) return;
+                const key = normalizePeriodKey(p);
+                if (!key) return;
+                const existing = mergedByKey.get(key) || {};
+                mergedByKey.set(key, { ...existing, ...p });
+            });
+
+            const periodDetails = Array.from(mergedByKey.values())
+                .filter(Boolean)
+                .sort((a, b) => String(normalizePeriodKey(a) || '').localeCompare(String(normalizePeriodKey(b) || '')));
+
+            console.debug('[PDF DEBUG] periodDetails length before sort/filter:', periodDetails.length);
+            try {
+                console.debug('[PDF DEBUG] periodDetails sample keys:', periodDetails.slice(0, 5).map(p => ({ id: p.id, period: p.period, dueDate: p.dueDate, amountDue: p.amountDue })));
+            } catch (e) {
+                console.warn('[PDF DEBUG] error while logging periodDetails', e);
+            }
+
+            if (periodDetails.length > 0) {
+                try {
+                    doc.addPage();
+                    cursorY = 52;
+
+                    drawSectionTitle('Detalles de Períodos de Pago');
+
+                    for (const period of periodDetails) {
+                        if (!period) continue;
+                        ensureSpace(240);
+
+                        const displayPeriodName = formatPeriodName(period.period, period.periodName);
+                        const dueDate = period?.dueDate || '';
+                        const periodRouteType = String(period?.routeType || routeType || 'N/A');
+                        const studentsCountValue = Number(period?.studentsCount || studentsArr?.length || studentCount || 1) || 1;
+                        const originalAmount = Number(period?.originalAmount || period?.monthlyFee || 0) || 0;
+                        const discountApplied = Number(period?.discountApplied || 0) || 0;
+                        const extraDiscount = Number(period?.extraordinaryTariffDiscount || 0) || 0;
+                        const netAmount = Number(period?.netAmount ?? (originalAmount - discountApplied - extraDiscount)) || 0;
+                        const amountPaid = Number(period?.amountPaid ?? period?.paidAmount ?? 0) || 0;
+                        const amountDue = Number(period?.amountDue ?? 0) || 0;
+                        const penaltyDue = Number(period?.penaltyDue || 0) || 0;
+                        const penaltyAmount = Number(period?.penaltyAmount || 0) || 0;
+                        const penaltyPaid = Number(period?.penaltyPaid || 0) || 0;
+                        const penaltyDiscountApplied = Number(period?.penaltyDiscountApplied || 0) || 0;
+                        const penaltyAccrualBaseAmount = Number(period?.penaltyAccrualBaseAmount || 0) || 0;
+                        const penaltyDays = calculatePenaltyDays(period);
+                        const status = String(period?.status || 'PENDIENTE').toUpperCase();
+                        const hasMora = penaltyDue > 0 || penaltyAmount > 0 || !!period?.penaltyFrozen || !!period?.penaltyCleared;
+                        const effectiveStatus = hasMora ? 'MORA' : status;
+                        const totalPending = amountDue + penaltyDue;
+
+                        const headerY = Number(cursorY) || 52;
+                        const headerH = 26;
+                        doc.setFillColor(245, 245, 245);
+                        doc.setDrawColor(200, 200, 200);
+                        doc.setLineWidth(0.8);
+                        doc.rect(40, headerY, pageWidth - 80, headerH, 'FD');
+
+                        doc.setFont(undefined, 'bold');
+                        doc.setFontSize(11);
+                        doc.setTextColor(0, 0, 0);
+                        doc.text(displayPeriodName, 50, headerY + 16);
+                        doc.setFont(undefined, 'normal');
+                        doc.setFontSize(8);
+                        doc.setTextColor(100);
+                        doc.text(`Vence: ${formatDateDMY(dueDate)}`, 50, headerY + 26);
+                        drawStatusBadge(pageWidth - 50, headerY + 18, effectiveStatus);
+                        doc.setTextColor(0, 0, 0);
+
+                        cursorY = headerY + headerH + 10;
+
+                        doc.setFont(undefined, 'bold');
+                        doc.setFontSize(9);
+                        doc.text('SERVICIO', 50, cursorY);
+                        cursorY += 7;
+                        doc.setFont(undefined, 'normal');
+                        doc.setFontSize(8);
+                        doc.setTextColor(80);
+                        doc.text('Tipo de ruta:', 50, cursorY);
+                        doc.text(periodRouteType, pageWidth - 50, cursorY, { align: 'right' });
+                        cursorY += 7;
+                        doc.text('Estudiantes:', 50, cursorY);
+                        doc.text(String(studentsCountValue), pageWidth - 50, cursorY, { align: 'right' });
+                        cursorY += 11;
+
+                        doc.setFont(undefined, 'bold');
+                        doc.setFontSize(9);
+                        doc.setTextColor(0, 0, 0);
+                        doc.text('TARIFA', 50, cursorY);
+                        cursorY += 7;
+                        doc.setFont(undefined, 'normal');
+                        doc.setFontSize(8);
+                        doc.setTextColor(80);
+                        doc.text('Tarifa base:', 50, cursorY);
+                        doc.text(money(originalAmount), pageWidth - 50, cursorY, { align: 'right' });
+                        cursorY += 7;
+                        if (discountApplied > 0) {
+                            doc.text('Descuento familiar:', 50, cursorY);
+                            doc.setTextColor(21, 128, 61);
+                            doc.text(`- ${money(discountApplied)}`, pageWidth - 50, cursorY, { align: 'right' });
+                            cursorY += 7;
+                        }
+                        if (extraDiscount > 0) {
+                            doc.setTextColor(80);
+                            doc.text('Descuento extraordinario:', 50, cursorY);
+                            doc.setTextColor(21, 128, 61);
+                            doc.text(`- ${money(extraDiscount)}`, pageWidth - 50, cursorY, { align: 'right' });
+                            cursorY += 7;
+                        }
+                        doc.setTextColor(80);
+                        doc.text('Tarifa neta:', 50, cursorY);
+                        doc.setTextColor(0, 0, 0);
+                        doc.text(money(netAmount), pageWidth - 50, cursorY, { align: 'right' });
+                        cursorY += 7;
+                        doc.setTextColor(80);
+                        doc.text('Pagado:', 50, cursorY);
+                        doc.setTextColor(21, 128, 61);
+                        doc.text(money(amountPaid), pageWidth - 50, cursorY, { align: 'right' });
+                        cursorY += 11;
+
+                        if (hasMora) {
+                            doc.setFont(undefined, 'bold');
+                            doc.setFontSize(9);
+                            doc.setTextColor(0, 0, 0);
+                            doc.text('MORA', 50, cursorY);
+                            cursorY += 7;
+                            doc.setFont(undefined, 'normal');
+                            doc.setFontSize(8);
+                            doc.setTextColor(80);
+                            if (penaltyAccrualBaseAmount > 0) {
+                                doc.text('Mora por día:', 50, cursorY);
+                                doc.text(money(penaltyAccrualBaseAmount), pageWidth - 50, cursorY, { align: 'right' });
+                                cursorY += 7;
+                            }
+                            if (penaltyDays !== null) {
+                                doc.text('Días de mora:', 50, cursorY);
+                                doc.text(`${penaltyDays} ${penaltyDays === 1 ? 'día' : 'días'}`, pageWidth - 50, cursorY, { align: 'right' });
+                                cursorY += 7;
+                            }
+                            if (penaltyAmount > 0) {
+                                doc.text('Mora acumulada:', 50, cursorY);
+                                doc.text(money(penaltyAmount), pageWidth - 50, cursorY, { align: 'right' });
+                                cursorY += 7;
+                            }
+                            if (penaltyDiscountApplied > 0) {
+                                doc.text('Descuento extraordinario:', 50, cursorY);
+                                doc.setTextColor(21, 128, 61);
+                                doc.text(`- ${money(penaltyDiscountApplied)}`, pageWidth - 50, cursorY, { align: 'right' });
+                                cursorY += 7;
+                            }
+                            if (penaltyPaid > 0) {
+                                doc.setTextColor(80);
+                                doc.text('Mora pagada:', 50, cursorY);
+                                doc.setTextColor(21, 128, 61);
+                                doc.text(money(penaltyPaid), pageWidth - 50, cursorY, { align: 'right' });
+                                cursorY += 7;
+                            }
+                            doc.setTextColor(80);
+                            doc.text('Mora pendiente:', 50, cursorY);
+                            if (penaltyDue > 0) doc.setTextColor(244, 67, 54);
+                            else doc.setTextColor(0, 0, 0);
+                            doc.text(money(penaltyDue), pageWidth - 50, cursorY, { align: 'right' });
+                            cursorY += 11;
+                            if (period?.penaltyFrozen) {
+                                doc.setTextColor(0, 0, 0);
+                                doc.text('Mora congelada', 50, cursorY);
+                                cursorY += 7;
+                            }
+                            if (period?.penaltyCleared) {
+                                doc.setTextColor(0, 0, 0);
+                                doc.text('Mora exonerada', 50, cursorY);
+                                cursorY += 7;
+                            }
+                        }
+
+                        doc.setFont(undefined, 'bold');
+                        doc.setFontSize(9);
+                        doc.setTextColor(0, 0, 0);
+                        doc.text('RESUMEN', 50, cursorY);
+                        cursorY += 7;
+                        doc.setFont(undefined, 'normal');
+                        doc.setFontSize(8);
+                        doc.setTextColor(80);
+                        doc.text('Tarifa pendiente:', 50, cursorY);
+                        if (amountDue > 0) doc.setTextColor(244, 67, 54);
+                        else doc.setTextColor(21, 128, 61);
+                        doc.text(money(amountDue), pageWidth - 50, cursorY, { align: 'right' });
+                        cursorY += 7;
+                        if (penaltyDue > 0) {
+                            doc.text('Mora pendiente:', 50, cursorY);
+                            doc.setTextColor(244, 67, 54);
+                            doc.text(money(penaltyDue), pageWidth - 50, cursorY, { align: 'right' });
+                            cursorY += 7;
+                        }
+                        doc.setFont(undefined, 'bold');
+                        if (totalPending > 0) doc.setTextColor(244, 67, 54);
+                        else doc.setTextColor(21, 128, 61);
+                        doc.text('Total a pagar:', 50, cursorY);
+                        doc.text(money(totalPending), pageWidth - 50, cursorY, { align: 'right' });
+                        cursorY += 18;
+                    }
+                } catch (err) {
+                    console.error('[handleDownloadHistory] Error rendering period details:', err);
+                }
+            }
+
+            try {
+                // Mostrar resumen breve en UI para depuración: cantidad de payments y periodDetails
+                const paymentsCount = Array.isArray(periodSourcePayments) ? periodSourcePayments.length : 0;
+                const periodsCount = Array.isArray(periodDetails) ? periodDetails.length : 0;
+                setSnackbar({ open: true, message: `DEBUG PDF: payments=${paymentsCount} periods=${periodsCount}`, severity: 'info' });
+            } catch (e) {
+                console.warn('[handleDownloadHistory] snackbar debug failed', e);
+            }
 
             // finalize and save
             const familyForName = (familyLastName && String(familyLastName).trim())
