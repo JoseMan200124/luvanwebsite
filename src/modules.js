@@ -25,6 +25,7 @@ import CiclosEscolaresPage from './pages/CiclosEscolaresPage';
 import AttendanceManagementPage from './pages/AttendanceManagementPage';
 import StudentIncidentsPage from './pages/StudentIncidentsPage';
 import BusIncidentsPage from './pages/BusIncidentsPage';
+import FailureMappingPage from './pages/FailureMappingPage';
 import BusEmergenciesPage from './pages/BusEmergenciesPage';
 import MechanicRequestsPage from './pages/MechanicRequestsPage';
 import RequestsPage from './pages/RequestsPage';
@@ -167,9 +168,15 @@ export const modules = [
             },
             {
                 key: 'incidentes-buses',
-                name: 'Incidentes de Buses',
+                name: 'Incidentes de Pilotos',
                 path: 'incidentes-buses',
                 component: BusIncidentsPage,
+            },
+            {
+                key: 'mapeo-fallas',
+                name: 'Mapeo de Fallas',
+                path: 'mapeo-fallas',
+                component: FailureMappingPage,
             },
             {
                 key: 'emergencias-buses',

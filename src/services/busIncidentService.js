@@ -53,8 +53,14 @@ export const deleteBusIncident = async (id) => {
  * @param {number} id - ID del incidente
  * @param {string} descripcion - Nueva descripción
  */
-export const updateBusIncidentDescription = async (id, descripcion) => {
-    const response = await api.patch(`/bus-incidents/${id}/description`, { descripcion });
+
+/**
+ * Actualizar campos de un incidente (unificado)
+ * @param {number} id - ID del incidente
+ * @param {Object} payload - Campos a actualizar
+ */
+export const updateBusIncident = async (id, payload = {}) => {
+    const response = await api.patch(`/bus-incidents/${id}`, payload);
     return response.data;
 };
 

@@ -1,4 +1,4 @@
-// src/pages/BusIncidentsPage.jsx
+// src/pages/FailureMappingPage.jsx
 
 import React, { useEffect, useState } from 'react';
 import {
@@ -43,13 +43,14 @@ import {
     HelpOutline as OtherIcon,
     CheckCircle as CheckCircleIcon,
     Cancel as CancelIcon,
+    PictureAsPdf as PictureAsPdfIcon,
     Edit as EditIcon,
     Save as SaveIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
-import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, updateBusIncident, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
+import { getAllFailureMappings, getFailureMappingById, deleteFailureMapping, updateFailureMapping, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/failureMappingService';
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
@@ -58,7 +59,7 @@ moment.tz.setDefault('America/Guatemala');
 const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
-const BusIncidentsPage = () => {
+const FailureMappingPage = () => {
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(0);
@@ -76,6 +77,7 @@ const BusIncidentsPage = () => {
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedTipoFalla, setSelectedTipoFalla] = useState('');
     const [selectedTipo, setSelectedTipo] = useState('');
+    const [selectedOperacional, setSelectedOperacional] = useState('');
     const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
@@ -109,7 +111,9 @@ const BusIncidentsPage = () => {
         byTipoFalla: {},
         byTipo: {},
         withImpact: 0,
+        noOperacional: 0,
     });
+    const [exportingPdf, setExportingPdf] = useState(false);
 
     useEffect(() => {
         fetchSchools();
@@ -132,7 +136,7 @@ const BusIncidentsPage = () => {
     useEffect(() => {
         fetchIncidents();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, selectedTipoFalla, selectedTipo, selectedCicloEscolar, startDate, endDate, orderBy, order]);
+    }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, selectedTipoFalla, selectedTipo, selectedOperacional, selectedCicloEscolar, startDate, endDate, orderBy, order]);
 
     const fetchSchools = async () => {
         try {
@@ -221,59 +225,27 @@ const BusIncidentsPage = () => {
                 }
             }
             if (selectedTipo) filters.tipo = selectedTipo;
+            if (selectedOperacional !== '') filters.fueOperacional = selectedOperacional;
             if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
             if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
             filters.orderBy = orderBy;
             filters.order = order;
 
-            const data = await getAllBusIncidents(filters);
+            const data = await getAllFailureMappings(filters);
 
-            const incidentList = data.incidents || data.data || [];
+            const incidentList = data.failureMappings || data.incidents || data.data || [];
             setIncidents(incidentList);
-            setTotalCount(data.total || data.totalIncidents || 0);
+            setTotalCount(data.total || data.totalRecords || 0);
 
-            // Calcular estadísticas
-            if (data.countsByTipoFalla || data.countsByTipo || data.withImpact !== undefined) {
-                setStatistics({
-                    total: Number(data.totalIncidents || data.total || incidentList.length),
-                    byTipoFalla: data.countsByTipoFalla || {},
-                    byTipo: data.countsByTipo || {},
-                    withImpact: Number(data.withImpact || 0),
-                });
-            } else {
-                // Fallback: calcular desde la página
-                if (incidentList.length > 0) {
-                    const byTipoFalla = {};
-                    const byTipo = {};
-                    let withImpact = 0;
-
-                    incidentList.forEach(incident => {
-                        const tipoFalla = incident.tipoFalla || 'sin_falla';
-                        const tipo = incident.tipo || 'incidente';
-
-                        byTipoFalla[tipoFalla] = (byTipoFalla[tipoFalla] || 0) + 1;
-                        byTipo[tipo] = (byTipo[tipo] || 0) + 1;
-
-                        if (incident.impacto) withImpact++;
-                    });
-
-                    setStatistics({
-                        total: data.total || incidentList.length,
-                        byTipoFalla,
-                        byTipo,
-                        withImpact,
-                    });
-                } else {
-                    setStatistics({
-                        total: 0,
-                        byTipoFalla: {},
-                        byTipo: {},
-                        withImpact: 0,
-                    });
-                }
-            }
+            setStatistics({
+                total: Number(data.total || data.totalRecords || incidentList.length),
+                byTipoFalla: data.countsByTipoFalla || {},
+                byTipo: data.countsByTipo || {},
+                withImpact: Number(data.withImpact || 0),
+                noOperacional: Number(data.noOperacional || 0),
+            });
         } catch (error) {
-            console.error('Error al cargar incidentes:', error);
+            console.error('Error al cargar mapeos de fallas:', error);
         } finally {
             setLoading(false);
         }
@@ -293,15 +265,69 @@ const BusIncidentsPage = () => {
         setPage(0);
     };
 
+    const handleExportPDF = async () => {
+        setExportingPdf(true);
+        try {
+            const filters = {
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
+            };
+            if (selectedSchool) filters.schoolId = selectedSchool;
+            if (selectedCorporation) filters.corporationId = selectedCorporation;
+            if (selectedPlate) filters.plate = selectedPlate;
+            if (selectedRoute) filters.routeNumber = selectedRoute;
+            if (selectedTipoFalla) filters.tipoFalla = selectedTipoFalla;
+            if (selectedTipo) filters.tipo = selectedTipo;
+            if (selectedOperacional !== '') filters.fueOperacional = selectedOperacional;
+            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
+            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+
+            const resp = await api.get('/reports/bus-incidents/pdf', { params: filters, responseType: 'blob' });
+            const contentType = String(resp.headers['content-type'] || '').toLowerCase();
+
+            const blob = resp.data instanceof Blob ? resp.data : new Blob([resp.data], { type: contentType || 'application/pdf' });
+            if (!contentType.includes('application/pdf')) {
+                const txt = await blob.text();
+                let message = 'No se pudo generar el PDF.';
+                try { const parsed = JSON.parse(txt); message = parsed?.message || parsed?.error || message; } catch (_) { message = (txt || '').slice(0, 240); }
+                alert(`Error generando PDF: ${message}`);
+                return;
+            }
+
+            // Validate PDF header
+            const headerBuf = await blob.slice(0, 5).arrayBuffer();
+            const header = new TextDecoder('utf-8').decode(headerBuf);
+            if (header !== '%PDF-') {
+                const txt = await blob.text();
+                alert('El archivo recibido no es un PDF válido. ' + (txt || '').slice(0, 240));
+                return;
+            }
+
+            const url = window.URL.createObjectURL(blob);
+            const filename = 'mapeo_fallas.pdf';
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error descargando PDF:', error);
+            alert('Error al descargar el PDF. Revisar consola.');
+        } finally {
+            setExportingPdf(false);
+        }
+    };
+
     const handleViewDetails = async (incidentId) => {
         setLoadingDetails(true);
         setDetailsOpen(true);
         try {
-            const data = await getBusIncidentById(incidentId);
+            const data = await getFailureMappingById(incidentId);
             setSelectedIncident(data);
         } catch (error) {
-            console.error('Error al cargar detalles del incidente:', error);
-            alert('Error al cargar los detalles del incidente');
+            console.error('Error al cargar detalles del mapeo:', error);
+            alert('Error al cargar los detalles del mapeo de fallas');
         } finally {
             setLoadingDetails(false);
         }
@@ -335,7 +361,7 @@ const BusIncidentsPage = () => {
         if (!selectedIncident || !fechaValue) return;
         setSavingFecha(true);
         try {
-            await updateBusIncident(selectedIncident.id, { fecha: fechaValue.toISOString() });
+            await updateFailureMapping(selectedIncident.id, { fecha: fechaValue.toISOString() });
             setSelectedIncident(prev => ({ ...prev, fecha: fechaValue.toISOString() }));
             setEditingFecha(false);
             setFechaValue(null);
@@ -356,7 +382,7 @@ const BusIncidentsPage = () => {
         if (!selectedIncident) return;
         setSavingDescription(true);
         try {
-            await updateBusIncident(selectedIncident.id, { descripcion: descriptionValue });
+            await updateFailureMapping(selectedIncident.id, { descripcion: descriptionValue });
             setSelectedIncident(prev => ({ ...prev, descripcion: descriptionValue }));
             setEditingDescription(false);
             setDescriptionValue('');
@@ -386,13 +412,13 @@ const BusIncidentsPage = () => {
 
     const handleConfirmDelete = async () => {
         try {
-            await deleteBusIncident(deleteId);
+            await deleteFailureMapping(deleteId);
             setDeleteOpen(false);
             setDeleteId(null);
             fetchIncidents();
         } catch (error) {
-            console.error('Error al eliminar incidente:', error);
-            alert('Error al eliminar el incidente');
+            console.error('Error al eliminar mapeo:', error);
+            alert('Error al eliminar el mapeo de fallas');
         }
     };
 
@@ -435,11 +461,48 @@ const BusIncidentsPage = () => {
             <Container>
                 <Box mb={3}>
                     <Typography variant="h4" gutterBottom>
-                        Incidentes de Pilotos
+                        Mapeo de Fallas
                     </Typography>
                     <Typography variant="body2" color="textSecondary">
-                        Visualiza y analiza los incidentes y accidentes reportados por los pilotos
+                        Depuración y registro de fallas reportadas por los supervisores
                     </Typography>
+                    <Box
+                        mt={2}
+                        display="flex"
+                        flexWrap="wrap"
+                        alignItems="center"
+                        gap={1.5}
+                    >
+                        <Button
+                            variant="contained"
+                            onClick={handleExportPDF}
+                            disabled={exportingPdf}
+                            startIcon={<PictureAsPdfIcon />}
+                            sx={{
+                                borderRadius: 999,
+                                px: 2.5,
+                                py: 1.1,
+                                textTransform: 'none',
+                                fontWeight: 800,
+                                letterSpacing: 0.2,
+                                background: 'linear-gradient(135deg, #1f4e79 0%, #2f6ea8 100%)',
+                                boxShadow: '0 10px 24px rgba(31, 78, 121, 0.28)',
+                                '&:hover': {
+                                    background: 'linear-gradient(135deg, #173c5d 0%, #255d8f 100%)',
+                                    boxShadow: '0 12px 28px rgba(31, 78, 121, 0.34)',
+                                },
+                                '&:disabled': {
+                                    background: 'linear-gradient(135deg, #93b2cb 0%, #b4c9db 100%)',
+                                    color: '#fff',
+                                }
+                            }}
+                        >
+                            {exportingPdf ? 'Generando PDF...' : 'Generar Reporte PDF'}
+                        </Button>
+                        <Typography variant="body2" color="textSecondary" sx={{ maxWidth: 460, lineHeight: 1.35 }}>
+                            La generación del reporte toma en cuenta los filtros aplicados.
+                        </Typography>
+                    </Box>
                 </Box>
 
                 {/* Estadísticas */}
@@ -448,26 +511,10 @@ const BusIncidentsPage = () => {
                         <Card>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
-                                    Total Incidentes
+                                    Total Registros
                                 </Typography>
                                 <Typography variant="h4">
                                     {statistics.total}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Tipo de Falla Más Común
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.byTipoFalla).length > 0
-                                        ? FAILURE_TYPES[Object.keys(statistics.byTipoFalla).reduce((a, b) => 
-                                            statistics.byTipoFalla[a] > statistics.byTipoFalla[b] ? a : b
-                                        )] || 'Sin Falla'
-                                        : 'N/A'}
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -492,6 +539,18 @@ const BusIncidentsPage = () => {
                                 </Typography>
                                 <Typography variant="h4">
                                     {statistics.withImpact}
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <Card>
+                            <CardContent>
+                                <Typography color="textSecondary" gutterBottom>
+                                    Días No Operacionales
+                                </Typography>
+                                <Typography variant="h4" color="warning.main">
+                                    {statistics.noOperacional}
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -640,6 +699,21 @@ const BusIncidentsPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
+                        <Grid item xs={12} sm={6} md={1}>
+                            <FormControl fullWidth>
+                                <InputLabel>Operacional</InputLabel>
+                                <Select
+                                    value={selectedOperacional}
+                                    onChange={(e) => setSelectedOperacional(e.target.value)}
+                                    label="Operacional"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
+                                >
+                                    <MenuItem value="">Todos</MenuItem>
+                                    <MenuItem value="true">Sí</MenuItem>
+                                    <MenuItem value="false">No</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
                         <Grid item xs={12} sm={6} md={1.25}>
                             <DatePicker
                                 label="Fecha Inicio"
@@ -656,7 +730,6 @@ const BusIncidentsPage = () => {
                                 slotProps={{ textField: { fullWidth: true } }}
                             />
                         </Grid>
-                        {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
                     </Grid>
                 </Paper>
 
@@ -699,6 +772,15 @@ const BusIncidentsPage = () => {
                                                     Tipo de Falla
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell align="center">
+                                                <TableSortLabel
+                                                    active={orderBy === 'fueOperacional'}
+                                                    direction={orderBy === 'fueOperacional' ? order : 'asc'}
+                                                    onClick={() => handleSort('fueOperacional')}
+                                                >
+                                                    Operacional
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell>
                                                 <TableSortLabel
                                                     active={orderBy === 'placaBus'}
@@ -726,7 +808,7 @@ const BusIncidentsPage = () => {
                                                     Colegio/Corp.
                                                 </TableSortLabel>
                                             </TableCell>
-                                            <TableCell>Piloto</TableCell>
+                                            <TableCell>Supervisor</TableCell>
                                             <TableCell align="center">
                                                 <TableSortLabel
                                                     active={orderBy === 'impacto'}
@@ -755,7 +837,7 @@ const BusIncidentsPage = () => {
                                                     {moment(incident.fecha).format('DD/MM/YYYY hh:mm A')}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Chip 
+                                                    <Chip
                                                         label={INCIDENT_EVENT_TYPES[incident.tipo] || incident.tipo}
                                                         size="small"
                                                         color={getTipoColor(incident.tipo)}
@@ -763,15 +845,15 @@ const BusIncidentsPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     {incident.noFallas ? (
-                                                        <Chip 
+                                                        <Chip
                                                             label="Sin Fallas"
                                                             size="small"
                                                             color="success"
                                                             icon={<CheckCircleIcon />}
                                                         />
                                                     ) : (
-                                                        <Chip 
-                                                            label={incident.tipoFalla === 'otro' && incident.otroFallaDetalle 
+                                                        <Chip
+                                                            label={incident.tipoFalla === 'otro' && incident.otroFallaDetalle
                                                                 ? `Otro: ${incident.otroFallaDetalle}`
                                                                 : FAILURE_TYPES[incident.tipoFalla] || incident.tipoFalla}
                                                             size="small"
@@ -780,8 +862,15 @@ const BusIncidentsPage = () => {
                                                         />
                                                     )}
                                                 </TableCell>
+                                                <TableCell align="center">
+                                                    {incident.fueOperacional === false ? (
+                                                        <Chip label="No" size="small" color="warning" />
+                                                    ) : (
+                                                        <Chip label="Sí" size="small" color="success" />
+                                                    )}
+                                                </TableCell>
                                                 <TableCell>
-                                                    {incident.placaBus || 'N/A'}
+                                                    {incident.allBuses ? 'TODOS' : (incident.placaBus || 'N/A')}
                                                 </TableCell>
                                                 <TableCell>
                                                     {incident.numeroRuta || 'N/A'}
@@ -790,7 +879,7 @@ const BusIncidentsPage = () => {
                                                     {incident.colegio || incident.corporacion || 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {incident.piloto?.name || 'N/A'}
+                                                    {incident.supervisor?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     {incident.impacto ? (
@@ -830,8 +919,8 @@ const BusIncidentsPage = () => {
                                         ))}
                                         {incidents.length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={10} align="center">
-                                                    No se encontraron incidentes
+                                                <TableCell colSpan={11} align="center">
+                                                    No se encontraron registros
                                                 </TableCell>
                                             </TableRow>
                                         )}
@@ -861,7 +950,7 @@ const BusIncidentsPage = () => {
                     maxWidth="md"
                     fullWidth
                 >
-                    <DialogTitle>Detalles del Incidente</DialogTitle>
+                    <DialogTitle>Detalles del Mapeo de Fallas</DialogTitle>
                     <DialogContent dividers>
                         {loadingDetails ? (
                             <Box display="flex" justifyContent="center" p={3}>
@@ -924,7 +1013,7 @@ const BusIncidentsPage = () => {
                                     <Typography variant="subtitle2" color="textSecondary">
                                         Tipo de Evento
                                     </Typography>
-                                    <Chip 
+                                    <Chip
                                         label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
                                         color={getTipoColor(selectedIncident.tipo)}
                                         sx={{ mt: 1 }}
@@ -935,15 +1024,15 @@ const BusIncidentsPage = () => {
                                         Tipo de Falla
                                     </Typography>
                                     {selectedIncident.noFallas ? (
-                                        <Chip 
+                                        <Chip
                                             label="Sin Fallas Reportadas"
                                             color="success"
                                             icon={<CheckCircleIcon />}
                                             sx={{ mt: 1 }}
                                         />
                                     ) : (
-                                        <Chip 
-                                            label={selectedIncident.tipoFalla === 'otro' && selectedIncident.otroFallaDetalle 
+                                        <Chip
+                                            label={selectedIncident.tipoFalla === 'otro' && selectedIncident.otroFallaDetalle
                                                 ? `Otro: ${selectedIncident.otroFallaDetalle}`
                                                 : FAILURE_TYPES[selectedIncident.tipoFalla] || selectedIncident.tipoFalla}
                                             color={getTipoFallaColor(selectedIncident.tipoFalla)}
@@ -954,10 +1043,20 @@ const BusIncidentsPage = () => {
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
                                     <Typography variant="subtitle2" color="textSecondary">
+                                        ¿Fue Operacional? (hubo clases)
+                                    </Typography>
+                                    {selectedIncident.fueOperacional === false ? (
+                                        <Chip label="No" color="warning" size="small" sx={{ mt: 1 }} />
+                                    ) : (
+                                        <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
+                                    )}
+                                </Grid>
+                                <Grid item xs={12} sm={6}>
+                                    <Typography variant="subtitle2" color="textSecondary">
                                         Placa del Bus
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.placaBus || 'N/A'}
+                                        {selectedIncident.allBuses ? 'TODOS' : (selectedIncident.placaBus || 'N/A')}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
@@ -988,10 +1087,10 @@ const BusIncidentsPage = () => {
                                 )}
                                 <Grid item xs={12} sm={6}>
                                     <Typography variant="subtitle2" color="textSecondary">
-                                        Piloto
+                                        Supervisor
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.piloto?.name || 'N/A'}
+                                        {selectedIncident.supervisor?.name || 'N/A'}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
@@ -1026,17 +1125,17 @@ const BusIncidentsPage = () => {
                                 </Grid>
                                 {selectedIncident.allBuses && (
                                     <Grid item xs={12}>
-                                        <Chip 
-                                            label="Aplica para todos los buses" 
-                                            color="info" 
-                                            sx={{ mt: 1 }} 
+                                        <Chip
+                                            label="Aplica para todos los buses"
+                                            color="info"
+                                            sx={{ mt: 1 }}
                                         />
                                     </Grid>
                                 )}
                                 <Grid item xs={12}>
                                     <Box display="flex" alignItems="center" gap={1}>
                                         <Typography variant="subtitle2" color="textSecondary">
-                                            Descripción del Incidente
+                                            Descripción
                                         </Typography>
                                         {!editingDescription && (
                                             <Tooltip title="Editar descripción">
@@ -1111,7 +1210,7 @@ const BusIncidentsPage = () => {
                     <DialogTitle>Confirmar Eliminación</DialogTitle>
                     <DialogContent>
                         <Typography>
-                            ¿Estás seguro de que deseas eliminar este incidente? Esta acción no se puede deshacer.
+                            ¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.
                         </Typography>
                     </DialogContent>
                     <DialogActions>
@@ -1128,4 +1227,4 @@ const BusIncidentsPage = () => {
     );
 };
 
-export default BusIncidentsPage;
+export default FailureMappingPage;
