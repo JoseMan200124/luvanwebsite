@@ -41,7 +41,9 @@ import {
     Refresh as RefreshIcon, 
     Edit as EditIcon,
     Visibility as VisibilityIcon,
-    LocalGasStation as GasIcon 
+    LocalGasStation as GasIcon,
+    WarningAmber as WarningAmberIcon,
+    InfoOutlined as InfoOutlinedIcon
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import tw from 'twin.macro';
@@ -134,6 +136,8 @@ const FuelRecordsPage = () => {
         totalGallons: 0,
         totalAmount: 0,
         averagePrice: 0,
+        consumptionPerDay: 0,
+        consumptionPerRoute: 0,
         byReason: {},
     });
 
@@ -409,6 +413,8 @@ const FuelRecordsPage = () => {
                     totalGallons: parseFloat(totals.totalGallonage) || 0,
                     totalAmount: parseFloat(totals.totalAmount) || 0,
                     averagePrice: parseFloat(totals.avgPricePerGallon) || 0,
+                    consumptionPerDay: parseFloat(response.data.consumptionPerDay) || 0,
+                    consumptionPerRoute: parseFloat(response.data.consumptionPerRoute) || 0,
                     byReason: byReason,
                 });
             } else {
@@ -417,6 +423,8 @@ const FuelRecordsPage = () => {
                     totalGallons: 0,
                     totalAmount: 0,
                     averagePrice: 0,
+                    consumptionPerDay: 0,
+                    consumptionPerRoute: 0,
                     byReason: {},
                 });
             }
@@ -427,6 +435,8 @@ const FuelRecordsPage = () => {
                 totalGallons: 0,
                 totalAmount: 0,
                 averagePrice: 0,
+                consumptionPerDay: 0,
+                consumptionPerRoute: 0,
                 byReason: {},
             });
         }
@@ -806,10 +816,10 @@ const FuelRecordsPage = () => {
                 </Box>
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
+                <Grid container spacing={3} mb={3} alignItems="stretch">
+                    <Grid item xs={12} sm={6} md={2.4}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
                                 <Box display="flex" alignItems="center" mb={1}>
                                     <GasIcon color="primary" sx={{ mr: 1 }} />
                                     <Typography color="textSecondary" variant="body2">
@@ -822,9 +832,9 @@ const FuelRecordsPage = () => {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
+                    <Grid item xs={12} sm={6} md={2.4}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
                                 <Typography color="textSecondary" gutterBottom variant="body2">
                                     Total Galones
                                 </Typography>
@@ -834,9 +844,9 @@ const FuelRecordsPage = () => {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
+                    <Grid item xs={12} sm={6} md={2.4}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
                                 <Typography color="textSecondary" gutterBottom variant="body2">
                                     Total Gastado
                                 </Typography>
@@ -846,14 +856,29 @@ const FuelRecordsPage = () => {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
+                    <Grid item xs={12} sm={6} md={2.4}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
                                 <Typography color="textSecondary" gutterBottom variant="body2">
                                     Precio Promedio/Galón
                                 </Typography>
                                 <Typography variant="h4">
                                     {formatCurrency(statistics.averagePrice)}
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={2.4}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
+                                <Typography color="textSecondary" gutterBottom variant="body2">
+                                    Consumo de combustible por días/recorrido
+                                </Typography>
+                                <Typography variant="h5" sx={{ lineHeight: 1.2 }}>
+                                    {(Number(statistics.consumptionPerDay) || 0).toFixed(2)} gal/día
+                                </Typography>
+                                <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                                    {(Number(statistics.consumptionPerRoute) || 0).toFixed(2)} gal/recorrido
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -1085,6 +1110,7 @@ const FuelRecordsPage = () => {
                                                     Tipo Combustible
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell align="center">Anotación</TableCell>
                                             <TableCell align="right" sortDirection={orderBy === 'gallonage' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'gallonage'}
@@ -1142,6 +1168,24 @@ const FuelRecordsPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     {FUEL_TYPES[record.fuelType] || record.fuelType}
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    {record.notes?.trim() && (
+                                                        <Tooltip title={`Anotación: ${record.notes.trim()}`}>
+                                                            <Box
+                                                                component="span"
+                                                                sx={{
+                                                                    width: 14,
+                                                                    height: 14,
+                                                                    borderRadius: '50%',
+                                                                    display: 'inline-block',
+                                                                    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                                                                    boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.15)',
+                                                                    border: '1px solid rgba(251, 191, 36, 0.35)',
+                                                                }}
+                                                            />
+                                                        </Tooltip>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell align="right">
                                                     {parseFloat(record.gallonage).toFixed(2)}
