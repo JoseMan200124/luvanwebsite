@@ -172,8 +172,8 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
     // 1) Rutas primero
     const [selectedRoutes, setSelectedRoutes] = useState([]); // strings
-    // 2) Luego horario
-    const [selectedSchedule, setSelectedSchedule] = useState('');
+    // 2) Luego horario(s)
+    const [selectedSchedules, setSelectedSchedules] = useState([]);
 
     // Counts reales por horario para esas rutas
     const [scheduleCounts, setScheduleCounts] = useState(DEFAULT_COUNTS);
@@ -212,6 +212,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     // IDs para evitar race conditions (respuestas viejas pisan estado nuevo)
     const countsReqId = useRef(0);
     const previewReqId = useRef(0);
+    const initializedSchoolRef = useRef(false);
 
     const currentSchool = useMemo(() => {
         if (selectedSchool === 'all') return null;
@@ -275,6 +276,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
         () => (Array.isArray(schools) ? schools : []).map((s) => ({ value: String(s.id), label: s.name })),
         [schools]
     );
+    const allowAllSchools = schoolOptions.length > 1;
 
     const schoolIdsForAll = useMemo(
         () => (Array.isArray(schools) ? schools : []).map((s) => String(s.id)).filter(Boolean),
@@ -298,12 +300,29 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
         setter(typeof value === 'string' ? value.split(',') : value);
     };
 
+    useEffect(() => {
+        if (!open) {
+            initializedSchoolRef.current = false;
+            return;
+        }
+
+        if (initializedSchoolRef.current) return;
+
+        if (schoolOptions.length === 1) {
+            setSelectedSchool(String(schoolOptions[0].value));
+        } else {
+            setSelectedSchool('all');
+        }
+
+        initializedSchoolRef.current = true;
+    }, [open, schoolOptions.length]);
+
     // =========================
     // RESET al cambiar colegio
     // =========================
     useEffect(() => {
         setSelectedRoutes([]);
-        setSelectedSchedule('');
+        setSelectedSchedules([]);
         setScheduleCounts(DEFAULT_COUNTS);
         setPreview(null);
         setCountsLoading(false);
@@ -337,7 +356,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
             if (selectedRoutes.length === 0) {
                 setScheduleCounts(DEFAULT_COUNTS);
-                setSelectedSchedule('');
+                setSelectedSchedules([]);
                 setPreview(null);
                 return;
             }
@@ -362,16 +381,18 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                 });
                 setScheduleCounts(newCounts);
 
-                // Si el horario actual ya no aplica (0), lo limpiamos (sin loop)
-                if (selectedSchedule && Number(counts[selectedSchedule] || 0) <= 0) {
-                    setSelectedSchedule('');
+                const validSchedules = (selectedSchedules || []).filter((code) => Number(counts[String(code)] || 0) > 0);
+                if (!arraysEqual(validSchedules, selectedSchedules)) {
+                    setSelectedSchedules(validSchedules);
+                }
+                if (validSchedules.length === 0) {
                     setPreview(null);
                 }
             } catch (err) {
                 if (reqId !== countsReqId.current) return;
                 console.error('[CircularMasivaModal] Error cargando counts:', err);
                 setScheduleCounts(DEFAULT_COUNTS);
-                setSelectedSchedule('');
+                setSelectedSchedules([]);
                 setPreview(null);
                 setSnackbar({ open: true, message: 'No se pudieron calcular los horarios disponibles.', severity: 'error' });
             } finally {
@@ -400,14 +421,13 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                 return;
             }
 
-            // If parents role is selected and there is no schedule, we cannot build preview.
-            if (selectedSchool !== 'all' && !selectedSchedule && selectedRoles.includes('parents')) {
+            // Si se seleccionó el rol padres, debe haber al menos un horario válido.
+            if (selectedSchool !== 'all' && selectedRoles.includes('parents') && selectedSchedules.length === 0) {
                 setPreview(null);
                 return;
             }
 
-            // si se seleccionó un horario y está en 0, no pedimos preview
-            if (selectedSchool !== 'all' && selectedSchedule && Number(scheduleCounts[selectedSchedule] || 0) <= 0) {
+            if (selectedSchool !== 'all' && selectedSchedules.some((code) => Number(scheduleCounts[code] || 0) <= 0)) {
                 setPreview(null);
                 return;
             }
@@ -420,7 +440,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                     schoolId: selectedSchool,
                     schoolIds: selectedSchool === 'all' ? schoolIdsForAll : undefined,
                     routeNumbers: selectedSchool === 'all' ? [] : selectedRoutes,
-                    scheduleCode: selectedSchool === 'all' ? undefined : selectedSchedule,
+                    scheduleCodes: selectedSchool === 'all' ? undefined : selectedSchedules,
                     recipientRoles: selectedRoles,
                     padreFilters: padreSelected ? padreFilters : undefined,
                 });
@@ -446,7 +466,20 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
         loadPreview();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedSchedule, currentSchool?.id, selectedRoles, selectedRoutesKey, padreFiltersKey, padreSelected]);
+    }, [selectedSchedules, currentSchool?.id, selectedRoles, selectedRoutesKey, padreFiltersKey, padreSelected]);
+
+    const availableScheduleCodes = Object.keys(scheduleCounts).filter((code) => Number(scheduleCounts[code] || 0) > 0);
+    const allSchedulesSelected = availableScheduleCodes.length > 0 && availableScheduleCodes.every((code) => selectedSchedules.includes(code));
+
+    const handleSelectAllSchedules = (event) => {
+        const checked = event.target.checked;
+        setSelectedSchedules(checked ? [...availableScheduleCodes] : []);
+    };
+
+    const handleScheduleChange = (_, nextValue) => {
+        if (nextValue === null) return;
+        setSelectedSchedules(nextValue || []);
+    };
 
     const scheduleDisabled = (code) => {
         if (selectedRoutes.length === 0) return true;
@@ -464,9 +497,9 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             selectedSchool !== 'all' &&
             selectedRoutes.length > 0 &&
             selectedRoles.includes('parents') &&
-            !selectedSchedule
+            selectedSchedules.length === 0
         ) {
-            setSnackbar({ open: true, message: 'Selecciona un horario para las rutas elegidas.', severity: 'error' });
+            setSnackbar({ open: true, message: 'Selecciona al menos un horario para las rutas elegidas.', severity: 'error' });
             return;
         }
 
@@ -489,7 +522,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
             if (selectedSchool !== 'all' && selectedRoutes.length > 0) {
                 formData.append('routeNumbers', JSON.stringify(selectedRoutes));
-                formData.append('scheduleCode', selectedSchedule);
+                formData.append('scheduleCodes', JSON.stringify(selectedSchedules));
             }
 
             // Incluir roles seleccionados para que el backend pueda filtrar destinatarios
@@ -520,7 +553,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             setFile(null);
             setSelectedSchool('all');
             setSelectedRoutes([]);
-            setSelectedSchedule('');
+            setSelectedSchedules([]);
             setScheduleCounts(DEFAULT_COUNTS);
             setPreview(null);
             setSendEmail(false);
@@ -566,7 +599,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                 options={schoolOptions}
                                 value={String(selectedSchool)}
                                 onChange={(e) => setSelectedSchool(String(e.target.value))}
-                                allowAll
+                                allowAll={allowAllSchools}
                                 allLabel="Todos"
                             />
                             {selectedSchool !== 'all' && (
@@ -662,7 +695,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
                                         <Typography variant="subtitle1" fontWeight={600}>2) Horario</Typography>
                                         <Typography variant="caption" color="text.secondary">
-                                            {selectedSchedule ? scheduleLabel(selectedSchedule) : 'Sin seleccionar'}
+                                            {selectedSchedules.length ? selectedSchedules.map(scheduleLabel).join(', ') : 'Sin seleccionar'}
                                         </Typography>
                                     </Box>
                                 </AccordionSummary>
@@ -672,12 +705,23 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                         Se habilitan horarios que realmente tienen padres en las rutas seleccionadas.
                                     </FormHelperText>
 
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
+                                        <Checkbox
+                                            checked={allSchedulesSelected}
+                                            indeterminate={!allSchedulesSelected && selectedSchedules.length > 0}
+                                            onChange={handleSelectAllSchedules}
+                                            disabled={availableScheduleCodes.length === 0}
+                                            size="small"
+                                        />
+                                        <Typography variant="body2">Seleccionar todos los horarios disponibles</Typography>
+                                    </Box>
+
                                     <ToggleButtonGroup
-                                        value={selectedSchedule}
-                                        exclusive
-                                        onChange={(_, val) => setSelectedSchedule(val ?? '')}
+                                        value={selectedSchedules}
+                                        onChange={handleScheduleChange}
                                         fullWidth
                                         size="small"
+                                        multiple
                                         sx={{
                                             '& .MuiToggleButton-root': { textTransform: 'none', py: 1, border: '1px solid', borderColor: 'divider', borderRadius: 0 },
                                             '& .MuiToggleButton-root:first-of-type': { borderTopLeftRadius: 6, borderBottomLeftRadius: 6 },
@@ -753,7 +797,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
                                     {padreSelected && (
                                         <Accordion
-                                            defaultExpanded
+                                            defaultExpanded={false}
                                             elevation={0}
                                             sx={{
                                                 border: '1px solid',
@@ -829,7 +873,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                 </AccordionSummary>
 
                                 <AccordionDetails sx={{ pt: 2 }}>
-                                    {selectedSchool !== 'all' && selectedRoles.includes('parents') && !selectedSchedule ? (
+                                    {selectedSchool !== 'all' && selectedRoles.includes('parents') && selectedSchedules.length === 0 ? (
                                         <Alert severity="warning">Selecciona un horario para ver la vista previa.</Alert>
                                     ) : previewLoading ? (
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
