@@ -115,6 +115,12 @@ const FailureMappingPage = () => {
     });
     const [exportingPdf, setExportingPdf] = useState(false);
 
+    // Modal PDF
+    const [pdfModalOpen, setPdfModalOpen] = useState(false);
+    const [pdfModalSchoolId, setPdfModalSchoolId] = useState('');
+    const [pdfModalCorporationId, setPdfModalCorporationId] = useState('');
+    const [pdfModalMonth, setPdfModalMonth] = useState(moment().startOf('month'));
+
     useEffect(() => {
         fetchSchools();
         fetchCorporations();
@@ -265,21 +271,34 @@ const FailureMappingPage = () => {
         setPage(0);
     };
 
+    const handleOpenPdfModal = () => {
+        setPdfModalSchoolId('');
+        setPdfModalCorporationId('');
+        setPdfModalMonth(moment().startOf('month'));
+        setPdfModalOpen(true);
+    };
+
+    const handleClosePdfModal = () => {
+        setPdfModalOpen(false);
+    };
+
     const handleExportPDF = async () => {
+        if (!pdfModalSchoolId && !pdfModalCorporationId) {
+            alert('Selecciona un cliente para generar el reporte.');
+            return;
+        }
+        if (!pdfModalMonth || !pdfModalMonth.isValid()) {
+            alert('Selecciona un mes para generar el reporte.');
+            return;
+        }
         setExportingPdf(true);
         try {
             const filters = {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
+                month: pdfModalMonth.format('YYYY-MM'),
             };
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedCorporation) filters.corporationId = selectedCorporation;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedTipoFalla) filters.tipoFalla = selectedTipoFalla;
-            if (selectedTipo) filters.tipo = selectedTipo;
-            if (selectedOperacional !== '') filters.fueOperacional = selectedOperacional;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (pdfModalSchoolId) filters.schoolId = pdfModalSchoolId;
+            if (pdfModalCorporationId) filters.corporationId = pdfModalCorporationId;
 
             const resp = await api.get('/reports/bus-incidents/pdf', { params: filters, responseType: 'blob' });
             const contentType = String(resp.headers['content-type'] || '').toLowerCase();
@@ -303,7 +322,10 @@ const FailureMappingPage = () => {
             }
 
             const url = window.URL.createObjectURL(blob);
-            const filename = 'mapeo_fallas.pdf';
+            const clientName = pdfModalSchoolId
+                ? (schools.find(s => s.id === pdfModalSchoolId)?.name || 'cliente')
+                : (corporations.find(c => c.id === pdfModalCorporationId)?.name || 'cliente');
+            const filename = `mapeo_fallas_${clientName.replace(/\s+/g, '_')}_${pdfModalMonth.format('YYYY-MM')}.pdf`;
             const a = document.createElement('a');
             a.href = url;
             a.download = filename;
@@ -311,6 +333,7 @@ const FailureMappingPage = () => {
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
+            setPdfModalOpen(false);
         } catch (error) {
             console.error('Error descargando PDF:', error);
             alert('Error al descargar el PDF. Revisar consola.');
@@ -475,7 +498,7 @@ const FailureMappingPage = () => {
                     >
                         <Button
                             variant="contained"
-                            onClick={handleExportPDF}
+                            onClick={handleOpenPdfModal}
                             disabled={exportingPdf}
                             startIcon={<PictureAsPdfIcon />}
                             sx={{
@@ -500,7 +523,7 @@ const FailureMappingPage = () => {
                             {exportingPdf ? 'Generando PDF...' : 'Generar Reporte PDF'}
                         </Button>
                         <Typography variant="body2" color="textSecondary" sx={{ maxWidth: 460, lineHeight: 1.35 }}>
-                            La generación del reporte toma en cuenta los filtros aplicados.
+                            Selecciona el cliente y el mes para generar el reporte mensual.
                         </Typography>
                     </Box>
                 </Box>
@@ -837,14 +860,20 @@ const FailureMappingPage = () => {
                                                     {moment(incident.fecha).format('DD/MM/YYYY hh:mm A')}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Chip
-                                                        label={INCIDENT_EVENT_TYPES[incident.tipo] || incident.tipo}
-                                                        size="small"
-                                                        color={getTipoColor(incident.tipo)}
-                                                    />
+                                                    {incident.tipo === null ? (
+                                                        <Chip label="N/A" size="small" sx={{ bgcolor: 'grey.300', color: 'text.primary' }} />
+                                                    ) : (
+                                                        <Chip
+                                                            label={INCIDENT_EVENT_TYPES[incident.tipo] || incident.tipo}
+                                                            size="small"
+                                                            color={getTipoColor(incident.tipo)}
+                                                        />
+                                                    )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {incident.noFallas ? (
+                                                    {incident.fueOperacional === false ? (
+                                                        <Chip label="No aplica" size="small" />
+                                                    ) : incident.noFallas ? (
                                                         <Chip
                                                             label="Sin Fallas"
                                                             size="small"
@@ -882,14 +911,18 @@ const FailureMappingPage = () => {
                                                     {incident.supervisor?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    {incident.impacto ? (
+                                                    {incident.impacto === null ? (
+                                                        <Chip label="N/A" size="small" />
+                                                    ) : incident.impacto ? (
                                                         <Chip label="Sí" size="small" color="error" />
                                                     ) : (
                                                         <Chip label="No" size="small" color="success" />
                                                     )}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    {incident.pudoContinuarRuta ? (
+                                                    {incident.pudoContinuarRuta === null ? (
+                                                        <Chip label="N/A" size="small" />
+                                                    ) : incident.pudoContinuarRuta ? (
                                                         <CheckCircleIcon color="success" fontSize="small" />
                                                     ) : (
                                                         <CancelIcon color="error" fontSize="small" />
@@ -1013,17 +1046,23 @@ const FailureMappingPage = () => {
                                     <Typography variant="subtitle2" color="textSecondary">
                                         Tipo de Evento
                                     </Typography>
-                                    <Chip
-                                        label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
-                                        color={getTipoColor(selectedIncident.tipo)}
-                                        sx={{ mt: 1 }}
-                                    />
+                                    {selectedIncident.tipo === null ? (
+                                        <Chip label="N/A" size="small" sx={{ mt: 1, bgcolor: 'grey.300', color: 'text.primary' }} />
+                                    ) : (
+                                        <Chip
+                                            label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
+                                            color={getTipoColor(selectedIncident.tipo)}
+                                            sx={{ mt: 1 }}
+                                        />
+                                    )}
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
                                     <Typography variant="subtitle2" color="textSecondary">
                                         Tipo de Falla
                                     </Typography>
-                                    {selectedIncident.noFallas ? (
+                                    {selectedIncident.fueOperacional === false || selectedIncident.tipoFalla === null ? (
+                                        <Chip label="N/A" size="small" sx={{ mt: 1, bgcolor: 'grey.300', color: 'text.primary' }} />
+                                    ) : selectedIncident.noFallas ? (
                                         <Chip
                                             label="Sin Fallas Reportadas"
                                             color="success"
@@ -1097,7 +1136,9 @@ const FailureMappingPage = () => {
                                     <Typography variant="subtitle2" color="textSecondary">
                                         ¿Hubo Impacto?
                                     </Typography>
-                                    {selectedIncident.impacto ? (
+                                    {selectedIncident.impacto === null ? (
+                                        <Chip label="N/A" size="small" sx={{ mt: 1 }} />
+                                    ) : selectedIncident.impacto ? (
                                         <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
                                     ) : (
                                         <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />
@@ -1107,7 +1148,9 @@ const FailureMappingPage = () => {
                                     <Typography variant="subtitle2" color="textSecondary">
                                         ¿Pudo Continuar la Ruta?
                                     </Typography>
-                                    {selectedIncident.pudoContinuarRuta ? (
+                                    {selectedIncident.pudoContinuarRuta === null ? (
+                                        <Chip label="N/A" size="small" sx={{ mt: 1 }} />
+                                    ) : selectedIncident.pudoContinuarRuta ? (
                                         <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
                                     ) : (
                                         <Chip label="No" color="error" size="small" sx={{ mt: 1 }} />
@@ -1117,7 +1160,9 @@ const FailureMappingPage = () => {
                                     <Typography variant="subtitle2" color="textSecondary">
                                         ¿Se Utilizó Bus Suplente?
                                     </Typography>
-                                    {selectedIncident.seUtilizoBusSuplente ? (
+                                    {selectedIncident.seUtilizoBusSuplente === null ? (
+                                        <Chip label="N/A" size="small" sx={{ mt: 1 }} />
+                                    ) : selectedIncident.seUtilizoBusSuplente ? (
                                         <Chip label="Sí" color="warning" size="small" sx={{ mt: 1 }} />
                                     ) : (
                                         <Chip label="No" color="default" size="small" sx={{ mt: 1 }} />
@@ -1196,6 +1241,62 @@ const FailureMappingPage = () => {
                     <DialogActions>
                         <Button onClick={handleCloseDetails} color="primary">
                             Cerrar
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Modal Generar PDF */}
+                <Dialog open={pdfModalOpen} onClose={handleClosePdfModal} maxWidth="xs" fullWidth>
+                    <DialogTitle>Generar Reporte PDF</DialogTitle>
+                    <DialogContent dividers>
+                        <Box display="flex" flexDirection="column" gap={2} pt={1}>
+                            <FormControl fullWidth>
+                                <InputLabel>Colegio</InputLabel>
+                                <Select
+                                    value={pdfModalSchoolId}
+                                    onChange={(e) => { setPdfModalSchoolId(e.target.value); setPdfModalCorporationId(''); }}
+                                    label="Colegio"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
+                                >
+                                    <MenuItem value="">Ninguno</MenuItem>
+                                    {schools.map((school) => (
+                                        <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                            <FormControl fullWidth>
+                                <InputLabel>Corporación</InputLabel>
+                                <Select
+                                    value={pdfModalCorporationId}
+                                    onChange={(e) => { setPdfModalCorporationId(e.target.value); setPdfModalSchoolId(''); }}
+                                    label="Corporación"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
+                                >
+                                    <MenuItem value="">Ninguna</MenuItem>
+                                    {corporations.map((corp) => (
+                                        <MenuItem key={corp.id} value={corp.id}>{corp.name}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                            <DatePicker
+                                label="Mes del reporte"
+                                value={pdfModalMonth}
+                                onChange={(val) => setPdfModalMonth(val)}
+                                views={['year', 'month']}
+                                openTo="month"
+                                slotProps={{ textField: { fullWidth: true } }}
+                            />
+                        </Box>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleClosePdfModal} color="inherit">Cancelar</Button>
+                        <Button
+                            onClick={handleExportPDF}
+                            variant="contained"
+                            disabled={exportingPdf || (!pdfModalSchoolId && !pdfModalCorporationId) || !pdfModalMonth}
+                            startIcon={exportingPdf ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />}
+                        >
+                            {exportingPdf ? 'Generando...' : 'Generar PDF'}
                         </Button>
                     </DialogActions>
                 </Dialog>
