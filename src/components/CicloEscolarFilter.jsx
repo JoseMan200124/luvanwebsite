@@ -26,7 +26,8 @@ const CicloEscolarFilter = ({
     allLabel = 'Todos los ciclos',
     size = 'small',
     fullWidth = true,
-    sx
+    sx,
+    allowAll = true,
 }) => {
     const [ciclosEscolares, setCiclosEscolares] = useState([]);
 
@@ -50,15 +51,27 @@ const CicloEscolarFilter = ({
         };
     }, []);
 
+    // If allowAll is false and current value is ALL or falsy, auto-select first ciclo when loaded
+    useEffect(() => {
+        if (!allowAll && ciclosEscolares.length > 0) {
+            const current = (value || ALL_CYCLES_VALUE);
+            if (current === ALL_CYCLES_VALUE || !current) {
+                const firstId = String(ciclosEscolares[0].id);
+                onChange(firstId);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [allowAll, ciclosEscolares]);
+
     return (
         <FormControl fullWidth={fullWidth} size={size} sx={sx}>
             <InputLabel>{label}</InputLabel>
             <Select
-                value={value || ALL_CYCLES_VALUE}
+                value={value || (allowAll ? ALL_CYCLES_VALUE : (ciclosEscolares[0] ? String(ciclosEscolares[0].id) : ''))}
                 label={label}
                 onChange={(event) => onChange(event.target.value)}
             >
-                <MenuItem value={ALL_CYCLES_VALUE}>{allLabel}</MenuItem>
+                {allowAll && <MenuItem value={ALL_CYCLES_VALUE}>{allLabel}</MenuItem>}
                 {ciclosEscolares.map((cicloEscolar) => (
                     <MenuItem key={cicloEscolar.id} value={String(cicloEscolar.id)}>
                         {getCicloEscolarOptionLabel(cicloEscolar)}

@@ -30,6 +30,7 @@ import {
     DialogActions,
     Button,
     TextField,
+    Divider,
 } from '@mui/material';
 import { DatePicker, DateTimePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -46,6 +47,7 @@ import {
     PictureAsPdf as PictureAsPdfIcon,
     Edit as EditIcon,
     Save as SaveIcon,
+    Add as AddIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
@@ -60,6 +62,9 @@ const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
 const FailureMappingPage = () => {
+    const removeDiacritics = (s = '') => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const normalizeLabel = (s = '') => removeDiacritics(String(s)).toLowerCase().trim();
+
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(0);
@@ -120,6 +125,15 @@ const FailureMappingPage = () => {
     const [pdfModalSchoolId, setPdfModalSchoolId] = useState('');
     const [pdfModalCorporationId, setPdfModalCorporationId] = useState('');
     const [pdfModalMonth, setPdfModalMonth] = useState(moment().startOf('month'));
+    const [pdfModalCicloEscolar, setPdfModalCicloEscolar] = useState(getInitialCicloEscolarFilter);
+    const [pdfModalSchools, setPdfModalSchools] = useState([]);
+
+    // Indicadores extra (estructurados por secciones) para Resumen Ejecutivo del PDF
+    const [pdfExtraSections, setPdfExtraSections] = useState([]);
+    const [pdfAddMode, setPdfAddMode] = useState(null); // null | 'section' | 'indicator'
+    const [pdfAddTargetSection, setPdfAddTargetSection] = useState(null); // index of section when adding indicator
+    const [pdfAddLabel, setPdfAddLabel] = useState('');
+    const [pdfAddValue, setPdfAddValue] = useState('');
 
     useEffect(() => {
         fetchSchools();
@@ -275,12 +289,82 @@ const FailureMappingPage = () => {
         setPdfModalSchoolId('');
         setPdfModalCorporationId('');
         setPdfModalMonth(moment().startOf('month'));
+        setPdfModalCicloEscolar(getInitialCicloEscolarFilter);
+        setPdfModalSchools([]);
+        // Initialize default sections (Operación e Incidentes) and default Operación indicators
+        setPdfExtraSections([
+            { label: 'Operación', items: [ { label: 'Días con servicio', value: '' }, { label: 'Rutas', value: '' } ] },
+            { label: 'Incidentes', items: [] }
+        ]);
+        setPdfAddMode(null);
+        setPdfAddTargetSection(null);
+        setPdfAddLabel('');
+        setPdfAddValue('');
         setPdfModalOpen(true);
+    };
+
+    const handlePdfAddConfirm = () => {
+        if (!pdfAddLabel.trim()) return;
+        if (pdfAddMode === 'section') {
+            setPdfExtraSections(prev => [...prev, { label: pdfAddLabel.trim(), items: [] }]);
+        } else if (pdfAddMode === 'indicator' && Number.isInteger(pdfAddTargetSection)) {
+            setPdfExtraSections(prev => {
+                const next = prev.map((s, i) => ({ ...s }));
+                const target = next[pdfAddTargetSection];
+                if (target) {
+                    target.items = [...(target.items || []), { label: pdfAddLabel.trim(), value: pdfAddValue.trim() }];
+                }
+                return next;
+            });
+        }
+        setPdfAddMode(null);
+        setPdfAddTargetSection(null);
+        setPdfAddLabel('');
+        setPdfAddValue('');
+    };
+
+    const handlePdfAddCancel = () => {
+        setPdfAddMode(null);
+        setPdfAddTargetSection(null);
+        setPdfAddLabel('');
+        setPdfAddValue('');
+    };
+
+    const handlePdfRemoveIndicator = (sectionIndex, indicatorIndex) => {
+        setPdfExtraSections(prev => prev.map((s, i) => {
+            if (i !== sectionIndex) return s;
+            const nextItems = (s.items || []).filter((_, j) => j !== indicatorIndex);
+            return { ...s, items: nextItems };
+        }));
+    };
+
+    const handlePdfRemoveSection = (sectionIndex) => {
+        // Prevent removing the two default sections (indices 0 and 1)
+        if (sectionIndex === 0 || sectionIndex === 1) return;
+        setPdfExtraSections(prev => prev.filter((_, i) => i !== sectionIndex));
     };
 
     const handleClosePdfModal = () => {
         setPdfModalOpen(false);
     };
+
+    // Fetch schools for the modal based on ciclo escolar (corporations are cross-cycle)
+    const fetchPdfModalSchools = async (ciclo) => {
+        try {
+            const params = { ...getCicloEscolarFilterParams(ciclo), includeArchived: true };
+            const response = await api.get('/schools', { params });
+            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            setPdfModalSchools(schoolsData);
+        } catch (error) {
+            console.error('Error al cargar colegios para modal PDF:', error);
+            setPdfModalSchools([]);
+        }
+    };
+
+    useEffect(() => {
+        if (pdfModalOpen) fetchPdfModalSchools(pdfModalCicloEscolar);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfModalCicloEscolar, pdfModalOpen]);
 
     const handleExportPDF = async () => {
         if (!pdfModalSchoolId && !pdfModalCorporationId) {
@@ -294,11 +378,11 @@ const FailureMappingPage = () => {
         setExportingPdf(true);
         try {
             const filters = {
-                ...getCicloEscolarFilterParams(selectedCicloEscolar),
                 month: pdfModalMonth.format('YYYY-MM'),
             };
             if (pdfModalSchoolId) filters.schoolId = pdfModalSchoolId;
             if (pdfModalCorporationId) filters.corporationId = pdfModalCorporationId;
+            if (Array.isArray(pdfExtraSections) && pdfExtraSections.length > 0) filters.extraIndicators = JSON.stringify(pdfExtraSections);
 
             const resp = await api.get('/reports/bus-incidents/pdf', { params: filters, responseType: 'blob' });
             const contentType = String(resp.headers['content-type'] || '').toLowerCase();
@@ -779,29 +863,20 @@ const FailureMappingPage = () => {
                                             </TableCell>
                                             <TableCell>
                                                 <TableSortLabel
+                                                    active={orderBy === 'colegio'}
+                                                    direction={orderBy === 'colegio' ? order : 'asc'}
+                                                    onClick={() => handleSort('colegio')}
+                                                >
+                                                    Colegio/Corp.
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell>
+                                                <TableSortLabel
                                                     active={orderBy === 'tipo'}
                                                     direction={orderBy === 'tipo' ? order : 'asc'}
                                                     onClick={() => handleSort('tipo')}
                                                 >
                                                     Tipo
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'tipoFalla'}
-                                                    direction={orderBy === 'tipoFalla' ? order : 'asc'}
-                                                    onClick={() => handleSort('tipoFalla')}
-                                                >
-                                                    Tipo de Falla
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={orderBy === 'fueOperacional'}
-                                                    direction={orderBy === 'fueOperacional' ? order : 'asc'}
-                                                    onClick={() => handleSort('fueOperacional')}
-                                                >
-                                                    Operacional
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell>
@@ -822,23 +897,31 @@ const FailureMappingPage = () => {
                                                     Ruta
                                                 </TableSortLabel>
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell align="center">
                                                 <TableSortLabel
-                                                    active={orderBy === 'colegio'}
-                                                    direction={orderBy === 'colegio' ? order : 'asc'}
-                                                    onClick={() => handleSort('colegio')}
+                                                    active={orderBy === 'fueOperacional'}
+                                                    direction={orderBy === 'fueOperacional' ? order : 'asc'}
+                                                    onClick={() => handleSort('fueOperacional')}
                                                 >
-                                                    Colegio/Corp.
+                                                    Día Operacional
                                                 </TableSortLabel>
                                             </TableCell>
-                                            <TableCell>Supervisor</TableCell>
+                                            <TableCell>
+                                                <TableSortLabel
+                                                    active={orderBy === 'tipoFalla'}
+                                                    direction={orderBy === 'tipoFalla' ? order : 'asc'}
+                                                    onClick={() => handleSort('tipoFalla')}
+                                                >
+                                                    Tipo de Falla
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell align="center">
                                                 <TableSortLabel
                                                     active={orderBy === 'impacto'}
                                                     direction={orderBy === 'impacto' ? order : 'asc'}
                                                     onClick={() => handleSort('impacto')}
                                                 >
-                                                    Impacto
+                                                    Hubo Impacto
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell align="center">
@@ -850,6 +933,7 @@ const FailureMappingPage = () => {
                                                     Continuó Ruta
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell>Supervisor</TableCell>
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </TableHead>
@@ -860,6 +944,9 @@ const FailureMappingPage = () => {
                                                     {moment(incident.fecha).format('DD/MM/YYYY hh:mm A')}
                                                 </TableCell>
                                                 <TableCell>
+                                                    {incident.colegio || incident.corporacion || 'N/A'}
+                                                </TableCell>
+                                                <TableCell>
                                                     {incident.tipo === null ? (
                                                         <Chip label="N/A" size="small" sx={{ bgcolor: 'grey.300', color: 'text.primary' }} />
                                                     ) : (
@@ -868,6 +955,19 @@ const FailureMappingPage = () => {
                                                             size="small"
                                                             color={getTipoColor(incident.tipo)}
                                                         />
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {incident.allBuses ? 'TODOS' : (incident.placaBus || 'N/A')}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {incident.numeroRuta || 'N/A'}
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    {incident.fueOperacional === false ? (
+                                                        <Chip label="No" size="small" color="warning" />
+                                                    ) : (
+                                                        <Chip label="Sí" size="small" color="success" />
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
@@ -892,25 +992,6 @@ const FailureMappingPage = () => {
                                                     )}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    {incident.fueOperacional === false ? (
-                                                        <Chip label="No" size="small" color="warning" />
-                                                    ) : (
-                                                        <Chip label="Sí" size="small" color="success" />
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {incident.allBuses ? 'TODOS' : (incident.placaBus || 'N/A')}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {incident.numeroRuta || 'N/A'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {incident.colegio || incident.corporacion || 'N/A'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {incident.supervisor?.name || 'N/A'}
-                                                </TableCell>
-                                                <TableCell align="center">
                                                     {incident.impacto === null ? (
                                                         <Chip label="N/A" size="small" />
                                                     ) : incident.impacto ? (
@@ -927,6 +1008,9 @@ const FailureMappingPage = () => {
                                                     ) : (
                                                         <CancelIcon color="error" fontSize="small" />
                                                     )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {incident.supervisor?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     <Tooltip title="Ver detalles">
@@ -1246,10 +1330,16 @@ const FailureMappingPage = () => {
                 </Dialog>
 
                 {/* Modal Generar PDF */}
-                <Dialog open={pdfModalOpen} onClose={handleClosePdfModal} maxWidth="xs" fullWidth>
+                <Dialog open={pdfModalOpen} onClose={handleClosePdfModal} maxWidth="sm" fullWidth>
                     <DialogTitle>Generar Reporte PDF</DialogTitle>
                     <DialogContent dividers>
                         <Box display="flex" flexDirection="column" gap={2} pt={1}>
+                            <CicloEscolarFilter
+                                size="small"
+                                value={pdfModalCicloEscolar}
+                                onChange={(val) => setPdfModalCicloEscolar(val)}
+                                allowAll={false}
+                            />
                             <FormControl fullWidth>
                                 <InputLabel>Colegio</InputLabel>
                                 <Select
@@ -1257,9 +1347,10 @@ const FailureMappingPage = () => {
                                     onChange={(e) => { setPdfModalSchoolId(e.target.value); setPdfModalCorporationId(''); }}
                                     label="Colegio"
                                     MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
+                                    disabled={Boolean(pdfModalCorporationId)}
                                 >
                                     <MenuItem value="">Ninguno</MenuItem>
-                                    {schools.map((school) => (
+                                    {pdfModalSchools.map((school) => (
                                         <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
                                     ))}
                                 </Select>
@@ -1271,6 +1362,7 @@ const FailureMappingPage = () => {
                                     onChange={(e) => { setPdfModalCorporationId(e.target.value); setPdfModalSchoolId(''); }}
                                     label="Corporación"
                                     MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
+                                    disabled={Boolean(pdfModalSchoolId)}
                                 >
                                     <MenuItem value="">Ninguna</MenuItem>
                                     {corporations.map((corp) => (
@@ -1286,6 +1378,122 @@ const FailureMappingPage = () => {
                                 openTo="month"
                                 slotProps={{ textField: { fullWidth: true } }}
                             />
+
+                            <Divider />
+
+                            <Box>
+                                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                                    Indicadores Resumen Ejecutivo
+                                </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block" mb={1}>
+                                    Agrega indicadores dentro de cada sección. Las secciones "Operación" e "Incidentes" siempre aparecen.
+                                </Typography>
+
+                                {/* Secciones */}
+                                {pdfExtraSections.map((section, sIdx) => (
+                                    <Box key={sIdx} mb={1}>
+                                        <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} sx={{ bgcolor: '#e8eef7', px: 1.25, py: 0.75, borderRadius: 1 }}>
+                                            <Typography variant="body2" fontWeight={700} color="#1f4e79">
+                                                {section.label}
+                                            </Typography>
+                                            <Box display="flex" gap={1}>
+                                                <Button size="small" variant="outlined" onClick={() => { setPdfAddMode('indicator'); setPdfAddTargetSection(sIdx); setPdfAddLabel(''); setPdfAddValue(''); }}>
+                                                    Agregar indicador
+                                                </Button>
+                                                {sIdx > 1 && (
+                                                    <Button size="small" color="error" variant="text" onClick={() => handlePdfRemoveSection(sIdx)}>
+                                                        Eliminar sección
+                                                    </Button>
+                                                )}
+                                            </Box>
+                                        </Box>
+
+                                        {/* Indicadores de la sección */}
+                                        {(section.items || []).length > 0 && (
+                                            <Box display="flex" flexDirection="column" gap={0.5} mt={0.5}>
+                                                {section.items.map((it, idx) => {
+                                                    const isOper = normalizeLabel(section.label) === 'operacion';
+                                                    const nl = normalizeLabel(it.label);
+                                                    const isDefaultOpIndicator = isOper && (nl === 'dias con servicio' || nl === 'rutas');
+                                                    if (isDefaultOpIndicator) {
+                                                        return (
+                                                            <Box key={idx} display="flex" alignItems="center" gap={1} sx={{ bgcolor: '#fafafa', border: '1px solid #e0e0e0', borderRadius: 1, px: 1.5, py: 0.75 }}>
+                                                                <Typography variant="body2" sx={{ minWidth: 180 }}>{it.label}</Typography>
+                                                                <TextField
+                                                                    size="small"
+                                                                    value={it.value || ''}
+                                                                    onChange={(e) => {
+                                                                        const v = e.target.value;
+                                                                        setPdfExtraSections(prev => prev.map((s, i) => {
+                                                                            if (i !== sIdx) return s;
+                                                                            const next = { ...s, items: (s.items || []).map((x, j) => j === idx ? ({ ...x, value: v }) : x) };
+                                                                            return next;
+                                                                        }));
+                                                                    }}
+                                                                    sx={{ flex: 1 }}
+                                                                />
+                                                            </Box>
+                                                        );
+                                                    }
+
+                                                    return (
+                                                        <Box key={idx} display="flex" alignItems="center" gap={1} sx={{ bgcolor: '#fafafa', border: '1px solid #e0e0e0', borderRadius: 1, px: 1.5, py: 0.75 }}>
+                                                            <Typography variant="body2" flex={1}>
+                                                                <strong>{it.label}:</strong>{it.value ? ` ${it.value}` : ''}
+                                                            </Typography>
+                                                            <Tooltip title="Eliminar">
+                                                                <IconButton size="small" onClick={() => handlePdfRemoveIndicator(sIdx, idx)} color="error">
+                                                                    <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </Box>
+                                                    );
+                                                })}
+                                            </Box>
+                                        )}
+
+                                        {/* Inline add form for this section */}
+                                        {pdfAddMode === 'indicator' && pdfAddTargetSection === sIdx && (
+                                            <Box display="flex" flexDirection="column" gap={1} mt={1} sx={{ border: '1px dashed #90caf9', borderRadius: 1, p: 1.25 }}>
+                                                <TextField label="Nombre del indicador" value={pdfAddLabel} onChange={(e) => setPdfAddLabel(e.target.value)} size="small" fullWidth autoFocus />
+                                                <TextField label="Valor" value={pdfAddValue} onChange={(e) => setPdfAddValue(e.target.value)} size="small" fullWidth />
+                                                <Box display="flex" gap={1}>
+                                                    <Button size="small" variant="contained" onClick={handlePdfAddConfirm} disabled={!pdfAddLabel.trim()}>
+                                                        Agregar
+                                                    </Button>
+                                                    <Button size="small" variant="outlined" onClick={handlePdfAddCancel}>
+                                                        Cancelar
+                                                    </Button>
+                                                </Box>
+                                            </Box>
+                                        )}
+                                    </Box>
+                                ))}
+
+                                {/* Agregar nueva sección */}
+                                {!pdfAddMode && (
+                                    <Box display="flex" gap={1} mt={1}>
+                                        <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => { setPdfAddMode('section'); setPdfAddLabel(''); }}>
+                                            Agregar sección
+                                        </Button>
+                                    </Box>
+                                )}
+
+                                {/* Formulario para nueva sección */}
+                                {pdfAddMode === 'section' && (
+                                    <Box display="flex" flexDirection="column" gap={1} mt={1} sx={{ border: '1px dashed #90caf9', borderRadius: 1, p: 1.25 }}>
+                                        <TextField label="Nombre de la sección" value={pdfAddLabel} onChange={(e) => setPdfAddLabel(e.target.value)} size="small" fullWidth autoFocus />
+                                        <Box display="flex" gap={1}>
+                                            <Button size="small" variant="contained" onClick={handlePdfAddConfirm} disabled={!pdfAddLabel.trim()}>
+                                                Agregar sección
+                                            </Button>
+                                            <Button size="small" variant="outlined" onClick={handlePdfAddCancel}>
+                                                Cancelar
+                                            </Button>
+                                        </Box>
+                                    </Box>
+                                )}
+                            </Box>
                         </Box>
                     </DialogContent>
                     <DialogActions>
