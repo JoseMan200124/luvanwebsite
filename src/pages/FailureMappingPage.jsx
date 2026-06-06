@@ -55,6 +55,7 @@ import tw from 'twin.macro';
 import { getAllFailureMappings, getFailureMappingById, deleteFailureMapping, updateFailureMapping, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/failureMappingService';
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import PermissionGuard from '../components/PermissionGuard';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -1022,7 +1023,8 @@ const FailureMappingPage = () => {
                                                             <VisibilityIcon />
                                                         </IconButton>
                                                     </Tooltip>
-                                                    <Tooltip title="Eliminar">
+                                                    <PermissionGuard permission="mapeo-fallas-eliminar">
+                                                    <Tooltip title="Eliminar" >
                                                         <IconButton
                                                             size="small"
                                                             onClick={() => handleOpenDelete(incident.id)}
@@ -1031,6 +1033,7 @@ const FailureMappingPage = () => {
                                                             <DeleteIcon />
                                                         </IconButton>
                                                     </Tooltip>
+                                                    </PermissionGuard>
                                                 </TableCell>
                                             </TableRow>
                                         ))}

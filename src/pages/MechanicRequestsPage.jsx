@@ -65,6 +65,7 @@ import {
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
     ${tw`p-6`}
@@ -755,7 +756,7 @@ const MechanicRequestsPage = () => {
                                                         <EditIcon fontSize="small" />
                                                     </IconButton>
                                                 </Tooltip>
-                                                {(userRole === 'Administrador' || userRole === 'Gestor') && (
+                                                <PermissionGuard permission="mecanica-eliminar-solicitud">
                                                     <Tooltip title="Eliminar">
                                                         <IconButton
                                                             size="small"
@@ -765,7 +766,7 @@ const MechanicRequestsPage = () => {
                                                             <DeleteIcon fontSize="small" />
                                                         </IconButton>
                                                     </Tooltip>
-                                                )}
+                                                </PermissionGuard>
                                             </TableCell>
                                         </TableRow>
                                     ))
