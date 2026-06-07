@@ -49,6 +49,22 @@ export const deleteBusIncident = async (id) => {
 };
 
 /**
+ * Actualizar la descripción de un incidente
+ * @param {number} id - ID del incidente
+ * @param {string} descripcion - Nueva descripción
+ */
+
+/**
+ * Actualizar campos de un incidente (unificado)
+ * @param {number} id - ID del incidente
+ * @param {Object} payload - Campos a actualizar
+ */
+export const updateBusIncident = async (id, payload = {}) => {
+    const response = await api.patch(`/bus-incidents/${id}`, payload);
+    return response.data;
+};
+
+/**
  * Obtener estadísticas de incidentes
  * @param {Object} filters - Filtros para las estadísticas
  */
@@ -65,6 +81,10 @@ export const getBusIncidentStatistics = async (filters = {}) => {
     return response.data;
 };
 
+/**
+ * Obtener todos los incidentes (para export/descarga) sin paginación (intenta traer muchos)
+ * @param {Object} filters - Filtros para la consulta
+ */
 /**
  * Tipos de falla disponibles
  */
