@@ -52,6 +52,7 @@ import tw from 'twin.macro';
 import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, updateBusIncident, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import PermissionGuard from '../components/PermissionGuard';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -816,15 +817,17 @@ const BusIncidentsPage = () => {
                                                             <VisibilityIcon />
                                                         </IconButton>
                                                     </Tooltip>
-                                                    <Tooltip title="Eliminar">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleOpenDelete(incident.id)}
-                                                            color="error"
-                                                        >
-                                                            <DeleteIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    <PermissionGuard permission="incidentes-buses-eliminar">
+                                                        <Tooltip title="Eliminar">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={() => handleOpenDelete(incident.id)}
+                                                                color="error"
+                                                            >
+                                                                <DeleteIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </PermissionGuard>
                                                 </TableCell>
                                             </TableRow>
                                         ))}

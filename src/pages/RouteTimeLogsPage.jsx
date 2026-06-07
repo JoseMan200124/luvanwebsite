@@ -43,6 +43,7 @@ import ExcelJS from 'exceljs';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import PermissionGuard from '../components/PermissionGuard';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -871,11 +872,13 @@ const RouteTimeLogsPage = () => {
                                                     />
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Eliminar registro">
-                                                        <IconButton onClick={() => handleOpenDelete(log.id)} size="small" color="error">
-                                                            <DeleteIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    <PermissionGuard permission="monitora-eliminar-tiempos">
+                                                        <Tooltip title="Eliminar registro">
+                                                            <IconButton onClick={() => handleOpenDelete(log.id)} size="small" color="error">
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </PermissionGuard>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
