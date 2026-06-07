@@ -25,6 +25,14 @@ export const getMechanicRequestById = async (id) => {
 };
 
 /**
+ * Crear una nueva solicitud de mecánica
+ */
+export const createMechanicRequest = async (data) => {
+    const response = await api.post(API_URL, data);
+    return response.data;
+};
+
+/**
  * Actualizar estado de una solicitud de mecánica
  */
 export const updateMechanicRequestStatus = async (id, data) => {

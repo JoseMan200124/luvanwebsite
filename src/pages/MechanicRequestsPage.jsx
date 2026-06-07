@@ -56,6 +56,7 @@ import {
     getAllMechanicRequests,
     getMechanicRequestById,
     getMechanicRequestStatistics,
+    createMechanicRequest,
     deleteMechanicRequest,
     updateMechanicRequestStatus,
     WORK_TYPES,
@@ -122,6 +123,19 @@ const MechanicRequestsPage = () => {
     const [newStatus, setNewStatus] = useState('');
     const [statusNotes, setStatusNotes] = useState('');
     const [fechaCompletado, setFechaCompletado] = useState('');
+    // Create modal states
+    const [createModalOpen, setCreateModalOpen] = useState(false);
+    const [createSchoolId, setCreateSchoolId] = useState('');
+    const [createCorporationId, setCreateCorporationId] = useState('');
+    const [createBusId, setCreateBusId] = useState('');
+    const [createPlateOptions, setCreatePlateOptions] = useState([]);
+    const [createTipoTrabajo, setCreateTipoTrabajo] = useState('mecánico');
+    const [createOtroTrabajoDetalle, setCreateOtroTrabajoDetalle] = useState('');
+    const [createSolicitud, setCreateSolicitud] = useState('');
+    const [createUrgente, setCreateUrgente] = useState(false);
+    const [createLoadingPlates, setCreateLoadingPlates] = useState(false);
+    const [createSubmitting, setCreateSubmitting] = useState(false);
+    const [createError, setCreateError] = useState(null);
 
     // Cargar colegios y corporaciones
     useEffect(() => {
@@ -335,6 +349,76 @@ const MechanicRequestsPage = () => {
         }
     };
 
+    // Create modal handlers
+    const handleOpenCreateModal = () => {
+        // default to current selected client filters if present
+        setCreateSchoolId(schoolId || '');
+        setCreateCorporationId(corporationId || '');
+        setCreateBusId('');
+        setCreatePlateOptions([]);
+        setCreateTipoTrabajo('mecánico');
+        setCreateOtroTrabajoDetalle('');
+        setCreateSolicitud('');
+        setCreateUrgente(false);
+        setCreateError(null);
+        setCreateModalOpen(true);
+    };
+
+    const loadCreatePlates = async () => {
+        setCreatePlateOptions([]);
+        if (!createSchoolId && !createCorporationId) return;
+        setCreateLoadingPlates(true);
+        try {
+            const params = { limit: 200 };
+            if (createSchoolId) params.schoolId = createSchoolId;
+            if (createCorporationId) params.corporationId = createCorporationId;
+            const resp = await api.get('/buses', { params });
+            const buses = resp.data?.buses || [];
+            const plates = buses.map(b => ({ id: b.id, label: b.plate }));
+            setCreatePlateOptions(plates);
+        } catch (e) {
+            console.error('Error loading create plates:', e);
+        } finally {
+            setCreateLoadingPlates(false);
+        }
+    };
+
+    useEffect(() => {
+        loadCreatePlates();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [createSchoolId, createCorporationId]);
+
+    const handleConfirmCreate = async () => {
+        setCreateError(null);
+        if (!createBusId) {
+            setCreateError('Seleccione un bus válido.');
+            return;
+        }
+        if (!createSolicitud || String(createSolicitud).trim() === '') {
+            setCreateError('La descripción de la solicitud es requerida.');
+            return;
+        }
+        setCreateSubmitting(true);
+        try {
+            const payload = {
+                busId: createBusId,
+                tipoTrabajo: createTipoTrabajo,
+                otroTrabajoDetalle: createOtroTrabajoDetalle || null,
+                solicitud: createSolicitud,
+                urgente: !!createUrgente
+            };
+            await createMechanicRequest(payload);
+            setCreateModalOpen(false);
+            setCreateSubmitting(false);
+            fetchRequests();
+            fetchStatistics();
+        } catch (e) {
+            console.error('Error creating mechanic request:', e);
+            setCreateError(e?.response?.data?.message || 'Error al crear la solicitud.');
+            setCreateSubmitting(false);
+        }
+    };
+
     // Obtener icono de estado
     const getStatusIcon = (estado) => {
         switch (estado) {
@@ -482,8 +566,9 @@ const MechanicRequestsPage = () => {
                             size="small"
                             label="Colegio"
                             value={schoolId}
-                            onChange={(e) => { setSchoolId(e.target.value); setPage(0); setPlate(''); setRouteNumber(''); }}
+                            onChange={(e) => { setSchoolId(e.target.value); setCorporationId(''); setPage(0); setPlate(''); setRouteNumber(''); }}
                             SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
+                            disabled={!!corporationId}
                         >
                             <MenuItem value="">Todos</MenuItem>
                             {schools.map((school) => (
@@ -500,8 +585,9 @@ const MechanicRequestsPage = () => {
                             size="small"
                             label="Corporación"
                             value={corporationId}
-                            onChange={(e) => { setCorporationId(e.target.value); setPage(0); setPlate(''); setRouteNumber(''); }}
+                            onChange={(e) => { setCorporationId(e.target.value); setSchoolId(''); setPage(0); setPlate(''); setRouteNumber(''); }}
                             SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
+                            disabled={!!schoolId}
                         >
                             <MenuItem value="">Todas</MenuItem>
                             {corporations.map((corp) => (
@@ -617,6 +703,13 @@ const MechanicRequestsPage = () => {
                             onChange={(e) => { setEndDate(e.target.value); setPage(0); }}
                             InputLabelProps={{ shrink: true }}
                         />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={1.25}>
+                        <PermissionGuard permission="mecanica-crear-solicitud">
+                            <Button variant="contained" color="primary" onClick={handleOpenCreateModal} sx={{ mr: 1 }}>
+                                Nueva Solicitud
+                            </Button>
+                        </PermissionGuard>
                     </Grid>
                 </Grid>
             </FiltersContainer>
@@ -789,6 +882,128 @@ const MechanicRequestsPage = () => {
                     </>
                 )}
             </TableContainer>
+
+            {/* Modal de Crear Solicitud */}
+            <Dialog
+                open={createModalOpen}
+                onClose={() => setCreateModalOpen(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>
+                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                    Nueva Solicitud de Mecánica
+                </DialogTitle>
+                <DialogContent dividers>
+                    {createError && (
+                        <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>
+                    )}
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                    select
+                                    fullWidth
+                                    size="small"
+                                    label="Colegio"
+                                    value={createSchoolId}
+                                    onChange={(e) => { setCreateSchoolId(e.target.value); setCreateCorporationId(''); setCreateBusId(''); }}
+                                    disabled={!!createCorporationId}
+                                >
+                                <MenuItem value="">Seleccione</MenuItem>
+                                {schools.map((s) => (
+                                    <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                                ))}
+                            </TextField>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                    select
+                                    fullWidth
+                                    size="small"
+                                    label="Corporación"
+                                    value={createCorporationId}
+                                    onChange={(e) => { setCreateCorporationId(e.target.value); setCreateSchoolId(''); setCreateBusId(''); }}
+                                    disabled={!!createSchoolId}
+                                >
+                                <MenuItem value="">Seleccione</MenuItem>
+                                {corporations.map((c) => (
+                                    <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                                ))}
+                            </TextField>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                select
+                                fullWidth
+                                size="small"
+                                label="Placa/Bus"
+                                value={createBusId}
+                                onChange={(e) => setCreateBusId(e.target.value)}
+                                disabled={(!createSchoolId && !createCorporationId) || createLoadingPlates}
+                            >
+                                <MenuItem value="">Seleccione</MenuItem>
+                                {createPlateOptions.map((p) => (
+                                    <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>
+                                ))}
+                            </TextField>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                select
+                                fullWidth
+                                size="small"
+                                label="Tipo Trabajo"
+                                value={createTipoTrabajo}
+                                onChange={(e) => setCreateTipoTrabajo(e.target.value)}
+                            >
+                                {Object.entries(WORK_TYPES).map(([key, label]) => (
+                                    <MenuItem key={key} value={key}>{label}</MenuItem>
+                                ))}
+                            </TextField>
+                        </Grid>
+                        {createTipoTrabajo === 'otro' && (
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Detalle de Otro Trabajo"
+                                    value={createOtroTrabajoDetalle}
+                                    onChange={(e) => setCreateOtroTrabajoDetalle(e.target.value)}
+                                />
+                            </Grid>
+                        )}
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                multiline
+                                rows={4}
+                                label="Solicitud"
+                                value={createSolicitud}
+                                onChange={(e) => setCreateSolicitud(e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <FormControl fullWidth>
+                                <InputLabel>Urgente</InputLabel>
+                                <Select
+                                    value={createUrgente ? 'true' : 'false'}
+                                    onChange={(e) => setCreateUrgente(e.target.value === 'true')}
+                                    label="Urgente"
+                                >
+                                    <MenuItem value="false">No</MenuItem>
+                                    <MenuItem value="true">Sí</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setCreateModalOpen(false)} disabled={createSubmitting}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleConfirmCreate} disabled={createSubmitting}>
+                        {createSubmitting ? 'Guardando...' : 'Crear'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             {/* Modal de Detalle */}
             <Dialog
