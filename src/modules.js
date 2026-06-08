@@ -5,7 +5,8 @@ import {
     CalendarMonth,
     BarChart,
     People,
-    Smartphone,
+    Groups,
+    DirectionsBus,
     History
 } from '@mui/icons-material';
 
@@ -37,9 +38,9 @@ import HistoricalDataPage from './pages/HistoricalDataPage';
 
 export const modules = [
     {
-        key: 'gestion-usuarios-roles',
-        name: 'Gestión de Usuarios y Roles',
-        icon: Group,
+        key: 'gestion-personal',
+        name: 'Gestión de Personal',
+        icon: People,
         submodules: [
             {
                 key: 'usuarios',
@@ -47,82 +48,6 @@ export const modules = [
                 path: 'usuarios',
                 component: RolesManagementPage,
             },
-            {
-                key: 'solicitudes-usuarios',
-                name: 'Solicitudes Usuarios',
-                path: 'solicitudes-usuarios',
-                component: RequestsPage,
-            },
-        ],
-    },
-    {
-        key: 'gestion-colegios-rutas',
-        name: 'Gestión de Clientes y Rutas',
-        icon: School,
-        submodules: [
-            {
-                key: 'colegios',
-                name: 'Colegios',
-                path: 'colegios',
-                component: CicloEscolarSelectionPage,
-            },
-            {
-                key: 'ciclos-escolares',
-                name: 'Ciclos Escolares',
-                path: 'ciclos-escolares',
-                component: CiclosEscolaresPage,
-                icon: CalendarMonth,
-            },
-            {
-                key: 'corporaciones',
-                name: 'Corporaciones',
-                path: 'corporaciones',
-                component: CorporationsPage,
-            },
-            {
-                key: 'buses',
-                name: 'Buses',
-                path: 'buses',
-                component: BusesManagementPage,
-            },
-            {
-                key: 'historial-recorridos-rutas',
-                name: 'Historial de Recorridos de Rutas',
-                path: 'historial-recorridos-rutas',
-                component: RouteHistoryPage,
-            },
-            {
-                key: 'circulares-admin-listar',
-                name: 'Historial de Circulares',
-                path: 'circulares',
-                component: CircularHistoryPage,
-            },
-        ],
-    },
-    {
-        key: 'reportes-estadisticas',
-        name: 'Reportes y Estadísticas',
-        icon: BarChart,
-        submodules: [
-            {
-                key: 'reportes-uso',
-                name: 'Reportes de Uso',
-                path: 'reportes-uso',
-                component: ReportsUsagePage,
-            },
-            {
-                key: 'estadisticas-financieras',
-                name: 'Estadísticas Financieras',
-                path: 'estadisticas-financieras',
-                component: FinancialStatisticsPage,
-            },
-        ],
-    },
-    {
-        key: 'gestion-personal',
-        name: 'Gestión de Personal',
-        icon: People,
-        submodules: [
             {
                 key: 'monitores',
                 name: 'Monitores',
@@ -150,9 +75,96 @@ export const modules = [
         ],
     },
     {
-        key: 'operaciones-moviles',
-        name: 'Operaciones Móviles',
-        icon: Smartphone,
+        key: 'gestion-colegios-rutas',
+        name: 'Gestión de Clientes',
+        icon: School,
+        submodules: [
+            {
+                key: 'colegios',
+                name: 'Colegios',
+                path: 'colegios',
+                component: CicloEscolarSelectionPage,
+            },
+            {
+                key: 'ciclos-escolares',
+                name: 'Ciclos Escolares',
+                path: 'ciclos-escolares',
+                component: CiclosEscolaresPage,
+                icon: CalendarMonth,
+            },
+            {
+                key: 'corporaciones',
+                name: 'Corporaciones',
+                path: 'corporaciones',
+                component: CorporationsPage,
+            },
+            {
+                key: 'circulares-admin-listar',
+                name: 'Historial de Circulares',
+                path: 'circulares',
+                component: CircularHistoryPage,
+            },
+            {
+                key: 'solicitudes-usuarios',
+                name: 'Solicitudes Usuarios',
+                path: 'solicitudes-usuarios',
+                component: RequestsPage,
+            },
+        ],
+    },
+    {
+        key: 'gestion-buses',
+        name: 'Gestión de Buses',
+        icon: DirectionsBus,
+        submodules: [
+            {
+                key: 'buses',
+                name: 'Buses',
+                path: 'buses',
+                component: BusesManagementPage,
+            },
+            {
+                key: 'historial-recorridos-rutas',
+                name: 'Recorridos',
+                path: 'historial-recorridos-rutas',
+                component: RouteHistoryPage,
+            },
+            {
+                key: 'mapeo-fallas',
+                name: 'Mapeo de Fallas',
+                path: 'mapeo-fallas',
+                component: FailureMappingPage,
+            },
+            {
+                key: 'registros-combustible',
+                name: 'Registros de Combustible',
+                path: 'registros-combustible',
+                component: FuelRecordsPage,
+            },
+            {
+                key: 'incidentes-buses',
+                name: 'Incidentes',
+                path: 'incidentes-buses',
+                component: BusIncidentsPage,
+            },
+            {
+                key: 'emergencias-buses',
+                name: 'Emergencias',
+                path: 'emergencias-buses',
+                component: BusEmergenciesPage,
+            },
+            {
+                key: 'solicitudes-mecanica',
+                name: 'Solicitudes de Mecánica',
+                path: 'solicitudes-mecanica',
+                component: MechanicRequestsPage,
+            },
+        ],
+    },
+    {
+        key: 'gestion-monitoras',
+        name: 'Gestión de Monitoras',
+        icon: Groups,
         submodules: [
             {
                 key: 'asistencias',
@@ -167,40 +179,10 @@ export const modules = [
                 component: StudentIncidentsPage,
             },
             {
-                key: 'incidentes-buses',
-                name: 'Incidentes de Pilotos',
-                path: 'incidentes-buses',
-                component: BusIncidentsPage,
-            },
-            {
-                key: 'mapeo-fallas',
-                name: 'Mapeo de Fallas',
-                path: 'mapeo-fallas',
-                component: FailureMappingPage,
-            },
-            {
-                key: 'emergencias-buses',
-                name: 'Emergencias de Buses',
-                path: 'emergencias-buses',
-                component: BusEmergenciesPage,
-            },
-            {
-                key: 'solicitudes-mecanica',
-                name: 'Solicitudes de Mecánica',
-                path: 'solicitudes-mecanica',
-                component: MechanicRequestsPage,
-            },
-            {
                 key: 'horarios-rutas',
                 name: 'Horarios de Rutas',
                 path: 'horarios-rutas',
                 component: RouteTimeLogsPage,
-            },
-            {
-                key: 'registros-combustible',
-                name: 'Registros de Combustible',
-                path: 'registros-combustible',
-                component: FuelRecordsPage,
             },
         ],
     },
@@ -220,6 +202,25 @@ export const modules = [
                 name: 'Historial de Asignaciones',
                 path: 'historial-asignaciones',
                 component: AssignmentHistoryPage,
+            },
+        ],
+    },
+    {
+        key: 'reportes-estadisticas',
+        name: 'Reportes y Estadísticas',
+        icon: BarChart,
+        submodules: [
+            {
+                key: 'reportes-uso',
+                name: 'Reportes de Uso',
+                path: 'reportes-uso',
+                component: ReportsUsagePage,
+            },
+            {
+                key: 'estadisticas-financieras',
+                name: 'Estadísticas Financieras',
+                path: 'estadisticas-financieras',
+                component: FinancialStatisticsPage,
             },
         ],
     },
