@@ -83,7 +83,7 @@ const REQUEST_TYPE_ICON_MAP = {
   other: CreateIcon,
 };
 
-const formatDate = (date) => (date ? moment(date).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '-');
+const formatDate = (date) => (date ? moment(date).tz('America/Guatemala').format('DD/MM/YYYY hh:mm A') : '-');
 
 const getRequestTypeChip = (type) => {
   const normalizedType = String(type || '').toLowerCase();
@@ -146,6 +146,78 @@ const getStatusLabelEs = (status) => {
   return labels[normalized] || 'Estado actualizado';
 };
 
+// Try to extract a status value from a variety of metadata shapes
+const extractStatusFromMetadata = (meta) => {
+  if (!meta) return null;
+  const direct = meta?.status || meta?.newStatus || meta?.statusCode || meta?.to || meta?.new_status || meta?.new_status_code;
+  if (direct) return direct;
+
+  if (meta.change && (meta.change.to || meta.change.new)) return meta.change.to || meta.change.new;
+  if (meta.changes?.status && (meta.changes.status.to || meta.changes.status.new)) return meta.changes.status.to || meta.changes.status.new;
+  if (meta.details && (meta.details.status || meta.details.newStatus)) return meta.details.status || meta.details.newStatus;
+
+  const candidates = [];
+  const scan = (obj, depth = 0) => {
+    if (!obj || depth > 3) return;
+    if (typeof obj === 'string' || typeof obj === 'number') {
+      candidates.push(String(obj));
+      return;
+    }
+    if (Array.isArray(obj)) {
+      for (const v of obj) scan(v, depth + 1);
+      return;
+    }
+    if (typeof obj === 'object') {
+      for (const k of Object.keys(obj)) {
+        const v = obj[k];
+        if (typeof v === 'string' || typeof v === 'number') candidates.push(String(v));
+        else if (typeof v === 'object') scan(v, depth + 1);
+      }
+    }
+  };
+
+  scan(meta, 0);
+  if (candidates.length === 0) return null;
+
+  const join = candidates.join(' ').toLowerCase();
+  const keywords = ['pending','pendiente','in_review','in review','en revisi','approved','aprob','rejected','rechaz','completed','completad','cancelled','cancelad'];
+  for (const kw of keywords) {
+    if (join.includes(kw)) return kw;
+  }
+
+  return candidates[0] || null;
+};
+
+const normalizeEventStatus = (s) => {
+  if (!s) return null;
+  const low = String(s).toLowerCase().trim();
+  const map = {
+    pending: 'pending',
+    pendiente: 'pending',
+    in_review: 'in_review',
+    'in review': 'in_review',
+    en_revision: 'in_review',
+    'en revision': 'in_review',
+    'en revisión': 'in_review',
+    approved: 'completed',
+    aprobado: 'completed',
+    aprobada: 'completed',
+    aprob: 'completed',
+    rejected: 'rejected',
+    rechazado: 'rejected',
+    rechazada: 'rejected',
+    completed: 'completed',
+    completado: 'completed',
+    completada: 'completed',
+    cancelado: 'cancelled',
+    cancelled: 'cancelled',
+    cancelada: 'cancelled',
+  };
+  if (map[low]) return map[low];
+  if (['pending','in_review','approved','rejected','completed','cancelled'].includes(low)) return low;
+  return null;
+};
+
 const getEventActionLabel = (action) => {
   const normalized = String(action || '').toLowerCase();
   if (normalized === 'created') return 'Creación';
@@ -159,54 +231,53 @@ const getEventActionLabel = (action) => {
 
 const getEventTitle = (event) => {
   const action = String(event?.action || '').toLowerCase();
-  if (action === 'status_updated') {
-    const meta = event?.metadata || {};
-    const statusFromMetadata = meta?.status || meta?.newStatus || meta?.statusCode;
-    const notesText = String(event?.notes || '').toLowerCase();
-
-    let statusFromNotes = null;
-    if (/pending|pendiente/.test(notesText)) statusFromNotes = 'pending';
-    else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesText)) statusFromNotes = 'in_review';
-    else if (/approved|aproba/.test(notesText)) statusFromNotes = 'approved';
-    else if (/rejected|rechazad/.test(notesText)) statusFromNotes = 'rejected';
-    else if (/completed|completad/.test(notesText)) statusFromNotes = 'completed';
-    else if (/cancelled|cancelad/.test(notesText)) statusFromNotes = 'cancelled';
-
-    const status = normalizeStatus(statusFromMetadata || statusFromNotes);
-    return status ? getStatusLabelEs(status) : 'Estado actualizado';
-  }
+  if (action === 'status_updated') return 'Estado actualizado';
 
   return getEventActionLabel(event?.action);
 };
 
-const getEventDetailText = (event) => {
+const getEventDetailText = (event, selectedRequest) => {
   const action = String(event?.action || '').toLowerCase();
   const meta = event?.metadata || {};
+  const notesTextRaw = event?.notes || meta?.note || '';
+  const notes = String(notesTextRaw || '').trim();
+
+  let mainText = null;
 
   if (action === 'created') {
-    const requestType = meta?.requestType;
-    return `Tipo: ${getRequestTypeLabel(requestType)}`;
+    const requestType = meta?.requestType || selectedRequest?.requestType;
+    mainText = `Tipo: ${getRequestTypeLabel(requestType)}`;
+  } else if (action === 'status_updated') {
+    const rawFromMeta = extractStatusFromMetadata(meta) || meta?.status || meta?.newStatus || meta?.statusCode;
+
+    let resolved = normalizeEventStatus(rawFromMeta);
+    if (!resolved) {
+      const notesLower = notes.toLowerCase();
+      if (/pending|pendiente/.test(notesLower)) resolved = 'pending';
+      else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesLower)) resolved = 'in_review';
+      else if (/approved|aproba/.test(notesLower)) resolved = 'completed';
+      else if (/rejected|rechazad/.test(notesLower)) resolved = 'rejected';
+      else if (/completed|completad/.test(notesLower)) resolved = 'completed';
+      else if (/cancelled|cancelad/.test(notesLower)) resolved = 'cancelled';
+    }
+
+    mainText = resolved ? `Estado actualizado: ${getStatusLabelEs(resolved)}` : 'Estado actualizado';
+  } else if (action === 'cancelled') {
+    mainText = 'La solicitud fue cancelada';
+  } else {
+    if (notes) return String(notes);
+    mainText = 'Actualización registrada';
   }
 
-  if (action === 'status_updated') {
-    const statusFromMetadata = meta?.status || meta?.newStatus || meta?.statusCode;
-    const notesText = String(event?.notes || '').toLowerCase();
+  if (!notes) return mainText;
 
-    let statusFromNotes = null;
-    if (/pending|pendiente/.test(notesText)) statusFromNotes = 'pending';
-    else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesText)) statusFromNotes = 'in_review';
-    else if (/approved|aproba/.test(notesText)) statusFromNotes = 'approved';
-    else if (/rejected|rechazad/.test(notesText)) statusFromNotes = 'rejected';
-    else if (/completed|completad/.test(notesText)) statusFromNotes = 'completed';
-    else if (/cancelled|cancelad/.test(notesText)) statusFromNotes = 'cancelled';
-
-    const status = normalizeStatus(statusFromMetadata || statusFromNotes);
-    return status ? `Estado actualizado: ${getStatusLabelEs(status)}.` : 'Estado actualizado';
-  }
-
-  if (action === 'cancelled') return 'La solicitud fue cancelada';
-  if (event?.notes) return String(event.notes);
-  return 'Actualización registrada';
+  return (
+    <>
+      {mainText}
+      <br />
+      {`Nota: ${notes}`}
+    </>
+  );
 };
 
 const ParentRequestsPage = () => {
@@ -381,7 +452,7 @@ const ParentRequestsPage = () => {
                           {getEventTitle(event)}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {getEventDetailText(event)}
+                          {getEventDetailText(event, selectedRequest)}
                         </Typography>
                         <Typography variant="caption" color="text.disabled">
                           {formatDate(event.createdAt)}

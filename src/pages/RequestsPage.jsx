@@ -78,6 +78,7 @@ import {
     Create as CreateIcon,
 } from '@mui/icons-material';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
     ${tw`p-6`}
@@ -831,11 +832,13 @@ const RequestsPage = () => {
                                                 </IconButton>
                                             </span>
                                         </Tooltip>
-                                        <Tooltip title={r.status === 'cancelled' ? 'Eliminar':'Eliminar'}>
-                                            <IconButton size="small" color="error" onClick={() => handleOpenDeleteModal(r)}>
-                                                <DeleteIcon fontSize="small" />
-                                            </IconButton>
-                                        </Tooltip>
+                                         <PermissionGuard permission="solicitudes-eliminar">
+                                            <Tooltip title={'Eliminar'}>
+                                                <IconButton size="small" color="error" onClick={() => handleOpenDeleteModal(r)}>
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </PermissionGuard>
                                     </TableCell>
                                 </TableRow>
                             ))}
