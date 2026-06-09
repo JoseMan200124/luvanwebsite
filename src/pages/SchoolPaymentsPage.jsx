@@ -1281,7 +1281,7 @@ const SchoolPaymentsPage = () => {
             // Title centered
             doc.setFontSize(16);
             doc.setFont(undefined, 'bold');
-            doc.text('Estado de cuentas - Historial de Transacciones', headerCenterX, headerTopY + 30, { align: 'center' });
+            doc.text('Estado de cuenta', headerCenterX, headerTopY + 30, { align: 'center' });
             doc.setFontSize(9);
             doc.setFont(undefined, 'normal');
             doc.text(`Generado: ${moment().format('YYYY-MM-DD HH:mm')}`, headerCenterX, headerTopY + 46, { align: 'center' });
@@ -1684,9 +1684,11 @@ const SchoolPaymentsPage = () => {
                 })
                 .slice()
                 .sort((a, b) => {
-                    const da = moment.parseZone(a?.realPaymentDate || a?.createdAt || a?.registeredAt || 0).valueOf();
-                    const db = moment.parseZone(b?.realPaymentDate || b?.createdAt || b?.registeredAt || 0).valueOf();
-                    return da - db;
+                    // Prefer `realPaymentDate` for sorting. Fallback to `registeredAt` then `createdAt` only if necessary.
+                    const da = moment.parseZone(a?.realPaymentDate || a?.registeredAt || a?.createdAt || 0).valueOf();
+                    const db = moment.parseZone(b?.realPaymentDate || b?.registeredAt || b?.createdAt || 0).valueOf();
+                    // Descending (newest first)
+                    return db - da;
                 });
 
             const periodAlloc = periods.map(p => ({
@@ -1740,16 +1742,23 @@ const SchoolPaymentsPage = () => {
             let bodyRows = [];
 
             if (!noTransactions && !noPeriods) {
-                const txRows = (Array.isArray(transactions) ? transactions : [])
-                    .filter(tx => Number(tx?.amount || 0) !== 0 || String(tx?.receiptNumber || '').trim())
-                    .map(tx => {
-                        const amount = Number(tx?.amount || 0) || 0;
-                        const date = formatTransactionDate(tx?.realPaymentDate || tx?.createdAt || tx?.registeredAt || tx?.paidAt);
-                        const type = formatTransactionType(tx?.type || tx?.transactionType || 'Tarifa');
-                        const discount = Number(tx?.extraordinaryDiscount || tx?.discountApplied || tx?.discount || 0) || 0;
-                        const receipt = String(tx?.receiptNumber || tx?.boleta || tx?.reference || '').trim();
-                        return [date, type, money(amount), money(discount), receipt || '-'];
-                    });
+                // Sort transactions for display by `realPaymentDate` (desc). Fallback to `registeredAt` then `createdAt`.
+                const sortedTxsForDisplay = (Array.isArray(transactions) ? transactions.slice().sort((a, b) => {
+                    const da = moment.parseZone(a?.realPaymentDate || a?.registeredAt || a?.createdAt || 0).valueOf();
+                    const db = moment.parseZone(b?.realPaymentDate || b?.registeredAt || b?.createdAt || 0).valueOf();
+                    return db - da; // newest first
+                }) : []);
+
+                const txRows = sortedTxsForDisplay
+                        .filter(tx => Number(tx?.amount || 0) !== 0 || String(tx?.receiptNumber || '').trim())
+                        .map(tx => {
+                            const amount = Number(tx?.amount || 0) || 0;
+                            const date = formatTransactionDate(tx?.realPaymentDate || tx?.registeredAt || tx?.createdAt || tx?.paidAt);
+                            const type = formatTransactionType(tx?.type || tx?.transactionType || 'Tarifa');
+                            const discount = Number(tx?.extraordinaryDiscount || tx?.discountApplied || tx?.discount || 0) || 0;
+                            const receipt = String(tx?.receiptNumber || tx?.boleta || tx?.reference || '').trim();
+                            return [date, type, money(amount), money(discount), receipt || '-'];
+                        });
 
                 if (txRows.length > 0) {
                     bodyRows = txRows;
