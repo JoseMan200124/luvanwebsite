@@ -31,7 +31,8 @@ import {
     DialogContent,
     DialogActions,
     Button,
-    TableSortLabel
+    TableSortLabel,
+    Divider
 } from '@mui/material';
 import {
     Visibility as VisibilityIcon,
@@ -55,16 +56,29 @@ import { AuthContext } from '../context/AuthProvider';
 import {
     getAllRequests,
     getRequestById,
+    getRequestEvents,
     updateRequestStatus,
     deleteRequest,
     getRequestStatistics,
     getSchoolsList,
     getCorporationsList,
+    REQUEST_TYPE_META,
     VALID_REQUEST_TYPES,
     REQUEST_STATES,
     STATE_COLORS
 } from '../services/requestService';
+import {
+    Schedule as ScheduleIcon,
+    Payments as PaymentsIcon,
+    Description as DescriptionIcon,
+    SwapHoriz as SwapHorizIcon,
+    DirectionsBus as DirectionsBusIcon,
+    PauseCircle as PauseCircleIcon,
+    Lightbulb as LightbulbIcon,
+    Create as CreateIcon,
+} from '@mui/icons-material';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
     ${tw`p-6`}
@@ -124,12 +138,26 @@ const RequestsPage = () => {
     const [sortOrder, setSortOrder] = useState('desc');
 
     const [selectedRequest, setSelectedRequest] = useState(null);
+    const [requestEvents, setRequestEvents] = useState([]);
     const [detailModalOpen, setDetailModalOpen] = useState(false);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [requestToDelete, setRequestToDelete] = useState(null);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [newStatus, setNewStatus] = useState('');
     const [statusNotes, setStatusNotes] = useState('');
+    const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
+    const [pendingStatusPayload, setPendingStatusPayload] = useState(null);
+
+    const normalizeStatus = (status) => {
+        const normalized = String(status || '').toLowerCase();
+        if (normalized === 'approved') return 'completed';
+        return normalized;
+    };
+
+    const isFinalStatus = (status) => {
+        const normalized = normalizeStatus(status);
+        return normalized === 'completed' || normalized === 'rejected';
+    };
 
     // Load requests
     const fetchRequests = useCallback(async () => {
@@ -137,6 +165,7 @@ const RequestsPage = () => {
         try {
             const params = {
                 page: page + 1,
+                offset: page * rowsPerPage,
                 limit: rowsPerPage,
                 sortBy,
                 sortOrder: sortOrder.toUpperCase(),
@@ -220,7 +249,12 @@ const RequestsPage = () => {
     const handleViewDetail = async (request) => {
         try {
             const detail = await getRequestById(request.id);
-            setSelectedRequest(detail);
+            const events = await getRequestEvents(request.id);
+            setSelectedRequest({
+                ...detail,
+                createdBy: detail?.createdBy || request?.createdBy || null,
+            });
+            setRequestEvents(events || []);
             setDetailModalOpen(true);
         } catch (err) { console.error(err); }
     };
@@ -239,17 +273,34 @@ const RequestsPage = () => {
     };
 
     const handleOpenStatusModal = (request) => {
+        if (isFinalStatus(request.status)) {
+            return;
+        }
         setSelectedRequest(request);
-        setNewStatus(request.status || '');
+        setNewStatus('');
         setStatusNotes(request.reviewNotes || request.review_notes || '');
         setStatusModalOpen(true);
     };
 
     const handleConfirmStatusChange = async () => {
         if (!selectedRequest) return;
+        if (!newStatus) {
+            return;
+        }
+        if (isFinalStatus(newStatus)) {
+            setPendingStatusPayload({
+                id: selectedRequest.id,
+                status: newStatus,
+                notes: statusNotes,
+            });
+            setStatusConfirmOpen(true);
+            return;
+        }
+
+        const payload = { status: newStatus };
+        if (statusNotes) payload.reviewNotes = statusNotes;
+
         try {
-            const payload = { status: newStatus };
-            if (statusNotes) payload.reviewNotes = statusNotes;
             await updateRequestStatus(selectedRequest.id, payload);
             setStatusModalOpen(false);
             setSelectedRequest(null);
@@ -260,7 +311,24 @@ const RequestsPage = () => {
         } catch (err) { console.error(err); }
     };
 
-    const formatDate = (date) => date ? moment(date).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '-';
+    const handleConfirmFinalStatus = async () => {
+        if (!pendingStatusPayload) return;
+        try {
+            const payload = { status: pendingStatusPayload.status };
+            if (pendingStatusPayload.notes) payload.reviewNotes = pendingStatusPayload.notes;
+            await updateRequestStatus(pendingStatusPayload.id, payload);
+            setStatusConfirmOpen(false);
+            setPendingStatusPayload(null);
+            setStatusModalOpen(false);
+            setSelectedRequest(null);
+            setNewStatus('');
+            setStatusNotes('');
+            fetchRequests();
+            fetchStatistics();
+        } catch (err) { console.error(err); }
+    };
+
+    const formatDate = (date) => date ? moment(date).tz('America/Guatemala').format('DD/MM/YYYY hh:mm A') : '-';
 
     const PRIORITY_LABELS_ES = {
         urgent: 'Urgente',
@@ -280,7 +348,7 @@ const RequestsPage = () => {
         pending: 'Pendiente',
         in_review: 'En revisión',
         cancelled: 'Cancelada',
-        approved: 'Aprobada',
+        approved: 'Completada',
         rejected: 'Rechazada',
         completed: 'Completada'
     };
@@ -293,6 +361,8 @@ const RequestsPage = () => {
         completed: '#388E3C',
         rejected: '#E53935'
     };
+
+    const SELECTABLE_REQUEST_STATES = Object.keys(REQUEST_STATES).filter((s) => s !== 'approved');
 
     const getStatusIcon = (status) => {
         switch (status) {
@@ -311,15 +381,266 @@ const RequestsPage = () => {
     };
 
     const getStatusChip = (status) => {
-        const label = STATUS_LABELS_ES[status] || REQUEST_STATES[status] || status;
-        const bg = STATUS_BG[status] || '#757575';
-        return <Chip icon={getStatusIcon(status)} label={label} size="small" sx={{ backgroundColor: bg, color: '#fff', fontWeight: 600 }} />;
+        const normalizedStatus = status === 'approved' ? 'completed' : status;
+        const label = STATUS_LABELS_ES[normalizedStatus] || REQUEST_STATES[normalizedStatus] || normalizedStatus;
+        const bg = STATUS_BG[normalizedStatus] || '#757575';
+        return <Chip icon={getStatusIcon(normalizedStatus)} label={label} size="small" sx={{ backgroundColor: bg, color: '#fff', fontWeight: 600 }} />;
     };
 
     const getPriorityChip = (priority) => {
         const label = PRIORITY_LABELS_ES[priority] || priority || '-';
         const bg = PRIORITY_BG[priority] || '#616161';
         return <Chip label={label} size="small" sx={{ backgroundColor: bg, color: '#fff', fontWeight: 600 }} />;
+    };
+
+    const getRequestTypeLabel = (requestType) => {
+        const normalized = String(requestType || '').toLowerCase().trim();
+        const directMeta = REQUEST_TYPE_META[normalized];
+        if (directMeta?.label) return directMeta.label;
+
+        const normalizedKey = normalized
+            .replace(/-/g, '_')
+            .replace(/\s+/g, '_');
+
+        const aliasMap = {
+            servicecancellation: 'service_cancellation',
+            baja_del_servicio: 'service_cancellation',
+            bajadelsservicio: 'service_cancellation',
+            schedulechange: 'schedule_change',
+            cambiodehorario: 'schedule_change',
+            routechange: 'route_change',
+            cambioderuta: 'route_change',
+        };
+
+        const resolvedKey = aliasMap[normalizedKey] || normalizedKey;
+        return REQUEST_TYPE_META[resolvedKey]?.label || VALID_REQUEST_TYPES[resolvedKey] || requestType || 'N/A';
+    };
+
+    const REQUEST_TYPE_ICON_MAP = {
+        service_cancellation: CancelIcon,
+        schedule_change: ScheduleIcon,
+        route_change: DirectionsBusIcon,
+        payment_adjustment: PaymentsIcon,
+        contract_modification: DescriptionIcon,
+        student_transfer: SwapHorizIcon,
+        bus_change: DirectionsBusIcon,
+        temporary_suspension: PauseCircleIcon,
+        complaint: WarningIcon,
+        suggestion: LightbulbIcon,
+        other: CreateIcon,
+    };
+
+    const getRequestTypeChip = (requestType) => {
+        const meta = REQUEST_TYPE_META[requestType] || REQUEST_TYPE_META.other;
+        const IconComponent = REQUEST_TYPE_ICON_MAP[requestType] || CreateIcon;
+
+        return (
+            <Chip
+                icon={<IconComponent sx={{ color: '#fff !important', fontSize: 18 }} />}
+                label={meta.label || VALID_REQUEST_TYPES[requestType] || requestType || '-'}
+                size="small"
+                sx={{
+                    backgroundColor: meta.color || '#6C757D',
+                    color: '#fff',
+                    fontWeight: 700,
+                    '& .MuiChip-icon': { color: '#fff' },
+                }}
+            />
+        );
+    };
+
+    const getClientLabel = (request) => {
+        if (!request) return null;
+        if (request.corporation?.name) return request.corporation.name;
+        if (request.school?.name) return request.school.name;
+        return null;
+    };
+
+    const getClientChip = (request) => {
+        const label = getClientLabel(request);
+        if (!label) return null;
+
+        return (
+            <Chip
+                label={label}
+                size="small"
+                sx={{
+                    backgroundColor: '#E8F4FF',
+                    color: '#0B5CAB',
+                    fontWeight: 700,
+                    border: '1px solid #BFD9F7',
+                }}
+            />
+        );
+    };
+
+    const getSafeStatusLabel = (statusValue) => {
+        const normalized = String(statusValue || '').toLowerCase();
+        return STATUS_LABELS_ES[normalized] || REQUEST_STATES[normalized] || (statusValue ? String(statusValue) : 'N/A');
+    };
+
+    // Try to extract a status value from a variety of metadata shapes
+    const extractStatusFromMetadata = (meta) => {
+        if (!meta) return null;
+        // direct known keys
+        const direct = meta?.status || meta?.newStatus || meta?.statusCode || meta?.to || meta?.new_status || meta?.new_status_code;
+        if (direct) return direct;
+
+        // check common nested shapes
+        if (meta.change && (meta.change.to || meta.change.new)) return meta.change.to || meta.change.new;
+        if (meta.changes?.status && (meta.changes.status.to || meta.changes.status.new)) return meta.changes.status.to || meta.changes.status.new;
+        if (meta.details && (meta.details.status || meta.details.newStatus)) return meta.details.status || meta.details.newStatus;
+
+        // recursive shallow scan for string values that look like a status
+        const candidates = [];
+        const scan = (obj, depth = 0) => {
+            if (!obj || depth > 3) return;
+            if (typeof obj === 'string' || typeof obj === 'number') {
+                candidates.push(String(obj));
+                return;
+            }
+            if (Array.isArray(obj)) {
+                for (const v of obj) scan(v, depth + 1);
+                return;
+            }
+            if (typeof obj === 'object') {
+                for (const k of Object.keys(obj)) {
+                    const v = obj[k];
+                    if (typeof v === 'string' || typeof v === 'number') candidates.push(String(v));
+                    else if (typeof v === 'object') scan(v, depth + 1);
+                }
+            }
+        };
+
+        scan(meta, 0);
+        if (candidates.length === 0) return null;
+
+        // try to find one candidate that matches known keywords
+        const join = candidates.join(' ').toLowerCase();
+        const keywords = ['pending','pendiente','in_review','in review','en revisi','approved','aprob','rejected','rechaz','completed','completad','cancelled','cancelad'];
+        for (const kw of keywords) {
+            if (join.includes(kw)) return kw;
+        }
+
+        // fallback to first candidate
+        return candidates[0] || null;
+    };
+
+    const normalizeEventStatus = (s) => {
+        if (!s) return null;
+        const low = String(s).toLowerCase().trim();
+        const map = {
+            'pending': 'pending', 'pendiente': 'pending',
+            'in_review': 'in_review', 'in review': 'in_review', 'en_revision': 'in_review', 'en revision': 'in_review', 'en revisión': 'in_review',
+            'approved': 'completed', 'aprobado': 'completed', 'aprobada': 'completed', 'aprob': 'completed',
+            'rejected': 'rejected', 'rechazado': 'rejected', 'rechazada': 'rejected', 'rechaz': 'rejected',
+            'completed': 'completed', 'completado': 'completed', 'completada': 'completed', 'completad': 'completed',
+            'cancelled': 'cancelled', 'cancelado': 'cancelled', 'cancelada': 'cancelled', 'cancelad': 'cancelled'
+        };
+        // direct key
+        if (map[low]) return map[low];
+        if (['pending','in_review','approved','rejected','completed','cancelled'].includes(low)) return low;
+        return null;
+    };
+
+    const getEventTitle = (ev) => {
+        const action = String(ev?.action || '').toLowerCase();
+        if (action === 'created') return 'Creación';
+        if (action === 'status_updated') return 'Estado actualizado';
+        if (action === 'cancelled') return 'Solicitud cancelada';
+        if (action === 'assigned') return 'Solicitud asignada';
+        if (action === 'completed') return 'Solicitud completada';
+        if (action === 'commented') return 'Comentario agregado';
+        return 'Actualización';
+    };
+
+    const getEventDetailText = (ev) => {
+        const meta = ev?.metadata || {};
+        const action = String(ev?.action || '').toLowerCase();
+        const notesTextRaw = ev?.notes || meta?.note || '';
+        const notes = String(notesTextRaw || '').trim();
+
+        let mainText = null;
+
+        if (action === 'created') {
+            const requestType = meta?.requestType || selectedRequest?.requestType;
+            mainText = `Tipo: ${getRequestTypeLabel(requestType)}`;
+        } else if (action === 'status_updated') {
+            const rawFromMeta = extractStatusFromMetadata(meta);
+
+            let resolved = normalizeEventStatus(rawFromMeta);
+            if (!resolved) {
+                const notesLower = notes.toLowerCase();
+                if (/pending|pendiente/.test(notesLower)) resolved = 'pending';
+                else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesLower)) resolved = 'in_review';
+                else if (/approved|aproba/.test(notesLower)) resolved = 'completed';
+                else if (/rejected|rechazad/.test(notesLower)) resolved = 'rejected';
+                else if (/completed|completad/.test(notesLower)) resolved = 'completed';
+                else if (/cancelled|cancelad/.test(notesLower)) resolved = 'cancelled';
+            }
+
+            mainText = resolved ? `Estado actualizado: ${getSafeStatusLabel(resolved)}` : 'Estado actualizado';
+        } else if (action === 'cancelled') {
+            mainText = 'La solicitud fue cancelada';
+        } else {
+            // For unrecognized actions, prefer to show notes alone if they exist
+            if (notes) return String(notes);
+            mainText = 'Actualización registrada';
+        }
+
+        if (!notes) return mainText;
+
+        return (
+            <>
+                {mainText}
+                <br />
+                {"Notas: " + notes}
+            </>
+        );
+    };
+
+    const formatLastUpdateNote = (ev) => {
+        if (!ev) return null;
+
+        const action = String(ev?.action || '').toLowerCase();
+        const rawNote = String(ev.notes || ev.metadata?.note || '').trim();
+        if (!rawNote) return null;
+
+        if (action === 'created') {
+            const requestType = ev?.metadata?.requestType || selectedRequest?.requestType;
+            return `Solicitud creada de tipo ${getRequestTypeLabel(requestType)}`;
+        }
+
+        return rawNote;
+    };
+
+    const getLastUpdateEvent = () => {
+        if (!requestEvents || requestEvents.length === 0) return null;
+        const sorted = [...requestEvents].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const statusEv = sorted.find(ev => String(ev?.action || '').toLowerCase() === 'status_updated' && (ev.notes || ev.metadata?.note));
+        if (statusEv) return statusEv;
+        const anyNotes = sorted.find(ev => ev.notes || ev.metadata?.note);
+        return anyNotes || null;
+    };
+
+    const getStatusModalMessage = (status) => {
+        if (!status) return null;
+        const label = getSafeStatusLabel(status);
+        const normalized = normalizeStatus(status);
+        if (normalized !== 'rejected' && normalized !== 'completed') {
+            return null;
+        }
+        if (isFinalStatus(normalized)) {
+            const verb = String(label).toLowerCase();
+            return {
+                title: `Este cambio marcará la solicitud como ${verb}.`,
+                detail: `Una vez marcada como ${verb}, ya no se permitirá modificar su estado.`
+            };
+        }
+        return {
+            title: `Cambiar estado a ${label}.`,
+            detail: 'Este es un estado intermedio; podrás modificarlo posteriormente si fuera necesario.'
+        };
     };
 
     return (
@@ -361,10 +682,10 @@ const RequestsPage = () => {
                         </StatsCard>
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${STATUS_BG.approved}` }}>
+                        <StatsCard sx={{ borderLeft: `4px solid ${STATUS_BG.completed}` }}>
                             <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Aprobadas/Completadas</Typography>
-                                <Typography variant="h4" color={STATUS_BG.approved}>{statistics.approvedRequests}</Typography>
+                                <Typography color="textSecondary" gutterBottom>Completadas</Typography>
+                                <Typography variant="h4" color={STATUS_BG.completed}>{statistics.approvedRequests}</Typography>
                             </CardContent>
                         </StatsCard>
                     </Grid>
@@ -421,7 +742,7 @@ const RequestsPage = () => {
                     <Grid item xs="auto" sm="auto" md={"auto"}>
                         <TextField fullWidth size="small" label="Estado" select value={draftFilters.status} onChange={handleDraftChange('status')} sx={{ width: 150 }}>
                             <MenuItem value="">Todos</MenuItem>
-                                {Object.keys(REQUEST_STATES).map(s => (
+                                {SELECTABLE_REQUEST_STATES.map(s => (
                                     <MenuItem key={s} value={s}>{STATUS_LABELS_ES[s] || REQUEST_STATES[s] || s}</MenuItem>
                                 ))}
                         </TextField>
@@ -450,7 +771,7 @@ const RequestsPage = () => {
                         <TextField sx={{ width: 150 }} size="small" type="date" fullWidth label="Fecha Fin" value={draftFilters.endDate} onChange={handleDraftChange('endDate')} InputLabelProps={{ shrink: true }} />
                     </Grid>
                     <Grid item xs="auto" sm="auto" md={"auto"} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Button size="small" variant="outlined" onClick={() => { setDraftFilters(initialFilters); setFilters(initialFilters); setPage(0); fetchStatistics(); fetchRequests(); }}>Limpiar filtros</Button>
+                        <Button size="small" variant="outlined" onClick={() => { setDraftFilters(initialFilters); setFilters(initialFilters); setPage(0); }}>Limpiar filtros</Button>
                         <Button size="small" variant="contained" onClick={() => {
                             // Parse client selection and translate to schoolId/corporationId
                             const applied = { ...draftFilters };
@@ -467,8 +788,6 @@ const RequestsPage = () => {
                             delete applied.client;
                             setFilters(applied);
                             setPage(0);
-                            fetchStatistics();
-                            fetchRequests();
                         }}>Buscar</Button>
                     </Grid>
                 </Grid>
@@ -485,37 +804,41 @@ const RequestsPage = () => {
                                 <TableCell>Tipo</TableCell>
                                 <TableCell>Título</TableCell>
                                 <TableCell>Solicitante</TableCell>
+                                <TableCell>Creada por</TableCell>
                                 <TableCell>Estado</TableCell>
                                 <TableCell align="right">Acciones</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={7} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={8} align="center"><CircularProgress size={24} /></TableCell></TableRow>
                             ) : requests.length === 0 ? (
-                                <TableRow><TableCell colSpan={7} align="center">No hay solicitudes</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={8} align="center">No hay solicitudes</TableCell></TableRow>
                             ) : requests.map(r => (
                                 <TableRow key={r.id} hover sx={{ '&:hover': { backgroundColor: '#fafafa' } }}>
                                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(r.createdAt)}</TableCell>
                                         <TableCell>{getPriorityChip(r.priority)}</TableCell>
-                                        <TableCell>{VALID_REQUEST_TYPES[r.requestType] || r.requestType}</TableCell>
+                                        <TableCell>{getRequestTypeChip(r.requestType)}</TableCell>
                                         <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</TableCell>
                                         <TableCell>{r.requester?.name || r.requester?.fullName || r.userId}</TableCell>
+                                        <TableCell>{r.createdBy?.name || r.createdBy?.email || r.requester?.name || '-'}</TableCell>
                                         <TableCell>{getStatusChip(r.status)}</TableCell>
                                     <TableCell align="right">
                                         <Tooltip title="Ver detalle"><IconButton size="small" onClick={() => handleViewDetail(r)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
-                                        <Tooltip title={r.status === 'cancelled' ? 'No editable (cancelada)' : 'Cambiar estado'}>
+                                        <Tooltip title={isFinalStatus(r.status) || r.status === 'cancelled' ? 'Solicitud ya resuelta' : 'Cambiar estado'}>
                                             <span>
-                                                <IconButton size="small" color="primary" onClick={() => handleOpenStatusModal(r)} disabled={r.status === 'cancelled'}>
+                                                <IconButton size="small" color="primary" onClick={() => handleOpenStatusModal(r)} disabled={isFinalStatus(r.status) || r.status === 'cancelled'}>
                                                     <EditIcon fontSize="small" />
                                                 </IconButton>
                                             </span>
                                         </Tooltip>
-                                        <Tooltip title={r.status === 'cancelled' ? 'Eliminar':'Eliminar'}>
-                                            <IconButton size="small" color="error" onClick={() => handleOpenDeleteModal(r)}>
-                                                <DeleteIcon fontSize="small" />
-                                            </IconButton>
-                                        </Tooltip>
+                                         <PermissionGuard permission="solicitudes-eliminar">
+                                            <Tooltip title={'Eliminar'}>
+                                                <IconButton size="small" color="error" onClick={() => handleOpenDeleteModal(r)}>
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </PermissionGuard>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -535,79 +858,252 @@ const RequestsPage = () => {
                 />
 
             {/* Detail modal */}
-            <Dialog open={detailModalOpen} onClose={() => setDetailModalOpen(false)} maxWidth="md" fullWidth>
-                <DialogTitle>
-                    Detalle de Solicitud
-                </DialogTitle>
-                <DialogContent dividers>
+            <Dialog
+                open={detailModalOpen}
+                onClose={() => setDetailModalOpen(false)}
+                maxWidth="md"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 4,
+                        overflow: 'hidden',
+                        backgroundColor: '#F5F7FB',
+                    },
+                }}
+            >
+                <DialogTitle sx={{ p: 0 }}>
                     {selectedRequest ? (
-                        <Grid container spacing={2}>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">Fecha de solicitud</Typography>
-                                <Typography>{formatDate(selectedRequest.createdAt)}</Typography>
-                            </Grid>
+                        <Box
+                            sx={{
+                                px: 3,
+                                py: 3,
+                                color: '#fff',
+                                background: 'linear-gradient(135deg, #0B5CAB 0%, #2F80ED 100%)',
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                                <Box
+                                    sx={{
+                                        width: 52,
+                                        height: 52,
+                                        borderRadius: 3,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        backgroundColor: 'rgba(255,255,255,0.15)',
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    <VisibilityIcon />
+                                </Box>
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Typography variant="overline" sx={{ opacity: 0.85, letterSpacing: 1 }}>
+                                        Detalle de solicitud
+                                    </Typography>
+                                    <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.2, mb: 0.75 }}>
+                                        {selectedRequest.title || 'Solicitud sin título'}
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                                        {formatDate(selectedRequest.createdAt)}
+                                    </Typography>
+                                </Box>
+                            </Box>
 
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">Solicitante</Typography>
-                                <Typography>
-                                    {(() => {
-                                        const base = selectedRequest.requester?.name || selectedRequest.userId || '-';
-                                        if (selectedRequest.corporation?.name) return `${base} - Corporación ${selectedRequest.corporation.name}`;
-                                        if (selectedRequest.school?.name) return `${base} - Colegio ${selectedRequest.school.name}`;
-                                        return base;
-                                    })()}
-                                </Typography>
-                            </Grid>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
+                                {getStatusChip(selectedRequest.status)}
+                                {getRequestTypeChip(selectedRequest.requestType)}
+                                {getClientChip(selectedRequest)}
+                            </Box>
+                        </Box>
+                    ) : null}
+                </DialogTitle>
+                <DialogContent sx={{ p: 3 }} dividers={false}>
+                    {selectedRequest ? (
+                        <Grid container spacing={2.5}>
+                            <Grid item xs={12} md={7}>
+                                <Box
+                                    sx={{
+                                        backgroundColor: '#fff',
+                                        borderRadius: 3,
+                                        p: 2.5,
+                                        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
+                                        mb: 2,
+                                    }}
+                                >
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
+                                        Información general
+                                    </Typography>
 
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">Estado</Typography>
-                                <Box sx={{ mt: 1 }}>{getStatusChip(selectedRequest.status)}</Box>
-                            </Grid>
+                                    <Grid container spacing={2}>
+                                        <Grid item xs={12} sm={6}>
+                                            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                                                Solicitante
+                                            </Typography>
+                                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                                {selectedRequest.requester?.name || selectedRequest.userId || '-'}
+                                            </Typography>
+                                        </Grid>
 
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">Tipo de solicitud</Typography>
-                                <Typography>{VALID_REQUEST_TYPES[selectedRequest.requestType] || selectedRequest.requestType || '-'}</Typography>
-                            </Grid>
+                                        <Grid item xs={12} sm={6}>
+                                            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                                                Creada por
+                                            </Typography>
+                                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                                {selectedRequest.createdBy?.name || selectedRequest.createdBy?.email || '-'}
+                                            </Typography>
+                                        </Grid>
 
-                            <Grid item xs={12}>
-                                <Typography variant="subtitle2" color="textSecondary">Título de la solicitud</Typography>
-                                <Typography>{selectedRequest.title || '-'}</Typography>
-                            </Grid>
+                                        <Grid item xs={12} sm={6}>
+                                            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                                                Prioridad
+                                            </Typography>
+                                            <Box sx={{ mt: 0.5 }}>{getPriorityChip(selectedRequest.priority)}</Box>
+                                        </Grid>
 
-                            <Grid item xs={12}>
-                                <Typography variant="subtitle2" color="textSecondary">Motivo de la solicitud</Typography>
-                                <Typography>{selectedRequest.description || '-'}</Typography>
-                            </Grid>
+                                        <Grid item xs={12}>
+                                            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                                                Título
+                                            </Typography>
+                                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                                {selectedRequest.title || '-'}
+                                            </Typography>
+                                        </Grid>
 
-                            <Grid item xs={12}>
-                                <Typography variant="subtitle2" color="textSecondary">Notas adicionales</Typography>
-                                <Typography>{selectedRequest.reviewNotes || selectedRequest.notes || '-'}</Typography>
-                            </Grid>
-
-                            {selectedRequest.status && selectedRequest.status !== 'pending' && (
-                                <>
-                                    <Grid item xs={12} sx={{ mt: 1, borderTop: '1px solid #eee', pt: 2 }}>
-                                        <Typography variant="subtitle1">Revisión</Typography>
+                                        <Grid item xs={12}>
+                                            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                                                Descripción
+                                            </Typography>
+                                            <Typography
+                                                variant="body2"
+                                                sx={{
+                                                    color: 'text.primary',
+                                                    lineHeight: 1.7,
+                                                    backgroundColor: '#F8FAFC',
+                                                    border: '1px solid #E5EAF2',
+                                                    borderRadius: 2,
+                                                    p: 2,
+                                                    minHeight: 84,
+                                                }}
+                                            >
+                                                {selectedRequest.description || selectedRequest.reason || 'Sin descripción registrada.'}
+                                            </Typography>
+                                        </Grid>
+                                        {/* Last update moved to separate block below */}
                                     </Grid>
+                                </Box>
+                                {/* Bloque separado 'Última actualización' (alineado con Información general) */}
+                                {(() => {
+                                    const ev = getLastUpdateEvent();
+                                    if (!ev) return null;
+                                    const note = formatLastUpdateNote(ev);
+                                    const author = ev.actor?.name || ev.actor?.fullName || ev.actor?.email || null;
+                                    return (
+                                        <Box
+                                            sx={{
+                                                backgroundColor: '#fff',
+                                                borderRadius: 3,
+                                                p: 2.5,
+                                                boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
+                                                mb: 2,
+                                                width: '100%'
+                                            }}
+                                        >
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                                                    Última actualización
+                                                </Typography>
+                                                {(() => {
+                                                    const statusFromMeta = ev.metadata?.status || ev.metadata?.newStatus || ev.metadata?.statusCode;
+                                                    const notesText = String(ev.notes || '').toLowerCase();
+                                                    let notesMatch = null;
+                                                    if (/pending|pendiente/.test(notesText)) notesMatch = 'pending';
+                                                    else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesText)) notesMatch = 'in_review';
+                                                    else if (/approved|aprobad[oa]|aprobado|aprobada/.test(notesText)) notesMatch = 'approved';
+                                                    else if (/rejected|rechazad[oa]|rechazado|rechazada/.test(notesText)) notesMatch = 'rejected';
+                                                    else if (/completed|completad[oa]|completado|completada/.test(notesText)) notesMatch = 'completed';
+                                                    else if (/cancelled|cancelad[oa]|cancelado|cancelada/.test(notesText)) notesMatch = 'cancelled';
+                                                    const statusResolved = statusFromMeta || notesMatch || null;
+                                                    if (!statusResolved) return null;
+                                                    return <Box sx={{ ml: 0.5 }}>{getStatusChip(statusResolved)}</Box>;
+                                                })()}
+                                            </Box>
+                                            {note ? (
+                                                <Typography
+                                                    variant="body2"
+                                                    sx={{
+                                                        color: 'text.primary',
+                                                        lineHeight: 1.6,
+                                                        backgroundColor: '#FEFEFE',
+                                                        border: '1px solid #EAEFF6',
+                                                        borderRadius: 2,
+                                                        p: 1.5,
+                                                    }}
+                                                >
+                                                    {String(note)}
+                                                </Typography>
+                                            ) : (
+                                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                                    Sin nota de última actualización.
+                                                </Typography>
+                                            )}
+                                            <Box sx={{ mt: 1 }}>
+                                                {author && <Typography variant="caption" sx={{ color: 'text.secondary', mr: 1 }}>{author}</Typography>}
+                                                <Typography variant="caption" sx={{ color: 'text.disabled' }}>{ev.createdAt ? formatDate(ev.createdAt) : ''}</Typography>
+                                            </Box>
+                                        </Box>
+                                    );
+                                })()}
+                            </Grid>
 
-                                    <Grid item xs={12} sm={6}>
-                                        <Typography variant="subtitle2" color="textSecondary">Revisado por</Typography>
-                                        <Typography>{selectedRequest.reviewer?.name || selectedRequest.reviewedBy || '-'}</Typography>
-                                    </Grid>
+                            <Grid item xs={12} md={5}>
+                                <Box
+                                    sx={{
+                                        backgroundColor: '#fff',
+                                        borderRadius: 3,
+                                        p: 2.5,
+                                        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
+                                    }}
+                                >
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
+                                        Historial de Actualizaciones
+                                    </Typography>
 
-                                    <Grid item xs={12} sm={6}>
-                                        <Typography variant="subtitle2" color="textSecondary">Fecha de revisión</Typography>
-                                        <Typography>{formatDate(selectedRequest.reviewedAt)}</Typography>
-                                    </Grid>
-
-                                    <Grid item xs={12}>
-                                        <Typography variant="subtitle2" color="textSecondary">Notas de revisión</Typography>
-                                        <Typography>{selectedRequest.reviewNotes || '-'}</Typography>
-                                    </Grid>
-                                </>
-                            )}
-
-                            
+                                    {requestEvents.length === 0 ? (
+                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                            No hay actualizaciones registradas para esta solicitud.
+                                        </Typography>
+                                    ) : (
+                                        <Box sx={{ display: 'grid', gap: 1.5 }}>
+                                            {requestEvents.map((ev, index) => (
+                                                <Box
+                                                    key={ev.id}
+                                                    sx={{
+                                                        display: 'flex',
+                                                        gap: 0,
+                                                        alignItems: 'flex-start',
+                                                        p: 1.5,
+                                                        borderRadius: 2,
+                                                        backgroundColor: index === 0 ? '#F8FAFC' : '#FBFDFF',
+                                                        border: '1px solid #E6EDF7',
+                                                    }}
+                                                >
+                                                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                                                        <Typography variant="subtitle2" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                                                            {getEventTitle(ev)}
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, lineHeight: 1.6 }}>
+                                                            {getEventDetailText(ev)}
+                                                        </Typography>
+                                                        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
+                                                            {formatDate(ev.createdAt)}
+                                                        </Typography>
+                                                    </Box>
+                                                </Box>
+                                            ))}
+                                        </Box>
+                                    )}
+                                </Box>
+                            </Grid>
                         </Grid>
                     ) : <CircularProgress />}
                 </DialogContent>
@@ -627,37 +1123,148 @@ const RequestsPage = () => {
             </Dialog>
 
             {/* Status change */}
-            <Dialog open={statusModalOpen} onClose={() => setStatusModalOpen(false)} fullWidth maxWidth="sm">
-                <DialogTitle>✎ Cambiar Estado de Solicitud</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ mt: 1 }}>
+            <Dialog
+                open={statusModalOpen}
+                onClose={() => setStatusModalOpen(false)}
+                fullWidth
+                maxWidth="sm"
+                PaperProps={{
+                    sx: {
+                        borderRadius: 4,
+                        overflow: 'hidden',
+                        background: 'linear-gradient(180deg, #FFFFFF 0%, #F7FAFF 100%)',
+                    }
+                }}
+            >
+                <DialogTitle sx={{ p: 0 }}>
+                    <Box sx={{ px: 3, py: 2.5, background: 'linear-gradient(135deg, #0B5CAB 0%, #2F80ED 100%)', color: '#fff' }}>
+                        <Typography variant="overline" sx={{ opacity: 0.85, letterSpacing: 1 }}>
+                            Gestión de estado
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, mt: 0.5 }}>
+                            Cambiar estado de solicitud
+                        </Typography>
+                        <Typography variant="body2" sx={{ opacity: 0.92, mt: 1 }}>
+                            Selecciona el nuevo estado y añade una nota de revisión si corresponde.
+                        </Typography>
+                    </Box>
+                </DialogTitle>
+                <DialogContent sx={{ p: 3 }}>
+                    <Box sx={{ mb: 2.5, p: 2, borderRadius: 3, backgroundColor: '#EEF5FF', border: '1px solid #D8E7FF' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                            Solicitud
+                        </Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                            {selectedRequest?.title || 'Solicitud sin título'}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 1, mb: 0.5 }}>
+                            Descripción
+                        </Typography>
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                color: 'text.primary',
+                                lineHeight: 1.6,
+                                backgroundColor: '#FFFFFF',
+                                border: '1px solid #DCE7F5',
+                                borderRadius: 2,
+                                p: 1.5,
+                                minHeight: 64,
+                            }}
+                        >
+                            {selectedRequest?.description || selectedRequest?.reason || 'Sin descripción registrada.'}
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
+                            {getStatusChip(selectedRequest?.status)}
+                            {getPriorityChip(selectedRequest?.priority)}
+                        </Box>
+                    </Box>
+
+                    <Box sx={{ display: 'grid', gap: 2 }}>
                         <TextField
                             select
-                            label="Estado"
+                            label="Nuevo estado"
                             fullWidth
                             value={newStatus}
                             onChange={(e) => setNewStatus(e.target.value)}
-                            sx={{ mb: 2 }}
+                            helperText={newStatus ? (isFinalStatus(newStatus) ? 'Los estados finales requieren confirmación.' : ' ') : 'Selecciona un nuevo estado.'}
                         >
-                            {Object.keys(REQUEST_STATES).map(s => (
-                                <MenuItem key={s} value={s}>{STATUS_LABELS_ES[s] || REQUEST_STATES[s] || s}</MenuItem>
+                            <MenuItem value="" disabled>
+                                Selecciona un estado
+                            </MenuItem>
+                            {SELECTABLE_REQUEST_STATES.map(s => (
+                                normalizeStatus(s) === normalizeStatus(selectedRequest?.status)
+                                    ? null
+                                    : <MenuItem key={s} value={s}>{STATUS_LABELS_ES[s] || REQUEST_STATES[s] || s}</MenuItem>
                             ))}
                         </TextField>
 
                         <TextField
-                            label="Notas"
+                            label="Notas de revisión"
                             fullWidth
                             multiline
                             rows={4}
                             value={statusNotes}
                             onChange={(e) => setStatusNotes(e.target.value)}
-                            placeholder="Notas de revisión (opcional)"
+                            placeholder="Escribe una nota breve de la decisión tomada"
                         />
+
+                        {newStatus && (() => {
+                            const msg = getStatusModalMessage(newStatus);
+                            if (!msg) return null;
+                            const final = isFinalStatus(newStatus);
+                            return (
+                                <Box sx={{ p: 2, borderRadius: 2, backgroundColor: final ? '#FFF4E5' : '#F5F8FF', border: final ? '1px solid #FFD59A' : '1px solid #DCE7F5' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                        <Box>{getStatusChip(newStatus)}</Box>
+                                        <Typography variant="body2" sx={{ fontWeight: 700, color: final ? '#8A5A00' : 'text.primary' }}>
+                                            {msg.title}
+                                        </Typography>
+                                    </Box>
+                                    <Typography variant="caption" sx={{ color: final ? '#8A5A00' : 'text.secondary', display: 'block' }}>
+                                        {msg.detail}
+                                    </Typography>
+                                </Box>
+                            );
+                        })()}
                     </Box>
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setStatusModalOpen(false)}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleConfirmStatusChange}>Guardar</Button>
+                <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+                    <Button onClick={() => setStatusModalOpen(false)} variant="outlined">
+                        Cancelar
+                    </Button>
+                    <Button variant="contained" onClick={handleConfirmStatusChange} disabled={!newStatus}>
+                        Cambiar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={statusConfirmOpen}
+                onClose={() => setStatusConfirmOpen(false)}
+                maxWidth="xs"
+                fullWidth
+                PaperProps={{ sx: { borderRadius: 4 } }}
+            >
+                <DialogTitle sx={{ fontWeight: 800 }}>Confirmar resolución final</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+                        {pendingStatusPayload?.status ? `Estás a punto de marcar la solicitud como ${String(getSafeStatusLabel(pendingStatusPayload.status)).toLowerCase()}. Después de esto no se podrá volver a editar su estado.` : 'Estás a punto de marcar la solicitud como un estado final. Después de esto no se podrá volver a editar su estado.'}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                        {getStatusChip(pendingStatusPayload?.status)}
+                    </Box>
+                    <Typography variant="body2" sx={{ textAlign: 'center' }}>
+                        ¿Deseas continuar?
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 3 }}>
+                    <Button onClick={() => { setStatusConfirmOpen(false); setPendingStatusPayload(null); }} variant="outlined">
+                        Cancelar
+                    </Button>
+                    <Button color="warning" variant="contained" onClick={handleConfirmFinalStatus}>
+                        Sí, confirmar
+                    </Button>
                 </DialogActions>
             </Dialog>
         </PageContainer>

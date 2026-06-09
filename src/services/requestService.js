@@ -17,6 +17,16 @@ export const getRequestById = async (id) => {
     return res.data;
 };
 
+export const getMyRequests = async () => {
+    const res = await api.get(`${API_URL}/my-requests`);
+    return res.data?.requests || [];
+};
+
+export const getRequestEvents = async (id) => {
+    const res = await api.get(`${API_URL}/${id}/events`);
+    return res.data?.events || [];
+};
+
 export const createRequest = async (data) => {
     const res = await api.post(API_URL, data);
     return res.data;
@@ -57,12 +67,16 @@ export const getCorporationsList = async (params = {}) => {
     return res.data?.corporations || res.data || [];
 };
 
-export const VALID_REQUEST_TYPES = {
-    service_cancellation: 'Baja de Servicio',
-    schedule_change: 'Cambio de Horario',
-    route_change: 'Cambio de Ruta',
-    other: 'Otro'
+export const REQUEST_TYPE_META = {
+    service_cancellation: { label: 'Baja del Servicio', color: '#E74C3C', icon: 'cancel' },
+    schedule_change: { label: 'Cambio de Horario', color: '#2196F3', icon: 'schedule' },
+    route_change: { label: 'Cambio de Ruta', color: '#7B61FF', icon: 'bus' },
+    other: { label: 'Otro', color: '#6C757D', icon: 'create' },
 };
+
+export const VALID_REQUEST_TYPES = Object.fromEntries(
+    Object.entries(REQUEST_TYPE_META).map(([key, meta]) => [key, meta.label])
+);
 
 export const REQUEST_STATES = {
     pending: 'Pending',
@@ -83,6 +97,8 @@ export const STATE_COLORS = {
 export default {
     getAllRequests,
     getRequestById,
+    getMyRequests,
+    getRequestEvents,
     createRequest,
     createServiceCancellation,
     updateRequestStatus,

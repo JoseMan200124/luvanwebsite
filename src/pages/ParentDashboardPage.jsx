@@ -1000,6 +1000,17 @@ const ParentDashboardPage = () => {
                           Actualizar Mis Datos
                         </Button>
                       </Grid>
+                      <Grid item xs={12} sx={{ mt: 1 }}>
+                        <Button
+                          variant="outlined"
+                          color="secondary"
+                          fullWidth
+                          startIcon={<DescriptionIcon />}
+                          onClick={() => navigate('/parent/solicitudes')}
+                        >
+                          Mis Solicitudes
+                        </Button>
+                      </Grid>
                       <Grid item xs={12} sx={{ mt: 1, textAlign: 'center' }}>
                         <Button
                           variant="outlined"

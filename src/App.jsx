@@ -23,6 +23,7 @@ import ThankYouPage from './pages/ThankYouPage';
 import DefaultAdminRoute from './components/DefaultAdminRoute';
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import ParentDashboardPage from './pages/ParentDashboardPage';
+import ParentRequestsPage from './pages/ParentRequestsPage';
 import ParentPaymentPage from './pages/ParentPaymentPage';
 import ParentProtocolsPage from './pages/ParentProtocolsPage';
 import ParentCircularsPage from './pages/ParentCircularsPage';
@@ -278,6 +279,14 @@ function App() {
                                 redirectTo="/login"
                             >
                                 <ParentDashboardPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/parent/solicitudes"
+                        element={
+                            <ProtectedRoute redirectTo="/parent/dashboard" roles={['Padre']} requireSchoolContext={false}>
+                                <ParentRequestsPage />
                             </ProtectedRoute>
                         }
                     />
