@@ -41,7 +41,9 @@ import {
     Refresh as RefreshIcon, 
     Edit as EditIcon,
     Visibility as VisibilityIcon,
-    LocalGasStation as GasIcon 
+    LocalGasStation as GasIcon,
+    WarningAmber as WarningAmberIcon,
+    InfoOutlined as InfoOutlinedIcon
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import tw from 'twin.macro';
@@ -60,6 +62,11 @@ import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolar
 moment.tz.setDefault('America/Guatemala');
 
 const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
+// Feature flag: mostrar la nueva métrica de consumo (activar manualmente cuando corresponda)
+const SHOW_NEW_FUEL_METRIC = false;
+
+// Tamaño dinámico de las tarjetas para evitar huecos en la fila
+const cardMd = SHOW_NEW_FUEL_METRIC ? 2.4 : 3;
 
 const FuelRecordsPage = () => {
     const [fuelRecords, setFuelRecords] = useState([]);
@@ -111,6 +118,9 @@ const FuelRecordsPage = () => {
         notes: ''
     });
 
+    // Modal explicación eficiencia
+    const [efficiencyInfoOpen, setEfficiencyInfoOpen] = useState(false);
+
     // Crear registro
     const [createOpen, setCreateOpen] = useState(false);
     const [creating, setCreating] = useState(false);
@@ -134,6 +144,17 @@ const FuelRecordsPage = () => {
         totalGallons: 0,
         totalAmount: 0,
         averagePrice: 0,
+        efficiency: {
+            estimatedConsumptionPerDay: 0,
+            estimatedConsumptionPerRoute: 0,
+            kmPerGallon: 0,
+            gallonsPerKm: 0,
+            totalKmTraveled: 0,
+            totalRoutesCompleted: 0,
+            drivingDaysCount: 0,
+            avgKmPerRoute: 0,
+            byBus: []
+        },
         byReason: {},
     });
 
@@ -409,6 +430,17 @@ const FuelRecordsPage = () => {
                     totalGallons: parseFloat(totals.totalGallonage) || 0,
                     totalAmount: parseFloat(totals.totalAmount) || 0,
                     averagePrice: parseFloat(totals.avgPricePerGallon) || 0,
+                    efficiency: response.data.efficiency || {
+                        estimatedConsumptionPerDay: 0,
+                        estimatedConsumptionPerRoute: 0,
+                        kmPerGallon: 0,
+                        gallonsPerKm: 0,
+                        totalKmTraveled: 0,
+                        totalRoutesCompleted: 0,
+                        drivingDaysCount: 0,
+                        avgKmPerRoute: 0,
+                        byBus: []
+                    },
                     byReason: byReason,
                 });
             } else {
@@ -417,6 +449,17 @@ const FuelRecordsPage = () => {
                     totalGallons: 0,
                     totalAmount: 0,
                     averagePrice: 0,
+                    efficiency: {
+                        estimatedConsumptionPerDay: 0,
+                        estimatedConsumptionPerRoute: 0,
+                        kmPerGallon: 0,
+                        gallonsPerKm: 0,
+                        totalKmTraveled: 0,
+                        totalRoutesCompleted: 0,
+                        drivingDaysCount: 0,
+                        avgKmPerRoute: 0,
+                        byBus: []
+                    },
                     byReason: {},
                 });
             }
@@ -427,6 +470,17 @@ const FuelRecordsPage = () => {
                 totalGallons: 0,
                 totalAmount: 0,
                 averagePrice: 0,
+                efficiency: {
+                    estimatedConsumptionPerDay: 0,
+                    estimatedConsumptionPerRoute: 0,
+                    kmPerGallon: 0,
+                    gallonsPerKm: 0,
+                    totalKmTraveled: 0,
+                    totalRoutesCompleted: 0,
+                    drivingDaysCount: 0,
+                    avgKmPerRoute: 0,
+                    byBus: []
+                },
                 byReason: {},
             });
         }
@@ -806,10 +860,13 @@ const FuelRecordsPage = () => {
                 </Box>
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
+                <Grid container spacing={3} mb={3} alignItems="stretch">
+                    {/* Ajuste md dinámico para evitar hueco cuando la tarjeta nueva está oculta */}
+                    {/** cardMd: 2.4 cuando mostramos 5 cards; 3 cuando mostramos solo 4 **/}
+                    
+                    <Grid item xs={12} sm={6} md={cardMd}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
                                 <Box display="flex" alignItems="center" mb={1}>
                                     <GasIcon color="primary" sx={{ mr: 1 }} />
                                     <Typography color="textSecondary" variant="body2">
@@ -822,9 +879,9 @@ const FuelRecordsPage = () => {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
+                    <Grid item xs={12} sm={6} md={cardMd}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
                                 <Typography color="textSecondary" gutterBottom variant="body2">
                                     Total Galones
                                 </Typography>
@@ -834,9 +891,9 @@ const FuelRecordsPage = () => {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
+                    <Grid item xs={12} sm={6} md={cardMd}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
                                 <Typography color="textSecondary" gutterBottom variant="body2">
                                     Total Gastado
                                 </Typography>
@@ -846,9 +903,9 @@ const FuelRecordsPage = () => {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card>
-                            <CardContent>
+                    <Grid item xs={12} sm={6} md={cardMd}>
+                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
                                 <Typography color="textSecondary" gutterBottom variant="body2">
                                     Precio Promedio/Galón
                                 </Typography>
@@ -858,6 +915,30 @@ const FuelRecordsPage = () => {
                             </CardContent>
                         </Card>
                     </Grid>
+                    {SHOW_NEW_FUEL_METRIC && (
+                        <Grid item xs={12} sm={6} md={2.4}>
+                            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
+                                <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Typography color="textSecondary" gutterBottom variant="body2" sx={{ mb: 0 }}>
+                                            Consumo de combustible por días/recorrido
+                                        </Typography>
+                                        <Tooltip title="¿Cómo se calcula esto?">
+                                            <IconButton size="small" onClick={() => setEfficiencyInfoOpen(true)} sx={{ ml: 0.5, p: 0.25 }}>
+                                                <InfoOutlinedIcon fontSize="small" color="action" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Box>
+                                    <Typography variant="h5" sx={{ lineHeight: 1.2 }}>
+                                        {(Number(statistics.efficiency?.estimatedConsumptionPerDay) || 0).toFixed(2)} gal/día
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                                        {(Number(statistics.efficiency?.estimatedConsumptionPerRoute) || 0).toFixed(2)} gal/recorrido
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    )}
                 </Grid>
 
                 {/* Filtros */}
@@ -1085,6 +1166,7 @@ const FuelRecordsPage = () => {
                                                     Tipo Combustible
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell align="center">Anotación</TableCell>
                                             <TableCell align="right" sortDirection={orderBy === 'gallonage' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'gallonage'}
@@ -1142,6 +1224,24 @@ const FuelRecordsPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     {FUEL_TYPES[record.fuelType] || record.fuelType}
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    {record.notes?.trim() && (
+                                                        <Tooltip title={`Anotación: ${record.notes.trim()}`}>
+                                                            <Box
+                                                                component="span"
+                                                                sx={{
+                                                                    width: 14,
+                                                                    height: 14,
+                                                                    borderRadius: '50%',
+                                                                    display: 'inline-block',
+                                                                    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                                                                    boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.15)',
+                                                                    border: '1px solid rgba(251, 191, 36, 0.35)',
+                                                                }}
+                                                            />
+                                                        </Tooltip>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell align="right">
                                                     {parseFloat(record.gallonage).toFixed(2)}
@@ -1638,6 +1738,132 @@ const FuelRecordsPage = () => {
                         {editSnackbar.message}
                     </Alert>
                 </Snackbar>
+
+                {SHOW_NEW_FUEL_METRIC && (
+                    /* ── Modal: Explicación del cálculo de eficiencia ── */
+                    <Dialog
+                        open={efficiencyInfoOpen}
+                        onClose={() => setEfficiencyInfoOpen(false)}
+                        maxWidth="sm"
+                        fullWidth
+                        scroll="paper"
+                    >
+                        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <InfoOutlinedIcon color="primary" />
+                            ¿Cómo se calcula el consumo de combustible?
+                        </DialogTitle>
+                        <DialogContent dividers>
+                            {/* ── Resumen ── */}
+                            <Typography variant="body1" gutterBottom>
+                                Estas cifras estiman cuántos galones consume la flota <strong>por día de operación</strong> y <strong>por recorrido completado</strong>. El cálculo se basa en datos reales de distancia recorrida y combustible abastecido.
+                            </Typography>
+
+                            {/* ── Paso 1 ── */}
+                            <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 700 }}>
+                                Paso 1 — Eficiencia real (km / galón)
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                                Cruzamos dos fuentes de datos dentro del mismo período y para los mismos buses:
+                            </Typography>
+                            <Box component="ul" sx={{ pl: 2.5, mt: 0.5 }}>
+                                <li><Typography variant="body2"><strong>Kilómetros recorridos:</strong> suma de la distancia registrada en cada recorrido <em>completado</em> (aquellos que tienen hora de inicio <em>y</em> hora de fin).</Typography></li>
+                                <li><Typography variant="body2"><strong>Galones abastecidos:</strong> suma de todos los registros de combustible del período.</Typography></li>
+                            </Box>
+                            <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 1 }}>
+                                <Typography variant="body2" fontFamily="monospace">
+                                    Eficiencia = km totales ÷ galones totales abastecidos
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                                <strong>¿Por qué galones abastecidos ≈ galones consumidos?</strong> En períodos largos, el nivel del tanque al inicio y al final del período se cancela estadísticamente, de modo que lo que se surtió equivale a lo que se consumió.
+                            </Typography>
+
+                            {/* ── Paso 2 ── */}
+                            <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
+                                Paso 2 — Consumo estimado por recorrido
+                            </Typography>
+                            <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 0.5 }}>
+                                <Typography variant="body2" fontFamily="monospace">
+                                    Consumo/recorrido = km promedio por recorrido ÷ eficiencia (km/galón)
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                                Primero se calcula el promedio de kilómetros por recorrido. Luego, dividiendo esa distancia entre la eficiencia, se obtiene cuántos galones demanda un recorrido típico.
+                            </Typography>
+
+                            {/* ── Paso 3 ── */}
+                            <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
+                                Paso 3 — Consumo estimado por día de operación
+                            </Typography>
+                            <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 0.5 }}>
+                                <Typography variant="body2" fontFamily="monospace">
+                                    Consumo/día = (km totales ÷ días con recorridos) ÷ eficiencia (km/galón)
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                                Se cuentan únicamente los días en que hubo al menos un recorrido completado. Dividir los km de ese día entre la eficiencia da el gasto estimado de combustible para ese día promedio.
+                            </Typography>
+
+                            {/* ── Notas importantes ── */}
+                            <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700, color: 'warning.dark' }}>
+                                ⚠ Notas importantes
+                            </Typography>
+                            <Box component="ul" sx={{ pl: 2.5, mt: 0.5 }}>
+                                <li>
+                                    <Typography variant="body2">
+                                        <strong>Certeza de los datos:</strong> la precisión depende directamente de que los recorridos se <em>cierren correctamente</em> en el sistema (con hora de fin registrada) y de que todos los abastecimientos se carguen en tiempo real. Datos faltantes o incompletos reducen la exactitud.
+                                    </Typography>
+                                </li>
+                                <li>
+                                    <Typography variant="body2" sx={{ mt: 0.75 }}>
+                                        <strong>Período corto:</strong> con pocos días o pocos abastecimientos, el nivel inicial/final del tanque puede distorsionar el resultado. Los valores son más confiables en períodos de al menos 2–3 semanas.
+                                    </Typography>
+                                </li>
+                                <li>
+                                    <Typography variant="body2" sx={{ mt: 0.75 }}>
+                                        <strong>Buses sin datos cruzados:</strong> si un bus tiene registros de combustible pero ningún recorrido completado (o viceversa) en el período, no se incluye en el cálculo global de eficiencia.
+                                    </Typography>
+                                </li>
+                                <li>
+                                    <Typography variant="body2" sx={{ mt: 0.75 }}>
+                                        <strong>Mejora futura:</strong> cuando se activen las lecturas de odómetro y el indicador de tanque lleno, el sistema pasará al método <em>tank-to-tank</em> (lleno a lleno), que es el estándar de mayor precisión en gestión de flotas.
+                                    </Typography>
+                                </li>
+                            </Box>
+
+                            {/* ── Datos del período actual ── */}
+                            {statistics.efficiency?.kmPerGallon > 0 && (
+                                <>
+                                    <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
+                                        Datos del período actual
+                                    </Typography>
+                                    <Box sx={{ bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200', borderRadius: 1, px: 2, py: 1.5, mt: 0.5 }}>
+                                        <Grid container spacing={1}>
+                                            <Grid item xs={6}><Typography variant="body2"><strong>Eficiencia:</strong> {(statistics.efficiency.kmPerGallon || 0).toFixed(3)} km/gal</Typography></Grid>
+                                            <Grid item xs={6}><Typography variant="body2"><strong>Km totales:</strong> {(statistics.efficiency.totalKmTraveled || 0).toFixed(1)} km</Typography></Grid>
+                                            <Grid item xs={6}><Typography variant="body2"><strong>Recorridos completados:</strong> {statistics.efficiency.totalRoutesCompleted || 0}</Typography></Grid>
+                                            <Grid item xs={6}><Typography variant="body2"><strong>Días con operación:</strong> {statistics.efficiency.drivingDaysCount || 0}</Typography></Grid>
+                                            <Grid item xs={6}><Typography variant="body2"><strong>Km prom./recorrido:</strong> {(statistics.efficiency.avgKmPerRoute || 0).toFixed(2)} km</Typography></Grid>
+                                            <Grid item xs={6}><Typography variant="body2"><strong>Galones/km:</strong> {(statistics.efficiency.gallonsPerKm || 0).toFixed(4)} gal/km</Typography></Grid>
+                                        </Grid>
+                                    </Box>
+                                </>
+                            )}
+                            {(!statistics.efficiency?.kmPerGallon || statistics.efficiency.kmPerGallon === 0) && (
+                                <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.100', borderRadius: 1 }}>
+                                    <Typography variant="body2" color="textSecondary">
+                                        No hay datos suficientes para calcular la eficiencia en el período o filtros seleccionados actualmente.
+                                    </Typography>
+                                </Box>
+                            )}
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setEfficiencyInfoOpen(false)} variant="contained" disableElevation>
+                                Entendido
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
+                )}
             </Container>
         </LocalizationProvider>
     );
