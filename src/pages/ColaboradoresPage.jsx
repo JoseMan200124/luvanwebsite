@@ -305,11 +305,11 @@ const ColaboradoresPage = () => {
     // Funciones auxiliares para determinar el estado de los colaboradores
     const isColaboradorNew = (colaborador) => {
         if (!colaborador.ColaboradorDetail) return false;
-        if (colaborador.ColaboradorDetail.isNew === false) return false;
-        const createdAt = new Date(colaborador.createdAt);
-        const now = new Date();
-        const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
-        return diffDays <= 14;
+        const cd = colaborador.ColaboradorDetail;
+        if (!cd.createdAt) return false;
+        const since = new Date();
+        since.setDate(since.getDate() - 21);
+        return new Date(cd.createdAt) >= since;
     };
 
     const isColaboradorDuplicated = (colaborador, allColaboradores) => {
@@ -326,7 +326,13 @@ const ColaboradoresPage = () => {
         if (colaborador && (colaborador.state === 0 || colaborador.state === '0' || colaborador.state === false)) return 'Inactivo';
         if (isColaboradorNew(colaborador)) return 'Nuevo';
         if (isColaboradorDuplicated(colaborador, colaboradores)) return 'Duplicado';
-        if (colaborador.ColaboradorDetail && colaborador.ColaboradorDetail.hasUpdatedData) return 'Actualizado';
+        if (colaborador.ColaboradorDetail?.updatedAt && colaborador.ColaboradorDetail.createdAt) {
+            const updated = new Date(colaborador.ColaboradorDetail.updatedAt);
+            const created = new Date(colaborador.ColaboradorDetail.createdAt);
+            const since = new Date();
+            since.setDate(since.getDate() - 7);
+            if (updated > created && updated >= since) return 'Actualizado';
+        }
         return 'Activo';
     }, [colaboradores]);
 

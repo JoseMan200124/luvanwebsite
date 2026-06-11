@@ -376,14 +376,6 @@ const RolesManagementPage = () => {
     };
 
     const handleEditClick = async (user) => {
-        if (isUserNew(user)) {
-            try {
-                await api.put(`/users/${user.id}/mark-not-new`);
-                await fetchUsers();
-            } catch (err) {
-                console.error('Error al marcar como NO nuevo:', err);
-            }
-        }
         const parsedRoleId = Number(user.roleId);
         setSelectedUser({
             ...user,

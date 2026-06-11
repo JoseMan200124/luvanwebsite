@@ -1156,12 +1156,16 @@ const SchoolUsersPage = () => {
             const familyDetail = user.FamilyDetail;
             if (!familyDetail) return [user.id, '-'];
 
-            if (familyDetail.isNew !== false && familyDetail.isNew === true) {
-                const createdAt = new Date(user.createdAt).getTime();
-                const diffDays = Number.isFinite(createdAt)
-                    ? (now - createdAt) / (1000 * 60 * 60 * 24)
-                    : Infinity;
-                if (diffDays <= 21) return [user.id, 'Nuevo'];
+            // Nuevo: basado en FamilyDetail.createdAt del ciclo seleccionado
+            try {
+                const famCreated = getFamilyCreatedAt(user);
+                if (famCreated) {
+                    const createdAtMs = new Date(famCreated).getTime();
+                    const diffDays = Number.isFinite(createdAtMs) ? (now - createdAtMs) / (1000 * 60 * 60 * 24) : Infinity;
+                    if (diffDays <= 21) return [user.id, 'Nuevo'];
+                }
+            } catch (e) {
+                console.error('Error parsing createdAt for user', user.id, e);
             }
 
             const lastName = normalizeKey(familyDetail.familyLastName || '');
@@ -1169,10 +1173,23 @@ const SchoolUsersPage = () => {
                 return [user.id, 'Duplicado'];
             }
 
-            if (familyDetail.hasUpdatedData) return [user.id, 'Actualizado'];
+            // Actualizado: basado en FamilyDetail.updatedAt del ciclo seleccionado (dentro de 21 días y posterior a createdAt)
+            try {
+                const famUpdated = getFamilyUpdatedAt(user);
+                if (famUpdated) {
+                    const updatedAtMs = new Date(famUpdated).getTime();
+                    const diffDaysUpd = Number.isFinite(updatedAtMs) ? (now - updatedAtMs) / (1000 * 60 * 60 * 24) : Infinity;
+                    const famCreated = getFamilyCreatedAt(user);
+                    const createdAtMs = famCreated ? new Date(famCreated).getTime() : null;
+                    if (diffDaysUpd <= 7 && (!createdAtMs || updatedAtMs > createdAtMs)) return [user.id, 'Actualizado'];
+                }
+            } catch (e) {
+                console.error('Error parsing updatedAt for user', user.id, e);
+            }
+
             return [user.id, '-'];
         }));
-    }, [users]);
+    }, [users, getFamilyCreatedAt, getFamilyUpdatedAt]);
 
     const getUserStatus = useCallback((user) => {
         return userStatusById.get(user?.id) || '-';
@@ -1202,6 +1219,7 @@ const SchoolUsersPage = () => {
                 try {
                     students = JSON.parse(students || '[]');
                 } catch (e) {
+                    console.error('Error parsing students for user', user.id, e);
                     students = [];
                 }
             }
@@ -1209,6 +1227,7 @@ const SchoolUsersPage = () => {
             // Filter out falsy entries
             return students.filter(s => s && (typeof s === 'object' || String(s).trim() !== ''));
         } catch (e) {
+            console.error('Error getting students array for user', user.id, e);
             return [];
         }
     };
@@ -1241,10 +1260,10 @@ const SchoolUsersPage = () => {
                 // try several common property names
                 let slots = s?.ScheduleSlots || s?.scheduleSlots || s?.ScheduleSlot || s?.scheduleSlot || s?.slots;
                 if (!slots && typeof s === 'string') {
-                    try { slots = JSON.parse(s); } catch (e) { slots = null; }
+                    try { slots = JSON.parse(s); } catch (e) { console.error('Error parsing slots for student', s, e); slots = null; }
                 }
                 if (typeof slots === 'string') {
-                    try { slots = JSON.parse(slots); } catch (e) { slots = null; }
+                    try { slots = JSON.parse(slots); } catch (e) { console.error('Error parsing slots for student', s, e); slots = null; }
                 }
                 return Array.isArray(slots) && slots.length > 0;
             }).length;
@@ -1253,11 +1272,60 @@ const SchoolUsersPage = () => {
             if (assigned === total) return 'all';
             return 'some';
         } catch (e) {
+            console.error('Error determining bus assignment status for user', user.id, e);
             return 'none';
         }
     };
 
-    const countStudents = (list) => (Array.isArray(list) ? list.reduce((acc, u) => acc + getStudentsCount(u), 0) : 0);
+        // Prefer FamilyDetail-level updatedAt (for the selected school + ciclo) over global User.updatedAt
+        function getFamilyUpdatedAt(user) {
+            if (!user) return null;
+            const fd = user.FamilyDetail || user.familyDetail || null;
+            if (!fd) return null;
+
+            const resolveUpdated = (obj) => obj?.updatedAt || obj?.updated_at || obj?.updatedOn || obj?.modifiedAt || obj?.updated || null;
+
+            // If multiple family detail records are present, try to match by schoolId and cicloEscolarId
+            if (Array.isArray(fd)) {
+                const matched = fd.find(item => {
+                    if (!item) return false;
+                    const sid = item.schoolId ?? item.SchoolId ?? item.school?.id ?? item.colegioId ?? null;
+                    const cid = item.cicloEscolarId ?? item.CicloEscolarId ?? item.cicloId ?? item.cicloEscolar?.id ?? null;
+                    const schoolMatches = schoolId ? String(sid) === String(schoolId) : true;
+                    const cycleMatches = stateCicloEscolarId ? String(cid) === String(stateCicloEscolarId) : true;
+                    return schoolMatches && cycleMatches;
+                }) || fd[0];
+                return resolveUpdated(matched);
+            }
+
+            // If single object, assume it's already the relevant FamilyDetail
+            return resolveUpdated(fd);
+        }
+
+        // Prefer FamilyDetail-level createdAt (for the selected school + ciclo)
+        function getFamilyCreatedAt(user) {
+            if (!user) return null;
+            const fd = user.FamilyDetail || user.familyDetail || null;
+            if (!fd) return null;
+
+            const resolveCreated = (obj) => obj?.createdAt || obj?.created_at || obj?.createdOn || obj?.created || null;
+
+            if (Array.isArray(fd)) {
+                const matched = fd.find(item => {
+                    if (!item) return false;
+                    const sid = item.schoolId ?? item.SchoolId ?? item.school?.id ?? item.colegioId ?? null;
+                    const cid = item.cicloEscolarId ?? item.CicloEscolarId ?? item.cicloId ?? item.cicloEscolar?.id ?? null;
+                    const schoolMatches = schoolId ? String(sid) === String(schoolId) : true;
+                    const cycleMatches = stateCicloEscolarId ? String(cid) === String(stateCicloEscolarId) : true;
+                    return schoolMatches && cycleMatches;
+                }) || fd[0];
+                return resolveCreated(matched);
+            }
+
+            return resolveCreated(fd);
+        }
+
+        const countStudents = (list) => (Array.isArray(list) ? list.reduce((acc, u) => acc + getStudentsCount(u), 0) : 0);
 
     // Cargar datos adicionales
     const fetchContracts = useCallback(async () => {
@@ -2191,8 +2259,12 @@ const SchoolUsersPage = () => {
                     vb = getUserStatus(b);
                     break;
                 case 'updatedAt':
-                    va = a.updatedAt || a.createdAt || '';
-                    vb = b.updatedAt || b.createdAt || '';
+                    va = getFamilyUpdatedAt(a) || a.updatedAt || a.createdAt || '';
+                    vb = getFamilyUpdatedAt(b) || b.updatedAt || b.createdAt || '';
+                    break;
+                case 'createdAt':
+                    va = getFamilyCreatedAt(a) || a.createdAt || '';
+                    vb = getFamilyCreatedAt(b) || b.createdAt || '';
                     break;
                 case 'familyLastName':
                     va = a.FamilyDetail?.familyLastName || a.familyLastName || '';
@@ -2223,8 +2295,8 @@ const SchoolUsersPage = () => {
                     vb = '';
             }
 
-            // try numeric compare for updatedAt or students
-            if (sortBy === 'updatedAt') {
+            // try numeric compare for updatedAt/createdAt or students
+            if (sortBy === 'updatedAt' || sortBy === 'createdAt') {
                 const da = new Date(va).getTime() || 0;
                 const db = new Date(vb).getTime() || 0;
                 return sortOrder === 'asc' ? da - db : db - da;
@@ -2533,6 +2605,15 @@ const SchoolUsersPage = () => {
                                             </TableCell>
                                             <TableCell>
                                                 <TableSortLabel
+                                                    active={sortBy === 'createdAt'}
+                                                    direction={sortBy === 'createdAt' ? sortOrder : 'asc'}
+                                                    onClick={() => handleSortChange('createdAt')}
+                                                >
+                                                    Inscrito el
+                                                </TableSortLabel>
+                                            </TableCell>
+                                            <TableCell>
+                                                <TableSortLabel
                                                     active={sortBy === 'updatedAt'}
                                                     direction={sortBy === 'updatedAt' ? sortOrder : 'asc'}
                                                     onClick={() => handleSortChange('updatedAt')}
@@ -2597,7 +2678,23 @@ const SchoolUsersPage = () => {
                                                 <TableCell>
                                                     <Typography variant="body2">
                                                         {(() => {
-                                                            const d = new Date(user.updatedAt || user.createdAt);
+                                                            const famCreated = getFamilyCreatedAt(user);
+                                                            if (!famCreated) return '-';
+                                                            const d = new Date(famCreated);
+                                                            if (isNaN(d.getTime())) return '-';
+                                                            const dd = String(d.getDate()).padStart(2, '0');
+                                                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                                                            const yyyy = d.getFullYear();
+                                                            return `${dd}/${mm}/${yyyy}`;
+                                                        })()}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2">
+                                                        {(() => {
+                                                            const famUpdated = getFamilyUpdatedAt(user);
+                                                            const d = new Date(famUpdated || user.updatedAt || user.createdAt);
+                                                            if (isNaN(d.getTime())) return '-';
                                                             const dd = String(d.getDate()).padStart(2, '0');
                                                             const mm = String(d.getMonth() + 1).padStart(2, '0');
                                                             const yyyy = d.getFullYear();
