@@ -152,7 +152,7 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
                                     format="YYYY-MM-DD"
                                     renderInput={(params) => <TextField {...params} size="small" fullWidth />}
                                 />
-                                <Typography variant="caption" color="text.secondary">Última fecha en la que se puede pagar el período.</Typography>
+                                <Typography variant="caption" color="text.secondary">Última fecha en la que se puede pagar el período sin acumular mora.</Typography>
                             </Grid>
 
                             <Grid item xs={12} sm={6}>
@@ -162,7 +162,7 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
                                         control={<Checkbox checked={noAccruePenalty} onChange={(e) => setNoAccruePenalty(e.target.checked)} size="small" />}
                                         label="Congelar mora"
                                     />
-                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>Marcarse esta opción para que el período no acumule mora y así al crearse el período tendrá mora congelada.</Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>Marcar esta opción para que el período no acumule mora. Se creará el período con mora congelada.</Typography>
                                 </Box>
                             </Grid>
 
@@ -172,13 +172,16 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
             </DialogContent>
             <Box sx={{ px: 3, pb: 1 }}>
                 <Alert severity="info" sx={{ mt: 1 }}>
-                    <Typography variant="body2">
-                        Tener en cuenta la fecha de vencimiento del período.Si el vencimiento ocurre en o después del último día en que el colegio está en operaciones, puede que la mora no se acumule.
+                    <Typography variant="body2" sx={{ marginBottom: '8px' }}>
+                        Tener en cuenta la fecha de vencimiento del período que se desea crear.
                     </Typography>
-                    <Typography variant="subtitle2" sx={{ mt: 1, fontWeight: 700 }}>Opciones habituales</Typography>
+                    <Typography variant="body2">
+                        Se acumula mora hasta la fecha de fin de operaciones del colegio, la cual se establece en la configuración general del colegio. Si el período extracurricular que deseas crear tiene una fecha de vencimiento que ocurre después de la fecha de fin de operaciones, no acumulará mora incluso si no se marca la opción "Congelar mora".
+                    </Typography>
+                    <Typography variant="subtitle2" sx={{ mt: 1, fontWeight: 700 }}>Sugerencias</Typography>
                     <Box component="ul" sx={{ pl: 3, m: 0, mt: 0.5, listStyleType: 'disc', listStylePosition: 'outside', '& li': { marginBottom: '6px' } }}>
                         <li><Typography variant="body2">Crear el período normalmente aceptando que no acumule mora.</Typography></li>
-                        <li><Typography variant="body2">Elegir una fecha de vencimiento para el período dentro del rango operativo del colegio para permitir acumulación de mora.</Typography></li>
+                        <li><Typography variant="body2">Elegir una fecha de vencimiento para el período extracurricular, el cual se encuentre dentro del rango operativo del colegio para permitir acumulación de mora.</Typography></li>
                         <li><Typography variant="body2">Actualizar la fecha de fin de operaciones del colegio para que el período esté dentro del rango operativo.</Typography></li>
                     </Box>
                 </Alert>
