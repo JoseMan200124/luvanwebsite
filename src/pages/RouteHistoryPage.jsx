@@ -58,6 +58,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
 import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
 const RouteHistoryPage = () => {
     const { auth } = useContext(AuthContext);
@@ -120,6 +121,8 @@ const RouteHistoryPage = () => {
     const [statsData, setStatsData] = useState(null);
     const [statsSelectedClient, setStatsSelectedClient] = useState(null);
     const [statsClientTouched, setStatsClientTouched] = useState(false);
+    const [statsSelectedCicloEscolar, setStatsSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
+    const [statsClients, setStatsClients] = useState([]);
     const [statsStartDate, setStatsStartDate] = useState('');
     const [statsEndDate, setStatsEndDate] = useState('');
     const [statsMonth, setStatsMonth] = useState('');
@@ -258,7 +261,12 @@ const RouteHistoryPage = () => {
                             if (item.deleted) return;
                             const id = item.id || item._id || item.value || item.uuid || item.name;
                             const name = item.name || item.nombre || item.label || String(id);
-                            const group = type === 'school' ? 'Colegios' : 'Corporaciones';
+                            const cycle = item.cicloEscolar || item.CicloEscolar || {};
+                            const cycleId = item.cicloEscolarId || cycle.id || item.cicloEscolar_id;
+                            const cycleLabel = type === 'school'
+                                ? (getCicloEscolarOptionLabel(cycle) || (cycleId ? `Ciclo ${cycleId}` : 'Sin ciclo escolar'))
+                                : 'Corporaciones';
+                            const group = cycleLabel;
                             combined.push({ id, name, _raw: item, type, group });
                         };
 
@@ -284,6 +292,48 @@ const RouteHistoryPage = () => {
         loadClients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCicloEscolar]);
+
+    useEffect(() => {
+        const loadStatsClients = async () => {
+            try {
+                const [schoolsResp, corpsResp] = await Promise.all([
+                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(statsSelectedCicloEscolar), includeArchived: true } }),
+                    api.get('/corporations', { params: getCicloEscolarFilterParams(statsSelectedCicloEscolar) })
+                ]);
+
+                const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
+                const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
+
+                const combined = [];
+                const pushIfValid = (item, type) => {
+                    if (!item) return;
+                    if (item.deleted) return;
+                    const id = item.id || item._id || item.value || item.uuid || item.name;
+                    const name = item.name || item.nombre || item.label || String(id);
+                    const cycle = item.cicloEscolar || item.CicloEscolar || {};
+                    const cycleId = item.cicloEscolarId || cycle.id || item.cicloEscolar_id;
+                    const cycleLabel = type === 'school'
+                        ? (getCicloEscolarOptionLabel(cycle) || (cycleId ? `Ciclo ${cycleId}` : 'Sin ciclo escolar'))
+                        : 'Corporaciones';
+                    const group = cycleLabel;
+                    combined.push({ id, name, _raw: item, type, group });
+                };
+
+                (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
+                (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
+
+                const allOption = { id: 'ALL', name: 'Todos los clientes', type: 'all', group: 'Todos' };
+                setStatsClients([allOption, ...combined]);
+                setStatsSelectedClient(null);
+                setStatsClientTouched(false);
+            } catch (err) {
+                console.error('No se pudieron cargar los clientes (stats):', err);
+                setStatsClients([]);
+            }
+        };
+
+        loadStatsClients();
+    }, [statsSelectedCicloEscolar]);
 
     // Debounced server-side search for pilots
     useEffect(() => {
@@ -382,12 +432,9 @@ const RouteHistoryPage = () => {
 
         if (statsBusTimerRef.current) clearTimeout(statsBusTimerRef.current);
 
-        if (!statsBusInput || statsBusInput.length < 2) {
-            setStatsAvailableBuses([]);
-            return;
-        }
+        const queryText = statsBusInput || '';
 
-        const cacheKey = `${statsSelectedClient.type}:${statsSelectedClient.id}:` + statsBusInput;
+        const cacheKey = `${statsSelectedCicloEscolar}:${statsSelectedClient.type}:${statsSelectedClient.id}:${queryText}`;
         if (busesCacheRef.current.has(cacheKey)) {
             setStatsAvailableBuses(busesCacheRef.current.get(cacheKey));
             return;
@@ -396,10 +443,13 @@ const RouteHistoryPage = () => {
         statsBusTimerRef.current = setTimeout(async () => {
             setStatsLoadingBuses(true);
             try {
-                let url = `/buses?query=${encodeURIComponent(statsBusInput)}`;
-                if (statsSelectedClient.type === 'school') url += `&schoolId=${statsSelectedClient.id}`;
-                if (statsSelectedClient.type === 'corporation') url += `&corporationId=${statsSelectedClient.id}`;
-                const resp = await api.get(url);
+                const params = {
+                    query: queryText,
+                    ...getCicloEscolarFilterParams(statsSelectedCicloEscolar)
+                };
+                if (statsSelectedClient.type === 'school') params.schoolId = statsSelectedClient.id;
+                if (statsSelectedClient.type === 'corporation') params.corporationId = statsSelectedClient.id;
+                const resp = await api.get('/buses', { params });
                 const busesList = resp.data?.buses || resp.data || [];
                 const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
                 busesCacheRef.current.set(cacheKey, busesOpts);
@@ -413,7 +463,7 @@ const RouteHistoryPage = () => {
         }, 300);
 
         return () => { if (statsBusTimerRef.current) clearTimeout(statsBusTimerRef.current); };
-    }, [statsBusInput, statsSelectedClient, auth.token]);
+    }, [statsBusInput, statsSelectedClient, statsSelectedCicloEscolar, auth.token]);
 
     // Load route numbers for selected client (no debounce; small payload)
     useEffect(() => {
@@ -471,7 +521,7 @@ const RouteHistoryPage = () => {
             return;
         }
 
-        const cacheKey = `${statsSelectedClient.type}:${statsSelectedClient.id}`;
+        const cacheKey = `${statsSelectedCicloEscolar}:${statsSelectedClient.type}:${statsSelectedClient.id}`;
         if (routesCacheRef.current.has(cacheKey)) {
             setStatsAvailableRoutesList(routesCacheRef.current.get(cacheKey));
             return;
@@ -481,6 +531,7 @@ const RouteHistoryPage = () => {
             setStatsLoadingRoutes(true);
             try {
                 let url = '';
+                const params = getCicloEscolarFilterParams(statsSelectedCicloEscolar);
                 if (statsSelectedClient.type === 'school') {
                     url = `/routes/school/${statsSelectedClient.id}/numbers`;
                 } else if (statsSelectedClient.type === 'corporation') {
@@ -489,7 +540,7 @@ const RouteHistoryPage = () => {
                     url = `/routes/school/${statsSelectedClient.id}/numbers`;
                 }
 
-                const resp = await api.get(url);
+                const resp = await api.get(url, { params });
                 const nums = resp.data?.routeNumbers || resp.data?.routes || resp.data || [];
                 const opts = (Array.isArray(nums) ? nums : []).map((n) => {
                     if (typeof n === 'object' && n) {
@@ -510,7 +561,7 @@ const RouteHistoryPage = () => {
         };
 
         loadStatsRoutes();
-    }, [statsSelectedClient, auth.token]);
+    }, [statsSelectedClient, statsSelectedCicloEscolar, auth.token]);
 
     const formatTime = (dateTime) => {
         if (!dateTime) return 'N/A';
@@ -662,7 +713,7 @@ const RouteHistoryPage = () => {
             }
 
             const params = {
-                ...getCicloEscolarFilterParams(selectedCicloEscolar),
+                ...getCicloEscolarFilterParams(statsSelectedCicloEscolar),
                 ...clientParam,
                 startDate: startDateParam,
                 endDate: endDateParam,
@@ -1045,10 +1096,28 @@ const RouteHistoryPage = () => {
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: 'divider', backgroundColor: alpha(theme.palette.primary.main, 0.01) }}>
                             <Grid container spacing={2} alignItems="center">
+                                <Grid item xs={12} md={1.3}>
+                                    <CicloEscolarFilter
+                                        value={statsSelectedCicloEscolar}
+                                        onChange={(value) => {
+                                            setStatsSelectedCicloEscolar(value);
+                                            setStatsSelectedClient(null);
+                                            setStatsRouteSelected(null);
+                                            setStatsRouteNumber('');
+                                            setStatsBusSelected(null);
+                                            setStatsBusInput('');
+                                            setStatsPlate('');
+                                            setStatsAvailableRoutesList([]);
+                                            setStatsAvailableBuses([]);
+                                            setStatsFiltersDirty(true);
+                                        }}
+                                        size="small"
+                                    />
+                                </Grid>
                                 <Grid item xs={12} md={2}>
                                     <Autocomplete
                                         size="small"
-                                        options={clients.filter(c => c.type !== 'all')}
+                                        options={statsClients.filter(c => c.type !== 'all')}
                                         groupBy={(option) => option.group || ''}
                                         getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
                                         value={statsSelectedClient}

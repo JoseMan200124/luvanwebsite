@@ -155,6 +155,8 @@ function getFieldValue(bus, field) {
             return bus.capacity;
         case 'description':
             return bus.description;
+        case 'totalDistanceTraveled':
+            return Number(bus.totalDistanceTraveled) || 0;
         default:
             return '';
     }
@@ -846,6 +848,10 @@ const BusesManagementPage = () => {
                                             </MobileValue>
                                         </MobileField>
                                         <MobileField>
+                                            <MobileLabel>Kilómetros acumulados</MobileLabel>
+                                            <MobileValue>{Number(bus.totalDistanceTraveled || 0).toFixed(3)} km</MobileValue>
+                                        </MobileField>
+                                        <MobileField>
                                             <MobileLabel>Archivos</MobileLabel>
                                             <MobileValue>
                                                 {bus.files && bus.files.length > 0 ? (
@@ -948,6 +954,17 @@ const BusesManagementPage = () => {
                                                     Descripción
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell sortDirection={orderBy === 'totalDistanceTraveled' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'totalDistanceTraveled'}
+                                                    direction={orderBy === 'totalDistanceTraveled' ? order : 'asc'}
+                                                    onClick={() => handleRequestSort('totalDistanceTraveled')}
+                                                    hideSortIcon={false}
+                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
+                                                >
+                                                    Km acumulados
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell>Asignación</TableCell>
                                             <TableCell>Estado</TableCell>
                                             <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
@@ -967,6 +984,9 @@ const BusesManagementPage = () => {
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Descripción">
                                                         {bus.description}
+                                                    </ResponsiveTableCell>
+                                                    <ResponsiveTableCell data-label="Km acumulados">
+                                                        {Number(bus.totalDistanceTraveled || 0).toFixed(3)} km
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Asignación">
                                                         {getAssignmentText(bus)}
