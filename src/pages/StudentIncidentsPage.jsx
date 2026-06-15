@@ -28,6 +28,7 @@ import {
     DialogContent,
     DialogActions,
     Button,
+    TextField,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -61,6 +62,7 @@ const StudentIncidentsPage = () => {
     const [selectedIncidentType, setSelectedIncidentType] = useState('');
     const [selectedScheduleType, setSelectedScheduleType] = useState('');
     const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
+    const [selectedStudentName, setSelectedStudentName] = useState('');
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
 
@@ -91,7 +93,7 @@ const StudentIncidentsPage = () => {
     useEffect(() => {
         fetchIncidents();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedIncidentType, selectedScheduleType, selectedCicloEscolar, startDate, endDate]);
+    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedIncidentType, selectedScheduleType, selectedCicloEscolar, startDate, endDate, selectedStudentName]);
 
     const fetchSchools = async () => {
         try {
@@ -142,6 +144,7 @@ const StudentIncidentsPage = () => {
                 if (selectedScheduleType) filters.scheduleType = selectedScheduleType;
                 if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
                 if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+                if (selectedStudentName) filters.studentName = selectedStudentName;
 
             const data = await getAllStudentIncidents(filters);
             
@@ -423,6 +426,15 @@ const StudentIncidentsPage = () => {
                                 />
                             </Box>
                         </Grid>
+                         <Grid item xs={12} sm={6} md={2}>
+                            <TextField
+                                label="Buscar Estudiante"
+                                value={selectedStudentName}
+                                onChange={(e) => { setSelectedStudentName(e.target.value); setPage(0); }}
+                                fullWidth
+                                size="small"
+                            />
+                        </Grid>
                     </Grid>
                 </Paper>
 
@@ -456,7 +468,7 @@ const StudentIncidentsPage = () => {
                                                     {moment(incident.fecha).format('DD/MM/YYYY HH:mm')}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {incident.student?.fullName || 'N/A'}
+                                                    {incident.student ? (incident.student.fullName || 'N/A') : 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Chip 
@@ -548,7 +560,7 @@ const StudentIncidentsPage = () => {
                                         Estudiante
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.student?.fullName || 'N/A'}
+                                        {selectedIncident.student ? (selectedIncident.student.fullName || 'N/A') : 'N/A'}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
