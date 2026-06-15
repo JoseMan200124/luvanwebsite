@@ -65,6 +65,7 @@ import PaymentFilters from '../components/PaymentFilters';
 import PaymentTable from '../components/PaymentTable';
 import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
+import CreateSchoolPeriodModal from '../components/modals/CreateSchoolPeriodModal';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
@@ -672,6 +673,10 @@ const SchoolPaymentsPage = () => {
     const [receiptZoom, setReceiptZoom] = useState(1);
     // Month filter for boletas (format: YYYY-MM)
     const [boletaMonth, setBoletaMonth] = useState('');
+    // Extra actions: create school-wide period
+    const [openExtraAnchorEl, setOpenExtraAnchorEl] = useState(null);
+    const openExtraMenu = Boolean(openExtraAnchorEl);
+    const [openCreateSchoolPeriodModal, setOpenCreateSchoolPeriodModal] = useState(false);
 
     // derive month options only from uploaded receipts (Boletas should show uploaded files only)
     const boletaMonthOptions = React.useMemo(() => {
@@ -3067,7 +3072,7 @@ const SchoolPaymentsPage = () => {
                 </Box>
             )}
             <HeaderCard>
-                <CardContent>
+                <CardContent sx={{ position: 'relative' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                         <Button
                             startIcon={<ArrowBack />}
@@ -3096,8 +3101,30 @@ const SchoolPaymentsPage = () => {
                                     label={`${totalPayments} familias`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', fontWeight: 600 }}
                                 />
+                                {/* Opciones Extra moved to bottom-right of header */}
                             </Box>
                         </Box>
+                    </Box>
+                    <Box sx={{ position: 'absolute', right: 16, bottom: 12 }}>
+                        <Button
+                            size="small"
+                            variant="contained"
+                            sx={{
+                                backgroundColor: 'rgba(255,255,255,0.18)',
+                                color: 'white',
+                                fontWeight: 700,
+                                boxShadow: '0 1px 6px rgba(0,0,0,0.12)',
+                                '&:hover': { backgroundColor: 'rgba(255,255,255,0.22)', boxShadow: '0 3px 10px rgba(0,0,0,0.15)' }
+                            }}
+                            onClick={(e) => setOpenExtraAnchorEl(e.currentTarget)}
+                        >
+                            Opciones Extra
+                        </Button>
+                        <Menu anchorEl={openExtraAnchorEl} open={openExtraMenu} onClose={() => setOpenExtraAnchorEl(null)}>
+                            <MenuItem onClick={() => { setOpenCreateSchoolPeriodModal(true); setOpenExtraAnchorEl(null); }}>
+                                Crear período extracurricular
+                            </MenuItem>
+                        </Menu>
                     </Box>
                 </CardContent>
             </HeaderCard>
@@ -3548,6 +3575,18 @@ const SchoolPaymentsPage = () => {
                             payment={periodsTarget}
                             onChanged={() => {
                                 // Períodos impactan balances/estados, refrescar dataset y análisis
+                                fetchAllPayments(statusFilter, search);
+                                fetchPaymentsAnalysis(schoolId);
+                            }}
+                        />
+
+                        <CreateSchoolPeriodModal
+                            open={openCreateSchoolPeriodModal}
+                            onClose={() => setOpenCreateSchoolPeriodModal(false)}
+                            schoolId={schoolId}
+                            schoolSchedules={school?.schedules}
+                            onCreated={() => {
+                                // refrescar datos tras creación
                                 fetchAllPayments(statusFilter, search);
                                 fetchPaymentsAnalysis(schoolId);
                             }}
