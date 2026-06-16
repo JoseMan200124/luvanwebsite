@@ -34,6 +34,7 @@ import RouteTimeLogsPage from './pages/RouteTimeLogsPage';
 import FuelRecordsPage from './pages/FuelRecordsPage';
 import CorporationsPage from './pages/CorporationsPage';
 import AssignmentHistoryPage from './pages/AssignmentHistoryPage';
+import BusAssignmentHistoryPage from './pages/BusAssignmentHistoryPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
 
 export const modules = [
@@ -128,6 +129,12 @@ export const modules = [
                 name: 'Recorridos',
                 path: 'historial-recorridos-rutas',
                 component: RouteHistoryPage,
+            },
+            {
+                key: 'historial-asignaciones-buses',
+                name: 'Historial de Asignaciones de Buses',
+                path: 'historial-asignaciones-buses',
+                component: BusAssignmentHistoryPage,
             },
             {
                 key: 'mapeo-fallas',
