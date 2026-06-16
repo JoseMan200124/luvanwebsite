@@ -1,5 +1,5 @@
 // src/pages/SchoolUsersPage.jsx
-import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { alpha } from '@mui/material/styles';
@@ -116,6 +116,8 @@ const SchoolUsersPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [selectedUser, setSelectedUser] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+    const prevFilterKeyRef = useRef('');
 
     // Nuevos estados para funcionalidades
     
@@ -1486,7 +1488,11 @@ const SchoolUsersPage = () => {
         }
 
         setFilteredUsers(filtered);
-        setPage(0); // Reset page when filters change
+        const currentFilterKey = `${searchQuery}||${statusFilter}||${serviceStatusFilter}`;
+        if (prevFilterKeyRef.current !== currentFilterKey) {
+            setPage(0); // Reset page when filters change
+            prevFilterKeyRef.current = currentFilterKey;
+        }
     }, [users, searchQuery, statusFilter, serviceStatusFilter, getUserStatus]);
 
     const handleBackToDashboard = () => {
