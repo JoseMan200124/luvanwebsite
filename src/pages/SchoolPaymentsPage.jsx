@@ -52,9 +52,9 @@ import {
     Pie
 } from 'recharts';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowBack, School as SchoolIcon, CalendarToday, InfoOutlined, People } from '@mui/icons-material';
+import { ArrowBack, School as SchoolIcon, CalendarToday, InfoOutlined, People, ChevronLeft, ChevronRight } from '@mui/icons-material';
 import DownloadIcon from '@mui/icons-material/GetApp';
-import { getCurrentDate } from '../hooks/useCurrentDate';
+import { getCurrentDate, getCurrentDateSync } from '../hooks/useCurrentDate';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -108,6 +108,15 @@ const ChipsRow = styled(Box)`
 
 const getReceiptDisplayDateValue = (receipt) => receipt?.displayDate || receipt?.date || receipt?.createdAt || receipt?.uploadedAt || '';
 
+// Formateadores de presentación: el backend ya calcula TODAS las métricas financieras.
+// `null`/`undefined` => "N/A" (p. ej. divisiones por cero resueltas en el backend).
+const formatMoneyOrNA = (value) => (value === null || value === undefined)
+    ? 'N/A'
+    : `Q ${Number(value).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatPercentOrNA = (value) => (value === null || value === undefined)
+    ? 'N/A'
+    : `${Number(value).toFixed(1)}%`;
+
 const SchoolPaymentsPage = () => {
     useContext(AuthContext); // keep context hook for future auth-based features
     const navigate = useNavigate();
@@ -160,78 +169,62 @@ const SchoolPaymentsPage = () => {
     // Analysis data (short version of PaymentsManagementPage analysis)
     const [analysisData, setAnalysisData] = useState(null);
     const [combinedEarnings, setCombinedEarnings] = useState([]);
+    // Métricas financieras V2: el backend realiza TODOS los cálculos; el frontend sólo renderiza.
+    const [metricsData, setMetricsData] = useState(null);
+    const [metricsLoading, setMetricsLoading] = useState(false);
+    const [metricsBasis, setMetricsBasis] = useState('caja'); // 'caja' | 'devengado'
+    const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentDateSync().format('YYYY-MM'));
+    const [todayPeriod, setTodayPeriod] = useState(() => getCurrentDateSync().format('YYYY-MM'));
+    const didInitPeriodRef = useRef(false);
     // collapsed states: initially both collapsed
     const [collapsedAnalysis, setCollapsedAnalysis] = useState(true);
     const [collapsedExtra, setCollapsedExtra] = useState(true);
 
     // Indicators derived from analysisData/combinedEarnings
     // IMPORTANTE: Solo contar usuarios activos (state !== 0)
-    // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO
+    // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA
     // El estado INACTIVO es exclusivo del serviceStatus (estado del servicio), no del pago
     const confirmadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'CONFIRMADO')?.count || 0;
-    const adelantadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ADELANTADO')?.count || 0;
-    const pagadoCount = confirmadoCount + adelantadoCount; // CONFIRMADO + ADELANTADO = pagos al día
+    const pagadoCount = confirmadoCount; // PAGADO == CONFIRMADO (ADELANTADO separado)
     const moraCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'MORA')?.count || 0;
-    const atrasadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ATRASADO')?.count || 0;
-    const enProcesoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'EN_PROCESO')?.count || 0;
-    const pendienteCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0;
-    const inactivoCount = paymentsAll.filter(p => (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE').length;
-    const eliminadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'ELIMINADO')?.count || 0;
-    const currentMonthEarnings = combinedEarnings.find(item =>
-        item.year === moment().year() && item.month === (moment().month() + 1)
-    )?.total || 0;
+    // Usar exclusivamente los totales globales que provee el backend.
+    // Si el backend no provee estos totales, mostrar 0 (no caer a conteos locales).
+    const serverPaymentTotals = analysisData?.paymentStateTotalsAll ?? null;
+    const serverServiceTotals = analysisData?.serviceStatusTotalsAll ?? null;
 
-    // KPIs adicionales para toma de decisiones
-    const totalFamilias = analysisData?.totalPayments || totalPayments;
-    const familiasActivas = totalFamilias - inactivoCount;
-    const tasaPago = familiasActivas > 0 ? ((pagadoCount / familiasActivas) * 100).toFixed(1) : 0;
-    const tasaMora = familiasActivas > 0 ? ((moraCount / familiasActivas) * 100).toFixed(1) : 0;
-    const ingresoTotal = Number(analysisData?.netIncome || 0);
-    const ingresoMora = Number(analysisData?.lateFeeIncome || 0);
-    const totalPendiente = Number(analysisData?.sumTotalDue || 0);
-    const totalDescuentos = Number(analysisData?.totalSpecialFee || 0);
-    const moraPendiente = Number(analysisData?.totals?.penaltyDue || 0);
-    const creditoAcumulado = Number(analysisData?.totals?.creditBalance || 0);
-    
-    // Promedios y proyecciones
-    const promedioIngresoPorFamilia = familiasActivas > 0 ? (ingresoTotal / familiasActivas).toFixed(2) : 0;
-    const ingresoMensualPromedio = combinedEarnings.length > 0 
-        ? (combinedEarnings.reduce((acc, item) => acc + Number(item.total || 0), 0) / combinedEarnings.filter(i => i.total > 0).length || 1).toFixed(2)
-        : 0;
-    
-    // Eficiencia de cobro: (Ingreso Real / Ingreso Potencial) * 100
-    const ingresoPotencial = Number(analysisData?.totals?.netMonthlyFee || 0) * (combinedEarnings.filter(i => i.total > 0).length || 1);
-    const eficienciaCobro = ingresoPotencial > 0 ? ((ingresoTotal / ingresoPotencial) * 100).toFixed(1) : 0;
-    
-    // Contadores de estado del servicio (calculados desde paymentsAll)
-    const serviceActiveCount = paymentsAll.filter(p => {
-        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
-        return serviceStatus === 'ACTIVE';
-    }).length;
-    const servicePausedCount = paymentsAll.filter(p => {
-        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
-        return serviceStatus === 'PAUSED';
-    }).length;
-    const serviceSuspendedCount = paymentsAll.filter(p => {
-        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
-        return serviceStatus === 'SUSPENDED';
-    }).length;
-    const serviceInactiveCount = paymentsAll.filter(p => {
-        const serviceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
-        return serviceStatus === 'INACTIVE';
-    }).length;
-    
-    // Tendencia (comparar mes actual vs mes anterior)
-    const currentMonth = moment().month() + 1;
-    const currentYear = moment().year();
-    const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-    const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
-    const prevMonthEarnings = combinedEarnings.find(item => 
-        item.year === prevYear && item.month === prevMonth
-    )?.total || 0;
-    const tendencia = prevMonthEarnings > 0 
-        ? (((currentMonthEarnings - prevMonthEarnings) / prevMonthEarnings) * 100).toFixed(1)
-        : 0;
+    const eliminadoCount = serverPaymentTotals?.ELIMINADO ?? serverPaymentTotals?.DELETED ?? 0;
+
+    // Total de familias (conteo operativo; las métricas financieras vienen del backend).
+
+    // ====== Métricas financieras (calculadas 100% en el backend; aquí sólo se leen) ======
+    // Regla del sistema: ninguna fórmula financiera vive en el frontend.
+    const fin = metricsData?.metrics || null;
+    // Selector Caja/Devengado para las métricas que exponen ambas bases.
+    const finByBasis = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        return metricsBasis === 'devengado' ? obj.devengado : obj.caja;
+    };
+    const familiasActivas = fin ? fin.familiasActivas : null;
+    let tendenciaMensual = null;
+    if (fin?.tendencia) {
+        tendenciaMensual = metricsBasis === 'devengado'
+            ? fin.tendencia.mensualDevengado
+            : fin.tendencia.mensualCaja;
+    }
+
+    // Contadores de estado del servicio (autoridad: backend)
+    const serviceActiveCount = serverServiceTotals?.ACTIVE ?? 0;
+    const servicePausedCount = serverServiceTotals?.PAUSED ?? 0;
+    const serviceSuspendedCount = serverServiceTotals?.SUSPENDED ?? 0;
+    const serviceInactiveCount = serverServiceTotals?.INACTIVE ?? 0;
+
+    // Totales autoritativos que provee el backend (si faltan, mostrar 0)
+
+    const displayPaid = serverPaymentTotals?.PAGADO ?? serverPaymentTotals?.CONFIRMADO ?? 0;
+    const displayAdelantado = serverPaymentTotals?.ADELANTADO ?? 0;
+    const displayEnProceso = serverPaymentTotals?.EN_PROCESO ?? 0;
+    const displayPendiente = serverPaymentTotals?.PENDIENTE ?? 0;
+    const displayMora = serverPaymentTotals?.MORA ?? 0;
 
     useEffect(() => {
         (async () => {
@@ -259,6 +252,66 @@ const SchoolPaymentsPage = () => {
         fetchPaymentsAnalysis(schoolId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [paymentsAll]);
+
+    // Re-fetch analysis totals when visibility toggles change so backend totals
+    // reflect the same filtered population shown in the table.
+    useEffect(() => {
+        fetchPaymentsAnalysis(schoolId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showInactive, showDeleted]);
+
+    // Métricas financieras: el backend hace todos los cálculos; el frontend sólo consume el endpoint.
+    const fetchMetrics = useCallback(async (period) => {
+        if (!schoolId || !currentCicloEscolarId || !period) return;
+        setMetricsLoading(true);
+        try {
+            const res = await api.get('/payments/metrics', {
+                params: { schoolId, cicloEscolarId: currentCicloEscolarId, period }
+            });
+            setMetricsData(res.data || null);
+        } catch (err) {
+            console.error('fetchMetrics error', err);
+            setMetricsData(null);
+        } finally {
+            setMetricsLoading(false);
+        }
+    }, [schoolId, currentCicloEscolarId]);
+
+    // Refetch metrics whenever the selected period changes (or school/cycle resolves).
+    useEffect(() => {
+        if (selectedPeriod) fetchMetrics(selectedPeriod);
+    }, [selectedPeriod, fetchMetrics]);
+
+    // Resolve the accurate "current month" (supports simulated dates) once on mount.
+    useEffect(() => {
+        let active = true;
+        (async () => {
+            try {
+                const d = await getCurrentDate();
+                if (!active) return;
+                const p = d.format('YYYY-MM');
+                setTodayPeriod(p);
+                if (!didInitPeriodRef.current) {
+                    didInitPeriodRef.current = true;
+                    setSelectedPeriod(p);
+                }
+            } catch (e) {
+                console.debug('[metrics] no se pudo resolver la fecha actual; se usa el período por defecto', e);
+            }
+        })();
+        return () => { active = false; };
+    }, []);
+
+    // Period navigation bounds: from the school year start month up to the current month.
+    const minPeriod = school?.schoolYearStart ? moment(school.schoolYearStart).format('YYYY-MM') : null;
+    const shiftSelectedPeriod = useCallback((delta) => {
+        setSelectedPeriod((prev) => {
+            const next = moment(`${prev}-01`).add(delta, 'month').format('YYYY-MM');
+            if (minPeriod && next < minPeriod) return prev;
+            if (next > todayPeriod) return prev;
+            return next;
+        });
+    }, [minPeriod, todayPeriod]);
 
     const fetchSchool = async () => {
         try {
@@ -291,9 +344,9 @@ const SchoolPaymentsPage = () => {
             const params = buildPaymentParams({ page: 1, limit: 10000 });
 
             // MORA y PENDIENTE son valores de finalStatus → filtrar en el servidor.
-            // PAGADO (= CONFIRMADO + ADELANTADO) e INACTIVO (= serviceStatus INACTIVE)
-            // se manejan solo en cliente porque no son un único valor de columna.
-            const SERVER_FINAL_STATUS = new Set(['MORA', 'PENDIENTE', 'EN_PROCESO', 'ATRASADO', 'CONFIRMADO', 'ADELANTADO', 'ELIMINADO']);
+            // PAGADO (== CONFIRMADO) e INACTIVO (= serviceStatus INACTIVE)
+            // se manejan solo en cliente cuando corresponde.
+            const SERVER_FINAL_STATUS = new Set(['MORA', 'PENDIENTE', 'EN_PROCESO', 'CONFIRMADO', 'ADELANTADO', 'ELIMINADO']);
             if (st && SERVER_FINAL_STATUS.has(st)) params.finalStatus = st;
             // PAGADO e INACTIVO: no enviar filtro al servidor, el cliente filtra
             if (qq) params.search = qq;
@@ -329,8 +382,7 @@ const SchoolPaymentsPage = () => {
             const activePayments = arr.filter(isUserActive);
             const inactivePayments = arr.filter(pmt => !isUserActive(pmt));
             
-            // V2: CONFIRMADO + ADELANTADO = Al día
-            const paidPayments = activePayments.filter(pmt => ['CONFIRMADO', 'ADELANTADO'].includes((pmt.finalStatus||'').toUpperCase()));
+            const paidPayments = activePayments.filter(pmt => ((pmt.finalStatus || '').toUpperCase() === 'CONFIRMADO'));
             setTotalPaidCount(typeof res.data.totalPaidCount === 'number' ? res.data.totalPaidCount : paidPayments.length);
             setTotalPendingCount(typeof res.data.totalPendingCount === 'number' ? res.data.totalPendingCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PENDIENTE').length);
             setTotalMoraCount(typeof res.data.totalMoraCount === 'number' ? res.data.totalMoraCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'MORA').length);
@@ -351,7 +403,11 @@ const SchoolPaymentsPage = () => {
     const fetchPaymentsAnalysis = async (schId) => {
         if (!schId) return;
         try {
-            const res = await api.get('/payments/analysis', { params: buildPaymentParams({ schoolId: schId, excludeInactive: true }) });
+            // Pedir al backend los totales respetando los toggles de la UI.
+            // Si `showInactive` o `showDeleted` están activos, incluimos esas familias;
+            // de lo contrario pedimos que el backend excluya INACTIVE/DELETED.
+            const excludeInactiveParam = !(showInactive || showDeleted);
+            const res = await api.get('/payments/analysis', { params: buildPaymentParams({ schoolId: schId, excludeInactive: excludeInactiveParam }) });
             // expected shape: { statusDistribution: [...], monthlyEarnings: [...] }
             const data = res.data || null;
             // Keep ELIMINADO in statusDistribution so the counter chip reads the correct value.
@@ -366,7 +422,7 @@ const SchoolPaymentsPage = () => {
             };
             setAnalysisData(sanitized);
             setCombinedEarnings(Array.isArray(data?.monthlyEarnings) ? data.monthlyEarnings : []);
-    } catch (e) {
+        } catch (e) {
             // fallback: derive from current payments (best-effort)
             // IMPORTANTE: Separar familias con servicio inactivo (serviceStatus=INACTIVE)
             try {
@@ -374,11 +430,10 @@ const SchoolPaymentsPage = () => {
                 const activePayments = (paymentsAll || []).filter(p => !isServiceInactive(p));
                 const inactivePayments = (paymentsAll || []).filter(isServiceInactive);
                 
-                // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA, ATRASADO
+                // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA
                 const confirmado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'CONFIRMADO').length;
                 const adelantado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'ADELANTADO').length;
                 const mora = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'MORA').length;
-                const atrasado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'ATRASADO').length;
                 const enProceso = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'EN_PROCESO').length;
                 const pend = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'PENDIENTE').length;
                 const inactivo = inactivePayments.length;
@@ -387,7 +442,6 @@ const SchoolPaymentsPage = () => {
                     { finalStatus: 'CONFIRMADO', count: confirmado },
                     { finalStatus: 'ADELANTADO', count: adelantado },
                     { finalStatus: 'MORA', count: mora },
-                    { finalStatus: 'ATRASADO', count: atrasado },
                     { finalStatus: 'EN_PROCESO', count: enProceso },
                     { finalStatus: 'PENDIENTE', count: pend },
                     { finalStatus: 'INACTIVO', count: inactivo }
@@ -475,7 +529,11 @@ const SchoolPaymentsPage = () => {
         try {
             const st = statusFilter ? String(statusFilter).toUpperCase().trim() : '';
             const qq = search ? String(search).toLowerCase().trim() : '';
-            const allowInactive = !!showInactive || serviceStatusFilter === 'INACTIVE' || st === 'INACTIVO';
+            // Allow including inactive families when explicitly requested or when
+            // filtering by payment states that the backend counts across all
+            // service statuses (e.g., PAGADO). This makes the table filter
+            // consistent with backend `paymentStateTotals` used for the chips.
+            const allowInactive = !!showInactive || serviceStatusFilter === 'INACTIVE' || st === 'INACTIVO' || st === 'PAGADO';
             const arr = (paymentsAll || []).filter(p => {
                 // Determinar si la familia tiene servicio inactivo (serviceStatus = INACTIVE)
                 const isServiceInactive = (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE';
@@ -493,13 +551,16 @@ const SchoolPaymentsPage = () => {
                         // Filtrar solo eliminados
                         if (!isDeleted) return false;
                     } else {
-                        // Para otros estados, excluir familias con servicio inactivo y filtrar por finalStatus
-                        if (isDeleted && !showDeleted) return false;
-                        const s = (p.finalStatus || p.status || '').toUpperCase();
-                        
-                        // V2: PAGADO incluye CONFIRMADO y ADELANTADO
+                        // Para otros estados: filtrar por finalStatus.
+                        // Excepción: cuando el usuario pidió `PAGADO`, incluir
+                        // familias eliminadas/inactivas para coincidir con los
+                        // totales autoritativos del backend (las chips).
+                        if (st !== 'PAGADO' && isDeleted && !showDeleted) return false;
+                        const s = (p.finalStatus || '').toUpperCase();
+
+                        // Interpretar `PAGADO` como `CONFIRMADO` solamente (ADELANTADO es separado)
                         if (st === 'PAGADO') {
-                            if (!['CONFIRMADO', 'ADELANTADO'].includes(s)) return false;
+                            if (s !== 'CONFIRMADO') return false;
                         } else {
                             if (s !== st) return false;
                         }
@@ -508,7 +569,7 @@ const SchoolPaymentsPage = () => {
                     // No se seleccionó estado: aplicar reglas por defecto
                     if (isDeleted && !showDeleted) return false;
 
-                    const s = (p.finalStatus || p.status || '').toUpperCase();
+                    const s = (p.finalStatus || '').toUpperCase();
                     const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
                     if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO') || (allowInactive && isServiceInactive))) return false;
                 }
@@ -1371,9 +1432,7 @@ const SchoolPaymentsPage = () => {
             }[rawServiceStatus] || (rawServiceStatus || '-');
 
             const rawFinalStatus = (familyPayment?.finalStatus || '').toString().toUpperCase().trim();
-            const paymentStatusLabel = ['CONFIRMADO', 'ADELANTADO'].includes(rawFinalStatus)
-                ? 'PAGADO'
-                : (rawFinalStatus || '-');
+            const paymentStatusLabel = rawFinalStatus === 'CONFIRMADO' ? 'PAGADO' : (rawFinalStatus || '-');
 
             // Left summary
             doc.setFontSize(11);
@@ -1521,7 +1580,7 @@ const SchoolPaymentsPage = () => {
 
             const drawStatusBadge = (xRight, y, status) => {
                 const normalized = String(status || '').toUpperCase().trim() || 'PENDIENTE';
-                const label = (['CONFIRMADO', 'ADELANTADO', 'PAGADO'].includes(normalized)) ? 'PAGADO' : normalized;
+                const label = (normalized === 'CONFIRMADO' || normalized === 'PAGADO') ? 'PAGADO' : normalized;
                 const padX = 10;
                 const h = 16;
                 doc.setFontSize(9);
@@ -2509,16 +2568,16 @@ const SchoolPaymentsPage = () => {
                 if (exportFinalStatus && exportFinalStatus !== 'TODOS') {
                     const filtroUpper = normalizeUpper(exportFinalStatus);
                     
-                    // PAGADO incluye CONFIRMADO y ADELANTADO
+                    // PAGADO corresponde solo a CONFIRMADO; ADELANTADO es separado
                     if (filtroUpper === 'PAGADO') {
-                        if (!['CONFIRMADO', 'ADELANTADO'].includes(estadoUpper)) return;
+                        if (estadoUpper !== 'CONFIRMADO') return;
                     } else {
                         if (estadoUpper !== filtroUpper) return;
                     }
                 }
 
                 // Mostrar estado de pago en formato UI
-                const estadoPagoText = (['CONFIRMADO', 'ADELANTADO'].includes(estadoUpper))
+                const estadoPagoText = (estadoUpper === 'CONFIRMADO')
                     ? 'PAGADO'
                     : (estadoUpper || '');
                 
@@ -2689,7 +2748,7 @@ const SchoolPaymentsPage = () => {
 
             const toEstadoPagoText = (stRaw) => {
                 const s = String(stRaw || '').toUpperCase().trim();
-                return ['CONFIRMADO', 'ADELANTADO'].includes(s) ? 'PAGADO' : s;
+                return s === 'CONFIRMADO' ? 'PAGADO' : s;
             };
 
             const filteredRows = arr.filter(p => {
@@ -2704,10 +2763,10 @@ const SchoolPaymentsPage = () => {
                     if (paymentServiceStatus !== serviceFilter) return false;
                 }
 
-                const s = (p.finalStatus || p.status || '').toString().toUpperCase();
+                const s = (p.finalStatus || '').toString().toUpperCase();
 
                 if (!estadoNorm || estadoNorm === 'TODOS') return true;
-                if (estadoNorm === 'PAGADO') return ['CONFIRMADO', 'ADELANTADO'].includes(s);
+                if (estadoNorm === 'PAGADO') return s === 'CONFIRMADO';
                 return s === estadoNorm;
             });
 
@@ -2723,7 +2782,7 @@ const SchoolPaymentsPage = () => {
             sheet.addRow(headers);
 
             filteredRows.forEach(p => {
-                const estadoVal = toEstadoPagoText(p.finalStatus || p.status || '');
+                const estadoVal = toEstadoPagoText(p.finalStatus || '');
                 const serviceText = toServiceText(p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '');
                 const familyLast = p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '';
                 const autoDebit = !!(p.automaticDebit || p.User?.FamilyDetail?.automaticDebit || p.User?.FamilyDetail?.autoDebit);
@@ -3098,7 +3157,7 @@ const SchoolPaymentsPage = () => {
                                 <Chip
                                     size="small"
                                     icon={<People />}
-                                    label={`${totalPayments} familias`}
+                                    label={`${totalPayments} familias en sistema`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', fontWeight: 600 }}
                                 />
                                 {/* Opciones Extra moved to bottom-right of header */}
@@ -3157,6 +3216,39 @@ const SchoolPaymentsPage = () => {
                                 {/* If analysisData available show extended grid and chart */}
                                 {analysisData ? (
                                     <Box sx={{ mt: 2 }}>
+                                        {/* Controles de período y base (Caja/Devengado) — las métricas se recalculan en el backend */}
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 2, p: 1.5, background: '#f1f5f9', borderRadius: 2 }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <IconButton size="small" onClick={() => shiftSelectedPeriod(-1)} disabled={minPeriod ? selectedPeriod <= minPeriod : false} aria-label="Mes anterior">
+                                                    <ChevronLeft />
+                                                </IconButton>
+                                                <Box sx={{ minWidth: 150, textAlign: 'center' }}>
+                                                    <Typography variant="subtitle1" sx={{ fontWeight: 700, textTransform: 'capitalize', lineHeight: 1.1 }}>
+                                                        {moment(`${selectedPeriod}-01`).format('MMMM YYYY')}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary">Período de métricas</Typography>
+                                                </Box>
+                                                <IconButton size="small" onClick={() => shiftSelectedPeriod(1)} disabled={selectedPeriod >= todayPeriod} aria-label="Mes siguiente">
+                                                    <ChevronRight />
+                                                </IconButton>
+                                            </Box>
+                                            {metricsLoading && <CircularProgress size={18} />}
+                                            <Box sx={{ flexGrow: 1 }} />
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <Typography variant="caption" color="text.secondary">Base</Typography>
+                                                <Tooltip title={
+                                                    "Caja: agrupa los pagos por la fecha en que se recibió el dinero, sin importar a qué mes pertenece la cuota. " +
+                                                    "Devengado: agrupa los pagos por el mes al que corresponde la cuota, sin importar cuándo se recibió el dinero. " +
+                                                    "Ejemplo: una cuota de marzo pagada el 5 de abril aparece en abril en base Caja, y en marzo en base Devengado."
+                                                } arrow>
+                                                    <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                </Tooltip>
+                                                <ToggleButtonGroup size="small" exclusive value={metricsBasis} onChange={(e, v) => { if (v) setMetricsBasis(v); }}>
+                                                    <ToggleButton value="caja">Caja</ToggleButton>
+                                                    <ToggleButton value="devengado">Devengado</ToggleButton>
+                                                </ToggleButtonGroup>
+                                            </Box>
+                                        </Box>
                                         {/* KPIs Principales */}
                                         <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#1976d2' }}>📊 Indicadores Clave (KPIs)</Typography>
                                         <Box sx={{ mb: 3, p: 2, background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)', borderRadius: 2, boxShadow: 1 }}>
@@ -3165,50 +3257,83 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Tasa de Pago</Typography>
-                                                            <Tooltip title="Porcentaje de familias activas que están al día con sus pagos" arrow>
+                                                            <Tooltip title={
+                                                                "Porcentaje de familias con cuota generada en el período seleccionado que la pagaron por completo. " +
+                                                                "Solo se cuentan familias con estado Activo o Suspendido, porque son las únicas que reciben facturación ese mes. " +
+                                                                "Por eso este número puede ser menor al total de familias registradas en el colegio: " +
+                                                                "las que están Pausadas o Inactivas no tienen cuota ese mes y no entran en el cálculo. " +
+                                                                "La condición de 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                            } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
                                                         </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#4caf50' }}>{tasaPago}%</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{pagadoCount} de {familiasActivas} familias</Typography>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#4caf50' }}>{formatPercentOrNA(fin?.tasaDePago)}</Typography>
+                                                        <Typography variant="caption" color="text.secondary">{pagadoCount} de {familiasActivas ?? '—'} con cuota este período</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Tasa de Mora</Typography>
-                                                            <Tooltip title="Porcentaje de familias activas con pagos atrasados y acumulación de penalidades" arrow>
+                                                            <Tooltip title={
+                                                                "Porcentaje de familias con cuota en el período seleccionado (Activo o Suspendido) que tienen mora generada en ese mes específico. " +
+                                                                "No incluye mora arrastrada de meses anteriores — esa se muestra en 'Mora Pendiente'. " +
+                                                                "La pertenencia a 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                            } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
                                                         </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#f44336' }}>{tasaMora}%</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{moraCount} familias en mora</Typography>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#f44336' }}>{formatPercentOrNA(fin?.tasaDeMora)}</Typography>
+                                                        <Typography variant="caption" color="text.secondary">{moraCount} con mora generada en este período</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Eficiencia de Cobro</Typography>
-                                                            <Tooltip title="Efectividad del cobro: (Ingreso real / Ingreso potencial) × 100. Muestra pérdidas por descuentos, créditos y moras no cobradas" arrow>
+                                                            <Tooltip title={
+                                                                "Porcentaje del monto neto facturado en el período que ya fue cobrado. Fórmula: (cobrado ÷ monto neto facturado) × 100. " +
+                                                                "El monto neto ya tiene descontados los descuentos especiales de cada familia. " +
+                                                                "Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar."
+                                                            } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
                                                         </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#2196f3' }}>{eficienciaCobro}%</Typography>
-                                                        <Typography variant="caption" color="text.secondary">Ingreso real vs potencial</Typography>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#2196f3' }}>{formatPercentOrNA(fin?.eficienciaCobro)}</Typography>
+                                                        <Typography variant="caption" color="text.secondary">cobrado vs. monto neto facturado</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Tendencia Mensual</Typography>
-                                                            <Tooltip title="Variación porcentual de ingresos del mes actual vs mes anterior." arrow>
+                                                            <Tooltip title={
+                                                                "Variación del ingreso del período seleccionado respecto al mes inmediato anterior. " +
+                                                                "Verde (+) indica más recaudación que el mes pasado; rojo (−) indica menos. " +
+                                                                "Se calcula con la base activa (Caja o Devengado). Muestra N/A si no hay datos del mes anterior con qué comparar."
+                                                            } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
                                                         </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: Number(tendencia) >= 0 ? '#4caf50' : '#f44336' }}>
-                                                            {Number(tendencia) >= 0 ? '+' : ''}{tendencia}%
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: tendenciaMensual === null ? '#9e9e9e' : (Number(tendenciaMensual) >= 0 ? '#4caf50' : '#f44336') }}>
+                                                            {tendenciaMensual === null ? 'N/A' : `${Number(tendenciaMensual) >= 0 ? '+' : ''}${Number(tendenciaMensual).toFixed(1)}%`}
                                                         </Typography>
                                                         <Typography variant="caption" color="text.secondary">vs mes anterior</Typography>
+                                                    </Box>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" color="text.secondary">Tasa de Puntualidad</Typography>
+                                                            <Tooltip title={
+                                                                "De las familias que completaron su pago en el período seleccionado, qué porcentaje lo hizo antes o en la fecha límite de pago (sin generar mora). " +
+                                                                "Ejemplo: si 30 familias pagaron y 25 lo hicieron a tiempo, la tasa es 83.3%. Una tasa alta indica disciplina de pago en el colegio."
+                                                            } arrow>
+                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                            </Tooltip>
+                                                        </Box>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#00897b' }}>{formatPercentOrNA(fin?.tasaPuntualidad)}</Typography>
+                                                        <Typography variant="caption" color="text.secondary">de los que pagaron, lo hicieron sin mora</Typography>
                                                     </Box>
                                                 </Grid>
                                             </Grid>
@@ -3221,118 +3346,139 @@ const SchoolPaymentsPage = () => {
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Ingreso Total del Año</strong></Typography>
-                                                        <Tooltip title="Todo el dinero cobrado durante el año escolar actual (tarifas + moras pagadas; No incluye créditos acumulados)" arrow>
+                                                        <Tooltip title={
+                                                            "Total de tarifas de colegiatura cobradas en el año del período seleccionado. " +
+                                                            "Incluye pagos de todas las familias del ciclo. " +
+                                                            "Base Caja: suma por fecha en que se recibió el dinero. Base Devengado: suma por el mes al que pertenece cada cuota. " +
+                                                            "No incluye mora ni pagos extraordinarios."
+                                                        } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>Q {ingresoTotal.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoAnio))}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Mes Actual</strong></Typography>
-                                                        <Tooltip title="Dinero cobrado únicamente en el mes en curso." arrow>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso del Mes</strong></Typography>
+                                                        <Tooltip title={
+                                                            "Total de tarifas de colegiatura del período seleccionado. " +
+                                                            "Incluye pagos de todas las familias del ciclo. " +
+                                                            "Base Caja: pagos recibidos en este mes calendario. " +
+                                                            "Base Devengado: lo cobrado de la cuota de este mes, sin importar cuándo se recibió. No incluye mora ni pagos extraordinarios."
+                                                        } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#2196f3', fontWeight: 600 }}>Q {currentMonthEarnings.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#2196f3', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoMes))}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Promedio Mensual</strong></Typography>
-                                                        <Tooltip title="Promedio de ingresos por mes durante el año." arrow>
+                                                        <Tooltip title={
+                                                            "Ingreso promedio por mes en lo que va del año: (ingreso acumulado de enero hasta el período seleccionado) ÷ (número de meses transcurridos). " +
+                                                            "Varía según la base Caja o Devengado activa."
+                                                        } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>Q {Number(ingresoMensualPromedio).toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.promedioMensual))}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Promedio por Familia</strong></Typography>
-                                                        <Tooltip title="Cuánto paga en promedio cada familia activa." arrow>
+                                                            <Tooltip title={
+                                                                "Ingreso del período seleccionado dividido entre el número de familias con cuota activa (Activo o Suspendido) al cierre del período. " +
+                                                                "Mide cuánto se recaudó en promedio por cada familia que debía pagar ese mes. " +
+                                                                "La clasificación de 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                            } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>Q {Number(promedioIngresoPorFamilia).toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.promedioPorFamilia))}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Ingreso por Mora</strong></Typography>
-                                                        <Tooltip title="Dinero cobrado específicamente por moras." arrow>
+                                                        <Tooltip title={
+                                                            "Total cobrado por concepto de mora en el período seleccionado. Incluye pagos de todas las familias del ciclo. " +
+                                                            "Base Caja: pagos de mora recibidos en este mes. " +
+                                                            "Base Devengado: mora cobrada que pertenece a este período (distribuida desde el mes con mora más antiguo)."
+                                                        } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#ff9800', fontWeight: 600 }}>Q {ingresoMora.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#ff9800', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoPorMora))}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Total Pendiente de Cobro</strong></Typography>
-                                                        <Tooltip title="Suma de todas las deudas actuales de tarifas sin pagar." arrow>
+                                                        <Tooltip title={
+                                                            "Suma de todas las cuotas de colegiatura sin pagar acumuladas hasta el cierre del período seleccionado. " +
+                                                            "Incluye todas las familias del ciclo, independientemente de su estado actual, porque el saldo pendiente existe aunque la familia esté pausada o inactiva. " +
+                                                            "No incluye mora."
+                                                        } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#f44336', fontWeight: 600 }}>Q {totalPendiente.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#f44336', fontWeight: 600 }}>{formatMoneyOrNA(fin?.totalPendiente)}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Mora Pendiente</strong></Typography>
-                                                        <Tooltip title="Suma de todas las penalidades por mora acumuladas y no pagadas." arrow>
+                                                        <Tooltip title={
+                                                            "Suma de todas las penalidades por mora sin pagar hasta el cierre del período seleccionado. " +
+                                                            "Incluye todas las familias del ciclo porque la mora no desaparece al cambiar de estado. " +
+                                                            "La mora generada específicamente en el mes seleccionado también se refleja en la 'Tasa de Mora'."
+                                                        } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#d32f2f', fontWeight: 600 }}>Q {moraPendiente.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#d32f2f', fontWeight: 600 }}>{formatMoneyOrNA(fin?.moraPendiente)}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Crédito Acumulado</strong></Typography>
-                                                        <Tooltip title="Dinero a favor de las familias por pagos adelantados o sobrepagos. Se aplica automáticamente a futuros cobros" arrow>
+                                                        <Tooltip title={
+                                                            "Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado. " +
+                                                            "Incluye familias pausadas o inactivas porque el crédito es un derecho de la familia independientemente de su estado. " +
+                                                            "Se genera por sobrepagos o pagos anticipados y se descuenta automáticamente del próximo cobro."
+                                                        } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>Q {creditoAcumulado.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>{formatMoneyOrNA(fin?.creditoAcumulado)}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Total Descuentos</strong></Typography>
-                                                        <Tooltip title="Suma de todos los descuentos especiales otorgados a las familias." arrow>
+                                                        <Tooltip title={
+                                                            "Suma de descuentos aplicados a las cuotas de colegiatura en el período seleccionado, para familias con cuota activa. " +
+                                                            "Incluye el descuento especial permanente de cada familia más los descuentos extraordinarios manuales del período. " +
+                                                            "Las exoneraciones de mora se reportan por separado en 'Mora Exonerada'. " +
+                                                            "La condición de 'con cuota activa' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                        } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#795548', fontWeight: 600 }}>Q {totalDescuentos.toLocaleString('es-GT', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#795548', fontWeight: 600 }}>{formatMoneyOrNA(fin?.totalDescuentos)}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Mora Exonerada</strong></Typography>
+                                                        <Tooltip title={
+                                                            "Mora perdonada o condonada en el período seleccionado, para familias con cuota activa. " +
+                                                            "Se reporta separado de los descuentos de colegiatura porque representa una deuda ya generada que se decidió no cobrar, no una reducción del monto original facturado. " +
+                                                            "La condición de 'con cuota activa' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#607d8b', fontWeight: 600 }}>{formatMoneyOrNA(fin?.descuentosMoraExonerados)}</Typography>
                                                 </Grid>
                                             </Grid>
                                         </Box>
 
-                                        {/* Distribución de Familias */}
-                                        <Typography variant="h6" sx={{ mb: 2, mt: 3, fontWeight: 600, color: '#1976d2' }}>👥 Distribución de Familias</Typography>
-                                        <Box sx={{ mb: 3, p: 2, background: '#f9fafb', borderRadius: 2, boxShadow: 1 }}>
-                                            <Grid container spacing={2}>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2" color="text.secondary"><strong>Total Familias</strong></Typography>
-                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{totalFamilias}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2" color="text.secondary"><strong>Activas</strong></Typography>
-                                                    <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>{familiasActivas}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2" color="text.secondary"><strong>Inactivas</strong></Typography>
-                                                    <Typography variant="h6" sx={{ color: '#9e9e9e', fontWeight: 600 }}>{inactivoCount}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2" color="text.secondary"><strong>Pagadas</strong></Typography>
-                                                    <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>{pagadoCount}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2" color="text.secondary"><strong>En Mora</strong></Typography>
-                                                    <Typography variant="h6" sx={{ color: '#f44336', fontWeight: 600 }}>{moraCount}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={2}>
-                                                    <Typography variant="body2" color="text.secondary"><strong>Pendientes</strong></Typography>
-                                                    <Typography variant="h6" sx={{ color: '#ff9800', fontWeight: 600 }}>{pendienteCount}</Typography>
-                                                </Grid>
-                                                
-                                            </Grid>
-                                        </Box>
+                                        
 
                                         {/* Gráficos */}
                                         <Grid container spacing={3} sx={{ mt: 2 }}>
@@ -3379,11 +3525,11 @@ const SchoolPaymentsPage = () => {
                                                             <PieChart>
                                                                 <Pie
                                                                     data={[
-                                                                        { name: 'Pagadas', value: pagadoCount, fill: '#4caf50' },
-                                                                        { name: 'En Mora', value: moraCount, fill: '#f44336' },
-                                                                        { name: 'Pendientes', value: pendienteCount, fill: '#ff9800' },
-                                                                        { name: 'En Proceso', value: enProcesoCount, fill: '#2196f3' },
-                                                                        { name: 'Atrasadas', value: atrasadoCount, fill: '#ff5722' }
+                                                                        { name: 'Pagado', value: displayPaid, fill: '#4caf50' },
+                                                                        { name: 'Adelantado', value: displayAdelantado, fill: '#1976D2' },
+                                                                        { name: 'En Mora', value: displayMora, fill: '#f44336' },
+                                                                        { name: 'Pendientes', value: displayPendiente, fill: '#ff9800' },
+                                                                        { name: 'En Proceso', value: displayEnProceso, fill: '#2196f3' }
                                                                     ].filter(item => item.value > 0)}
                                                                     cx="50%"
                                                                     cy="50%"
@@ -3464,10 +3610,11 @@ const SchoolPaymentsPage = () => {
                         
                         {countersView === 'payment' ? (
                             <>
-                                <Chip label={`Pagados: ${totalPaidCount}`} color="success" />
-                                <Chip label={`Pendientes: ${totalPendingCount}`} color="warning" />
-                                <Chip label={`En Mora: ${totalMoraCount}`} color="error" />
-                                <Chip label={`Eliminados: ${eliminadoCount}`} sx={{ backgroundColor: '#000000', color: 'white' }} />
+                                <Chip label={`Pagados: ${displayPaid}`} color="success" />
+                                <Chip label={`Adelantado: ${displayAdelantado}`} sx={{ ml: 1, backgroundColor: '#1976D2', color: '#fff' }} />
+                                <Chip label={`En Proceso: ${displayEnProceso}`} sx={{ ml: 1, backgroundColor: '#2196f3', color: '#fff' }} />
+                                <Chip label={`Pendientes: ${displayPendiente}`} color="warning" />
+                                <Chip label={`En Mora: ${displayMora}`} color="error" />
                             </>
                         ) : (
                             <>
@@ -3475,6 +3622,7 @@ const SchoolPaymentsPage = () => {
                                 <Chip label={`Pausados: ${servicePausedCount}`} color="warning" />
                                 <Chip label={`Suspendidos: ${serviceSuspendedCount}`} color="error" />
                                 <Chip label={`Inactivos: ${serviceInactiveCount}`} sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />
+                                <Chip label={`Eliminados: ${eliminadoCount}`} sx={{ backgroundColor: '#000000', color: 'white', ml: 1 }} />
                             </>
                         )}
                         

@@ -56,9 +56,11 @@ const SERVICE_STATUS_OPTIONS = [
 ];
 
 const PAYMENT_STATUS_OPTIONS = [
-    { value: 'CONFIRMADO', label: 'Confirmado' },
-    { value: 'PENDIENTE',  label: 'Pendiente'  },
-    { value: 'MORA',       label: 'En Mora'    },
+    { value: 'CONFIRMADO',  label: 'Pagado' },
+    { value: 'ADELANTADO',  label: 'Adelantado' },
+    { value: 'PENDIENTE',   label: 'Pendiente' },
+    { value: 'MORA',        label: 'En Mora' },
+    { value: 'EN_PROCESO',  label: 'En Proceso' },
 ];
 
 const MENU_PROPS = { PaperProps: { style: { maxHeight: 280 } } };
