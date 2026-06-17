@@ -1144,6 +1144,54 @@ const SchoolUsersPage = () => {
     const [contracts, setContracts] = useState([]);
     const [schools, setSchools] = useState([]);
 
+    // Prefer FamilyDetail-level updatedAt (for the selected school + ciclo) over global User.updatedAt
+    const getFamilyUpdatedAt = useCallback((user) => {
+        if (!user) return null;
+        const fd = user.FamilyDetail || user.familyDetail || null;
+        if (!fd) return null;
+
+        const resolveUpdated = (obj) => obj?.updatedAt || obj?.updated_at || obj?.updatedOn || obj?.modifiedAt || obj?.updated || null;
+
+        // If multiple family detail records are present, try to match by schoolId and cicloEscolarId
+        if (Array.isArray(fd)) {
+            const matched = fd.find(item => {
+                if (!item) return false;
+                const sid = item.schoolId ?? item.SchoolId ?? item.school?.id ?? item.colegioId ?? null;
+                const cid = item.cicloEscolarId ?? item.CicloEscolarId ?? item.cicloId ?? item.cicloEscolar?.id ?? null;
+                const schoolMatches = schoolId ? String(sid) === String(schoolId) : true;
+                const cycleMatches = stateCicloEscolarId ? String(cid) === String(stateCicloEscolarId) : true;
+                return schoolMatches && cycleMatches;
+            }) || fd[0];
+            return resolveUpdated(matched);
+        }
+
+        // If single object, assume it's already the relevant FamilyDetail
+        return resolveUpdated(fd);
+    }, [schoolId, stateCicloEscolarId]);
+
+    // Prefer FamilyDetail-level createdAt (for the selected school + ciclo)
+    const getFamilyCreatedAt = useCallback((user) => {
+        if (!user) return null;
+        const fd = user.FamilyDetail || user.familyDetail || null;
+        if (!fd) return null;
+
+        const resolveCreated = (obj) => obj?.createdAt || obj?.created_at || obj?.createdOn || obj?.created || null;
+
+        if (Array.isArray(fd)) {
+            const matched = fd.find(item => {
+                if (!item) return false;
+                const sid = item.schoolId ?? item.SchoolId ?? item.school?.id ?? item.colegioId ?? null;
+                const cid = item.cicloEscolarId ?? item.CicloEscolarId ?? item.cicloId ?? item.cicloEscolar?.id ?? null;
+                const schoolMatches = schoolId ? String(sid) === String(schoolId) : true;
+                const cycleMatches = stateCicloEscolarId ? String(cid) === String(stateCicloEscolarId) : true;
+                return schoolMatches && cycleMatches;
+            }) || fd[0];
+            return resolveCreated(matched);
+        }
+
+        return resolveCreated(fd);
+    }, [schoolId, stateCicloEscolarId]);
+
     const userStatusById = useMemo(() => {
         const familyLastNameCounts = new Map();
         const now = Date.now();
@@ -1278,54 +1326,6 @@ const SchoolUsersPage = () => {
             return 'none';
         }
     };
-
-        // Prefer FamilyDetail-level updatedAt (for the selected school + ciclo) over global User.updatedAt
-        function getFamilyUpdatedAt(user) {
-            if (!user) return null;
-            const fd = user.FamilyDetail || user.familyDetail || null;
-            if (!fd) return null;
-
-            const resolveUpdated = (obj) => obj?.updatedAt || obj?.updated_at || obj?.updatedOn || obj?.modifiedAt || obj?.updated || null;
-
-            // If multiple family detail records are present, try to match by schoolId and cicloEscolarId
-            if (Array.isArray(fd)) {
-                const matched = fd.find(item => {
-                    if (!item) return false;
-                    const sid = item.schoolId ?? item.SchoolId ?? item.school?.id ?? item.colegioId ?? null;
-                    const cid = item.cicloEscolarId ?? item.CicloEscolarId ?? item.cicloId ?? item.cicloEscolar?.id ?? null;
-                    const schoolMatches = schoolId ? String(sid) === String(schoolId) : true;
-                    const cycleMatches = stateCicloEscolarId ? String(cid) === String(stateCicloEscolarId) : true;
-                    return schoolMatches && cycleMatches;
-                }) || fd[0];
-                return resolveUpdated(matched);
-            }
-
-            // If single object, assume it's already the relevant FamilyDetail
-            return resolveUpdated(fd);
-        }
-
-        // Prefer FamilyDetail-level createdAt (for the selected school + ciclo)
-        function getFamilyCreatedAt(user) {
-            if (!user) return null;
-            const fd = user.FamilyDetail || user.familyDetail || null;
-            if (!fd) return null;
-
-            const resolveCreated = (obj) => obj?.createdAt || obj?.created_at || obj?.createdOn || obj?.created || null;
-
-            if (Array.isArray(fd)) {
-                const matched = fd.find(item => {
-                    if (!item) return false;
-                    const sid = item.schoolId ?? item.SchoolId ?? item.school?.id ?? item.colegioId ?? null;
-                    const cid = item.cicloEscolarId ?? item.CicloEscolarId ?? item.cicloId ?? item.cicloEscolar?.id ?? null;
-                    const schoolMatches = schoolId ? String(sid) === String(schoolId) : true;
-                    const cycleMatches = stateCicloEscolarId ? String(cid) === String(stateCicloEscolarId) : true;
-                    return schoolMatches && cycleMatches;
-                }) || fd[0];
-                return resolveCreated(matched);
-            }
-
-            return resolveCreated(fd);
-        }
 
         const countStudents = (list) => (Array.isArray(list) ? list.reduce((acc, u) => acc + getStudentsCount(u), 0) : 0);
 
@@ -1493,7 +1493,7 @@ const SchoolUsersPage = () => {
             setPage(0); // Reset page when filters change
             prevFilterKeyRef.current = currentFilterKey;
         }
-    }, [users, searchQuery, statusFilter, serviceStatusFilter, getUserStatus]);
+    }, [users, searchQuery, statusFilter, serviceStatusFilter]);
 
     const handleBackToDashboard = () => {
         navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
