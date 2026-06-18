@@ -59,9 +59,9 @@ const PaymentFilters = ({
                     sx={{ m: 0, whiteSpace: 'nowrap', '& .MuiFormControlLabel-label': { fontSize: { xs: '0.95rem', sm: '0.82rem' } } }}
                 />
                 <FormControlLabel
-                    control={<Switch size="small" checked={showDeleted} onChange={(e) => onShowDeletedChange(e.target.checked)} disabled={!!status} />}
+                    control={<Switch size="small" checked={showDeleted} onChange={(e) => onShowDeletedChange(e.target.checked)} disabled={serviceStatus === 'INACTIVE'} />}
                     label="Mostrar eliminadas"
-                    disabled={!!status}
+                    disabled={serviceStatus === 'INACTIVE'}
                     sx={{ m: 0, whiteSpace: 'nowrap', '& .MuiFormControlLabel-label': { fontSize: { xs: '0.95rem', sm: '0.82rem' } } }}
                 />
             </Box>

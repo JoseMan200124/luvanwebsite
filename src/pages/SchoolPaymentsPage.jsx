@@ -518,20 +518,29 @@ const SchoolPaymentsPage = () => {
         }
     }, [fetchAllPayments, fetchPaymentsAnalysis, schoolId]);
 
-    const fetchTotalFamiliesCount = useCallback(async (schId) => {
-        if (!schId) return;
+    const fetchTotalFamiliesCount = useCallback(async (/* schId unused */) => {
         try {
-            // Request analysis without excluding inactive/deleted so we get the full total
-            const res = await api.get('/payments/analysis', { params: buildPaymentParams({ schoolId: schId, excludeInactive: false }) });
-            const data = res.data || {};
-            const total = (typeof data.totalPayments === 'number')
-                ? data.totalPayments
-                : (Array.isArray(data.statusDistribution) ? data.statusDistribution.reduce((s, it) => s + (it.count || 0), 0) : null);
-            setTotalFamiliesCount(total);
+            if (!Array.isArray(paymentsAll) || paymentsAll.length === 0) {
+                setTotalFamiliesCount(0);
+                return;
+            }
+            const famMap = new Map();
+            paymentsAll.forEach(p => {
+                const fam = p?.User?.FamilyDetail || p?.FamilyDetail || null;
+                const familyId = fam?.id || fam?.familyId || p?.familyDetailId || p?.familyId || p?.userId || p?.User?.id || null;
+                if (!familyId) return;
+                const serviceStatus = (fam?.serviceStatus || p?.serviceStatus || '').toString().toUpperCase();
+                const familyDeletedFlag = fam?.deleted || fam?.isDeleted || !!fam?.deletedAt || !!p?.deleted || !!p?.deletedAt || false;
+                const deleted = familyDeletedFlag || serviceStatus === 'DELETED' || serviceStatus === 'ELIMINADO';
+                if (deleted) return;
+                famMap.set(String(familyId), true);
+            });
+            setTotalFamiliesCount(famMap.size);
         } catch (err) {
             console.error('fetchTotalFamiliesCount error', err);
+            setTotalFamiliesCount(0);
         }
-    }, [buildPaymentParams]);
+    }, [paymentsAll]);
 
     useEffect(() => {
         if (schoolId) fetchTotalFamiliesCount(schoolId);
@@ -556,10 +565,11 @@ const SchoolPaymentsPage = () => {
             // service statuses (e.g., PAGADO). This makes the table filter
             // consistent with backend `paymentStateTotals` used for the chips.
             const allowInactive = !!showInactive || serviceStatusFilter === 'INACTIVE' || st === 'INACTIVO' || st === 'PAGADO';
+            const allowDeleted = !!showDeleted || serviceStatusFilter === 'ELIMINADO';
             const arr = (paymentsAll || []).filter(p => {
                 // Determinar si la familia tiene servicio inactivo (serviceStatus = INACTIVE)
                 const isServiceInactive = (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus) === 'INACTIVE';
-                const isDeleted = !!p.User?.FamilyDetail?.deleted;
+                const isDeleted = !!p.User?.FamilyDetail?.deleted || !!p.User?.FamilyDetail?.isDeleted || !!p.User?.FamilyDetail?.deletedAt || !!p.deleted || !!p.deletedAt;
 
                 // Por defecto, NO mostrar inactivas. Solo mostrarlas si el toggle está activo
                 // o si el usuario filtró explícitamente por Estado del Servicio = INACTIVE.
@@ -577,7 +587,7 @@ const SchoolPaymentsPage = () => {
                         // Excepción: cuando el usuario pidió `PAGADO`, incluir
                         // familias eliminadas/inactivas para coincidir con los
                         // totales autoritativos del backend (las chips).
-                        if (st !== 'PAGADO' && isDeleted && !showDeleted) return false;
+                        if (st !== 'PAGADO' && isDeleted && !allowDeleted) return false;
                         const s = (p.finalStatus || '').toUpperCase();
 
                         // Interpretar `PAGADO` como `CONFIRMADO` solamente (ADELANTADO es separado)
@@ -589,11 +599,11 @@ const SchoolPaymentsPage = () => {
                     }
                 } else {
                     // No se seleccionó estado: aplicar reglas por defecto
-                    if (isDeleted && !showDeleted) return false;
+                    if (isDeleted && !allowDeleted) return false;
 
                     const s = (p.finalStatus || '').toUpperCase();
                     const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
-                    if (!(defaultAllowed.includes(s) || (showDeleted && s === 'ELIMINADO') || (allowInactive && isServiceInactive))) return false;
+                    if (!(defaultAllowed.includes(s) || (allowDeleted && s === 'ELIMINADO') || (allowInactive && isServiceInactive))) return false;
                 }
                 if (qq) {
                     const familyLast = (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toLowerCase();
@@ -608,8 +618,14 @@ const SchoolPaymentsPage = () => {
                 }
                 // Filtrado por estado del servicio
                 if (serviceStatusFilter) {
-                    const paymentServiceStatus = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus;
-                    if (paymentServiceStatus !== serviceStatusFilter) return false;
+                    const paymentServiceStatusRaw = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '';
+                    const paymentServiceStatus = (paymentServiceStatusRaw || '').toString().toUpperCase();
+                    const paymentIsDeleted = !!p.User?.FamilyDetail?.deleted || paymentServiceStatus === 'DELETED' || paymentServiceStatus === 'ELIMINADO';
+                    if (serviceStatusFilter === 'ELIMINADO') {
+                        if (!paymentIsDeleted) return false;
+                    } else {
+                        if (paymentServiceStatus !== serviceStatusFilter) return false;
+                    }
                 }
                 return true;
             });
