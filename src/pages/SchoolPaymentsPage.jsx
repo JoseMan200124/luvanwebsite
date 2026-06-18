@@ -4093,7 +4093,11 @@ const SchoolPaymentsPage = () => {
                                                     
                                                     {dialogCredito > 0 && (
                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                            <Typography variant="body2" color="text.secondary">Crédito a favor</Typography>
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                <Box component="span" title="Crédito generado por pagos anteriores donde el monto excedió la tarifa del mes. Se aplica automáticamente." sx={{ borderBottom: '1px dashed #999', cursor: 'help' }}>
+                                                                    Crédito a favor ↗
+                                                                </Box>
+                                                            </Typography>
                                                             <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
                                                                 - {formatCurrency(dialogCredito)}
                                                             </Typography>
@@ -4277,6 +4281,39 @@ const SchoolPaymentsPage = () => {
                                                 </Typography>
                                             </Box>
                                         </Box>
+
+                                        {/* 🔄 INFO: Explicación del flujo de crédito cuando hay crédito a favor */}
+                                        {dialogCredito > 0 && (
+                                            <Box sx={{ mb: 2, p: 1.5, bgcolor: '#e3f2fd', borderRadius: 1.5, border: '1px solid #90caf9' }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#1565c0' }}>
+                                                        🔄 Flujo del crédito disponible
+                                                    </Typography>
+                                                </Box>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Box component="span" sx={{ px: 0.6, py: 0.2, bgcolor: '#e8f5e9', borderRadius: 0.5, fontWeight: 600, fontSize: '0.65rem', color: '#2e7d32', whiteSpace: 'nowrap' }}>
+                                                            ↗ Crédito disponible
+                                                        </Box>
+                                                        <Typography variant="caption" sx={{ fontWeight: 600, color: '#1565c0' }}>
+                                                            Q {dialogCredito.toFixed(2)}
+                                                        </Typography>
+                                                    </Box>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Este crédito proviene de pagos anteriores donde el monto excedió la tarifa del mes.
+                                                        Se aplicará automáticamente a la tarifa del próximo período al generar la facturación mensual.
+                                                    </Typography>
+                                                    {dialogPendingBalance > 0 && (
+                                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.3 }}>
+                                                            {dialogCredito >= dialogPendingBalance
+                                                                ? `✅ El crédito cubre todo el saldo pendiente (Q${dialogPendingBalance.toFixed(2)}). No se requiere pago adicional para ponerse al día.`
+                                                                : `💡 El crédito (Q${dialogCredito.toFixed(2)}) se aplicará primero al saldo pendiente (Q${dialogPendingBalance.toFixed(2)}), reduciéndolo a Q${Math.max(0, dialogPendingBalance - dialogCredito).toFixed(2)}.`
+                                                            }
+                                                        </Typography>
+                                                    )}
+                                                </Box>
+                                            </Box>
+                                        )}
 
                                         <TextField
                                             label="Monto pagado"
@@ -4486,7 +4523,11 @@ const SchoolPaymentsPage = () => {
                                             </Box>
                                             {dialogCredito > 0 && (
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                    <Typography variant="body2" sx={{ color: 'success.main' }}>Crédito disponible:</Typography>
+                                                    <Typography variant="body2" sx={{ color: 'success.main' }}>
+                                                        <Box component="span" title="Crédito acumulado de pagos anteriores. Puede usarse para cubrir la mora." sx={{ borderBottom: '1px dashed #999', cursor: 'help' }}>
+                                                            Crédito disponible ↗
+                                                        </Box>
+                                                    </Typography>
                                                     <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>Q {dialogCredito.toFixed(2)}</Typography>
                                                 </Box>
                                             )}
