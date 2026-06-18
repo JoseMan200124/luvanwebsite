@@ -952,12 +952,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
                 <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
                     <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) handleAction('receipts'); }} disabled={isDeleted}>Boletas</Button>
-                    {isGlobalPenaltyFrozen && (
-                        <Chip size="small" color="warning" label="Mora global congelada" />
-                    )}
-                    {frozenPenaltyPeriodsCount > 0 && (
-                        <Chip size="small" color="info" variant="outlined" label={`${frozenPenaltyPeriodsCount} período(s) congelado(s)`} />
-                    )}
                     <Button 
                         variant="outlined" 
                         color={isGlobalPenaltyFrozen ? "success" : "primary"}
