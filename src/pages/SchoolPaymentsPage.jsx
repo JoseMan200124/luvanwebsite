@@ -159,6 +159,9 @@ const SchoolPaymentsPage = () => {
     const [page, setPage] = useState(0); // UI page (0-based)
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [totalPayments, setTotalPayments] = useState(0);
+    // Total families authoritative (includes active + inactive). Fetched independently
+    // so it doesn't change when table filters/switches are toggled.
+    const [totalFamiliesCount, setTotalFamiliesCount] = useState(null);
     const [totalPaidCount, setTotalPaidCount] = useState(0);
     const [totalMoraCount, setTotalMoraCount] = useState(0);
     const [totalPendingCount, setTotalPendingCount] = useState(0);
@@ -514,6 +517,25 @@ const SchoolPaymentsPage = () => {
             setLoading(false);
         }
     }, [fetchAllPayments, fetchPaymentsAnalysis, schoolId]);
+
+    const fetchTotalFamiliesCount = useCallback(async (schId) => {
+        if (!schId) return;
+        try {
+            // Request analysis without excluding inactive/deleted so we get the full total
+            const res = await api.get('/payments/analysis', { params: buildPaymentParams({ schoolId: schId, excludeInactive: false }) });
+            const data = res.data || {};
+            const total = (typeof data.totalPayments === 'number')
+                ? data.totalPayments
+                : (Array.isArray(data.statusDistribution) ? data.statusDistribution.reduce((s, it) => s + (it.count || 0), 0) : null);
+            setTotalFamiliesCount(total);
+        } catch (err) {
+            console.error('fetchTotalFamiliesCount error', err);
+        }
+    }, [buildPaymentParams]);
+
+    useEffect(() => {
+        if (schoolId) fetchTotalFamiliesCount(schoolId);
+    }, [schoolId, fetchTotalFamiliesCount]);
 
     // Extraordinary payments are handled by the shared ExtraordinaryPaymentSection component
 
@@ -3157,7 +3179,7 @@ const SchoolPaymentsPage = () => {
                                 <Chip
                                     size="small"
                                     icon={<People />}
-                                    label={`${totalPayments} familias en sistema`}
+                                    label={`${totalFamiliesCount || 0} familias en sistema`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', fontWeight: 600 }}
                                 />
                                 {/* Opciones Extra moved to bottom-right of header */}
