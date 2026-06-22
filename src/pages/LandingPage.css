@@ -1,0 +1,161 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+.luvan-landing {
+  --green:#1C9E57; --green-d:#15824A; --blue:#1F45C4; --blue-d:#173597;
+  --navy:#152330; --navy2:#1B2D3D; --ink:#1A2730; --muted:#5C6B78; --faint:#8A98A3;
+  --soft:#F4F7F9; --soft2:#EDF2F5; --line:#E4EBEF; --bg:#FFFFFF;
+  background:var(--bg); color:var(--ink); font-family:'Inter',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased; line-height:1.65; overflow-x:hidden; min-height:100vh;
+}
+.luvan-landing *, .luvan-landing *::before, .luvan-landing *::after { box-sizing:border-box; }
+.luvan-landing a { color:inherit; text-decoration:none; }
+.luvan-landing img { display:block; max-width:100%; }
+.luvan-wrap { max-width:1180px; margin:0 auto; padding:0 32px; }
+.luvan-landing h1,.luvan-landing h2,.luvan-landing h3,.luvan-landing h4,.luvan-landing .luvan-jak { font-family:'Plus Jakarta Sans',sans-serif; }
+.luvan-eyebrow { font-weight:600; font-size:.74rem; letter-spacing:.18em; text-transform:uppercase; color:var(--green); }
+.luvan-btn { display:inline-flex; align-items:center; gap:9px; font-family:inherit; font-weight:600; font-size:.92rem; padding:14px 26px; border-radius:100px; transition:transform .16s,box-shadow .25s,background .2s; cursor:pointer; border:none; }
+.luvan-btn-green { background:var(--green); color:#fff; }
+.luvan-btn-green:hover { background:var(--green-d); transform:translateY(-2px); box-shadow:0 14px 30px -12px var(--green); }
+.luvan-btn-ghost { background:transparent; color:#fff; border:1.5px solid rgba(255,255,255,.5); }
+.luvan-btn-ghost:hover { border-color:#fff; background:rgba(255,255,255,.1); }
+
+.luvan-logo { display:inline-flex; align-items:center; }
+.luvan-logo img { height:44px; width:auto; display:block; }
+.luvan-header:not(.solid) .luvan-logo img { filter:brightness(0) invert(1); }
+.luvan-header.solid .luvan-logo img { filter:none; }
+
+.luvan-header { position:fixed; top:0; left:0; right:0; z-index:60; transition:background .4s,box-shadow .4s,padding .3s; }
+.luvan-header .luvan-nav { display:flex; align-items:center; justify-content:space-between; height:80px; }
+.luvan-header.solid { background:rgba(255,255,255,.92); backdrop-filter:blur(12px); box-shadow:0 1px 0 var(--line); }
+.luvan-navlinks { display:flex; gap:34px; align-items:center; }
+.luvan-navlinks a { font-size:.9rem; font-weight:500; color:rgba(255,255,255,.92); transition:color .2s; }
+.luvan-header.solid .luvan-navlinks a { color:var(--ink); }
+.luvan-navlinks a:hover, .luvan-header.solid .luvan-navlinks a:hover { color:var(--green); }
+.luvan-nav-actions { display:flex; align-items:center; gap:16px; }
+.luvan-phone { display:inline-flex; align-items:center; gap:7px; font-weight:600; font-size:.88rem; color:#fff; }
+.luvan-header.solid .luvan-phone { color:var(--ink); }
+.luvan-menu-btn { display:none; flex-direction:column; gap:5px; background:none; border:none; cursor:pointer; padding:6px; }
+.luvan-menu-btn span { width:24px; height:2px; background:#fff; border-radius:2px; transition:.3s; }
+.luvan-header.solid .luvan-menu-btn span { background:var(--ink); }
+
+.luvan-mobile { position:fixed; inset:0 0 0 auto; width:300px; max-width:84vw; background:#fff; z-index:70; transform:translateX(100%); transition:transform .35s cubic-bezier(.3,.7,.2,1); padding:100px 30px 30px; display:flex; flex-direction:column; gap:6px; box-shadow:-20px 0 60px -20px rgba(0,0,0,.3); }
+.luvan-mobile.open { transform:none; }
+.luvan-mobile a { padding:14px 0; border-bottom:1px solid var(--line); font-weight:500; color:var(--ink); }
+.luvan-mobile .luvan-btn { margin-top:18px; justify-content:center; color:#fff; border-bottom:none; }
+.luvan-mob-ov { position:fixed; inset:0; background:rgba(21,35,48,.5); opacity:0; pointer-events:none; transition:opacity .3s; z-index:65; }
+.luvan-mob-ov.open { opacity:1; pointer-events:auto; }
+
+.luvan-hero { position:relative; min-height:100vh; display:flex; align-items:center; overflow:hidden; }
+.luvan-hero-bg { position:absolute; inset:0; background:#152330 center/cover no-repeat; transform:scale(1.05); animation:luvan-kb 18s ease-in-out infinite alternate; }
+@keyframes luvan-kb { to { transform:scale(1.14) translateY(-12px); } }
+.luvan-hero-ov { position:absolute; inset:0; background:linear-gradient(115deg,rgba(18,30,42,.92) 0%,rgba(18,30,42,.6) 52%,rgba(28,158,87,.32) 100%); }
+.luvan-hero-inner { position:relative; z-index:2; padding:120px 0 80px; max-width:680px; }
+.luvan-hero .luvan-eyebrow { color:#7DE0AC; }
+.luvan-hero h1 { font-weight:800; font-size:clamp(2.6rem,6vw,4.5rem); line-height:1.04; letter-spacing:-.02em; color:#fff; margin:20px 0 0; }
+.luvan-hero h1 .g { color:#7DE0AC; }
+.luvan-hero p { color:rgba(255,255,255,.86); font-size:1.18rem; margin-top:22px; max-width:48ch; }
+.luvan-cta { margin-top:36px; display:flex; gap:16px; flex-wrap:wrap; }
+.luvan-scroll-cue { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); z-index:2; color:rgba(255,255,255,.6); font-size:.7rem; letter-spacing:.2em; text-transform:uppercase; display:flex; flex-direction:column; align-items:center; gap:8px; animation:luvan-bob 2.4s ease-in-out infinite; }
+.luvan-scroll-cue .bar { width:1px; height:30px; background:linear-gradient(rgba(255,255,255,.6),transparent); }
+@keyframes luvan-bob { 0%,100% { transform:translateX(-50%) translateY(0); } 50% { transform:translateX(-50%) translateY(6px); } }
+
+.luvan-stats { background:var(--navy); color:#fff; }
+.luvan-stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:30px; padding:54px 0; }
+.luvan-s { text-align:center; }
+.luvan-v { font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:clamp(2.2rem,4vw,3rem); line-height:1; color:#fff; }
+.luvan-v .u { color:var(--green); }
+.luvan-l { color:#9FB0BC; font-size:.82rem; letter-spacing:.04em; margin-top:10px; }
+
+.luvan-band { padding:110px 0; }
+.luvan-head { text-align:center; max-width:680px; margin:0 auto 60px; }
+.luvan-head .luvan-eyebrow { display:block; margin-bottom:14px; }
+.luvan-head h2 { font-weight:800; font-size:clamp(2rem,4.4vw,3rem); line-height:1.08; letter-spacing:-.02em; margin:0; }
+.luvan-head p { color:var(--muted); margin:14px 0 0; font-size:1.05rem; }
+
+.luvan-cards3 { display:grid; grid-template-columns:repeat(3,1fr); gap:26px; }
+.luvan-card { background:#fff; border:1px solid var(--line); border-radius:18px; padding:38px 32px; transition:transform .25s,box-shadow .25s,border-color .25s; }
+.luvan-card:hover { transform:translateY(-7px); box-shadow:0 30px 60px -34px rgba(21,35,48,.4); border-color:transparent; }
+.luvan-ico { width:60px; height:60px; border-radius:15px; display:flex; align-items:center; justify-content:center; background:rgba(28,158,87,.1); color:var(--green); margin-bottom:22px; }
+.luvan-ico svg { width:30px; height:30px; }
+.luvan-card h3 { font-weight:700; font-size:1.3rem; margin:0 0 10px; }
+.luvan-card p { color:var(--muted); font-size:.97rem; margin:0; }
+
+.luvan-services { background:var(--soft); }
+.luvan-cards-svc { display:grid; grid-template-columns:repeat(2,1fr); gap:24px; }
+.luvan-svc { background:#fff; border:1px solid var(--line); border-radius:18px; padding:36px; display:flex; gap:24px; align-items:flex-start; transition:transform .25s,box-shadow .25s; }
+.luvan-svc:hover { transform:translateY(-5px); box-shadow:0 28px 56px -34px rgba(21,35,48,.38); }
+.luvan-svc .luvan-ico { margin-bottom:0; flex:none; width:58px; height:58px; }
+.luvan-svc h3 { font-weight:700; font-size:1.25rem; margin:0 0 8px; }
+.luvan-svc p { color:var(--muted); font-size:.95rem; margin:0; }
+
+.luvan-about { display:grid; grid-template-columns:1fr 1fr; gap:64px; align-items:center; }
+.luvan-about .luvan-eyebrow { display:block; margin-bottom:14px; }
+.luvan-about h2 { font-weight:800; font-size:clamp(1.9rem,4vw,2.8rem); line-height:1.1; letter-spacing:-.02em; margin:0; }
+.luvan-about p { color:var(--muted); margin:20px 0 0; font-size:1.05rem; }
+.luvan-about .luvan-quote { margin-top:22px; font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-style:italic; color:var(--blue); font-size:1.15rem; }
+.luvan-panel { background:linear-gradient(150deg,#F4F7F9,#E7EEF2); border:1px solid var(--line); border-radius:24px; min-height:340px; display:flex; align-items:center; justify-content:center; padding:40px; }
+.luvan-panel img { max-width:330px; width:82%; height:auto; }
+
+.luvan-ctaband { position:relative; overflow:hidden; background:var(--green); color:#fff; }
+.luvan-ctaband::after { content:""; position:absolute; right:-80px; top:-80px; width:320px; height:320px; border-radius:50%; background:rgba(255,255,255,.08); }
+.luvan-cta-inner { position:relative; z-index:2; padding:80px 0; display:flex; align-items:center; justify-content:space-between; gap:30px; flex-wrap:wrap; }
+.luvan-ctaband h2 { font-weight:800; font-size:clamp(1.8rem,4vw,2.6rem); line-height:1.1; letter-spacing:-.02em; max-width:18ch; margin:0; }
+.luvan-ctaband .luvan-btn { background:#fff; color:var(--green-d); }
+.luvan-ctaband .luvan-btn:hover { background:#EAF6EF; }
+
+.luvan-contact { display:grid; grid-template-columns:.9fr 1.1fr; gap:60px; }
+.luvan-contact h2 { font-weight:800; font-size:clamp(1.9rem,4vw,2.6rem); letter-spacing:-.02em; margin:0; }
+.luvan-sub { color:var(--muted); margin:12px 0 0; }
+.luvan-cinfo { margin-top:32px; display:flex; flex-direction:column; gap:22px; }
+.luvan-row { display:flex; gap:16px; align-items:center; }
+.luvan-ic { width:46px; height:46px; border-radius:12px; flex:none; background:rgba(28,158,87,.1); color:var(--green); display:flex; align-items:center; justify-content:center; }
+.luvan-ic svg { width:22px; height:22px; }
+.luvan-k { font-size:.78rem; color:var(--faint); text-transform:uppercase; letter-spacing:.08em; }
+.luvan-val { font-weight:600; color:var(--ink); }
+.luvan-form { background:#fff; border:1px solid var(--line); border-radius:22px; padding:38px; box-shadow:0 30px 70px -40px rgba(21,35,48,.4); }
+.luvan-two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.luvan-field { margin-bottom:16px; }
+.luvan-field label { display:block; font-size:.8rem; font-weight:600; color:var(--muted); margin-bottom:7px; }
+.luvan-field input,.luvan-field textarea { width:100%; border:1px solid var(--line); background:var(--soft); border-radius:12px; padding:13px 15px; font-family:inherit; font-size:.95rem; color:var(--ink); transition:border-color .2s,background .2s; }
+.luvan-field input:focus,.luvan-field textarea:focus { outline:none; border-color:var(--green); background:#fff; }
+.luvan-field textarea { resize:vertical; min-height:120px; }
+.luvan-form .luvan-btn { width:100%; justify-content:center; margin-top:6px; }
+
+.luvan-footer { background:var(--navy); color:#9FB0BC; padding:64px 0 32px; }
+.luvan-footer .luvan-logo img { height:48px; filter:brightness(0) invert(1); }
+.luvan-fgrid { display:grid; grid-template-columns:1.6fr 1fr 1fr 1fr; gap:40px; }
+.luvan-fdesc { margin:16px 0 0; max-width:30ch; font-size:.92rem; }
+.luvan-col h4 { color:#fff; font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; margin:0 0 16px; font-weight:700; }
+.luvan-col a,.luvan-col p { display:block; color:#9FB0BC; font-size:.92rem; margin:0 0 11px; transition:color .2s; }
+.luvan-col a:hover { color:var(--green); }
+.luvan-fbase { margin-top:50px; padding-top:24px; border-top:1px solid rgba(255,255,255,.1); display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; font-size:.84rem; color:#7E8E9A; }
+.luvan-fbase a { color:#9FB0BC; }
+
+.luvan-wa { position:fixed; right:22px; bottom:22px; z-index:55; width:58px; height:58px; border-radius:50%; background:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 14px 34px -10px rgba(37,211,102,.6); transition:transform .2s; }
+.luvan-wa:hover { transform:scale(1.08); }
+.luvan-wa svg { width:30px; height:30px; fill:#fff; }
+
+.luvan-reveal { opacity:0; transform:translateY(30px); transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1); }
+.luvan-reveal.in { opacity:1; transform:none; }
+
+@media (max-width:900px) {
+  .luvan-navlinks,.luvan-phone { display:none; }
+  .luvan-menu-btn { display:flex; }
+  .luvan-stats-grid { grid-template-columns:1fr 1fr; gap:34px 20px; }
+  .luvan-cards3,.luvan-cards-svc { grid-template-columns:1fr; }
+  .luvan-about,.luvan-contact { grid-template-columns:1fr; gap:40px; }
+  .luvan-fgrid { grid-template-columns:1fr 1fr; gap:32px; }
+  .luvan-band { padding:80px 0; }
+  .luvan-cta-inner { flex-direction:column; align-items:flex-start; }
+}
+@media (max-width:520px) {
+  .luvan-wrap { padding:0 20px; }
+  .luvan-two,.luvan-fgrid { grid-template-columns:1fr; }
+  .luvan-form { padding:28px 22px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .luvan-landing * { scroll-behavior:auto; }
+  .luvan-hero-bg,.luvan-scroll-cue { animation:none; }
+  .luvan-reveal { opacity:1; transform:none; }
+}
+.luvan-landing :focus-visible { outline:2px solid var(--green); outline-offset:3px; }
