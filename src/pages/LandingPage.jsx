@@ -109,8 +109,9 @@ function WhatsAppOutlineIcon() {
 
 function WhatsAppIcon() {
     return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm5.8 14.2c-.24.68-1.4 1.3-1.94 1.34-.5.04-1.12.06-1.8-.12-.42-.12-.96-.3-1.66-.6-2.92-1.26-4.82-4.2-4.96-4.4-.14-.2-1.2-1.6-1.2-3.04S6.96 7.3 7.2 7.04a.78.78 0 0 1 .56-.26h.4c.14 0 .32-.04.5.38.18.44.62 1.52.68 1.64.06.12.1.26.02.42-.34.68-.7.92-.46 1.32.84 1.44 1.68 1.94 2.96 2.58.2.1.32.08.44-.06.12-.14.5-.58.64-.78.14-.2.28-.16.46-.1.18.06 1.16.56 1.36.66.2.1.34.14.38.22.04.1.04.54-.2 1.06z" />
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6.7 3.8c.38-.39.94-.52 1.45-.33l1.62.61c.47.18.8.6.84 1.1l.13 1.67c.03.42-.12.84-.42 1.14l-1.14 1.15c.66 1.28 1.42 2.42 2.3 3.41.93 1.04 2.02 1.89 3.26 2.56l1.14-1.14c.3-.3.72-.46 1.14-.42l1.67.13c.5.04.92.37 1.1.84l.61 1.62c.19.51.06 1.07-.33 1.45l-1.09 1.09c-.52.52-1.27.77-1.99.66-2.9-.44-5.48-1.91-7.75-4.42-2.25-2.49-3.57-5.09-3.98-7.8-.1-.71.14-1.44.66-1.96L6.7 3.8Z" fill="currentColor" />
+            <path d="M14.72 4.75a5.12 5.12 0 0 1 4.53 4.53M14.55 7.47a2.48 2.48 0 0 1 1.98 1.98" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
         </svg>
     );
 }
@@ -130,6 +131,22 @@ const LandingPage = () => {
         window.addEventListener('scroll', updateHeader, { passive: true });
         return () => window.removeEventListener('scroll', updateHeader);
     }, []);
+
+    useEffect(() => {
+        document.body.classList.toggle('luvan-menu-open', isMobileMenuOpen);
+        return () => document.body.classList.remove('luvan-menu-open');
+    }, [isMobileMenuOpen]);
+
+    useEffect(() => {
+        if (!isMobileMenuOpen) return undefined;
+
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') setIsMobileMenuOpen(false);
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isMobileMenuOpen]);
 
     useEffect(() => {
         const root = rootRef.current;
@@ -227,11 +244,20 @@ const LandingPage = () => {
 
             <div className={isMobileMenuOpen ? 'luvan-mob-ov open' : 'luvan-mob-ov'} onClick={closeMobileMenu} aria-hidden="true" />
             <nav className={isMobileMenuOpen ? 'luvan-mobile open' : 'luvan-mobile'} aria-label="Navegación móvil">
-                <a href="#inicio" onClick={closeMobileMenu}>Inicio</a>
-                <a href="#servicios" onClick={closeMobileMenu}>Servicios</a>
-                <a href="#nosotros" onClick={closeMobileMenu}>Sobre Nosotros</a>
-                <a href="#contacto" onClick={closeMobileMenu}>Contacto</a>
-                <Link to="/login" className="luvan-btn luvan-btn-green" onClick={closeMobileMenu}>Iniciar Sesión</Link>
+                <div className="luvan-mobile-top">
+                    <img src={logoLuvan} alt="Transportes Luvan" />
+                    <button className="luvan-mobile-close" type="button" onClick={closeMobileMenu} aria-label="Cerrar menú">
+                        <span />
+                        <span />
+                    </button>
+                </div>
+                <div className="luvan-mobile-links">
+                    <a href="#inicio" onClick={closeMobileMenu}>Inicio</a>
+                    <a href="#servicios" onClick={closeMobileMenu}>Servicios</a>
+                    <a href="#nosotros" onClick={closeMobileMenu}>Sobre Nosotros</a>
+                    <a href="#contacto" onClick={closeMobileMenu}>Contacto</a>
+                    <Link to="/login" className="luvan-btn luvan-btn-green" onClick={closeMobileMenu}>Iniciar Sesión</Link>
+                </div>
             </nav>
 
             <section className="luvan-hero" id="inicio">
@@ -242,7 +268,7 @@ const LandingPage = () => {
                 <div className="luvan-hero-ov" />
                 <div className="luvan-wrap luvan-hero-inner">
                     <span className="luvan-eyebrow">Transporte escolar y empresarial · Guatemala</span>
-                    <h1>Seguridad y confianza<br />en <span className="g">cada trayecto.</span></h1>
+                    <h1>Seguridad y confianza<br className="luvan-desktop-break" />en <span className="g">cada trayecto.</span></h1>
                     <p>Más de 10 años movilizando a estudiantes y colaboradores con unidades monitoreadas, personal capacitado y puntualidad garantizada.</p>
                     <div className="luvan-cta">
                         <a href="#contacto" className="luvan-btn luvan-btn-green">Contáctanos →</a>
