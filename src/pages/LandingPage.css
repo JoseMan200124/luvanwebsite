@@ -159,3 +159,29 @@
   .luvan-reveal { opacity:1; transform:none; }
 }
 .luvan-landing :focus-visible { outline:2px solid var(--green); outline-offset:3px; }
+
+/* Contraste garantizado sobre la imagen del hero.
+   Estas reglas se declaran al final y con !important para evitar que estilos
+   globales del panel (Tailwind/MUI) hereden un color oscuro en los enlaces. */
+.luvan-header:not(.solid) a.luvan-phone,
+.luvan-header:not(.solid) .luvan-phone {
+  color:#FFFFFF !important;
+  text-shadow:0 1px 3px rgba(0,0,0,.34);
+}
+.luvan-header:not(.solid) .luvan-phone svg,
+.luvan-header:not(.solid) .luvan-phone svg * {
+  color:inherit !important;
+  fill:currentColor !important;
+}
+.luvan-hero a.luvan-btn-ghost,
+.luvan-hero .luvan-btn-ghost {
+  color:#FFFFFF !important;
+  border-color:rgba(255,255,255,.82) !important;
+  text-shadow:0 1px 3px rgba(0,0,0,.38);
+}
+.luvan-hero a.luvan-btn-ghost:hover,
+.luvan-hero .luvan-btn-ghost:hover {
+  color:#FFFFFF !important;
+  border-color:#FFFFFF !important;
+  background:rgba(255,255,255,.14) !important;
+}
