@@ -35,6 +35,7 @@ const RetroactiveApplyModal = ({
 
     // Inputs por modo
     currentDiscount = 0,
+    currentPercent = null,
     routeType = '',
 
     onApplied = () => {}
@@ -188,17 +189,26 @@ const RetroactiveApplyModal = ({
                 return;
             }
         } else {
-            const hasTypedDiscount = currentDiscount !== '' && currentDiscount !== null && typeof currentDiscount !== 'undefined';
-            const typedDiscount = hasTypedDiscount ? Number(currentDiscount) : NaN;
-            const configuredDiscount = Number(familyFromDetail?.specialFee ?? 0);
+            const percentMode = !(currentPercent === null || currentPercent === '' || typeof currentPercent === 'undefined');
+            if (percentMode) {
+                const pct = Number(currentPercent);
+                if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+                    setSnackbar({ open: true, message: 'Ingresa un porcentaje válido (0-100) antes de aplicar.', severity: 'warning' });
+                    return;
+                }
+            } else {
+                const hasTypedDiscount = currentDiscount !== '' && currentDiscount !== null && typeof currentDiscount !== 'undefined';
+                const typedDiscount = hasTypedDiscount ? Number(currentDiscount) : NaN;
+                const configuredDiscount = Number(familyFromDetail?.specialFee ?? 0);
 
-            const typedIsValid = Number.isFinite(typedDiscount) && typedDiscount >= 0;
-            const configuredIsValid = Number.isFinite(configuredDiscount) && configuredDiscount >= 0;
-            const familySpecial = typedIsValid ? typedDiscount : (configuredIsValid ? configuredDiscount : 0);
+                const typedIsValid = Number.isFinite(typedDiscount) && typedDiscount >= 0;
+                const configuredIsValid = Number.isFinite(configuredDiscount) && configuredDiscount >= 0;
+                const familySpecial = typedIsValid ? typedDiscount : (configuredIsValid ? configuredDiscount : 0);
 
-            if (!Number.isFinite(familySpecial) || familySpecial < 0) {
-                setSnackbar({ open: true, message: 'Ingresa un descuento familiar válido (0 o mayor) antes de aplicar.', severity: 'warning' });
-                return;
+                if (!Number.isFinite(familySpecial) || familySpecial < 0) {
+                    setSnackbar({ open: true, message: 'Ingresa un descuento familiar válido (0 o mayor) antes de aplicar.', severity: 'warning' });
+                    return;
+                }
             }
         }
 
@@ -219,15 +229,20 @@ const RetroactiveApplyModal = ({
             } else {
                 endpoint = `/payments/v2/${paymentId}/apply-family-discount`;
 
-                const hasTypedDiscount = currentDiscount !== '' && currentDiscount !== null && typeof currentDiscount !== 'undefined';
-                const typedDiscount = hasTypedDiscount ? Number(currentDiscount) : NaN;
-                const configuredDiscount = Number(familyFromDetail?.specialFee ?? 0);
+                const percentMode = !(currentPercent === null || currentPercent === '' || typeof currentPercent === 'undefined');
+                if (percentMode) {
+                    basePayload = { familyDiscountPercent: Number(currentPercent) };
+                } else {
+                    const hasTypedDiscount = currentDiscount !== '' && currentDiscount !== null && typeof currentDiscount !== 'undefined';
+                    const typedDiscount = hasTypedDiscount ? Number(currentDiscount) : NaN;
+                    const configuredDiscount = Number(familyFromDetail?.specialFee ?? 0);
 
-                const typedIsValid = Number.isFinite(typedDiscount) && typedDiscount >= 0;
-                const configuredIsValid = Number.isFinite(configuredDiscount) && configuredDiscount >= 0;
-                const familySpecial = typedIsValid ? typedDiscount : (configuredIsValid ? configuredDiscount : 0);
+                    const typedIsValid = Number.isFinite(typedDiscount) && typedDiscount >= 0;
+                    const configuredIsValid = Number.isFinite(configuredDiscount) && configuredDiscount >= 0;
+                    const familySpecial = typedIsValid ? typedDiscount : (configuredIsValid ? configuredDiscount : 0);
 
-                basePayload = { specialFee: Number(familySpecial) };
+                    basePayload = { specialFee: Number(familySpecial) };
+                }
             }
 
             let payload = { ...basePayload };
@@ -276,7 +291,11 @@ const RetroactiveApplyModal = ({
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-            <DialogTitle><strong>{getHeader()}</strong></DialogTitle>
+            {(() => {
+                const percentModeProp = !(currentPercent === null || currentPercent === '' || typeof currentPercent === 'undefined');
+                const unit = percentModeProp ? '%' : 'Q';
+                return <DialogTitle><strong>{getHeader()} ({unit})</strong></DialogTitle>;
+            })()}
             <DialogContent>
                 <Box sx={{ mb: 2 }}>
                     <Paper variant="outlined" sx={(theme) => ({

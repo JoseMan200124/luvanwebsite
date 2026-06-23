@@ -1487,9 +1487,9 @@ const SchoolPaymentsPage = () => {
             // Right summary as a table (distinct style; no title/header)
             const rightLabelX = 340;
             const rightStartY = cursorY;
-            const discountPct = (monthlyTariff > 0 && familyDiscount > 0)
-                ? Math.round((familyDiscount / monthlyTariff) * 100)
-                : 0;
+            const familyPercentRaw = Number(familyPayment?.User?.FamilyDetail?.specialFeePercentage ?? familyPayment?.user?.FamilyDetail?.specialFeePercentage ?? null);
+            const familyPercentFlag = !!(familyPayment?.User?.FamilyDetail?.discountIsPercent || familyPayment?.user?.FamilyDetail?.discountIsPercent);
+            const discountPct = familyPercentFlag && familyPercentRaw ? Math.round(familyPercentRaw * 100) : (monthlyTariff > 0 && familyDiscount > 0 ? Math.round((familyDiscount / monthlyTariff) * 100) : 0);
             const discountLabel = discountPct > 0 ? `Descuento (${discountPct}%)` : 'Descuento:';
             const summaryRows = [
                 ['Tipo de Ruta:', String(routeType || '-')],
@@ -2354,6 +2354,7 @@ const SchoolPaymentsPage = () => {
                     });
                 }
                 setSnackbar({ open: true, message: 'Débito automático desactivado', severity: 'success' });
+            
             } else if (actionName === 'toggleRequiresInvoice') {
                 // Use payments endpoint to set invoice need
                 const val = payload?.value;

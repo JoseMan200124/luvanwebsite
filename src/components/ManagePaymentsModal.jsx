@@ -25,6 +25,8 @@ import {
     Chip,
     Stack,
     Paper,
+    Snackbar,
+    Alert,
     useMediaQuery,
     useTheme
 } from '@mui/material';
@@ -431,11 +433,26 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [autoDebit, setAutoDebit] = useState(!!family.autoDebit || false);
     const [requiresInvoice, setRequiresInvoice] = useState(!!family.requiresInvoice || false);
     const [discount, setDiscount] = useState(family.specialFee ?? family.discount ?? 0);
+    const [percentDiscount, setPercentDiscount] = useState(() => {
+        try {
+            const pRaw = family.specialFeePercentage ?? null;
+            return (pRaw !== null && typeof pRaw !== 'undefined' && pRaw !== '') ? (Number(pRaw) * 100) : '';
+        } catch (e) {
+            return '';
+        }
+    });
 
     useEffect(() => {
         setAutoDebit(!!(payment?.User?.FamilyDetail?.autoDebit));
         setRequiresInvoice(!!(payment?.User?.FamilyDetail?.requiresInvoice));
         setDiscount(payment?.User?.FamilyDetail?.specialFee ?? payment?.User?.FamilyDetail?.discount ?? 0);
+        try {
+            const pRaw = typeof payment?.User?.FamilyDetail?.specialFeePercentage !== 'undefined' ? payment?.User?.FamilyDetail?.specialFeePercentage : null;
+            setPercentDiscount(pRaw !== null && typeof pRaw !== 'undefined' && pRaw !== '' ? (Number(pRaw) * 100) : '');
+        } catch (e) {
+            setPercentDiscount('');
+        }
+        // note: fullDiscount removed — percent-based discounts used instead
     }, [payment, open]);
 
     // Tab state: 'payments' | 'flow'
@@ -515,6 +532,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [txExplanation, setTxExplanation] = useState({ title: '', text: '' });
     // Help / legend dialog state for the table
     const [openHelpLegend, setOpenHelpLegend] = useState(false);
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
     // derive month options only from uploaded receipts (Boletas should show uploaded files only)
     const boletaMonthOptions = React.useMemo(() => {
@@ -800,7 +818,16 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     // compute total after discount (clamp to zero)
     const parsedDiscount = Number(discount || 0) || 0;
-    const totalAfterDiscount = Math.max(0, Number(computedTariff || 0) - parsedDiscount);
+    const parsedPercent = (() => {
+        const p = percentDiscount;
+        if (p === null || typeof p === 'undefined' || String(p).trim() === '') return null;
+        const n = Number(p);
+        return Number.isFinite(n) ? n : null;
+    })();
+    const percentDiscountAmount = (parsedPercent !== null) ? Math.round(((Number(computedTariff || 0) * parsedPercent) / 100) * 100) / 100 : 0;
+    const totalAfterDiscount = (parsedPercent !== null)
+        ? Math.max(0, Number(computedTariff || 0) - percentDiscountAmount)
+        : Math.max(0, Number(computedTariff || 0) - parsedDiscount);
 
     const handleOpenGlobalFreezeDialog = (mode) => {
         setGlobalFreezeDialogMode(mode);
@@ -927,13 +954,27 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     <Typography variant="h5">Q {totalAfterDiscount}</Typography>
                                 </Box>
                                 <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
-                                    <Typography variant="caption" color="text.secondary">Descuento (Q)</Typography>
-                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <TextField label="" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: { xs: '100%', sm: 100 } }} disabled={isDeleted} />
+                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
+                                        <Box>
+                                            <Typography variant="caption" color="text.secondary">Descuento (Q)</Typography>
+                                            <TextField label="Q" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: { xs: '100%', sm: 120 } }} disabled={isDeleted} />
+                                        </Box>
+                                        <Box>
+                                            <Typography variant="caption" color="text.secondary">Descuento (%)</Typography>
+                                            <TextField label="%" type="number" size="small" value={percentDiscount} onChange={(e) => setPercentDiscount(e.target.value)} sx={{ width: { xs: '100%', sm: 120 } }} disabled={isDeleted} />
+                                        </Box>
                                         <Button variant="outlined" size="small" onClick={() => {
                                             if (isDeleted) return;
-                                            // IMPORTANT: Do NOT persist discount here.
-                                            // The new flow applies the discount from the modal (retroactive scopes).
+                                            const pctRaw = percentDiscount;
+                                            const pctHas = !(pctRaw === null || pctRaw === '' || typeof pctRaw === 'undefined') && !Number.isNaN(Number(pctRaw)) && Number(pctRaw) !== 0;
+                                            const fixedHas = !(discount === null || discount === '' || typeof discount === 'undefined') && !Number.isNaN(Number(discount)) && Number(discount) !== 0;
+                                            // Validation: only one of the inputs may have a value when opening the apply-discount modal
+                                            if (pctHas && fixedHas) {
+                                                setSnackbar({ open: true, message: 'Solo puede aplicar un único tipo de descuento: monto o porcentaje.', severity: 'error' });
+                                                return;
+                                            }
+
+                                            // Open modal if either value is present or none (modal allows choosing configured amount)
                                             setOpenDiscountModal(true);
                                         }} disabled={isDeleted}>APLICAR</Button>
                                     </Box>
@@ -1084,6 +1125,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     mode="DISCOUNT"
                     payment={localPayment || payment}
                     currentDiscount={discount}
+                    currentPercent={percentDiscount}
                     onApplied={() => {
                         (async () => {
                             invalidateHistoryCacheForPayment();
@@ -1104,6 +1146,20 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         })();
                     }}
                 />
+                <Snackbar
+                    open={snackbar.open}
+                    autoHideDuration={5000}
+                    onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                >
+                    <Alert
+                        severity={snackbar.severity}
+                        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+                        sx={{ width: '100%' }}
+                    >
+                        {snackbar.message}
+                    </Alert>
+                </Snackbar>
                 {!histLoading && sortedHistories.length > 0 && (
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontStyle: 'italic' }}>
                         ℹ️ Mostrando solo pagos realizados. Para ver el flujo completo (créditos automáticos, distribuciones, etc.) usa la pestaña "Flujo Completo".
