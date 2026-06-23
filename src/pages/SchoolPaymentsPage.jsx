@@ -3344,6 +3344,23 @@ const SchoolPaymentsPage = () => {
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" color="text.secondary">Saldo Pendiente del Período</Typography>
+                                                            <Tooltip title={
+                                                                "Monto total de las cuotas del período seleccionado que aún no han sido pagadas por las familias activas. " +
+                                                                "Es la suma del 'amountDue' de cada PaymentPeriod del mes, y representa lo que falta por cobrar " +
+                                                                "de las facturas emitidas en este período específico (excluye mora y cuotas de otros meses). " +
+                                                                "Un valor alto indica muchas cuotas pendientes de pago."
+                                                            } arrow>
+                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                            </Tooltip>
+                                                        </Box>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#ff6f00' }}>{formatMoneyOrNA(fin?.saldoPendientePeriodo)}</Typography>
+                                                        <Typography variant="caption" color="text.secondary">cuotas sin pagar de este período</Typography>
+                                                    </Box>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Tendencia Mensual</Typography>
                                                             <Tooltip title={
                                                                 "Variación del ingreso del período seleccionado respecto al mes inmediato anterior. " +
