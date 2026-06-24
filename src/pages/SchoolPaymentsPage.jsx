@@ -3789,10 +3789,13 @@ const SchoolPaymentsPage = () => {
                             onClose={() => setOpenCreateSchoolPeriodModal(false)}
                             schoolId={schoolId}
                             schoolSchedules={school?.schedules}
-                            onCreated={() => {
+                            onCreated={(message) => {
                                 // refrescar datos tras creación
                                 fetchAllPayments(statusFilter, search);
                                 fetchPaymentsAnalysis(schoolId);
+                                if (message) {
+                                    setSnackbar({ open: true, message, severity: 'success' });
+                                }
                             }}
                         />
 
