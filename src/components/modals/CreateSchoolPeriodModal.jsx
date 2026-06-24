@@ -3,6 +3,7 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TextFie
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloseIcon from '@mui/icons-material/Close';
+import CircularProgress from '@mui/material/CircularProgress';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -15,16 +16,17 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
     const [originalAmount, setOriginalAmount] = useState('');
     const [dueDateEnd, setDueDateEnd] = useState(null);
     const [noAccruePenalty, setNoAccruePenalty] = useState(false);
+    const [applyFamilyDiscounts, setApplyFamilyDiscounts] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
 
     const reset = () => {
         setPeriod('');
         setOriginalAmount('');
         setError('');
-        setSuccess('');
         setDueDateEnd(null);
+        setNoAccruePenalty(false);
+        setApplyFamilyDiscounts(false);
     };
 
     const handleClose = () => {
@@ -44,6 +46,7 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
         if (schoolId) payload.schoolId = schoolId;
         // Indica en la UI que este periodo no debe acumular mora (backend debe interpretar si aplica)
         if (noAccruePenalty) payload.noAccruePenalty = true;
+        if (applyFamilyDiscounts) payload.applyFamilyDiscounts = true;
 
         setLoading(true);
         setError('');
@@ -54,9 +57,12 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
             const skipped = Number.isFinite(Number(data.skipped)) ? Number(data.skipped) : null;
 
             if (created && created > 0) {
-                setSuccess(`Período creado correctamente (familias afectadas: ${created})`);
-                if (onCreated) onCreated();
-                setTimeout(() => handleClose(), 900);
+                const successMessage = `Período creado correctamente (familias afectadas: ${created})`;
+                if (onCreated) onCreated(successMessage);
+                setTimeout(() => {
+                    reset();
+                    onClose && onClose();
+                }, 900);
             } else {
                 // Mensaje simple y auto-dismiss cuando no se creó ningún período
                 const simple = 'El periodo que deseas crear ya existe.';
@@ -105,7 +111,6 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
             </DialogTitle>
             <DialogContent sx={{ p: 3 }}>
                 {error && <Box sx={{ mb: 1 }}><Alert severity="error">{error}</Alert></Box>}
-                {success && <Box sx={{ mb: 1 }}><Alert severity="success">{success}</Alert></Box>}
                 <Box sx={{ display: 'grid', gap: 1, mt: 1 }}>
                     <Divider sx={{ mb: 1 }} />
                     <LocalizationProvider dateAdapter={AdapterMoment} adapterLocale="es" localeText={esES.components.MuiLocalizationProvider.defaultProps.localeText}>
@@ -156,13 +161,22 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
                             </Grid>
 
                             <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Mora</Typography>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                    <FormControlLabel
-                                        control={<Checkbox checked={noAccruePenalty} onChange={(e) => setNoAccruePenalty(e.target.checked)} size="small" />}
-                                        label="Congelar mora"
-                                    />
-                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>Marcar esta opción para que el período no acumule mora. Se creará el período con mora congelada.</Typography>
+                                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Opciones</Typography>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <FormControlLabel
+                                            control={<Checkbox checked={noAccruePenalty} onChange={(e) => setNoAccruePenalty(e.target.checked)} size="small" />}
+                                            label="Congelar mora"
+                                        />
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>Marcar esta opción para que el período no acumule mora. Se creará el período con mora congelada.</Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <FormControlLabel
+                                            control={<Checkbox checked={applyFamilyDiscounts} onChange={(e) => setApplyFamilyDiscounts(e.target.checked)} size="small" />}
+                                            label="Aplicar descuentos familiares"
+                                        />
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>Marcar esta opción para que al período se le aplique el descuento familiar configurado para cada familia.</Typography>
+                                    </Box>
                                 </Box>
                             </Grid>
 
@@ -188,7 +202,32 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
             </Box>
             <DialogActions sx={{ px: 3, pb: 2 }}>
                 <Button onClick={handleClose} disabled={loading}>Cancelar</Button>
-                <Button variant="contained" color="primary" onClick={handleCreate} disabled={loading}>Crear período</Button>
+                <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleCreate}
+                    disabled={loading}
+                    sx={{
+                        minWidth: 150,
+                        transition: 'all 0.2s ease-in-out',
+                        '&:disabled': {
+                            opacity: 0.85,
+                            cursor: 'not-allowed'
+                        },
+                        '&:hover': {
+                            transform: loading ? 'none' : 'translateY(-1px)'
+                        }
+                    }}
+                >
+                    {loading ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CircularProgress size={18} color="inherit" />
+                            <span>Creando…</span>
+                        </Box>
+                    ) : (
+                        'Crear período'
+                    )}
+                </Button>
             </DialogActions>
         </Dialog>
     );
