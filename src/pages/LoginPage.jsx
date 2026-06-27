@@ -1,117 +1,17 @@
-// src/pages/LoginPage.jsx
-
-import React, { useState, useContext } from 'react';
-import tw, { styled } from 'twin.macro';
-import {
-    TextField,
-    Button,
-    Typography,
-    Link,
-    Snackbar,
-    Alert,
-    Box,
-} from '@mui/material';
-import { keyframes } from 'styled-components';
-import { useNavigate } from 'react-router-dom';
-// OJO: Importar jwt-decode NO es necesario si delegamos todo a AuthContext
-// import jwtDecode from 'jwt-decode';
-
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+import React, { useContext, useEffect, useState } from 'react';
+import { Alert, Snackbar } from '@mui/material';
+import { Link, useNavigate } from 'react-router-dom';
 import ForgotPasswordModal from '../components/modals/ForgotPasswordModal';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
-
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import {
     getDefaultPathForRole,
     isSchoolContextRequiredRole,
     normalizeSchoolContext,
-    setStoredSchoolContext
+    setStoredSchoolContext,
 } from '../utils/schoolContext';
-
-// Animaciones ...
-const moveUp = keyframes`
-    0% {
-        background-position: center bottom;
-    }
-    100% {
-        background-position: center top;
-    }
-`;
-
-const fadeIn = keyframes`
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-`;
-
-const LoginContainer = tw.div`flex flex-col md:flex-row flex-grow min-h-screen`;
-
-const LeftSection = styled.div`
-    ${tw`hidden md:flex flex-col items-center justify-center bg-gray-800 text-white md:w-1/2 p-8 relative overflow-hidden`}
-`;
-
-const RightSection = styled.div`
-    ${tw`flex flex-col items-center justify-center bg-[rgb(31,29,29)] md:w-1/2 p-8 flex-grow`}
-`;
-
-const Title = styled(Typography)`
-    ${tw`text-center font-bold mb-2`}
-    color: #ffffff;
-`;
-
-const Slogan = styled(Typography)`
-    ${tw`text-center text-lg mt-2`}
-    color: #ffffff;
-`;
-
-const Logo = styled.img`
-    ${tw`h-20 w-auto my-4`}
-`;
-
-const LoginFormContainer = styled.div`
-    ${tw`relative bg-gray-50 rounded-lg shadow-lg w-full max-w-md mx-auto flex flex-col items-center pt-12 pb-8 px-8`}
-`;
-
-const FormTitleTab = styled.div`
-    ${tw`absolute -top-6 left-1/2 transform -translate-x-1/2 px-6 py-2 bg-green-600 rounded-t-md`}
-`;
-
-const FormTitle = tw(Typography)`text-white font-semibold`;
-
-const StyledTextField = styled(TextField)`
-    & .MuiInputBase-root {
-        ${tw`bg-white rounded`}
-    }
-    & .MuiInputLabel-root {
-        ${tw`text-gray-600`}
-    }
-    & .MuiInputBase-input::placeholder {
-        ${tw`text-gray-400`}
-    }
-`;
-
-const ForgotPasswordLink = styled(Link)`
-    ${tw`text-green-600 mt-4 mb-6 text-right underline cursor-pointer`}
-`;
-
-const LoginButton = styled(Button)`
-    ${tw`bg-green-600 hover:bg-green-700 text-white font-semibold py-2 mt-4 rounded`}
-`;
-
-const ErrorMessage = styled(Typography)`
-    ${tw`mb-4 text-center text-red-600`}
-`;
-
-const AnimatedSnackbar = styled(Snackbar)`
-    & .MuiAlert-root {
-        animation: ${fadeIn} 0.5s ease-out;
-    }
-`;
+import './LoginPage.css';
 
 const LoginPage = () => {
     const { login } = useContext(AuthContext);
@@ -124,31 +24,26 @@ const LoginPage = () => {
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-    const handleOpenModal = (e) => {
-        e.preventDefault();
+    useEffect(() => {
+        document.title = 'Iniciar Sesión · Transportes Luvan';
+    }, []);
+
+    const handleOpenModal = (event) => {
+        event.preventDefault();
         setIsModalOpen(true);
     };
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
+
+    const handleChange = (event) => {
+        const { name, value } = event.target;
+        setFormData((previous) => ({ ...previous, [name]: value }));
     };
 
-    const handleChange = (e) => {
-        setFormData((prev) => ({
-            ...prev,
-            [e.target.name]: e.target.value,
-        }));
+    const handleSnackbarClose = (_event, reason) => {
+        if (reason !== 'clickaway') setOpenSnackbar(false);
     };
 
-    const handleSnackbarClose = (event, reason) => {
-        if (reason === 'clickaway') {
-            return;
-        }
-        setOpenSnackbar(false);
-    };
-
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (event) => {
+        event.preventDefault();
         setError('');
         setSnackbarMessage('');
         setSnackbarSeverity('success');
@@ -160,9 +55,7 @@ const LoginPage = () => {
         }
 
         try {
-            /* --------------------- login --------------------- */
-            const { passwordExpired, roleId } =
-                await login(trimmedEmail, formData.password);
+            const { passwordExpired, roleId } = await login(trimmedEmail, formData.password);
 
             if (passwordExpired) {
                 navigate('/force-password-change');
@@ -174,7 +67,9 @@ const LoginPage = () => {
             if (isSchoolContextRequiredRole(roleId)) {
                 const contextsResponse = await api.get('/auth/me/contexts', { skipSchoolCycleContext: true });
                 const contexts = Array.isArray(contextsResponse.data?.contexts)
-                    ? contextsResponse.data.contexts.map(normalizeSchoolContext).filter((context) => context.schoolId && context.cicloEscolarId)
+                    ? contextsResponse.data.contexts
+                        .map(normalizeSchoolContext)
+                        .filter((context) => context.schoolId && context.cicloEscolarId)
                     : [];
 
                 if (contexts.length === 1) {
@@ -192,16 +87,12 @@ const LoginPage = () => {
                 return;
             }
 
-            /* ----------- redirección según rol -------------- */
             navigate(targetPath);
-
             setSnackbarMessage('¡Inicio de sesión exitoso!');
             setSnackbarSeverity('success');
             setOpenSnackbar(true);
-
-        } catch (err) {
-            const customMessage =
-                err.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
+        } catch (loginError) {
+            const customMessage = loginError.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
             setError(customMessage);
             setSnackbarMessage(customMessage);
             setSnackbarSeverity('error');
@@ -209,103 +100,82 @@ const LoginPage = () => {
         }
     };
 
-
     return (
-        <Box tw="flex flex-col min-h-screen">
-            <Navbar />
+        <main className="luvan-login">
+            <div className="luvan-login-split">
+                <section className="luvan-login-left">
+                    <Link to="/" className="luvan-login-logo" aria-label="Volver a Transportes Luvan">
+                        <img src={logoLuvan} alt="Transportes Luvan" />
+                    </Link>
 
-            <LoginContainer>
-                <LeftSection>
-                    <Title variant="h4">Transportes Luvan</Title>
-                    <Slogan variant="subtitle1">
-                        Soluciones de Transporte Seguras y Confiables
-                    </Slogan>
-                </LeftSection>
+                    <div className="luvan-login-mid">
+                        <span className="luvan-login-eyebrow">Portal de clientes</span>
+                        <h1>Transportes Luvan</h1>
+                        <p>Soluciones de transporte seguras y confiables. Accede a tu cuenta para gestionar tus servicios.</p>
+                    </div>
 
-                <RightSection>
-                    <LoginFormContainer>
-                        <FormTitleTab>
-                            <FormTitle variant="h6">Iniciar Sesión</FormTitle>
-                        </FormTitleTab>
+                    <Link to="/" className="luvan-login-back">← Volver al sitio</Link>
+                </section>
 
-                        <Logo src={logoLuvan} alt="Transportes Luvan" />
+                <section className="luvan-login-right">
+                    <div className="luvan-login-card">
+                        <div className="luvan-login-top">
+                            <img src={logoLuvan} alt="Transportes Luvan" />
+                            <h2>Iniciar Sesión</h2>
+                            <p>Bienvenido de nuevo</p>
+                        </div>
 
-                        {error && (
-                            <ErrorMessage variant="body1">
-                                {error}
-                            </ErrorMessage>
-                        )}
+                        {error && <p className="luvan-login-error" role="alert">{error}</p>}
 
-                        <form tw="mt-6 w-full" onSubmit={handleSubmit}>
-                            <StyledTextField
-                                label="Correo Electrónico"
-                                variant="outlined"
-                                fullWidth
-                                margin="normal"
-                                placeholder="ejemplo@correo.com"
-                                name="email"
-                                value={formData.email}
-                                onChange={handleChange}
-                                required
-                                aria-label="Correo Electrónico"
-                            />
-                            <StyledTextField
-                                label="Contraseña"
-                                type="password"
-                                variant="outlined"
-                                fullWidth
-                                margin="normal"
-                                placeholder="••••••••"
-                                name="password"
-                                value={formData.password}
-                                onChange={handleChange}
-                                required
-                                aria-label="Contraseña"
-                            />
-
-                            <ForgotPasswordLink
-                                href="#"
-                                variant="body2"
-                                onClick={handleOpenModal}
-                            >
-                                ¿Olvidaste tu contraseña?
-                            </ForgotPasswordLink>
-
-                            <LoginButton
-                                type="submit"
-                                variant="contained"
-                                fullWidth
-                                size="large"
-                            >
-                                Ingresar
-                            </LoginButton>
+                        <form onSubmit={handleSubmit}>
+                            <div className="luvan-login-field">
+                                <label htmlFor="email">Correo electrónico</label>
+                                <input
+                                    id="email"
+                                    type="email"
+                                    name="email"
+                                    autoComplete="email"
+                                    required
+                                    placeholder="tucorreo@ejemplo.com"
+                                    value={formData.email}
+                                    onChange={handleChange}
+                                />
+                            </div>
+                            <div className="luvan-login-field">
+                                <label htmlFor="pass">Contraseña</label>
+                                <input
+                                    id="pass"
+                                    type="password"
+                                    name="password"
+                                    autoComplete="current-password"
+                                    required
+                                    placeholder="••••••••"
+                                    value={formData.password}
+                                    onChange={handleChange}
+                                />
+                            </div>
+                            <a href="#forgot-password" className="luvan-login-forgot" onClick={handleOpenModal}>¿Olvidaste tu contraseña?</a>
+                            <button type="submit" className="luvan-login-btn">Ingresar</button>
                         </form>
-                    </LoginFormContainer>
-                </RightSection>
-            </LoginContainer>
 
-            <Footer />
+                        <div className="luvan-login-alt">¿No tienes cuenta? <a href="/#contacto">Contáctanos</a></div>
+                    </div>
+                </section>
+            </div>
 
-            <ForgotPasswordModal
-                open={isModalOpen}
-                handleClose={handleCloseModal}
-            />
+            <ForgotPasswordModal open={isModalOpen} handleClose={() => setIsModalOpen(false)} />
 
-            <AnimatedSnackbar
+            <Snackbar
                 open={openSnackbar}
                 autoHideDuration={6000}
                 onClose={handleSnackbarClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
-                <Alert
-                    onClose={handleSnackbarClose}
-                    severity={snackbarSeverity}
-                    sx={{ width: '100%' }}
-                >
+                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
                     {snackbarMessage}
                 </Alert>
-            </AnimatedSnackbar>
-        </Box>
+            </Snackbar>
+        </main>
     );
 };
 
