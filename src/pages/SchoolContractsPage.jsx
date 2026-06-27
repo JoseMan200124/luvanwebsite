@@ -209,7 +209,8 @@ const SchoolContractsPage = () => {
                     page: filledContractsPage,
                     limit: filledContractsLimit,
                     schoolId,
-                    contractUuid: selectedContractUuid
+                    contractUuid: selectedContractUuid,
+                    cicloEscolarId: routeCicloEscolarId
                 };
                 if (filledContractsSearch) params.search = filledContractsSearch;
                 params.isActive = !showInactive;
@@ -227,7 +228,8 @@ const SchoolContractsPage = () => {
             const params = {
                 page: filledContractsPage,
                 limit: filledContractsLimit,
-                schoolId
+                schoolId,
+                cicloEscolarId: routeCicloEscolarId
             };
             if (filledContractsSearch) params.search = filledContractsSearch;
             if (selectedContractUuid) params.contractUuid = selectedContractUuid;
@@ -240,7 +242,7 @@ const SchoolContractsPage = () => {
         } catch (err) {
             console.error('refreshPage filled contracts error', err);
         }
-    }, [schoolId, filledContractsPage, filledContractsLimit, filledContractsSearch, selectedContractUuid, showInactive, onlyUnfilled]);
+    }, [schoolId, filledContractsPage, filledContractsLimit, filledContractsSearch, selectedContractUuid, showInactive, onlyUnfilled, routeCicloEscolarId]);
 
     useRegisterPageRefresh(async () => {
         setFilledContractsLoading(true);
@@ -295,7 +297,8 @@ const SchoolContractsPage = () => {
                         page: filledContractsPage,
                         limit: filledContractsLimit,
                         schoolId: schoolId,
-                        contractUuid: selectedContractUuid
+                        contractUuid: selectedContractUuid,
+                        cicloEscolarId: routeCicloEscolarId
                     };
                     if (filledContractsSearch) params.search = filledContractsSearch;
                     // Por defecto solicitar sólo familias activas al backend salvo que se active "showInactive"
@@ -328,7 +331,8 @@ const SchoolContractsPage = () => {
                 const params = {
                     page: filledContractsPage,
                     limit: filledContractsLimit,
-                    schoolId: schoolId
+                    schoolId: schoolId,
+                    cicloEscolarId: routeCicloEscolarId
                 };
                 if (filledContractsSearch) params.search = filledContractsSearch;
                 if (selectedContractUuid) params.contractUuid = selectedContractUuid;
