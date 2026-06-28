@@ -765,7 +765,11 @@ const ParentDashboardPage = () => {
       else signatures[`${name}_signature`] = '';
     }
 
-    const payload = { filledData: { ...filledData, ...signatures }, parentId: auth?.user?.id };
+    const payload = { 
+      filledData: { ...filledData, ...signatures }, 
+      parentId: auth?.user?.id,
+      familyDetailId: parentInfo?.familyDetailId || undefined
+    };
 
     try {
       setSubmittingSignature(true);

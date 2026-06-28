@@ -18,10 +18,12 @@ const ContractFillPage = () => {
     const { uuid } = useParams();
 
     // =============================================
-    // Obtenemos parentId del query param "?parentId="
+    // Obtenemos parentId y familyDetailId del query param
     // =============================================
     const location = useLocation();
-    const parentId = new URLSearchParams(location.search).get('parentId') || null;
+    const searchParams = new URLSearchParams(location.search);
+    const parentId = searchParams.get('parentId') || null;
+    const familyDetailId = searchParams.get('familyDetailId') || null;
 
     const [contract, setContract] = useState(null);
     const [filledData, setFilledData] = useState({});
@@ -168,9 +170,10 @@ const ContractFillPage = () => {
         const payload = {
             filledData: { ...filledData, ...signatures },
             // ========================================
-            // Mandar parentId si existe
+            // Mandar parentId y familyDetailId si existen
             // ========================================
-            parentId: parentId ? parseInt(parentId, 10) : undefined
+            parentId: parentId ? parseInt(parentId, 10) : undefined,
+            familyDetailId: familyDetailId ? parseInt(familyDetailId, 10) : undefined
         };
 
         // All fields complete. Now check auth (open login only after validation passed)
@@ -203,6 +206,7 @@ const ContractFillPage = () => {
     // Keep pending payload when login required
     const [pendingPayload, setPendingPayload] = useState(null);
     const [sessionParentId, setSessionParentId] = useState(parentId ? parseInt(parentId, 10) : null);
+    const [sessionFamilyDetailId, setSessionFamilyDetailId] = useState(familyDetailId ? parseInt(familyDetailId, 10) : null);
 
     // Handle login from modal
     const handleLogin = async () => {
@@ -226,9 +230,20 @@ const ContractFillPage = () => {
                 setSessionParentId(user.id);
                 setSnackbar({ open: true, message: 'Ingreso exitoso.', severity: 'success' });
 
-                // If we have a pending payload, send it including parentId
+                // Resolver familyDetailId después del login
+                // Buscar el FamilyDetail para este usuario en el contexto actual
+                let resolvedFamilyDetailId = sessionFamilyDetailId;
+                if (!resolvedFamilyDetailId && pendingPayload?.familyDetailId) {
+                    resolvedFamilyDetailId = pendingPayload.familyDetailId;
+                }
+
+                // If we have a pending payload, send it including parentId and familyDetailId
                 if (pendingPayload) {
-                    const payloadWithParent = { ...pendingPayload, parentId: user.id };
+                    const payloadWithParent = { 
+                        ...pendingPayload, 
+                        parentId: user.id,
+                        familyDetailId: resolvedFamilyDetailId || pendingPayload.familyDetailId
+                    };
                     setSubmitting(true);
                     try {
                         await api.post(`/contracts/share/${uuid}`, payloadWithParent);

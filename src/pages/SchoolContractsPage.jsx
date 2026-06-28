@@ -777,7 +777,7 @@ const SchoolContractsPage = () => {
     // Componente local para renderizar un filled contract (evita duplicación móvil/desktop)
     const RenderFilledContract = ({ filledContract, isMobileView }) => {
         const familyLastName = (
-            filledContract?.parent?.FamilyDetail?.familyLastName ||
+            filledContract?.familyDetail?.familyLastName ||
             filledContract?.parent?.familyLastName ||
             filledContract?.filledData?.familyLastName ||
             ''
