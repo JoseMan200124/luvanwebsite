@@ -51,7 +51,8 @@ const roleOptionsStatic = [
     { id: 4, name: 'Monitora' },
     { id: 5, name: 'Piloto' },
     { id: 6, name: 'Supervisor' },
-    { id: 7, name: 'Auxiliar' }
+    { id: 7, name: 'Auxiliar' },
+    { id: 9, name: 'Invitado' }
 ];
 
 /* ================== Responsive Table & Mobile Cards =================== */
@@ -218,7 +219,7 @@ const RolesManagementPage = () => {
     const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
 
     // Roles allowed to be created from the "Añadir Usuario" dialog
-    const allowedRolesForCreate = ['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar'];
+    const allowedRolesForCreate = ['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado'];
     // Roles that should NOT be assigned a school or corporation
     const rolesWithoutSchoolOrCorp = ['administrador', 'supervisor', 'auxiliar'];
 

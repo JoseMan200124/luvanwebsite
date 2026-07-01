@@ -109,7 +109,10 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
     const user = { name: auth.user.name, role: auth.user.role, avatar: userImage };
 
-    const canAccessDashboard = !!permissions['dashboard'];
+    const isInvitado = user.role === 'Invitado';
+    const isInvitadoCorporacion = isInvitado && Boolean(auth.user?.corporationId);
+    const invitedClientAllowedSubmodules = isInvitadoCorporacion ? ['corporaciones'] : ['colegios'];
+    const canAccessDashboard = !!permissions['dashboard'] && !isInvitado;
 
     // Admin / Gestor
     const isAdminOrGestor = user.role === 'Administrador' || user.role === 'Gestor';
@@ -189,16 +192,21 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
                         {/* Módulos dinámicos */}
                         {modules.map((module, idx) => {
-                            // Para módulos con submódulos, verificar si tiene acceso a alguno
                             const hasSubs = module.submodules?.length > 0;
+
                             let canAccessModule = false;
+                            let visibleSubmodules = [];
 
                             if (hasSubs) {
-                                // Verificar si tiene acceso a algún submódulo
-                                canAccessModule = module.submodules.some(sm => permissions[sm.key]);
+                                visibleSubmodules = module.submodules.filter((sm) => {
+                                    if (!permissions[sm.key]) return false;
+                                    if (!isInvitado) return true;
+                                    return invitedClientAllowedSubmodules.includes(sm.key);
+                                });
+
+                                canAccessModule = visibleSubmodules.length > 0;
                             } else {
-                                // Verificar acceso directo al módulo
-                                canAccessModule = permissions[module.key];
+                                canAccessModule = permissions[module.key] && !isInvitado;
                             }
 
                             if (!canAccessModule) return null;
@@ -222,7 +230,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                     {/* Submenú inline */}
                                     {isOpen && hasSubs && isOpenMenu && (
                                         <div>
-                                            {module.submodules.map(sm => permissions[sm.key] && (
+                                            {visibleSubmodules.map(sm => (
                                                 <RouterLink
                                                     key={sm.key}
                                                     to={`/admin/${sm.path}`}
@@ -243,7 +251,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                             onMouseLeave={handlePopoutMouseLeave}
                                         >
                                             <PopoutList>
-                                                {module.submodules.map(sm => permissions[sm.key] && (
+                                                {visibleSubmodules.map(sm => (
                                                     <RouterLink
                                                         key={sm.key}
                                                         to={`/admin/${sm.path}`}
