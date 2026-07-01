@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Dialog,
     DialogTitle,
@@ -25,8 +25,13 @@ import {
     Chip,
     Stack,
     Paper,
+    Snackbar,
+    Alert,
     useMediaQuery,
-    useTheme
+    useTheme,
+    InputAdornment,
+    Select,
+    MenuItem
 } from '@mui/material';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TablePagination from '@mui/material/TablePagination';
@@ -35,14 +40,17 @@ import {
     Pause as PauseIcon, 
     PlayArrow as PlayArrowIcon, 
     Restore,
-    HelpOutline as HelpIcon,
-    NoteAlt as NoteAltIcon
+    NoteAlt as NoteAltIcon,
+    Timeline as TimelineIcon
 } from '@mui/icons-material';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
 import dateService from '../services/dateService';
 import ReceiptsPane from './ReceiptsPane';
 import RetroactiveApplyModal from './modals/RetroactiveApplyModal';
+import PaymentFlowTimeline from './PaymentFlowTimeline';
 
 // cache TTL (ms)
 const PAYMENT_HIST_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
@@ -80,6 +88,245 @@ const getTransactionSourceMeta = (sourceVal) => {
     }
 };
 
+/** Extraer los períodos a los que se aplicó una transacción.
+ *  Usa metadata de la transacción + ledgerEntries para determinar distribución. */
+function getTransactionAppliedPeriods(h) {
+    const meta = h.metadata || {};
+    const type = String(h.type || '').toUpperCase();
+    const source = String(h.source || '').toUpperCase();
+
+    // CREDITO_AUTO: el backend guarda `period` en metadata
+    if (type === 'CREDITO' && source === 'CREDIT_AUTO' && meta.period) {
+        const periodsFromMeta = (Array.isArray(meta.periodsApplied) && meta.periodsApplied.length > 0)
+            ? meta.periodsApplied.map(p => ({ period: p.period, amount: Number(p.amount || 0), isCredit: true }))
+            : [{ period: meta.period, amount: Number(meta.creditApplied || h.amountPaid || 0), isCredit: true }];
+        return periodsFromMeta;
+    }
+
+    // TARIFA manual: usar ledgerEntries para determinar distribución
+    if (type === 'TARIFA' && source === 'MANUAL' && Array.isArray(h.ledgerEntries)) {
+        const results = [];
+
+        for (const le of h.ledgerEntries) {
+            const op = String(le.operation || '').toUpperCase();
+            const leMeta = le.metadata || {};
+
+            if (op === 'PAYMENT' && le.balanceDueBefore > 0) {
+                const appliedToTarifa = Number(leMeta.amountToBalance || (le.balanceDueBefore - le.balanceDueAfter) || 0);
+                if (appliedToTarifa > 0) {
+                    results.push({ period: 'Tarifa', amount: appliedToTarifa, isCredit: false });
+                }
+            }
+
+            if (op === 'OVERPAYMENT') {
+                const overpaymentAmt = Number(leMeta.overpaymentAmount || leMeta.overpayment || 0);
+                if (overpaymentAmt > 0) {
+                    results.push({ period: 'Crédito generado', amount: overpaymentAmt, isCredit: true, isGeneratedCredit: true });
+                }
+            }
+        }
+
+        // Fallback si los ledger no aportaron datos: usar metadata directa
+        if (results.length === 0 && meta.overpayment && Number(meta.overpayment) > 0) {
+            return [
+                { period: 'Tarifa', amount: Number(meta.amountToBalance || h.amountPaid || 0), isCredit: false },
+                { period: 'Crédito generado', amount: Number(meta.overpayment || 0), isCredit: true, isGeneratedCredit: true }
+            ];
+        }
+
+        if (results.length > 0) return results;
+    }
+
+    // CREDITO manual (no CREDIT_AUTO): ver si hay ledger que indique consumo de crédito
+    if (type === 'CREDITO' && Array.isArray(h.ledgerEntries)) {
+        for (const le of h.ledgerEntries) {
+            if (String(le.operation || '').toUpperCase() === 'CREDIT_PAYMENT') {
+                const leMeta = le.metadata || {};
+                const period = leMeta.period || meta.period || '';
+                if (period) {
+                    return [{ period, amount: Number(leMeta.creditApplied || h.amountPaid || 0), isCredit: true }];
+                }
+            }
+        }
+    }
+
+    return [];
+}
+
+/** Nombre legible para un período YYYY-MM */
+function formatPeriodLabel(period) {
+    if (!period) return '';
+    const parts = String(period).split('-');
+    if (parts.length < 2) return period;
+    const monthNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const m = Number.parseInt(parts[1], 10) - 1;
+    const monthLabel = monthNames[m] || parts[1];
+    return `${monthLabel} ${parts[0]}`;
+}
+
+/** Nombre completo del mes */
+function formatPeriodFullLabel(period) {
+    if (!period) return '';
+    const parts = String(period).split('-');
+    if (parts.length < 2) return period;
+    const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const m = Number.parseInt(parts[1], 10) - 1;
+    const monthLabel = monthNames[m] || parts[1];
+    return `${monthLabel} de ${parts[0]}`;
+}
+
+/** Generar explicación legible de una transacción para el diálogo de detalle */
+function buildTransactionExplanation(h, allHistories = []) {
+    const type = String(h.type || '').toUpperCase();
+    const source = String(h.source || '').toUpperCase();
+    const amount = Number(h.amountPaid || 0);
+    const date = h.lastPaymentDate ? moment.parseZone(h.lastPaymentDate).format('DD/MM/YYYY') : '—';
+    const receipt = h.receiptNumber || '—';
+    const meta = h.metadata || {};
+    const lines = [];
+
+    // Helper para formatear montos
+    const fmt = (v) => `Q${Number(v || 0).toFixed(2)}`;
+
+    if (type === 'TARIFA' && source === 'MANUAL') {
+        lines.push(`💳 Pago manual registrado el ${date}.`);
+        lines.push(`   • Monto total recibido: ${fmt(amount)}`);
+        if (receipt !== '—') lines.push(`   • N° de boleta: ${receipt}`);
+
+        // Buscar ledger entries para ver distribución
+        const lePayment = Array.isArray(h.ledgerEntries)
+            ? h.ledgerEntries.find(le => String(le.operation || '').toUpperCase() === 'PAYMENT') : null;
+        const leOverpay = Array.isArray(h.ledgerEntries)
+            ? h.ledgerEntries.find(le => String(le.operation || '').toUpperCase() === 'OVERPAYMENT') : null;
+
+        if (lePayment || leOverpay) {
+            lines.push('');
+            lines.push('📊 Distribución del pago:');
+
+            const appliedToBalance = lePayment
+                ? Number(lePayment.metadata?.amountToBalance || (lePayment.balanceDueBefore - lePayment.balanceDueAfter) || 0)
+                : 0;
+            const overpaymentAmt = leOverpay
+                ? Number(leOverpay.metadata?.overpaymentAmount || leOverpay.metadata?.overpayment || 0)
+                : (lePayment ? Number(lePayment.metadata?.overpayment || 0) : 0);
+
+            if (appliedToBalance > 0) {
+                lines.push(`   ✅ Aplicado a tarifa: ${fmt(appliedToBalance)}`);
+                if (lePayment) {
+                    lines.push(`      (Saldo antes: ${fmt(lePayment.balanceDueBefore)} → después: ${fmt(lePayment.balanceDueAfter)})`);
+                }
+            }
+            if (overpaymentAmt > 0) {
+                lines.push(`   ↗ Convertido a crédito disponible: ${fmt(overpaymentAmt)}`);
+            }
+            if (appliedToBalance <= 0 && overpaymentAmt <= 0) {
+                lines.push('   ℹ️ Este pago se aplicó completamente a la tarifa del período.');
+            }
+        } else {
+            // Sin ledger: mostrar nota genérica
+            lines.push('');
+            lines.push('ℹ️ No hay datos de distribución disponibles para este pago.');
+        }
+    }
+
+    else if (type === 'CREDITO' && source === 'CREDIT_AUTO') {
+        const period = meta.period || '';
+        const periodLabel = period ? formatPeriodFullLabel(period) : 'un período';
+        const creditApplied = Number(meta.creditApplied || h.amountPaid || 0);
+
+        lines.push(`🔄 Aplicación automática de crédito.`);
+        lines.push(`   • Crédito aplicado: ${fmt(creditApplied)}`);
+        lines.push(`   • Destino: tarifa de ${periodLabel}`);
+
+        // Buscar origen del crédito (sourceTxIds)
+        const sourceTxIds = Array.isArray(meta.sourceTxIds) ? meta.sourceTxIds : [];
+        if (sourceTxIds.length > 0 && Array.isArray(allHistories)) {
+            const sourceTxs = allHistories.filter(t => sourceTxIds.includes(t.id));
+            if (sourceTxs.length > 0) {
+                lines.push('');
+                lines.push('📎 Este crédito proviene de:');
+                sourceTxs.forEach(stx => {
+                    const stxDate = stx.lastPaymentDate ? moment.parseZone(stx.lastPaymentDate).format('DD/MM/YYYY') : '—';
+                    const stxAmt = Number(stx.amountPaid || 0);
+                    lines.push(`   • Pago del ${stxDate} por ${fmt(stxAmt)} (boleta: ${stx.receiptNumber || '—'})`);
+                });
+            }
+        }
+
+        // Si hay creditAllocations, mostrar
+        const allocations = Array.isArray(meta.creditAllocations) ? meta.creditAllocations : [];
+        if (allocations.length > 0) {
+            lines.push('');
+            lines.push('📋 Asignaciones de crédito:');
+            allocations.forEach(al => {
+                const alPeriod = formatPeriodFullLabel(al.period);
+                const alAmt = Number(al.amount || 0);
+                const alDate = al.date ? moment(al.date).format('DD/MM/YYYY') : '—';
+                lines.push(`   • ${fmt(alAmt)} del pago del ${alDate} → ${alPeriod}`);
+            });
+        }
+
+        // Explicación del contexto: cuánto cubrió vs cuánto faltó
+        lines.push('');
+        lines.push('💡 El crédito disponible se aplica automáticamente al generar');
+        lines.push('   la factura mensual. Si el crédito no cubre la tarifa completa,');
+        lines.push('   el saldo restante queda pendiente hasta el siguiente pago.');
+    }
+
+    else if (type === 'CREDITO' && source !== 'CREDIT_AUTO') {
+        lines.push(`🔄 Transacción de crédito.`);
+        lines.push(`   • Monto: ${fmt(amount)}`);
+        lines.push(`   • Fecha: ${date}`);
+
+        const leEntries = Array.isArray(h.ledgerEntries) ? h.ledgerEntries : [];
+        const creditLe = leEntries.find(le => String(le.operation || '').toUpperCase() === 'CREDIT_PAYMENT');
+        if (creditLe) {
+            const leMeta = creditLe.metadata || {};
+            const targetPeriod = leMeta.period || meta.period || '';
+            const targetLabel = targetPeriod ? formatPeriodFullLabel(targetPeriod) : 'tarifa';
+            lines.push('');
+            lines.push(`   📌 Aplicado a: ${targetLabel}`);
+            if (creditLe.creditBalanceBefore !== undefined) {
+                lines.push(`      Crédito antes: ${fmt(creditLe.creditBalanceBefore)} → después: ${fmt(creditLe.creditBalanceAfter)}`);
+            }
+        }
+    }
+
+    else if (type === 'MORA') {
+        lines.push(`⚠️ Pago de mora registrado el ${date}.`);
+        lines.push(`   • Monto: ${fmt(amount)}`);
+
+        if (h.extraordinaryDiscount > 0) {
+            lines.push(`   • Descuento/exoneración aplicado: ${fmt(h.extraordinaryDiscount)}`);
+        }
+        if (receipt !== '—') lines.push(`   • N° de boleta: ${receipt}`);
+    }
+
+    else {
+        lines.push(`📄 Transacción de tipo "${type}".`);
+        lines.push(`   • Monto: ${fmt(amount)}`);
+        lines.push(`   • Fecha: ${date}`);
+    }
+
+    // Siempre mostrar estado del crédito/balance después de esta transacción
+    const leEntries = Array.isArray(h.ledgerEntries) ? h.ledgerEntries : [];
+    const lastLe = leEntries[leEntries.length - 1];
+    if (lastLe) {
+        const hasBalanceChange = Number(lastLe.balanceDueAfter || 0) !== Number(lastLe.balanceDueBefore || 0);
+        const hasCreditChange = Number(lastLe.creditBalanceAfter || 0) !== Number(lastLe.creditBalanceBefore || 0);
+        const hasPenaltyChange = Number(lastLe.penaltyDueAfter || 0) !== Number(lastLe.penaltyDueBefore || 0);
+        if (hasBalanceChange || hasCreditChange || hasPenaltyChange) {
+            lines.push('');
+            lines.push('📈 Estado financiero después de esta transacción:');
+            lines.push(`   • Saldo de tarifa: ${fmt(lastLe.balanceDueAfter)}`);
+            lines.push(`   • Crédito disponible: ${fmt(lastLe.creditBalanceAfter)}`);
+            lines.push(`   • Mora pendiente: ${fmt(lastLe.penaltyDueAfter)}`);
+        }
+    }
+
+    return lines.join('\n');
+}
+
 const TransactionBadge = ({ label, backgroundColor, compact = false }) => (
     <Box
         sx={{
@@ -97,7 +344,7 @@ const TransactionBadge = ({ label, backgroundColor, compact = false }) => (
     </Box>
 );
 
-const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes }) => {
+const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes, onOpenExplanation }) => {
     const dateVal = history.lastPaymentDate || null;
     const amountVal = Number(history.amountPaid || 0);
     const typeMeta = getTransactionTypeMeta(history.type || 'PAYMENT');
@@ -121,6 +368,32 @@ const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes }) => {
                     <TransactionBadge label={typeMeta.label} backgroundColor={typeMeta.backgroundColor} compact />
                     <TransactionBadge label={sourceMeta.label} backgroundColor={sourceMeta.backgroundColor} compact />
                 </Stack>
+
+                {/* Botón detalle */}
+                {(() => {
+                    const hasDetails = getTransactionAppliedPeriods(history).length > 0 || (history.ledgerEntries && history.ledgerEntries.length > 0);
+                    if (!hasDetails) return null;
+                    return (
+                        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                            <MuiIconButton
+                                size="small"
+                                onClick={() => {
+                                    if (onOpenExplanation) onOpenExplanation(history);
+                                }}
+                                title="Ver detalle de esta transacción"
+                                sx={{
+                                    color: '#1565c0',
+                                    backgroundColor: '#e3f2fd',
+                                    '&:hover': { backgroundColor: '#bbdefb' },
+                                    width: 32,
+                                    height: 32
+                                }}
+                            >
+                                <Typography variant="caption" sx={{ fontWeight: 700, fontSize: '0.8rem' }}>ℹ️</Typography>
+                            </MuiIconButton>
+                        </Box>
+                    );
+                })()}
 
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
                     <Box sx={{ minWidth: 0 }}>
@@ -162,13 +435,41 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     const [autoDebit, setAutoDebit] = useState(!!family.autoDebit || false);
     const [requiresInvoice, setRequiresInvoice] = useState(!!family.requiresInvoice || false);
-    const [discount, setDiscount] = useState(family.specialFee ?? family.discount ?? 0);
+    const isPercentMode = !!(family.discountIsPercent);
+    const [discountValue, setDiscountValue] = useState(
+        isPercentMode
+            ? (() => {
+                try {
+                    const pRaw = family.specialFeePercentage ?? null;
+                    return (pRaw !== null && typeof pRaw !== 'undefined' && pRaw !== '') ? (Number(pRaw) * 100) : '';
+                } catch (e) {
+                    return '';
+                }
+              })()
+            : (family.specialFee ?? family.discount ?? 0)
+    );
+    const [discountType, setDiscountType] = useState(isPercentMode ? 'percentage' : 'amount');
 
     useEffect(() => {
         setAutoDebit(!!(payment?.User?.FamilyDetail?.autoDebit));
         setRequiresInvoice(!!(payment?.User?.FamilyDetail?.requiresInvoice));
-        setDiscount(payment?.User?.FamilyDetail?.specialFee ?? payment?.User?.FamilyDetail?.discount ?? 0);
+        const fd = payment?.User?.FamilyDetail || {};
+        const isPct = !!(fd.discountIsPercent);
+        setDiscountType(isPct ? 'percentage' : 'amount');
+        if (isPct) {
+            try {
+                const pRaw = typeof fd.specialFeePercentage !== 'undefined' ? fd.specialFeePercentage : null;
+                setDiscountValue(pRaw !== null && typeof pRaw !== 'undefined' && pRaw !== '' ? (Number(pRaw) * 100) : '');
+            } catch (e) {
+                setDiscountValue('');
+            }
+        } else {
+            setDiscountValue(fd.specialFee ?? fd.discount ?? 0);
+        }
     }, [payment, open]);
+
+    // Tab state: 'payments' | 'flow'
+    const [tabValue, setTabValue] = useState('payments');
 
     // Prefer Sequelize included PaymentTransactions (backend includes them as PaymentTransactions)
     const [histories, setHistories] = useState([]);
@@ -238,8 +539,13 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     // Transaction notes quick-view dialog state
     const [openTxNotes, setOpenTxNotes] = useState(false);
     const [txNotes, setTxNotes] = useState('');
+
+    // Transaction explanation dialog state
+    const [openTxExplanation, setOpenTxExplanation] = useState(false);
+    const [txExplanation, setTxExplanation] = useState({ title: '', text: '' });
     // Help / legend dialog state for the table
     const [openHelpLegend, setOpenHelpLegend] = useState(false);
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
     // derive month options only from uploaded receipts (Boletas should show uploaded files only)
     const boletaMonthOptions = React.useMemo(() => {
@@ -292,25 +598,61 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 const transactions = res.data.transactions || [];
                 
                 // Transformar transacciones V2 a formato esperado por la UI
-                const arr = transactions.map(tx => ({
-                    id: tx.id,
-                    lastPaymentDate: tx.realPaymentDate || tx.createdAt,
-                    amountPaid: tx.amount,
-                    penaltyAfter: 0, // Las transacciones V2 no tienen penaltyAfter en cada tx
-                    receiptNumber: tx.receiptNumber || '',
-                    requiresInvoice: tx.invoiceSent || false,
-                    type: tx.type,
-                    source: tx.source,
-                    notes: tx.notes,
-                    extraordinaryDiscount: Number(tx.extraordinaryDiscount ?? tx.extraDiscount ?? 0)
-                }));
+                const arr = transactions.map(tx => {
+                    // Parsear metadata si es string (ocurre con ciertos formatos de BD)
+                    let metadata = tx.metadata || null;
+                    if (typeof metadata === 'string') {
+                        try { metadata = JSON.parse(metadata); } catch (e) { metadata = null; }
+                    }
+                    const ledgerEntries = Array.isArray(tx.ledgerEntries)
+                        ? tx.ledgerEntries.map(le => {
+                            let leMeta = le.metadata || null;
+                            if (typeof leMeta === 'string') { try { leMeta = JSON.parse(leMeta); } catch(e) { leMeta = null; } }
+                            return {
+                                id: le.id,
+                                operation: le.operation,
+                                description: le.description,
+                                balanceDueBefore: Number(le.balanceDueBefore || 0),
+                                balanceDueAfter: Number(le.balanceDueAfter || 0),
+                                creditBalanceBefore: Number(le.creditBalanceBefore || 0),
+                                creditBalanceAfter: Number(le.creditBalanceAfter || 0),
+                                penaltyDueBefore: Number(le.penaltyDueBefore || 0),
+                                penaltyDueAfter: Number(le.penaltyDueAfter || 0),
+                                metadata: leMeta
+                            };
+                        })
+                        : [];
+
+                    return {
+                        id: tx.id,
+                        lastPaymentDate: tx.realPaymentDate || tx.createdAt,
+                        amountPaid: tx.amount,
+                        penaltyAfter: 0, // Las transacciones V2 no tienen penaltyAfter en cada tx
+                        receiptNumber: tx.receiptNumber || '',
+                        requiresInvoice: tx.invoiceSent || false,
+                        type: tx.type,
+                        source: tx.source,
+                        notes: tx.notes,
+                        extraordinaryDiscount: Number(tx.extraordinaryDiscount ?? tx.extraDiscount ?? 0),
+                        metadata,
+                        ledgerEntries
+                    };
+                });
                 
-                const total = arr.length;
+                // Filtrar transacciones automáticas del sistema para el historial simplificado.
+                // CREDIT_AUTO y FULL_DISCOUNT son generados automáticamente y pueden confundir al usuario.
+                // Se muestran en la sección "Flujo Completo" (PaymentFlowTimeline).
+                const manualFiltered = arr.filter(tx => {
+                    const src = String(tx.source || '').toUpperCase();
+                    return src !== 'CREDIT_AUTO' && src !== 'FULL_DISCOUNT';
+                });
+                
+                const total = manualFiltered.length;
                 
                 // Paginar en cliente
                 const start = histPage * histLimit;
                 const end = start + histLimit;
-                const paginatedArr = arr.slice(start, end);
+                const paginatedArr = manualFiltered.slice(start, end);
                 
                 setHistories(paginatedArr);
                 setHistTotal(total);
@@ -460,6 +802,19 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         document.body.removeChild(a);
     };
 
+    const handleOpenExplanation = useCallback((h) => {
+        const dateVal = h.lastPaymentDate || null;
+        const amountVal = Number(h.amountPaid || 0);
+        const typeLabel = getTransactionTypeMeta(h.type || 'PAYMENT').label;
+        const dateStr = dateVal ? moment.parseZone(dateVal).format('DD/MM/YYYY') : '—';
+        const explanation = buildTransactionExplanation(h, sortedHistories);
+        setTxExplanation({
+            title: `${typeLabel} · Q${amountVal.toFixed(2)} · ${dateStr}`,
+            text: explanation
+        });
+        setOpenTxExplanation(true);
+    }, [sortedHistories]);
+
     const invalidateHistoryCacheForPayment = () => {
         try {
             const paymentId = (localPayment || payment)?.id;
@@ -475,8 +830,19 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     };
 
     // compute total after discount (clamp to zero)
-    const parsedDiscount = Number(discount || 0) || 0;
-    const totalAfterDiscount = Math.max(0, Number(computedTariff || 0) - parsedDiscount);
+    const parsedDiscount = discountType === 'amount' ? (Number(discountValue || 0) || 0) : 0;
+    const parsedPercent = discountType === 'percentage'
+        ? (() => {
+            const p = discountValue;
+            if (p === null || typeof p === 'undefined' || String(p).trim() === '') return null;
+            const n = Number(p);
+            return Number.isFinite(n) ? n : null;
+          })()
+        : null;
+    const percentDiscountAmount = (parsedPercent !== null) ? Math.round(((Number(computedTariff || 0) * parsedPercent) / 100) * 100) / 100 : 0;
+    const totalAfterDiscount = (parsedPercent !== null)
+        ? Math.max(0, Number(computedTariff || 0) - percentDiscountAmount)
+        : Math.max(0, Number(computedTariff || 0) - parsedDiscount);
 
     const handleOpenGlobalFreezeDialog = (mode) => {
         setGlobalFreezeDialogMode(mode);
@@ -603,15 +969,48 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     <Typography variant="h5">Q {totalAfterDiscount}</Typography>
                                 </Box>
                                 <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
-                                    <Typography variant="caption" color="text.secondary">Descuento (Q)</Typography>
-                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <TextField label="" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: { xs: '100%', sm: 100 } }} disabled={isDeleted} />
-                                        <Button variant="outlined" size="small" onClick={() => {
-                                            if (isDeleted) return;
-                                            // IMPORTANT: Do NOT persist discount here.
-                                            // The new flow applies the discount from the modal (retroactive scopes).
-                                            setOpenDiscountModal(true);
-                                        }} disabled={isDeleted}>APLICAR</Button>
+                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
+                                        <Box>
+                                            <Typography variant="caption" color="text.secondary">Descuento</Typography>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <TextField
+                                                    size="small"
+                                                    type="number"
+                                                    value={discountValue}
+                                                    onChange={(e) => setDiscountValue(e.target.value)}
+                                                    disabled={isDeleted}
+                                                    sx={{
+                                                        width: 120,
+                                                        '& input[type=number]': { MozAppearance: 'textfield' },
+                                                        '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+                                                    }}
+                                                    InputProps={{
+                                                        startAdornment: (
+                                                            <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                                                                <Select
+                                                                    value={discountType}
+                                                                    onChange={(e) => setDiscountType(e.target.value)}
+                                                                    variant="standard"
+                                                                    disableUnderline
+                                                                    disabled={isDeleted}
+                                                                    sx={{
+                                                                        fontSize: '1rem',
+                                                                        '& .MuiSelect-select': { paddingRight: '15px !important' },
+                                                                    }}
+                                                                >
+                                                                    <MenuItem value="amount">Q</MenuItem>
+                                                                    <MenuItem value="percentage">%</MenuItem>
+                                                                </Select>
+                                                            </InputAdornment>
+                                                        ),
+                                                    }}
+                                                />
+                                                <Button variant="outlined" size="small" onClick={() => {
+                                                    if (isDeleted) return;
+                                                    setOpenDiscountModal(true);
+                                                }} disabled={isDeleted}>Aplicar</Button>
+                                            </Box>
+                                        </Box>
                                     </Box>
                                 </Box>
                             </Box>
@@ -628,12 +1027,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
                 <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
                     <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) handleAction('receipts'); }} disabled={isDeleted}>Boletas</Button>
-                    {isGlobalPenaltyFrozen && (
-                        <Chip size="small" color="warning" label="Mora global congelada" />
-                    )}
-                    {frozenPenaltyPeriodsCount > 0 && (
-                        <Chip size="small" color="info" variant="outlined" label={`${frozenPenaltyPeriodsCount} período(s) congelado(s)`} />
-                    )}
                     <Button 
                         variant="outlined" 
                         color={isGlobalPenaltyFrozen ? "success" : "primary"}
@@ -765,7 +1158,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     onClose={() => setOpenDiscountModal(false)}
                     mode="DISCOUNT"
                     payment={localPayment || payment}
-                    currentDiscount={discount}
+                    currentDiscount={discountType === 'amount' ? discountValue : 0}
+                    currentPercent={discountType === 'percentage' ? discountValue : null}
                     onApplied={() => {
                         (async () => {
                             invalidateHistoryCacheForPayment();
@@ -786,13 +1180,51 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         })();
                     }}
                 />
+                <Snackbar
+                    open={snackbar.open}
+                    autoHideDuration={5000}
+                    onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                >
+                    <Alert
+                        severity={snackbar.severity}
+                        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+                        sx={{ width: '100%' }}
+                    >
+                        {snackbar.message}
+                    </Alert>
+                </Snackbar>
+                {!histLoading && sortedHistories.length > 0 && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontStyle: 'italic' }}>
+                        ℹ️ Mostrando solo pagos realizados. Para ver el flujo completo (créditos automáticos, distribuciones, etc.) usa la pestaña "Flujo Completo".
+                    </Typography>
+                )}
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 1 }}>
-                    <Typography variant="h6">Historial de Pagos</Typography>
-                    <MuiIconButton size="small" onClick={() => setOpenHelpLegend(true)} title="Ayuda - Leyenda tabla" sx={{ ml: 0.5 }}>
-                        <HelpIcon fontSize="small" />
-                    </MuiIconButton>
+                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}>
+                    <Tabs
+                        value={tabValue}
+                        onChange={(e, newVal) => setTabValue(newVal)}
+                        variant="fullWidth"
+                        textColor="primary"
+                        indicatorColor="primary"
+                    >
+                        <Tab
+                            value="payments"
+                            label="Pagos Registrados"
+                            icon={<ReceiptIcon fontSize="small" />}
+                            iconPosition="start"
+                        />
+                        <Tab
+                            value="flow"
+                            label="Flujo Completo"
+                            icon={<TimelineIcon fontSize="small" />}
+                            iconPosition="start"
+                        />
+                    </Tabs>
                 </Box>
+
+                {/* Tab: Pagos Registrados (historial simplificado) */}
+                {tabValue === 'payments' && (
                 <Box sx={{ overflowX: 'auto', maxWidth: '100%' }}>
                 {isMobile ? (
                     <Stack spacing={1.25}>
@@ -812,6 +1244,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 history={h}
                                 onToggleInvoiceRow={handleToggleInvoiceRow}
                                 onOpenNotes={(notes) => { setTxNotes(notes || ''); setOpenTxNotes(true); }}
+                                onOpenExplanation={handleOpenExplanation}
                             />
                         ))}
                         <Box sx={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '100%' }}>
@@ -951,6 +1384,16 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 </Table>
                 )}
                 </Box>
+                )}
+
+                {/* Tab: Flujo Completo */}
+                {tabValue === 'flow' && (
+                    <PaymentFlowTimeline
+                        paymentId={payment?.id}
+                        userId={payment?.userId || payment?.User?.id}
+                        familyLastName={family.familyLastName || ''}
+                    />
+                )}
 
                 {/* Dialog: Vista rápida de Notas de Transacciones */}
                 <Dialog open={openTxNotes} onClose={() => setOpenTxNotes(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
@@ -963,6 +1406,51 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </DialogActions>
                 </Dialog>
 
+                {/* Dialog: Explicación detallada de Transacción */}
+                <Dialog open={openTxExplanation} onClose={() => setOpenTxExplanation(false)} maxWidth="sm" fullWidth fullScreen={isMobile}
+                    PaperProps={{ sx: { borderRadius: 2 } }}>
+                    <DialogTitle sx={{
+                        pb: 1,
+                        borderBottom: '1px solid #e0e0e0',
+                        backgroundColor: '#f5f7fa',
+                        fontWeight: 700
+                    }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{
+                                width: 32, height: 32, borderRadius: '50%',
+                                backgroundColor: '#e3f2fd', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '1rem'
+                            }}>ℹ️</Box>
+                            <Box>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                                    {txExplanation.title}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    Detalle de cómo se distribuyó esta transacción
+                                </Typography>
+                            </Box>
+                        </Box>
+                    </DialogTitle>
+                    <DialogContent sx={{ pt: 2.5 }}>
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                whiteSpace: 'pre-wrap',
+                                fontFamily: 'system-ui, -apple-system, sans-serif',
+                                lineHeight: 1.8,
+                                '& strong': { fontWeight: 600 }
+                            }}
+                        >
+                            {txExplanation.text || 'No hay información disponible para esta transacción.'}
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e0e0e0' }}>
+                        <Button onClick={() => setOpenTxExplanation(false)} variant="outlined" size="small">
+                            Cerrar
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
                 {/* Dialog: Leyenda / Ayuda de la Tabla de Historial (mejor visual) */}
                 <Dialog open={openHelpLegend} onClose={() => setOpenHelpLegend(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
                     <DialogTitle>Leyenda - Historial de Pagos</DialogTitle>
@@ -970,6 +1458,50 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         <Grid container spacing={2}>
                             <Grid item xs={12}>
                                 <Typography variant="subtitle1" sx={{ mb: 1 }}>Columnas y etiquetas</Typography>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Período Aplicado</Typography>
+                                <List dense>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#fff3e0', color: '#e65100' }}>
+                                                        ✓ Tarifa
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Ene 2026 Q910.00</Typography>
+                                                </Box>
+                                            }
+                                            secondary="Pago aplicado directamente al período. Muestra el mes y monto asignado."
+                                        />
+                                    </ListItem>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#e3f2fd', color: '#1565c0' }}>
+                                                        ↘ Crédito
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Jun 2026 Q12.13</Typography>
+                                                </Box>
+                                            }
+                                            secondary="Indica que se usó crédito disponible para pagar parte de la tarifa de ese período."
+                                        />
+                                    </ListItem>
+                                    <ListItem alignItems="flex-start">
+                                        <ListItemText
+                                            primary={
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#e8f5e9', color: '#2e7d32' }}>
+                                                        ↗ Crédito
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Crédito Q12.13</Typography>
+                                                </Box>
+                                            }
+                                            secondary="Muestra que esta transacción generó crédito (sobrepago). El monto se agregó al saldo de crédito disponible."
+                                        />
+                                    </ListItem>
+                                </List>
                             </Grid>
 
                             <Grid item xs={12} sm={6}>

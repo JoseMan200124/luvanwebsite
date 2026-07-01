@@ -19,6 +19,8 @@ import {
     IconButton,
     Divider,
     TextField,
+    InputAdornment,
+    Select,
     MenuItem,
     Alert,
     CircularProgress,
@@ -52,6 +54,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     const [periodToAdd, setPeriodToAdd] = useState('');
     const [routeTypeToAdd, setRouteTypeToAdd] = useState('');
     const [discountToAdd, setDiscountToAdd] = useState('');
+    const [discountToAddType, setDiscountToAddType] = useState('amount');
     const [studentsCountToAdd, setStudentsCountToAdd] = useState('');
 
     const [deleteTarget, setDeleteTarget] = useState(null);
@@ -127,6 +130,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
         setPeriodToAdd('');
         setRouteTypeToAdd('');
         setDiscountToAdd('');
+        setDiscountToAddType('amount');
         setStudentsCountToAdd('');
         autoFilledCurrentRef.current = false;
         setDeleteTarget(null);
@@ -217,13 +221,19 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
 
         const rt = String(routeTypeToAdd || '').trim();
 
-        const parsedDiscount = discountToAdd === '' || discountToAdd === null || typeof discountToAdd === 'undefined'
+        const rawDiscount = discountToAdd === '' || discountToAdd === null || typeof discountToAdd === 'undefined'
             ? NaN
             : Number(discountToAdd);
-        if (discountToAdd !== '' && (!Number.isFinite(parsedDiscount) || parsedDiscount < 0)) {
+        if (discountToAdd !== '' && (!Number.isFinite(rawDiscount) || rawDiscount < 0)) {
             setError('Ingresa un descuento válido (0 o mayor), o déjalo en blanco para usar el descuento actual.');
             return;
         }
+        const discountPercentValue = discountToAddType === 'percentage' && Number.isFinite(rawDiscount) ? rawDiscount : undefined;
+        const parsedDiscount = Number.isFinite(rawDiscount)
+            ? (discountToAddType === 'percentage'
+                ? Math.round((Number(payment?.monthlyFee || 0) * rawDiscount / 100) * 100) / 100
+                : rawDiscount)
+            : NaN;
 
         const parsedStudentsCount = studentsCountToAdd === '' || studentsCountToAdd === null || typeof studentsCountToAdd === 'undefined'
             ? NaN
@@ -240,6 +250,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
             const payload = { period: p };
             if (rt) payload.routeType = rt;
             if (Number.isFinite(parsedDiscount)) payload.discountApplied = parsedDiscount;
+            if (discountPercentValue !== undefined) payload.discountPercent = discountPercentValue;
             if (Number.isFinite(parsedStudentsCount)) payload.studentsCount = parsedStudentsCount;
 
             await api.post(`/payments/v2/${paymentId}/periods`, payload);
@@ -444,16 +455,35 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
 
                             <TextField
                                 size="small"
-                                label="Descuento (Q)"
                                 type="number"
+                                label="Descuento"
                                 inputProps={{ min: 0, step: 0.01 }}
-                                placeholder={`Actual: Q ${Number(futureDiscount || 0).toFixed(2)}`}
+                                placeholder={discountToAddType === 'amount' ? `Actual: Q ${Number(futureDiscount || 0).toFixed(2)}` : '%'}
                                 value={discountToAdd}
                                 onChange={(e) => setDiscountToAdd(e.target.value)}
                                 disabled={!paymentId || loading}
                                 InputLabelProps={{ shrink: true }}
                                 fullWidth
                                 sx={{ minWidth: 0 }}
+                                InputProps={{
+                                    startAdornment: (
+                                        <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                                            <Select
+                                                value={discountToAddType}
+                                                onChange={(e) => setDiscountToAddType(e.target.value)}
+                                                variant="standard"
+                                                disableUnderline
+                                                sx={{
+                                                    fontSize: '0.875rem',
+                                                    '& .MuiSelect-select': { paddingRight: '20px !important' },
+                                                }}
+                                            >
+                                                <MenuItem value="amount">Q</MenuItem>
+                                                <MenuItem value="percentage">%</MenuItem>
+                                            </Select>
+                                        </InputAdornment>
+                                    ),
+                                }}
                             />
 
                             <TextField

@@ -56,7 +56,20 @@ const getPaymentViewModel = (payment = {}) => {
         studentsCount: family.studentsCount || 0,
         routeType: family.routeType || '-',
         lastPaymentFormatted: lastPayment ? moment.parseZone(lastPayment).format('DD/MM/YY') : '—',
-        discount: Number(family.specialFee || family.discount || 0).toFixed(2),
+        // If family discount is configured as percent, show a percent string (e.g. "50%"),
+        // otherwise show fixed amount with currency formatting.
+        discount: (() => {
+            const isPercent = !!(family.discountIsPercent || payment.discountIsPercent);
+            const pctRaw = family.specialFeePercentage ?? payment.appliedFamilyDiscountPercent ?? null;
+            if (isPercent && pctRaw !== null && typeof pctRaw !== 'undefined' && !Number.isNaN(Number(pctRaw))) {
+                const pct = Number(pctRaw) * 100;
+                // Round to maximum 2 decimal places to avoid long floats
+                const rounded = Math.round(pct * 100) / 100;
+                if (Number.isInteger(rounded)) return `${rounded}%`;
+                return `${rounded}%`;
+            }
+            return `Q ${Number(family.specialFee || family.discount || 0).toFixed(2)}`;
+        })(),
         requiresInvoice: !!family.requiresInvoice || !!payment.requiresInvoice || false,
         status,
         serviceStatus,
@@ -67,20 +80,20 @@ const getPaymentViewModel = (payment = {}) => {
 };
 
 const PaymentStatusChip = ({ status }) => {
-    if (status === 'CONFIRMADO' || status === 'ADELANTADO') {
+    if (status === 'CONFIRMADO') {
         return <Chip label="Pagado" size="small" color="success" />;
     }
+    if (status === 'ADELANTADO') {
+        return <Chip label="Adelantado" size="small" color="info" />;
+    }
     if (status === 'MORA' || status === 'ATRASADO') {
-        return <Chip label="Mora" size="small" color="error" />;
+        return <Chip label="En Mora" size="small" color="error" />;
     }
     if (status === 'PENDIENTE') {
         return <Chip label="Pendiente" size="small" color="warning" />;
     }
     if (status === 'EN_PROCESO') {
         return <Chip label="En Proceso" size="small" color="warning" />;
-    }
-    if (status === 'ELIMINADO') {
-        return <Chip label="Eliminado" size="small" sx={{ backgroundColor: '#000000', color: 'white' }} />;
     }
     return <Chip label={status || '-'} size="small" />;
 };
@@ -89,7 +102,10 @@ PaymentStatusChip.propTypes = {
     status: PropTypes.string,
 };
 
-const ServiceStatusChip = ({ serviceStatus }) => {
+const ServiceStatusChip = ({ serviceStatus, isDeleted }) => {
+    if (isDeleted) {
+        return <Chip label="Eliminado" size="small" sx={{ backgroundColor: '#000000', color: 'white' }} />;
+    }
     if (serviceStatus === 'ACTIVE') {
         return <Chip label="Activo" size="small" color="success" />;
     }
@@ -102,14 +118,12 @@ const ServiceStatusChip = ({ serviceStatus }) => {
     if (serviceStatus === 'INACTIVE') {
         return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
     }
-    if (serviceStatus === 'DELETED') {
-        return <Chip label="Eliminado" size="small" sx={{ backgroundColor: '#000000', color: 'white' }} />;
-    }
     return <Chip label="-" size="small" />;
 };
 
 ServiceStatusChip.propTypes = {
     serviceStatus: PropTypes.string,
+    isDeleted: PropTypes.bool,
 };
 
 const PaymentActions = React.memo(({ payment, isDeleted, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick }) => (
@@ -158,7 +172,7 @@ const PaymentRow = React.memo(({ payment, onRegisterClick, onReceiptClick, onEma
     return (
         <TableRow key={payment.id} hover>
             <TableCell align="center" sx={{ borderLeft: '3px solid #2196F3', borderRight: '3px solid #E0E0E0' }}>
-                <ServiceStatusChip serviceStatus={view.serviceStatus} />
+                <ServiceStatusChip serviceStatus={view.serviceStatus} isDeleted={view.isDeleted} />
             </TableCell>
             <TableCell align="center" sx={{ borderLeft: '3px solid #E0E0E0', borderRight: '3px solid #4CAF50' }}>
                 <PaymentStatusChip status={view.status} />
@@ -172,7 +186,7 @@ const PaymentRow = React.memo(({ payment, onRegisterClick, onReceiptClick, onEma
             <TableCell align="center">{view.studentsCount}</TableCell>
             <TableCell align="center">{view.routeType}</TableCell>
             <TableCell align="center">{view.lastPaymentFormatted}</TableCell>
-            <TableCell align="center">Q {view.discount}</TableCell>
+            <TableCell align="center">{view.discount}</TableCell>
             <TableCell align="center">
                 {view.requiresInvoice ? <CheckCircleIcon color="success" fontSize="small" /> : <CloseIcon color="error" fontSize="small" />}
             </TableCell>
