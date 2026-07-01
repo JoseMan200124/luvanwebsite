@@ -35,7 +35,8 @@ import {
     KeyboardArrowDown as ExpandMoreIcon,
     KeyboardArrowUp as ExpandLessIcon,
     MoreHoriz as MoreHorizIcon,
-    SwapVert as SortIcon
+    SwapVert as SortIcon,
+    Autorenew as AutorenewIcon
 } from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
@@ -79,7 +80,7 @@ const OPERATION_META = {
     REVERSAL: { icon: <RestoreIcon fontSize="small" />, label: 'Reversión', color: '#d32f2f', bgColor: '#ffebee' },
     EXONERATION: { icon: <MoneyOffIcon fontSize="small" />, label: 'Exoneración', color: '#7b1fa2', bgColor: '#f3e5f5' },
     ADJUSTMENT: { icon: <InfoIcon fontSize="small" />, label: 'Ajuste', color: '#f57c00', bgColor: '#fff8e1' },
-    AUTO_DEBIT: { icon: <ReceiptIcon fontSize="small" />, label: 'Débito Automático', color: '#388e3c', bgColor: '#e8f5e9' },
+    AUTO_DEBIT: { icon: <AutorenewIcon fontSize="small" />, label: 'Débito Automático', color: '#388e3c', bgColor: '#e8f5e9' },
     FULL_DISCOUNT: { icon: <MoneyOffIcon fontSize="small" />, label: 'Descuento Total', color: '#6a1b9a', bgColor: '#f3e5f5' },
     PENALTY_CLEARANCE: { icon: <MoneyOffIcon fontSize="small" />, label: 'Limpieza de Mora', color: '#6a1b9a', bgColor: '#f3e5f5' },
     DEFAULT: { icon: <MoreHorizIcon fontSize="small" />, label: 'Operación', color: '#757575', bgColor: '#f5f5f5' }
@@ -100,11 +101,15 @@ function getAdjustmentFreezeDesc(meta, entry) {
     }
     if (meta.action === 'UNFREEZE_GLOBAL') return 'Descongelamiento global de mora (reanuda acumulación sin retroactivo)';
     if (meta.action === 'FREEZE_PERIOD') {
-        const periods = meta.periodsAffected || [];
-        const pLabel = periods.length ? periods.join(', ') : (meta.period || '');
+        const periods = (meta.periodsAffected || []).map(p => formatPeriodLabel(p)).filter(Boolean);
+        const pLabel = periods.length ? periods.join(', ') : formatPeriodLabel(meta.period);
         return pLabel ? `Congelamiento de mora — período(s) ${pLabel}` : 'Congelamiento de mora por período';
     }
-    if (meta.action === 'UNFREEZE_PERIOD') return 'Descongelamiento de mora por período';
+    if (meta.action === 'UNFREEZE_PERIOD') {
+        const periods = (meta.periodsAffected || []).map(p => formatPeriodLabel(p)).filter(Boolean);
+        const pLabel = periods.length ? periods.join(', ') : formatPeriodLabel(meta.period);
+        return pLabel ? `Descongelamiento de mora — período(s) ${pLabel}` : 'Descongelamiento de mora por período';
+    }
     if (meta.action === 'RESET') return null; // fallback a description
     return null;
 }
@@ -114,21 +119,43 @@ function getAdjustmentRouteDesc(meta) {
     const from = meta.routeTypeBefore || '(sin asignar)';
     const to = meta.routeTypeAfter || '(sin asignar)';
     if (meta.scope === 'NEXT_FROM') return `Tipo de ruta configurado para próximos períodos: ${to}`;
-    return `Cambio de tipo de ruta de "${from}" a "${to}" en ${(meta.periods || []).length} período(s)`;
+    const scopeLabel = formatScopeLabel(meta.scope);
+    return `Cambio de tipo de ruta (${scopeLabel}) de "${from}" a "${to}" en ${(meta.periods || []).length} período(s)`;
+}
+
+function formatScopeLabel(scope) {
+    const labels = {
+        'CURRENT': 'período actual',
+        'ALL_PENDING': 'períodos pendientes',
+        'SELECTED': 'períodos seleccionados',
+        'CURRENT_AND_NEXT_FROM': 'período actual y próximos',
+        'NEXT_FROM': 'próximos períodos'
+    };
+    return labels[scope] || scope;
 }
 
 function getAdjustmentDiscountDesc(meta) {
     if (meta.appliedSpecialFee === undefined && meta.scope !== 'NEXT_FROM') return null;
     const fee = Number(meta.appliedSpecialFee || meta.familySpecialFeeAfter || 0);
+    const percent = meta.familyPercentAfter != null ? Number(meta.familyPercentAfter) : null;
     const periods = (meta.periods || []).length;
     if (meta.scope === 'NEXT_FROM') {
-        return fee > 0
-            ? `Descuento familiar configurado para próximos períodos: ${fmt(fee)}`
-            : 'Descuento familiar eliminado para próximos períodos';
+        if (percent !== null && percent > 0) {
+            return `Descuento familiar configurado para próximos períodos: ${(percent * 100).toFixed(1)}%`;
+        }
+        if (fee > 0) {
+            return `Descuento familiar configurado para próximos períodos: ${fmt(fee)}`;
+        }
+        return 'Descuento familiar eliminado para próximos períodos';
     }
-    return fee > 0
-        ? `Descuento familiar aplicado (${meta.scope}) — ${fmt(fee)} en ${periods} período(s)`
-        : `Descuento familiar eliminado (${meta.scope}) en ${periods} período(s)`;
+    const scopeLabel = formatScopeLabel(meta.scope);
+    if (fee > 0) {
+        return `Descuento familiar aplicado (${scopeLabel}) — ${fmt(fee)} en ${periods} período(s)`;
+    }
+    if (percent !== null && percent > 0) {
+        return `Descuento familiar aplicado (${scopeLabel}) — ${(percent * 100).toFixed(1)}% en ${periods} período(s)`;
+    }
+    return `Descuento familiar eliminado (${scopeLabel}) en ${periods} período(s)`;
 }
 
 function getAdjustmentMiscDesc(meta) {
@@ -147,7 +174,17 @@ function getAdjustmentDescription(entry) {
     const meta = entry.metadata || {};
     const freezeDesc = getAdjustmentFreezeDesc(meta, entry);
     if (freezeDesc) return freezeDesc;
-    if (meta.action === 'RESET') return entry.description || 'Reset de mora';
+    if (meta.action === 'RESET') {
+        const amt = Number(meta.oldPenalty || 0);
+        return amt > 0 ? `Reset de mora — ${fmt(amt)} eliminados` : (entry.description || 'Reset de mora');
+    }
+    if (meta.action === 'MANUAL_ADJUSTMENT') {
+        const oldP = Number(meta.oldPenalty || 0);
+        const newP = Number(meta.newPenalty || 0);
+        const periodStr = meta.period ? `período ${formatPeriodLabel(meta.period)}` : 'manual';
+        if (oldP !== newP) return `Ajuste de mora (${periodStr}): ${fmt(oldP)} → ${fmt(newP)}`;
+        return entry.description || `Ajuste de mora (${periodStr})`;
+    }
 
     const miscDesc = getAdjustmentMiscDesc(meta);
     if (miscDesc) return miscDesc;
@@ -170,8 +207,8 @@ function getOperationDescription(entry) {
             const period = meta.period || '';
             const amount = Number(meta.amount || meta.billedAmount || 0) || Math.max(0, Number(entry.balanceDueAfter - entry.balanceDueBefore || 0));
             return period
-                ? `Facturación del período ${formatPeriodLabel(period)} — ${fmt(amount)}`
-                : `Facturación mensual — ${fmt(amount)}`;
+                ? `Cargo tarifa del período ${formatPeriodLabel(period)} — ${fmt(amount)}`
+                : `Cargo tarifa mensual — ${fmt(amount)}`;
         }
         case 'PAYMENT': {
             let amt = Math.max(0, Number(entry.balanceDueBefore - entry.balanceDueAfter || 0));
@@ -186,10 +223,19 @@ function getOperationDescription(entry) {
             const amt = Math.max(0, Number(entry.penaltyDueBefore - entry.penaltyDueAfter || 0));
             const receipt = meta.receiptNumber || '';
             const base = `Pago de mora — ${fmt(amt)}`;
+            if (entry._grouped) {
+                const periodsStr = entry._grouped.periods.join(', ');
+                return `${base} (${entry._grouped.count} períodos: ${periodsStr})`;
+            }
             return receipt ? `${base} (Boleta: ${receipt})` : base;
         }
         case 'CREDIT_PAYMENT': {
             const amt = Math.max(0, Number(entry.creditBalanceBefore - entry.creditBalanceAfter || 0));
+            if (meta.source === 'credit_to_penalty') {
+                return meta.period
+                    ? `Crédito aplicado a mora del período ${formatPeriodLabel(meta.period)} — ${fmt(amt)}`
+                    : `Crédito aplicado a mora — ${fmt(amt)}`;
+            }
             return meta.period
                 ? `Crédito aplicado a ${formatPeriodLabel(meta.period)} — ${fmt(amt)}`
                 : `Uso de crédito disponible — ${fmt(amt)}`;
@@ -204,12 +250,40 @@ function getOperationDescription(entry) {
         }
         case 'ADJUSTMENT':
             return getAdjustmentDescription(entry);
-        case 'AUTO_DEBIT':
-            return entry.description || 'Débito automático procesado';
-        case 'FULL_DISCOUNT':
-            return entry.description || 'Descuento total aplicado';
-        case 'PENALTY_CLEARANCE':
-            return entry.description || 'Limpieza de mora aplicada';
+        case 'AUTO_DEBIT': {
+            const amt = Number(meta.amountApplied || meta.amountToBalance || 0) || Math.max(0, Number(entry.balanceDueBefore - entry.balanceDueAfter || 0));
+            const hasPenaltyExoneration = Number(meta.penaltyExonerated || 0) > 0;
+            let text = amt > 0 ? `Débito automático — ${fmt(amt)}` : (entry.description || 'Débito automático procesado');
+            if (hasPenaltyExoneration) {
+                text += ` (mora exonerada: ${fmt(meta.penaltyExonerated)})`;
+            }
+            if (meta.activatedAfterDueDate) {
+                text += ' [retroactivo]';
+            }
+            return text;
+        }
+        case 'FULL_DISCOUNT': {
+            const amt = Math.max(0, Number(entry.balanceDueBefore - entry.balanceDueAfter || 0));
+            if (entry._grouped) {
+                const totalAmt = amt * entry._grouped.count;
+                const periodsStr = entry._grouped.periods.join(', ');
+                return `Descuento total aplicado — ${fmt(totalAmt)} (${entry._grouped.count} períodos: ${periodsStr})`;
+            }
+            return entry.description || `Descuento total aplicado — ${amt > 0 ? fmt(amt) : ''}`;
+        }
+        case 'PENALTY_CLEARANCE': {
+            const clearedAmt = Number(meta.clearedAmount || 0);
+            const periodsCleared = meta.periodsCleared;
+            const periodLabel = meta.period === 'ALL'
+                ? 'total'
+                : (periodsCleared && Array.isArray(periodsCleared)
+                    ? periodsCleared.map(p => formatPeriodLabel(p)).join(', ')
+                    : formatPeriodLabel(meta.period));
+            const base = clearedAmt > 0
+                ? `Limpieza de mora — ${fmt(clearedAmt)}`
+                : 'Limpieza de mora';
+            return periodLabel ? `${base} (${periodLabel})` : base;
+        }
         default:
             return entry.description || 'Operación del sistema';
     }
@@ -532,13 +606,13 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
 
-    const fetchFlow = useCallback(async (page, limit) => {
+    const fetchFlow = useCallback(async (page, limit, order) => {
         if (!paymentId) return;
         setLoading(true);
         setError(null);
         try {
             const res = await api.get(`/payments/v2/${paymentId}/flow`, {
-                params: { page, limit }
+                params: { page, limit, sortOrder: order }
             });
             setFlowData(res.data);
             // Usar ledgerTotal para la paginación (el timeline es el elemento principal)
@@ -552,14 +626,21 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
     }, [paymentId]);
 
     useEffect(() => {
-        fetchFlow(flowPage, flowLimit);
-    }, [fetchFlow, flowPage, flowLimit]);
+        fetchFlow(flowPage, flowLimit, sortOrder);
+    }, [fetchFlow, flowPage, flowLimit, sortOrder]);
 
-    // Ordenar ledger según sortOrder y filtrar por rango de fechas
+    // Filtrar ledger por rango de fechas (el backend ya ordena según sortOrder)
     const ledgerFiltered = useMemo(() => {
         if (!flowData?.ledger) return [];
 
-        let items = [...flowData.ledger];
+        let items = flowData.ledger;
+
+        // Excluir entradas internas de distribución por período (TARIFA_PERIOD)
+        // para evitar duplicados — el asiento principal de PAYMENT ya refleja la operación
+        items = items.filter(e => {
+            const meta = e.metadata || {};
+            return meta.kind !== 'TARIFA_PERIOD';
+        });
 
         // Filtro por fecha desde
         if (dateFrom) {
@@ -572,19 +653,72 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
             items = items.filter(e => new Date(e.createdAt || 0).getTime() <= toEnd);
         }
 
-        // Ordenar según sortOrder
-        items.sort((a, b) => {
-            const timeA = new Date(a.createdAt || 0).getTime();
-            const timeB = new Date(b.createdAt || 0).getTime();
-            const diff = timeA - timeB;
-            const orderedDiff = sortOrder === 'desc' ? -diff : diff;
-            if (orderedDiff !== 0) return orderedDiff;
-            const idDiff = (a.id || 0) - (b.id || 0);
-            return sortOrder === 'desc' ? -idDiff : idDiff;
-        });
+        // Agrupar entradas consecutivas MORA_PAYMENT o FULL_DISCOUNT con el mismo monto
+        // para evitar ruido cuando cubren varios períodos con valores iguales
+        const GROUPABLE_OPS = new Set(['MORA_PAYMENT', 'FULL_DISCOUNT']);
+        const grouped = [];
+        let i = 0;
+        while (i < items.length) {
+            const current = items[i];
+            const op = String(current.operation || '').toUpperCase();
 
-        return items;
-    }, [flowData?.ledger, sortOrder, dateFrom, dateTo]);
+            if (GROUPABLE_OPS.has(op)) {
+                // Calcular el "key amount" de esta operación
+                const keyAmount = op === 'MORA_PAYMENT'
+                    ? Math.max(0, Number(current.penaltyDueBefore - current.penaltyDueAfter || 0))
+                    : Math.max(0, Number(current.balanceDueBefore - current.balanceDueAfter || 0));
+                const roundedKey = Math.round(keyAmount * 100);
+
+                // Acumular entradas consecutivas con el mismo monto
+                const batch = [current];
+                let j = i + 1;
+                while (j < items.length) {
+                    const next = items[j];
+                    const nextOp = String(next.operation || '').toUpperCase();
+                    if (nextOp !== op) break;
+                    const nextKeyAmt = op === 'MORA_PAYMENT'
+                        ? Math.max(0, Number(next.penaltyDueBefore - next.penaltyDueAfter || 0))
+                        : Math.max(0, Number(next.balanceDueBefore - next.balanceDueAfter || 0));
+                    if (Math.round(nextKeyAmt * 100) !== roundedKey) break;
+                    batch.push(next);
+                    j++;
+                }
+
+                if (batch.length > 1) {
+                    // Agrupar en una sola entrada
+                    const periods = batch.map(e => {
+                        const m = e.metadata || {};
+                        const rawPeriod = m.period || '';
+                        return rawPeriod ? formatPeriodLabel(rawPeriod) : '';
+                    }).filter(Boolean);
+                    const first = batch[0];
+                    const last = batch[batch.length - 1];
+                    const totalKeyAmt = roundedKey / 100;
+
+                    grouped.push({
+                        ...first,
+                        balanceDueBefore: first.balanceDueBefore,
+                        balanceDueAfter: last.balanceDueAfter,
+                        penaltyDueBefore: first.penaltyDueBefore,
+                        penaltyDueAfter: last.penaltyDueAfter,
+                        creditBalanceBefore: first.creditBalanceBefore,
+                        creditBalanceAfter: last.creditBalanceAfter,
+                        _grouped: { count: batch.length, periods },
+                        createdAt: sortOrder === 'desc' ? first.createdAt : last.createdAt
+                    });
+                    i = j;
+                } else {
+                    grouped.push(current);
+                    i++;
+                }
+            } else {
+                grouped.push(current);
+                i++;
+            }
+        }
+
+        return grouped;
+    }, [flowData?.ledger, dateFrom, dateTo, sortOrder]);
 
     const payment = flowData?.payment || null;
     const summary = flowData?.summary || null;
@@ -703,7 +837,7 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                         size="small"
                         value={sortOrder}
                         exclusive
-                        onChange={(e, val) => { if (val) setSortOrder(val); }}
+                        onChange={(e, val) => { if (val) { setSortOrder(val); setFlowPage(0); } }}
                     >
                         <ToggleButton value="desc" sx={{ textTransform: 'none', fontSize: '0.75rem', px: 1.5 }}>
                             Más reciente

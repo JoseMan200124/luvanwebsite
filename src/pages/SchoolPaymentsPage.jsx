@@ -187,9 +187,6 @@ const SchoolPaymentsPage = () => {
     // IMPORTANTE: Solo contar usuarios activos (state !== 0)
     // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA
     // El estado INACTIVO es exclusivo del serviceStatus (estado del servicio), no del pago
-    const confirmadoCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'CONFIRMADO')?.count || 0;
-    const pagadoCount = confirmadoCount; // PAGADO == CONFIRMADO (ADELANTADO separado)
-    const moraCount = analysisData?.statusDistribution?.find(s => s.finalStatus === 'MORA')?.count || 0;
     // Usar exclusivamente los totales globales que provee el backend.
     // Si el backend no provee estos totales, mostrar 0 (no caer a conteos locales).
     const serverPaymentTotals = analysisData?.paymentStateTotalsAll ?? null;
@@ -232,6 +229,8 @@ const SchoolPaymentsPage = () => {
     useEffect(() => {
         (async () => {
             setLoading(true);
+            // Clear stale metrics when school changes
+            setMetricsData(null);
             // If the current `school` is missing or does not match the requested `schoolId`, fetch it.
             if (!school || String(school.id) !== String(schoolId)) await fetchSchool();
             // Avoid school-wide mora recalculation on page load. Opening the register modal
@@ -282,8 +281,12 @@ const SchoolPaymentsPage = () => {
 
     // Refetch metrics whenever the selected period changes (or school/cycle resolves).
     useEffect(() => {
-        if (selectedPeriod) fetchMetrics(selectedPeriod);
-    }, [selectedPeriod, fetchMetrics]);
+        if (selectedPeriod && schoolId && currentCicloEscolarId) {
+            fetchMetrics(selectedPeriod);
+        } else {
+            setMetricsData(null);
+        }
+    }, [selectedPeriod, fetchMetrics, schoolId, currentCicloEscolarId]);
 
     // Resolve the accurate "current month" (supports simulated dates) once on mount.
     useEffect(() => {
@@ -3307,7 +3310,7 @@ const SchoolPaymentsPage = () => {
                                                             </Tooltip>
                                                         </Box>
                                                         <Typography variant="h4" sx={{ fontWeight: 700, color: '#4caf50' }}>{formatPercentOrNA(fin?.tasaDePago)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{pagadoCount} de {familiasActivas ?? '—'} con cuota este período</Typography>
+                                                        <Typography variant="caption" color="text.secondary">{fin?.countPagado ?? '—'} de {familiasActivas ?? '—'} con tarifa este período</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
@@ -3315,15 +3318,13 @@ const SchoolPaymentsPage = () => {
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Tasa de Mora</Typography>
                                                             <Tooltip title={
-                                                                "Porcentaje de familias con cuota en el período seleccionado (Activo o Suspendido) que tienen mora generada en ese mes específico. " +
-                                                                "No incluye mora arrastrada de meses anteriores — esa se muestra en 'Mora Pendiente'. " +
-                                                                "La pertenencia a 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                                "Porcentaje de familias con mora en el período seleccionado."
                                                             } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
                                                         </Box>
                                                         <Typography variant="h4" sx={{ fontWeight: 700, color: '#f44336' }}>{formatPercentOrNA(fin?.tasaDeMora)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{moraCount} con mora generada en este período</Typography>
+                                                        <Typography variant="caption" color="text.secondary">{fin?.countMora ?? '—'} de {familiasActivas ?? '—'} con mora este período</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
@@ -3340,23 +3341,6 @@ const SchoolPaymentsPage = () => {
                                                         </Box>
                                                         <Typography variant="h4" sx={{ fontWeight: 700, color: '#2196f3' }}>{formatPercentOrNA(fin?.eficienciaCobro)}</Typography>
                                                         <Typography variant="caption" color="text.secondary">cobrado vs. monto neto facturado</Typography>
-                                                    </Box>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Typography variant="caption" color="text.secondary">Saldo Pendiente del Período</Typography>
-                                                            <Tooltip title={
-                                                                "Monto total de las cuotas del período seleccionado que aún no han sido pagadas por las familias activas. " +
-                                                                "Es la suma del 'amountDue' de cada PaymentPeriod del mes, y representa lo que falta por cobrar " +
-                                                                "de las facturas emitidas en este período específico (excluye mora y cuotas de otros meses). " +
-                                                                "Un valor alto indica muchas cuotas pendientes de pago."
-                                                            } arrow>
-                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                            </Tooltip>
-                                                        </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#ff6f00' }}>{formatMoneyOrNA(fin?.saldoPendientePeriodo)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">cuotas sin pagar de este período</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
@@ -3389,7 +3373,7 @@ const SchoolPaymentsPage = () => {
                                                             </Tooltip>
                                                         </Box>
                                                         <Typography variant="h4" sx={{ fontWeight: 700, color: '#00897b' }}>{formatPercentOrNA(fin?.tasaPuntualidad)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">de los que pagaron, lo hicieron sin mora</Typography>
+                                                        <Typography variant="caption" color="text.secondary">{fin?.countPagadoSinMora ?? '—'} de {fin?.countPagado ?? '—'} pagaron sin entrar en mora este período</Typography>
                                                     </Box>
                                                 </Grid>
                                             </Grid>
@@ -3467,11 +3451,9 @@ const SchoolPaymentsPage = () => {
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Total Pendiente de Cobro</strong></Typography>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Tarifa Pendiente</strong></Typography>
                                                         <Tooltip title={
-                                                            "Suma de todas las cuotas de colegiatura sin pagar acumuladas hasta el cierre del período seleccionado. " +
-                                                            "Incluye todas las familias del ciclo, independientemente de su estado actual, porque el saldo pendiente existe aunque la familia esté pausada o inactiva. " +
-                                                            "No incluye mora."
+                                                            "Suma de todas las cuotas de tarifa sin pagar acumuladas del período seleccionado. "
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3482,9 +3464,7 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Mora Pendiente</strong></Typography>
                                                         <Tooltip title={
-                                                            "Suma de todas las penalidades por mora sin pagar hasta el cierre del período seleccionado. " +
-                                                            "Incluye todas las familias del ciclo porque la mora no desaparece al cambiar de estado. " +
-                                                            "La mora generada específicamente en el mes seleccionado también se refleja en la 'Tasa de Mora'."
+                                                            "Suma de todas las penalidades por mora sin pagar acumuladas del período seleccionado."
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3493,11 +3473,9 @@ const SchoolPaymentsPage = () => {
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Crédito Acumulado</strong></Typography>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Crédito a favor Acumulado</strong></Typography>
                                                         <Tooltip title={
-                                                            "Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado. " +
-                                                            "Incluye familias pausadas o inactivas porque el crédito es un derecho de la familia independientemente de su estado. " +
-                                                            "Se genera por sobrepagos o pagos anticipados y se descuenta automáticamente del próximo cobro."
+                                                            "Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado. "
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3508,10 +3486,8 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Total Descuentos</strong></Typography>
                                                         <Tooltip title={
-                                                            "Suma de descuentos aplicados a las cuotas de colegiatura en el período seleccionado, para familias con cuota activa. " +
-                                                            "Incluye el descuento especial permanente de cada familia más los descuentos extraordinarios manuales del período. " +
-                                                            "Las exoneraciones de mora se reportan por separado en 'Mora Exonerada'. " +
-                                                            "La condición de 'con cuota activa' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                            "Suma de descuentos aplicados a las cuotas de tarifa en el período seleccionado." +
+                                                            "Incluye el descuento especial permanente de cada familia más los descuentos extraordinarios manuales realizados en el período. "
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3522,9 +3498,7 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Mora Exonerada</strong></Typography>
                                                         <Tooltip title={
-                                                            "Mora perdonada o condonada en el período seleccionado, para familias con cuota activa. " +
-                                                            "Se reporta separado de los descuentos de colegiatura porque representa una deuda ya generada que se decidió no cobrar, no una reducción del monto original facturado. " +
-                                                            "La condición de 'con cuota activa' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                            "Mora exonerada en el período seleccionado. "
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
