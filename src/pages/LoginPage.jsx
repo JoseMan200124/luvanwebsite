@@ -78,6 +78,22 @@ const LoginPage = () => {
                 } else if (contexts.length > 1) {
                     navigate('/select-context', { replace: true, state: { nextPath: targetPath, forceChoice: true } });
                 } else {
+                    // No school contexts: attempt corporation fallback (users assigned to a corporation)
+                    try {
+                        const verifyResp = await api.get('/auth/verify');
+                        const corpId = verifyResp.data?.user?.corporationId;
+                        if (corpId) {
+                            // Redirect corporate users to the existing corporations page (filtered by backend)
+                            navigate('/admin/corporaciones', { replace: true });
+                            setSnackbarMessage('¡Inicio de sesión exitoso!');
+                            setSnackbarSeverity('success');
+                            setOpenSnackbar(true);
+                            return;
+                        }
+                    } catch (err) {
+                        // ignore and fall through to original error
+                    }
+
                     throw new Error('Tu usuario no tiene un colegio o ciclo escolar activo asignado. Contacta al administrador.');
                 }
 
