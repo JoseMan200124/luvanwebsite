@@ -28,7 +28,10 @@ import {
     Snackbar,
     Alert,
     useMediaQuery,
-    useTheme
+    useTheme,
+    InputAdornment,
+    Select,
+    MenuItem
 } from '@mui/material';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TablePagination from '@mui/material/TablePagination';
@@ -432,27 +435,37 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     const [autoDebit, setAutoDebit] = useState(!!family.autoDebit || false);
     const [requiresInvoice, setRequiresInvoice] = useState(!!family.requiresInvoice || false);
-    const [discount, setDiscount] = useState(family.specialFee ?? family.discount ?? 0);
-    const [percentDiscount, setPercentDiscount] = useState(() => {
-        try {
-            const pRaw = family.specialFeePercentage ?? null;
-            return (pRaw !== null && typeof pRaw !== 'undefined' && pRaw !== '') ? (Number(pRaw) * 100) : '';
-        } catch (e) {
-            return '';
-        }
-    });
+    const isPercentMode = !!(family.discountIsPercent);
+    const [discountValue, setDiscountValue] = useState(
+        isPercentMode
+            ? (() => {
+                try {
+                    const pRaw = family.specialFeePercentage ?? null;
+                    return (pRaw !== null && typeof pRaw !== 'undefined' && pRaw !== '') ? (Number(pRaw) * 100) : '';
+                } catch (e) {
+                    return '';
+                }
+              })()
+            : (family.specialFee ?? family.discount ?? 0)
+    );
+    const [discountType, setDiscountType] = useState(isPercentMode ? 'percentage' : 'amount');
 
     useEffect(() => {
         setAutoDebit(!!(payment?.User?.FamilyDetail?.autoDebit));
         setRequiresInvoice(!!(payment?.User?.FamilyDetail?.requiresInvoice));
-        setDiscount(payment?.User?.FamilyDetail?.specialFee ?? payment?.User?.FamilyDetail?.discount ?? 0);
-        try {
-            const pRaw = typeof payment?.User?.FamilyDetail?.specialFeePercentage !== 'undefined' ? payment?.User?.FamilyDetail?.specialFeePercentage : null;
-            setPercentDiscount(pRaw !== null && typeof pRaw !== 'undefined' && pRaw !== '' ? (Number(pRaw) * 100) : '');
-        } catch (e) {
-            setPercentDiscount('');
+        const fd = payment?.User?.FamilyDetail || {};
+        const isPct = !!(fd.discountIsPercent);
+        setDiscountType(isPct ? 'percentage' : 'amount');
+        if (isPct) {
+            try {
+                const pRaw = typeof fd.specialFeePercentage !== 'undefined' ? fd.specialFeePercentage : null;
+                setDiscountValue(pRaw !== null && typeof pRaw !== 'undefined' && pRaw !== '' ? (Number(pRaw) * 100) : '');
+            } catch (e) {
+                setDiscountValue('');
+            }
+        } else {
+            setDiscountValue(fd.specialFee ?? fd.discount ?? 0);
         }
-        // note: fullDiscount removed — percent-based discounts used instead
     }, [payment, open]);
 
     // Tab state: 'payments' | 'flow'
@@ -817,13 +830,15 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     };
 
     // compute total after discount (clamp to zero)
-    const parsedDiscount = Number(discount || 0) || 0;
-    const parsedPercent = (() => {
-        const p = percentDiscount;
-        if (p === null || typeof p === 'undefined' || String(p).trim() === '') return null;
-        const n = Number(p);
-        return Number.isFinite(n) ? n : null;
-    })();
+    const parsedDiscount = discountType === 'amount' ? (Number(discountValue || 0) || 0) : 0;
+    const parsedPercent = discountType === 'percentage'
+        ? (() => {
+            const p = discountValue;
+            if (p === null || typeof p === 'undefined' || String(p).trim() === '') return null;
+            const n = Number(p);
+            return Number.isFinite(n) ? n : null;
+          })()
+        : null;
     const percentDiscountAmount = (parsedPercent !== null) ? Math.round(((Number(computedTariff || 0) * parsedPercent) / 100) * 100) / 100 : 0;
     const totalAfterDiscount = (parsedPercent !== null)
         ? Math.max(0, Number(computedTariff || 0) - percentDiscountAmount)
@@ -956,27 +971,46 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
                                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
                                         <Box>
-                                            <Typography variant="caption" color="text.secondary">Descuento (Q)</Typography>
-                                            <TextField label="Q" type="number" size="small" value={discount} onChange={(e) => setDiscount(e.target.value)} sx={{ width: { xs: '100%', sm: 120 } }} disabled={isDeleted} />
+                                            <Typography variant="caption" color="text.secondary">Descuento</Typography>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <TextField
+                                                    size="small"
+                                                    type="number"
+                                                    value={discountValue}
+                                                    onChange={(e) => setDiscountValue(e.target.value)}
+                                                    disabled={isDeleted}
+                                                    sx={{
+                                                        width: 120,
+                                                        '& input[type=number]': { MozAppearance: 'textfield' },
+                                                        '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+                                                    }}
+                                                    InputProps={{
+                                                        startAdornment: (
+                                                            <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                                                                <Select
+                                                                    value={discountType}
+                                                                    onChange={(e) => setDiscountType(e.target.value)}
+                                                                    variant="standard"
+                                                                    disableUnderline
+                                                                    disabled={isDeleted}
+                                                                    sx={{
+                                                                        fontSize: '1rem',
+                                                                        '& .MuiSelect-select': { paddingRight: '15px !important' },
+                                                                    }}
+                                                                >
+                                                                    <MenuItem value="amount">Q</MenuItem>
+                                                                    <MenuItem value="percentage">%</MenuItem>
+                                                                </Select>
+                                                            </InputAdornment>
+                                                        ),
+                                                    }}
+                                                />
+                                                <Button variant="outlined" size="small" onClick={() => {
+                                                    if (isDeleted) return;
+                                                    setOpenDiscountModal(true);
+                                                }} disabled={isDeleted}>Aplicar</Button>
+                                            </Box>
                                         </Box>
-                                        <Box>
-                                            <Typography variant="caption" color="text.secondary">Descuento (%)</Typography>
-                                            <TextField label="%" type="number" size="small" value={percentDiscount} onChange={(e) => setPercentDiscount(e.target.value)} sx={{ width: { xs: '100%', sm: 120 } }} disabled={isDeleted} />
-                                        </Box>
-                                        <Button variant="outlined" size="small" onClick={() => {
-                                            if (isDeleted) return;
-                                            const pctRaw = percentDiscount;
-                                            const pctHas = !(pctRaw === null || pctRaw === '' || typeof pctRaw === 'undefined') && !Number.isNaN(Number(pctRaw)) && Number(pctRaw) !== 0;
-                                            const fixedHas = !(discount === null || discount === '' || typeof discount === 'undefined') && !Number.isNaN(Number(discount)) && Number(discount) !== 0;
-                                            // Validation: only one of the inputs may have a value when opening the apply-discount modal
-                                            if (pctHas && fixedHas) {
-                                                setSnackbar({ open: true, message: 'Solo puede aplicar un único tipo de descuento: monto o porcentaje.', severity: 'error' });
-                                                return;
-                                            }
-
-                                            // Open modal if either value is present or none (modal allows choosing configured amount)
-                                            setOpenDiscountModal(true);
-                                        }} disabled={isDeleted}>APLICAR</Button>
                                     </Box>
                                 </Box>
                             </Box>
@@ -1124,8 +1158,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     onClose={() => setOpenDiscountModal(false)}
                     mode="DISCOUNT"
                     payment={localPayment || payment}
-                    currentDiscount={discount}
-                    currentPercent={percentDiscount}
+                    currentDiscount={discountType === 'amount' ? discountValue : 0}
+                    currentPercent={discountType === 'percentage' ? discountValue : null}
                     onApplied={() => {
                         (async () => {
                             invalidateHistoryCacheForPayment();
