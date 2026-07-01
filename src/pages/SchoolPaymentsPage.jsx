@@ -671,7 +671,16 @@ const SchoolPaymentsPage = () => {
             if (key === 'students') return p.User?.FamilyDetail?.studentsCount || p.studentCount || 0;
             if (key === 'routeType') return (p.User?.FamilyDetail?.routeType || '').toString().toLowerCase();
             if (key === 'lastPayment') return p.lastPaymentDate || p.lastPaidDate || p.lastPayment || '';
-            if (key === 'discount') return Number(p.User?.FamilyDetail?.specialFee ?? p.specialFee ?? 0) || 0;
+            if (key === 'discount') {
+                const fd = p.User?.FamilyDetail || {};
+                const isPercent = !!(fd.discountIsPercent || p.discountIsPercent);
+                const pctRaw = fd.specialFeePercentage ?? p.appliedFamilyDiscountPercent ?? null;
+                if (isPercent && pctRaw !== null && typeof pctRaw !== 'undefined' && !Number.isNaN(Number(pctRaw))) {
+                    const monthlyFee = Number(p.monthlyFee || 0);
+                    return Math.round(monthlyFee * Number(pctRaw) * 100) / 100;
+                }
+                return Number(fd.specialFee ?? p.specialFee ?? 0) || 0;
+            }
             if (key === 'invoice') return !!(p.User?.FamilyDetail?.requiresInvoice || p.requiresInvoice) ? 1 : 0;
             if (key === 'status') return (p.finalStatus || '').toString().toLowerCase();
             if (key === 'serviceStatus') return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
