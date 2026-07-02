@@ -674,18 +674,25 @@ const ActivityLogPage = () => {
         setPayPage(0);
     };
     
-    const COLORS = ['#4CAF50', '#FFC107', '#F44336'];
+    // Colores para segmentos: CONFIRMADO, ADELANTADO, EN_PROCESO, PENDIENTE, MORA
+        const COLORS = ['#2E7D32', '#1976D2', '#2196f3', '#FFC107', '#F44336'];
 
     const [totalPaymentsGlobal, setTotalPaymentsGlobal] = useState(0);
     const [totalPaidCountGlobal, setTotalPaidCountGlobal] = useState(0);
+    // Contadores desglosados
+    const [totalConfirmedCountGlobal, setTotalConfirmedCountGlobal] = useState(0);
+    const [totalAdelantadoCountGlobal, setTotalAdelantadoCountGlobal] = useState(0);
     const [totalMoraCountGlobal, setTotalMoraCountGlobal] = useState(0);
+    const [totalEnProcesoCountGlobal, setTotalEnProcesoCountGlobal] = useState(0);
     const [totalPendingCountGlobal, setTotalPendingCountGlobal] = useState(0);
     const [totalLeftoverGlobal, setTotalLeftoverGlobal] = useState(0);
     const [totalDueGlobal, setTotalDueGlobal] = useState(0);
     const [totalPenaltyGlobal, setTotalPenaltyGlobal] = useState(0);
 
     const statusData = [
-        { name: 'PAGADO', value: totalPaidCountGlobal },
+        { name: 'Pagado', value: totalConfirmedCountGlobal },
+        { name: 'ADELANTADO', value: totalAdelantadoCountGlobal },
+        { name: 'En Proceso', value: totalEnProcesoCountGlobal },
         { name: 'PENDIENTE', value: totalPendingCountGlobal },
         { name: 'MORA', value: totalMoraCountGlobal }
     ];
@@ -703,9 +710,24 @@ const ActivityLogPage = () => {
         try {
             const res = await api.get('/payments/analysis');
             setTotalPaymentsGlobal(res.data.totalPayments || 0);
-            setTotalPaidCountGlobal(
-                res.data.statusDistribution?.find(s => s.finalStatus === 'PAGADO')?.count || 0
-            );
+
+            // Intentamos leer contadores desglosados; si la API sólo devuelve PAGADO, lo tratamos como CONFIRMADO por compatibilidad
+            let confirmedCount = res.data.statusDistribution?.find(s => s.finalStatus === 'CONFIRMADO')?.count || 0;
+            let adelantadoCount = res.data.statusDistribution?.find(s => s.finalStatus === 'ADELANTADO')?.count || 0;
+            const pagadoComposite = res.data.statusDistribution?.find(s => s.finalStatus === 'PAGADO')?.count || 0;
+
+            let totalPaid = confirmedCount;
+            if (totalPaid === 0 && pagadoComposite) {
+                // fallback: asignar todo a CONFIRMADO si sólo existe la clave PAGADO
+                totalPaid = pagadoComposite;
+                if (!confirmedCount && !adelantadoCount) confirmedCount = pagadoComposite;
+            }
+
+            setTotalPaidCountGlobal(totalPaid);
+            setTotalConfirmedCountGlobal(confirmedCount);
+            setTotalAdelantadoCountGlobal(adelantadoCount);
+            const enProcesoCount = res.data.statusDistribution?.find(s => s.finalStatus === 'EN_PROCESO')?.count || 0;
+            setTotalEnProcesoCountGlobal(enProcesoCount);
             setTotalPendingCountGlobal(
                 res.data.statusDistribution?.find(s => s.finalStatus === 'PENDIENTE')?.count || 0
             );
@@ -1732,6 +1754,11 @@ const ActivityLogPage = () => {
                                         </Typography>
                                         <Typography variant="h5" color="success.main">
                                             {totalPaidCountGlobal}
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+                                            <strong>Pagado:</strong> {totalConfirmedCountGlobal} &nbsp;·&nbsp;
+                                            <strong>Adelantado:</strong> {totalAdelantadoCountGlobal} &nbsp;·&nbsp;
+                                            <strong>En Proceso:</strong> {totalEnProcesoCountGlobal}
                                         </Typography>
                                     </Paper>
                                 </Grid2>

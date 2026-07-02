@@ -26,9 +26,10 @@ const PaymentFilters = ({
                 <Select label="Estado de Pago" value={status} onChange={(e) => onStatusChange(e.target.value)}>
                     <MenuItem value="">Todos</MenuItem>
                     <MenuItem value="PAGADO">Pagado</MenuItem>
+                    <MenuItem value="ADELANTADO">Adelantado</MenuItem>
                     <MenuItem value="PENDIENTE">Pendiente</MenuItem>
-                    <MenuItem value="MORA">Mora</MenuItem>
-                    <MenuItem value="ELIMINADO">Eliminado</MenuItem>
+                    <MenuItem value="MORA">En Mora</MenuItem>
+                    <MenuItem value="EN_PROCESO">En Proceso</MenuItem>
                 </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 185 }, width: { xs: '100%', sm: 'auto' } }}>
@@ -39,6 +40,7 @@ const PaymentFilters = ({
                     <MenuItem value="PAUSED">Pausado</MenuItem>
                     <MenuItem value="SUSPENDED">Suspendido</MenuItem>
                     <MenuItem value="INACTIVE">Inactivo</MenuItem>
+                    <MenuItem value="ELIMINADO">Eliminado</MenuItem>
                 </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 185 }, width: { xs: '100%', sm: 'auto' } }}>
@@ -57,9 +59,9 @@ const PaymentFilters = ({
                     sx={{ m: 0, whiteSpace: 'nowrap', '& .MuiFormControlLabel-label': { fontSize: { xs: '0.95rem', sm: '0.82rem' } } }}
                 />
                 <FormControlLabel
-                    control={<Switch size="small" checked={showDeleted} onChange={(e) => onShowDeletedChange(e.target.checked)} disabled={!!status} />}
+                    control={<Switch size="small" checked={showDeleted} onChange={(e) => onShowDeletedChange(e.target.checked)} disabled={serviceStatus === 'INACTIVE'} />}
                     label="Mostrar eliminadas"
-                    disabled={!!status}
+                    disabled={serviceStatus === 'INACTIVE'}
                     sx={{ m: 0, whiteSpace: 'nowrap', '& .MuiFormControlLabel-label': { fontSize: { xs: '0.95rem', sm: '0.82rem' } } }}
                 />
             </Box>
