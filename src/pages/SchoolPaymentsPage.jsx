@@ -205,12 +205,6 @@ const SchoolPaymentsPage = () => {
         return metricsBasis === 'devengado' ? obj.devengado : obj.caja;
     };
     const familiasActivas = fin ? fin.familiasActivas : null;
-    let tendenciaMensual = null;
-    if (fin?.tendencia) {
-        tendenciaMensual = metricsBasis === 'devengado'
-            ? fin.tendencia.mensualDevengado
-            : fin.tendencia.mensualCaja;
-    }
 
     // Contadores de estado del servicio (autoridad: backend)
     const serviceActiveCount = serverServiceTotals?.ACTIVE ?? 0;
@@ -3348,26 +3342,8 @@ const SchoolPaymentsPage = () => {
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
                                                         </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#2196f3' }}>{formatPercentOrNA(fin?.eficienciaCobro)}</Typography>
+                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#2196f3' }}>{formatPercentOrNA(finByBasis(fin?.eficienciaCobro))}</Typography>
                                                         <Typography variant="caption" color="text.secondary">cobrado vs. monto neto facturado</Typography>
-                                                    </Box>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Typography variant="caption" color="text.secondary">Tendencia Mensual</Typography>
-                                                            <Tooltip title={
-                                                                "Variación del ingreso del período seleccionado respecto al mes inmediato anterior. " +
-                                                                "Verde (+) indica más recaudación que el mes pasado; rojo (−) indica menos. " +
-                                                                "Se calcula con la base activa (Caja o Devengado). Muestra N/A si no hay datos del mes anterior con qué comparar."
-                                                            } arrow>
-                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                            </Tooltip>
-                                                        </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: tendenciaMensual === null ? '#9e9e9e' : (Number(tendenciaMensual) >= 0 ? '#4caf50' : '#f44336') }}>
-                                                            {tendenciaMensual === null ? 'N/A' : `${Number(tendenciaMensual) >= 0 ? '+' : ''}${Number(tendenciaMensual).toFixed(1)}%`}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="text.secondary">vs mes anterior</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
@@ -3394,20 +3370,6 @@ const SchoolPaymentsPage = () => {
                                             <Grid container spacing={2}>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Total del Año</strong></Typography>
-                                                        <Tooltip title={
-                                                            "Total de tarifas de colegiatura cobradas en el año del período seleccionado. " +
-                                                            "Incluye pagos de todas las familias del ciclo. " +
-                                                            "Base Caja: suma por fecha en que se recibió el dinero. Base Devengado: suma por el mes al que pertenece cada cuota. " +
-                                                            "No incluye mora ni pagos extraordinarios."
-                                                        } arrow>
-                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                        </Tooltip>
-                                                    </Box>
-                                                    <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoAnio))}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Ingreso del Mes</strong></Typography>
                                                         <Tooltip title={
                                                             "Total de tarifas de colegiatura del período seleccionado. " +
@@ -3419,31 +3381,6 @@ const SchoolPaymentsPage = () => {
                                                         </Tooltip>
                                                     </Box>
                                                     <Typography variant="h6" sx={{ color: '#2196f3', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoMes))}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Promedio Mensual</strong></Typography>
-                                                        <Tooltip title={
-                                                            "Ingreso promedio por mes en lo que va del año: (ingreso acumulado de enero hasta el período seleccionado) ÷ (número de meses transcurridos). " +
-                                                            "Varía según la base Caja o Devengado activa."
-                                                        } arrow>
-                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                        </Tooltip>
-                                                    </Box>
-                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.promedioMensual))}</Typography>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Promedio por Familia</strong></Typography>
-                                                            <Tooltip title={
-                                                                "Ingreso del período seleccionado dividido entre el número de familias con cuota activa (Activo o Suspendido) al cierre del período. " +
-                                                                "Mide cuánto se recaudó en promedio por cada familia que debía pagar ese mes. " +
-                                                                "La clasificación de 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado."
-                                                            } arrow>
-                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                        </Tooltip>
-                                                    </Box>
-                                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.promedioPorFamilia))}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3490,6 +3427,33 @@ const SchoolPaymentsPage = () => {
                                                         </Tooltip>
                                                     </Box>
                                                     <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>{formatMoneyOrNA(fin?.creditoAcumulado)}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Esperado (Bruto)</strong></Typography>
+                                                        <Tooltip title={
+                                                            "Monto total de tarifa que se obtendría si todas las familias pagaran completo en el período seleccionado, " +
+                                                            "SIN considerar descuentos familiares. Se calcula como la suma de tarifas originales (originalAmount) " +
+                                                            "de todos los períodos generados en el mes. Refleja el ingreso máximo potencial de tarifa del período."
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#1565c0', fontWeight: 600 }}>{formatMoneyOrNA(fin?.ingresoEsperadoBruto)}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Esperado (Neto)</strong></Typography>
+                                                        <Tooltip title={
+                                                            "Monto total de tarifa que se obtendría si todas las familias pagaran completo en el período seleccionado, " +
+                                                            "CON descuentos familiares aplicados. Se calcula como la suma de montos netos (netAmount) " +
+                                                            "de todos los períodos generados en el mes. Representa el ingreso esperado real del período " +
+                                                            "después de aplicar los descuentos especiales de cada familia."
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 600 }}>{formatMoneyOrNA(fin?.ingresoEsperadoNeto)}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
