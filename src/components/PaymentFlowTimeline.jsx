@@ -216,18 +216,49 @@ function getOperationDescription(entry) {
                 amt = Number(meta.amountToBalance || meta.overpayment || meta.overpaymentAmount || 0);
             }
             const receipt = meta.receiptNumber || '';
-            const base = `Pago registrado — ${fmt(amt)}`;
-            return receipt ? `${base} (Boleta: ${receipt})` : base;
+            // Añadir información de descuento extraordinario si existe
+            const unusedDisc = Number(meta.unusedExtraordinaryDiscount || 0);
+            const appliedDisc = Number(meta.extraordinaryDiscountAppliedToBalance || 0);
+            const extraDisc = Number(meta.extraordinaryDiscount || 0);
+            // El monto mostrado debe incluir el descuento extraordinario (efectivo + descuento)
+            const displayAmt = unusedDisc > 0.01 ? amt + unusedDisc : amt;
+            let base;
+            if (unusedDisc > 0.01) {
+                base = receipt
+                    ? `Pago registrado — ${fmt(displayAmt)} / Desc.extraordinario no usado: ${fmt(unusedDisc)} (Boleta: ${receipt})`
+                    : `Pago registrado — ${fmt(displayAmt)} / Desc.extraordinario no usado: ${fmt(unusedDisc)}`;
+            } else if (appliedDisc > 0.01) {
+                base = receipt
+                    ? `Pago registrado — ${fmt(displayAmt)} (Desc.extraordinario: ${fmt(appliedDisc)}) (Boleta: ${receipt})`
+                    : `Pago registrado — ${fmt(displayAmt)} (Desc.extraordinario: ${fmt(appliedDisc)})`;
+            } else if (extraDisc > 0.01) {
+                base = receipt
+                    ? `Pago registrado — ${fmt(displayAmt)} (Desc.extraordinario: ${fmt(extraDisc)}) (Boleta: ${receipt})`
+                    : `Pago registrado — ${fmt(displayAmt)} (Desc.extraordinario: ${fmt(extraDisc)})`;
+            } else {
+                base = receipt ? `Pago registrado — ${fmt(displayAmt)} (Boleta: ${receipt})` : `Pago registrado — ${fmt(displayAmt)}`;
+            }
+            return base;
         }
         case 'MORA_PAYMENT': {
             const amt = Math.max(0, Number(entry.penaltyDueBefore - entry.penaltyDueAfter || 0));
             const receipt = meta.receiptNumber || '';
-            const base = `Pago de mora — ${fmt(amt)}`;
+            const discApplied = Number(meta.discountApplied || 0);
+            const paidApplied = Number(meta.paidApplied || 0);
+            let base;
+            if (discApplied > 0.01) {
+                const paidPortion = paidApplied > 0.01 ? paidApplied : Math.max(0, amt - discApplied);
+                base = `Pago de mora — ${fmt(paidPortion)} pagado + ${fmt(discApplied)} desc.extraordinario`;
+                if (receipt) base += ` (Boleta: ${receipt})`;
+            } else {
+                base = `Pago de mora — ${fmt(amt)}`;
+                if (receipt) base += ` (Boleta: ${receipt})`;
+            }
             if (entry._grouped) {
                 const periodsStr = entry._grouped.periods.join(', ');
-                return `${base} (${entry._grouped.count} períodos: ${periodsStr})`;
+                base += ` (${entry._grouped.count} períodos: ${periodsStr})`;
             }
-            return receipt ? `${base} (Boleta: ${receipt})` : base;
+            return base;
         }
         case 'CREDIT_PAYMENT': {
             const amt = Math.max(0, Number(entry.creditBalanceBefore - entry.creditBalanceAfter || 0));
@@ -240,8 +271,18 @@ function getOperationDescription(entry) {
                 ? `Crédito aplicado a ${formatPeriodLabel(meta.period)} — ${fmt(amt)}`
                 : `Uso de crédito disponible — ${fmt(amt)}`;
         }
-        case 'OVERPAYMENT':
-            return `Sobrepago convertido a crédito — ${fmt(Number(meta.overpaymentAmount || meta.overpayment || 0))}`;
+        case 'OVERPAYMENT': {
+            const overpaymentAmt = Number(meta.overpaymentAmount || meta.overpayment || 0);
+            const unusedDisc = Number(meta.unusedExtraordinaryDiscount || 0);
+            const creditToAdd = Number(meta.creditToAdd || 0);
+            if (unusedDisc > 0.01 && overpaymentAmt > 0.01) {
+                return `Sobrepago ${fmt(overpaymentAmt)} + Desc.extraordinario ${fmt(unusedDisc)} convertidos a crédito — ${fmt(creditToAdd || overpaymentAmt + unusedDisc)}`;
+            }
+            if (unusedDisc > 0.01) {
+                return `Descuento extraordinario no usado convertido a crédito — ${fmt(unusedDisc)}`;
+            }
+            return `Sobrepago convertido a crédito — ${fmt(overpaymentAmt)}`;
+        }
         case 'REVERSAL':
             return entry.description || meta.reason || 'Reversión de transacción';
         case 'EXONERATION': {
