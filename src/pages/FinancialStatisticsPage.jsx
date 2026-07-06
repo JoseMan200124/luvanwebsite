@@ -11,14 +11,13 @@ import {
     Snackbar,
     Alert,
     Box,
+    Checkbox,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
-    Checkbox,
+    ListSubheader,
     ListItemText,
-    OutlinedInput,
-    FormControlLabel,
     ToggleButton,
     ToggleButtonGroup,
     TextField,
@@ -29,7 +28,8 @@ import {
     TableRow,
     TableCell,
     TableContainer,
-    Paper
+    Paper,
+    Chip
 } from '@mui/material';
 import { InfoOutlined } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
@@ -59,29 +59,61 @@ const formatPercentOrNA = (value) => (value === null || value === undefined)
     : `${Number(value).toFixed(1)}%`;
 const formatTrend = (value) => {
     if (value === null || value === undefined) return 'N/A';
-    const sign = Number(value) >= 0 ? '+' : '';
-    return `${sign}${Number(value).toFixed(1)}%`;
+    const num = Number(value);
+    // Avoid misleading percentages when denominator is tiny
+    if (num > 500 || num < -99) return '—';
+    const sign = num >= 0 ? '+' : '';
+    return `${sign}${num.toFixed(1)}%`;
 };
 const basisValue = (obj, basis) => (obj && typeof obj === 'object') ? obj[basis] : null;
 
 // Descriptores de métricas reutilizados por la tabla (por colegio) y las tarjetas (global).
-const METRIC_COLUMNS = [
-    { key: 'familiasActivas', label: 'Familias Activas', type: 'int', color: '#1976d2' },
-    { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
-    { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
-    { key: 'tasaPuntualidad', label: 'Puntualidad', type: 'percent', color: '#00897b' },
-    { key: 'eficienciaCobro', label: 'Eficiencia de Cobro', type: 'percent', color: '#2196f3' },
-    { key: 'ingresoTarifa', label: 'Ingreso por Tarifa', type: 'money', basis: true, color: '#4caf50' },
-    { key: 'ingresoPorMora', label: 'Ingreso por Mora', type: 'money', basis: true, color: '#ff9800' },
-    { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
-    { key: 'tendencia', label: 'Tendencia', type: 'trend', basis: true, color: '#607d8b' },
-    { key: 'promedioPorFamilia', label: 'Prom. por Familia', type: 'money', basis: true, color: '#5e35b1' },
-    { key: 'totalDescuentos', label: 'Total Descuentos', type: 'money', color: '#795548' },
-    { key: 'descuentosMoraExonerados', label: 'Mora Exonerada', type: 'money', color: '#607d8b' },
-    { key: 'totalPendiente', label: 'Total Pendiente', type: 'money', color: '#f44336' },
-    { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' },
-    { key: 'creditoAcumulado', label: 'Crédito Acumulado', type: 'money', color: '#9c27b0' }
+// Columnas de métricas agrupadas por categoría visual
+const METRIC_GROUPS = [
+    {
+        label: 'Actividad',
+        columns: [
+            { key: 'familiasActivas', label: 'Familias Activas', type: 'int', color: '#1976d2' },
+            { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
+            { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
+            { key: 'tasaPuntualidad', label: 'Puntualidad', type: 'percent', color: '#00897b' }
+        ]
+    },
+    {
+        label: 'Cobranza',
+        columns: [
+            { key: 'eficienciaCobro', label: 'Eficiencia de Cobro', type: 'percent', basis: true, color: '#2196f3' },
+            { key: 'promedioPorFamilia', label: 'Prom. por Familia', type: 'money', basis: true, color: '#5e35b1' }
+        ]
+    },
+    {
+        label: 'Ingresos',
+        columns: [
+            { key: 'ingresoTarifa', label: 'Ingreso por Tarifa', type: 'money', basis: true, color: '#4caf50' },
+            { key: 'ingresoPorMora', label: 'Ingreso por Mora', type: 'money', basis: true, color: '#ff9800' },
+            { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
+            { key: 'tendencia', label: 'Tendencia', type: 'trend', basis: true, color: '#607d8b' }
+        ]
+    },
+    {
+        label: 'Pendientes',
+        columns: [
+            { key: 'totalPendiente', label: 'Total Pendiente', type: 'money', color: '#f44336' },
+            { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' },
+            { key: 'creditoAcumulado', label: 'Crédito Acumulado', type: 'money', color: '#9c27b0' }
+        ]
+    },
+    {
+        label: 'Descuentos',
+        columns: [
+            { key: 'totalDescuentos', label: 'Total Descuentos', type: 'money', color: '#795548' },
+            { key: 'descuentosMoraExonerados', label: 'Mora Exonerada', type: 'money', color: '#607d8b' }
+        ]
+    }
 ];
+
+// Flat list for global cards and formatMetric
+const METRIC_COLUMNS = METRIC_GROUPS.flatMap(g => g.columns);
 
 const formatMetric = (metrics, col, basis) => {
     if (!metrics) return 'N/A';
@@ -134,12 +166,29 @@ const FinancialStatisticsPage = () => {
     const reportRef = useRef();
 
     const [schools, setSchools] = useState([]);
-    const [allSchoolsSelected, setAllSchoolsSelected] = useState(true);
     const [selectedSchoolIds, setSelectedSchoolIds] = useState([]);
     const [fromMonth, setFromMonth] = useState(() => getCurrentDateSync().clone().subtract(5, 'month').format('YYYY-MM'));
     const [toMonth, setToMonth] = useState(() => getCurrentDateSync().format('YYYY-MM'));
-    const [groupBy, setGroupBy] = useState('school'); // 'school' | 'none'
     const [metricsBasis, setMetricsBasis] = useState('caja'); // 'caja' | 'devengado'
+    const [sortBy, setSortBy] = useState('schoolName');
+    const [sortDir, setSortDir] = useState('asc');
+    const handleSort = (colKey) => {
+        setSortDir((prevDir) => sortBy === colKey ? (prevDir === 'asc' ? 'desc' : 'asc') : 'asc');
+        setSortBy(colKey);
+    };
+    // Helper to extract raw sortable value from a colegio row for a given column key
+    const getSortValue = (colegio, colKey) => {
+        if (colKey === 'schoolName') return (colegio.schoolName || '').toLowerCase();
+        if (colKey === 'cicloEscolarAnio') return colegio.cicloEscolarAnio || 0;
+        const colDef = METRIC_COLUMNS.find(c => c.key === colKey);
+        if (!colDef) return 0;
+        const raw = colegio.metrics?.[colKey];
+        if (colDef.basis) {
+            const val = (raw && typeof raw === 'object') ? raw[metricsBasis] : null;
+            return val === null || val === undefined ? -Infinity : Number(val);
+        }
+        return raw === null || raw === undefined ? -Infinity : Number(raw);
+    };
 
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -147,7 +196,7 @@ const FinancialStatisticsPage = () => {
 
     const fetchSchools = useCallback(async () => {
         try {
-            const res = await api.get('/schools');
+            const res = await api.get('/schools', { params: { allCycles: true } });
             setSchools(res.data.schools || []);
         } catch (e) {
             console.error('fetchSchools error', e);
@@ -158,11 +207,10 @@ const FinancialStatisticsPage = () => {
         setLoading(true);
         setError(null);
         try {
-            const schoolIdsParam = (allSchoolsSelected || selectedSchoolIds.length === 0)
-                ? 'all'
-                : selectedSchoolIds.join(',');
+            const isAll = selectedSchoolIds.length === 0 || selectedSchoolIds.includes('__ALL__');
+            const schoolIdsParam = isAll ? 'all' : selectedSchoolIds.join(',');
             const res = await api.get('/financial-statistics', {
-                params: { schoolIds: schoolIdsParam, from: fromMonth, to: toMonth, groupBy }
+                params: { schoolIds: schoolIdsParam, from: fromMonth, to: toMonth, groupBy: 'school' }
             });
             setResult(res.data || null);
         } catch (e) {
@@ -172,7 +220,7 @@ const FinancialStatisticsPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [allSchoolsSelected, selectedSchoolIds, fromMonth, toMonth, groupBy]);
+    }, [selectedSchoolIds, fromMonth, toMonth]);
 
     useEffect(() => {
         fetchSchools();
@@ -189,9 +237,28 @@ const FinancialStatisticsPage = () => {
         await fetchStatistics();
     }, [fetchStatistics]);
 
+    // Group schools by ciclo escolar for the dropdown
+    const schoolGroups = React.useMemo(() => {
+        const map = {};
+        for (const s of schools) {
+            const year = s?.cicloEscolar?.anio || s?.cicloEscolarId || 0;
+            const label = s?.cicloEscolar?.label || s?.cicloEscolar?.nombre || `Ciclo ${s?.cicloEscolarId || '?'}`;
+            if (!map[year]) map[year] = { label, schools: [] };
+            map[year].schools.push(s);
+        }
+        return Object.entries(map)
+            .sort(([a], [b]) => Number(b) - Number(a))
+            .map(([, group]) => group);
+    }, [schools]);
+
     const handleSchoolSelectChange = (event) => {
         const value = event.target.value;
-        setSelectedSchoolIds(typeof value === 'string' ? value.split(',').map(Number) : value);
+        // If 'Todos' was selected, clear other selections
+        if (value.includes('__ALL__')) {
+            setSelectedSchoolIds(['__ALL__']);
+        } else {
+            setSelectedSchoolIds(value);
+        }
     };
 
     let rangeLabel = '';
@@ -247,21 +314,52 @@ const FinancialStatisticsPage = () => {
     };
 
     const renderSchoolTable = () => {
-        const colegios = result?.colegios || [];
+        const allColegios = result?.colegios || [];
+        // Apply sorting
+        const sorted = [...allColegios].sort((a, b) => {
+            const valA = getSortValue(a, sortBy);
+            const valB = getSortValue(b, sortBy);
+            if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+            // Secondary sort: by name then cycle for stability
+            const nameCmp = (a.schoolName || '').localeCompare(b.schoolName || '');
+            if (nameCmp !== 0) return nameCmp;
+            return (a.cicloEscolarAnio || 0) - (b.cicloEscolarAnio || 0);
+        });
+        // Use all sorted colegios (no inactive filter, total row suffices)
+        const colegios = sorted;
         const totales = result?.totales?.metrics || null;
         const basisLabel = metricsBasis === 'devengado' ? 'Devengado' : 'Caja';
+        const totalCols = METRIC_COLUMNS.length + 2; // + Colegio + Ciclo
+        const sortArrow = (colKey) => {
+            if (sortBy !== colKey) return null;
+            return sortDir === 'asc' ? ' ▲' : ' ▼';
+        };
         return (
             <TableContainer component={Paper} sx={{ boxShadow: 'none' }}>
                 <Table size="small" sx={{ '& td, & th': { whiteSpace: 'nowrap' } }}>
                     <TableHead>
+                        <TableRow sx={{ background: '#e3f2fd' }}>
+                            <TableCell rowSpan={2} sx={{ fontWeight: 700, position: 'sticky', left: 0, background: '#e3f2fd', zIndex: 1, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('schoolName')}>
+                                Colegio{sortArrow('schoolName')}
+                            </TableCell>
+                            <TableCell rowSpan={2} sx={{ fontWeight: 700, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('cicloEscolarAnio')}>
+                                Ciclo{sortArrow('cicloEscolarAnio')}
+                            </TableCell>
+                            {METRIC_GROUPS.map((group) => (
+                                <TableCell key={group.label} colSpan={group.columns.length} align="center" sx={{ fontWeight: 700, borderBottom: '1px solid #bbdefb' }}>
+                                    {group.label}
+                                </TableCell>
+                            ))}
+                        </TableRow>
                         <TableRow sx={{ background: '#f1f5f9' }}>
-                            <TableCell sx={{ fontWeight: 700, position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1 }}>Colegio</TableCell>
                             {METRIC_COLUMNS.map((col) => {
                                 const tooltip = getMetricTooltip(col.key);
+                                const isActiveSort = sortBy === col.key;
                                 return (
-                                    <TableCell key={col.key} align="right" sx={{ fontWeight: 700 }}>
+                                    <TableCell key={col.key} align="right" sx={{ fontWeight: 700, cursor: 'pointer' }} onClick={() => handleSort(col.key)}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-                                            <span>{col.label}{col.basis ? ` (${basisLabel})` : ''}</span>
+                                            <span>{col.label}{col.basis ? ` (${basisLabel})` : ''}{isActiveSort ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>
                                             {tooltip ? (
                                                 <Tooltip title={tooltip} arrow>
                                                     <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
@@ -276,14 +374,21 @@ const FinancialStatisticsPage = () => {
                     <TableBody>
                         {colegios.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={METRIC_COLUMNS.length + 1} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                                <TableCell colSpan={totalCols} align="center" sx={{ py: 3, color: 'text.secondary' }}>
                                     No hay colegios para el filtro seleccionado.
                                 </TableCell>
                             </TableRow>
                         ) : colegios.map((colegio) => (
-                            <TableRow key={colegio.schoolId} hover>
+                            <TableRow key={`${colegio.schoolId}-${colegio.cicloEscolarId || 'nc'}`} hover>
                                 <TableCell sx={{ fontWeight: 600, position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>
                                     {colegio.schoolName}
+                                </TableCell>
+                                <TableCell>
+                                    {colegio.cicloEscolarAnio ? (
+                                        <Chip label={String(colegio.cicloEscolarAnio)} size="small" variant="outlined" color="primary" />
+                                    ) : (
+                                        <Typography variant="caption" color="text.secondary">—</Typography>
+                                    )}
                                 </TableCell>
                                 {METRIC_COLUMNS.map((col) => {
                                     const text = formatMetric(colegio.metrics, col, metricsBasis);
@@ -300,6 +405,7 @@ const FinancialStatisticsPage = () => {
                         {totales && colegios.length > 0 && (
                             <TableRow sx={{ background: '#eef2ff' }}>
                                 <TableCell sx={{ fontWeight: 800, position: 'sticky', left: 0, background: '#eef2ff', zIndex: 1 }}>TOTAL</TableCell>
+                                <TableCell sx={{ fontWeight: 800 }}>—</TableCell>
                                 {METRIC_COLUMNS.map((col) => (
                                     <TableCell key={col.key} align="right" sx={{ fontWeight: 800 }}>
                                         {formatMetric(totales, col, metricsBasis)}
@@ -313,37 +419,29 @@ const FinancialStatisticsPage = () => {
         );
     };
 
-    const renderGlobalCards = () => {
-        const metrics = result?.metrics || null;
-        const count = result?.schoolIds?.length || 0;
-        const basisLabel = metricsBasis === 'devengado' ? 'Devengado' : 'Caja';
+    const renderKPICards = () => {
+        const metrics = result?.totales?.metrics || null;
+        if (!metrics) return null;
+        const kpis = [
+            { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
+            { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
+            { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
+            { key: 'familiasActivas', label: 'Familias Activas', type: 'int', color: '#1976d2' },
+            { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' }
+        ];
         return (
-            <Box>
-                <Typography variant="subtitle1" sx={{ mb: 2, color: 'text.secondary' }}>
-                    Totales globales de {count} colegio{count === 1 ? '' : 's'}{rangeLabel ? ` — ${rangeLabel}` : ''}
-                </Typography>
-                <Grid container spacing={2}>
-                    {METRIC_COLUMNS.map((col) => (
-                        <Grid item xs={12} sm={6} md={3} key={col.key}>
-                            <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', height: '100%' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {col.label}{col.basis ? ` (${basisLabel})` : ''}
-                                    </Typography>
-                                    {getMetricTooltip(col.key) ? (
-                                        <Tooltip title={getMetricTooltip(col.key)} arrow>
-                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                        </Tooltip>
-                                    ) : null}
-                                </Box>
-                                <Typography variant="h5" sx={{ fontWeight: 700, color: col.color }}>
-                                    {formatMetric(metrics, col, metricsBasis)}
-                                </Typography>
-                            </Box>
-                        </Grid>
-                    ))}
-                </Grid>
-            </Box>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+                {kpis.map((kpi) => (
+                    <Grid item xs={6} sm={4} md key={kpi.key}>
+                        <Card sx={{ p: 2, textAlign: 'center', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                            <Typography variant="caption" color="text.secondary">{kpi.label}</Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 800, color: kpi.color }}>
+                                {formatMetric(metrics, kpi, metricsBasis)}
+                            </Typography>
+                        </Card>
+                    </Grid>
+                ))}
+            </Grid>
         );
     };
 
@@ -354,10 +452,8 @@ const FinancialStatisticsPage = () => {
                 No hay datos para mostrar con los filtros seleccionados.
             </Typography>
         );
-    } else if (groupBy === 'school') {
-        reportContent = renderSchoolTable();
     } else {
-        reportContent = renderGlobalCards();
+        reportContent = renderSchoolTable();
     }
 
     return (
@@ -372,41 +468,44 @@ const FinancialStatisticsPage = () => {
             {/* Filtros */}
             <Card sx={{ mb: 2 }}>
                 <CardContent>
-                    <Grid container spacing={2} alignItems="flex-start">
-                        <Grid item xs={12} md={4}>
-                            <FormControlLabel
-                                control={(
-                                    <Checkbox
-                                        checked={allSchoolsSelected}
-                                        onChange={(e) => setAllSchoolsSelected(e.target.checked)}
-                                    />
-                                )}
-                                label="Todos los colegios"
-                            />
-                            <FormControl fullWidth size="small" disabled={allSchoolsSelected} sx={{ mt: 1 }}>
-                                <InputLabel id="schools-multiselect-label">Colegios</InputLabel>
+                    <Grid container spacing={2} alignItems="flex-end">
+                        <Grid item xs={12} sm={6} md={3}>
+                            <FormControl fullWidth size="small">
+                                <InputLabel id="school-select-label">Colegio</InputLabel>
                                 <Select
-                                    labelId="schools-multiselect-label"
+                                    labelId="school-select-label"
                                     multiple
                                     value={selectedSchoolIds}
+                                    label="Colegio"
                                     onChange={handleSchoolSelectChange}
-                                    input={<OutlinedInput label="Colegios" />}
-                                    renderValue={(selected) => schools
-                                        .filter((s) => selected.includes(s.id))
-                                        .map((s) => s.name)
-                                        .join(', ')}
+                                    renderValue={(selected) => {
+                                        if (selected.includes('__ALL__') || selected.length === 0) return 'Todos los colegios';
+                                        return selected.map(id => {
+                                            const s = schools.find(sch => String(sch.id) === id);
+                                            return s ? s.name : id;
+                                        }).join(', ');
+                                    }}
                                 >
-                                    {schools.map((school) => (
-                                        <MenuItem key={school.id} value={school.id}>
-                                            <Checkbox checked={selectedSchoolIds.includes(school.id)} />
-                                            <ListItemText primary={school.name} />
-                                        </MenuItem>
-                                    ))}
+                                    <MenuItem value="__ALL__">
+                                        <Checkbox checked={selectedSchoolIds.includes('__ALL__')} size="small" />
+                                        <ListItemText primary="Todos los colegios" />
+                                    </MenuItem>
+                                    {schoolGroups.map((group) => [
+                                        <ListSubheader key={group.label} sx={{ fontWeight: 700, color: '#1976d2', lineHeight: '32px' }}>
+                                            {group.label}
+                                        </ListSubheader>,
+                                        ...group.schools.map((school) => (
+                                            <MenuItem key={school.id} value={String(school.id)} sx={{ pl: 4 }}>
+                                                <Checkbox checked={selectedSchoolIds.includes(String(school.id))} size="small" />
+                                                <ListItemText primary={school.name} />
+                                            </MenuItem>
+                                        ))
+                                    ])}
                                 </Select>
                             </FormControl>
                         </Grid>
 
-                        <Grid item xs={6} md={2}>
+                        <Grid item xs={6} sm={3} md={2}>
                             <TextField
                                 fullWidth
                                 size="small"
@@ -417,7 +516,7 @@ const FinancialStatisticsPage = () => {
                                 slotProps={{ inputLabel: { shrink: true } }}
                             />
                         </Grid>
-                        <Grid item xs={6} md={2}>
+                        <Grid item xs={6} sm={3} md={2}>
                             <TextField
                                 fullWidth
                                 size="small"
@@ -429,44 +528,31 @@ const FinancialStatisticsPage = () => {
                             />
                         </Grid>
 
-                        <Grid item xs={12} md={4}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                <ToggleButtonGroup
-                                    size="small"
-                                    exclusive
-                                    value={groupBy}
-                                    onChange={(e, v) => { if (v) setGroupBy(v); }}
-                                >
-                                    <ToggleButton value="school">Ver por colegio</ToggleButton>
-                                    <ToggleButton value="none">Ver totales globales</ToggleButton>
-                                </ToggleButtonGroup>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    <Typography variant="caption" color="text.secondary">Base</Typography>
-                                    <Tooltip title="Caja = dinero efectivamente cobrado (por fecha de pago). Devengado = lo que correspondía facturar en el período." arrow>
-                                        <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                    </Tooltip>
-                                    <ToggleButtonGroup
-                                        size="small"
-                                        exclusive
-                                        value={metricsBasis}
-                                        onChange={(e, v) => { if (v) setMetricsBasis(v); }}
-                                    >
-                                        <ToggleButton value="caja">Caja</ToggleButton>
-                                        <ToggleButton value="devengado">Devengado</ToggleButton>
-                                    </ToggleButtonGroup>
-                                </Box>
-                            </Box>
+                        <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', justifyContent: { md: 'flex-end' }, alignItems: 'center', gap: 1 }}>
+                            <Typography variant="caption" color="text.secondary">Base</Typography>
+                            <Tooltip title="Caja = dinero efectivamente cobrado (por fecha de pago). Devengado = lo que correspondía facturar en el período." arrow>
+                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                            </Tooltip>
+                            <ToggleButtonGroup
+                                size="small"
+                                exclusive
+                                value={metricsBasis}
+                                onChange={(e, v) => { if (v) setMetricsBasis(v); }}
+                            >
+                                <ToggleButton value="caja">Caja</ToggleButton>
+                                <ToggleButton value="devengado">Devengado</ToggleButton>
+                            </ToggleButtonGroup>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6} md={2} sx={{ display: 'flex', gap: 1 }}>
+                            <Button variant="contained" color="primary" onClick={fetchStatistics} disabled={loading}>
+                                Aplicar filtros
+                            </Button>
+                            <Button variant="outlined" color="primary" onClick={generatePDF} disabled={loading || !result}>
+                                PDF
+                            </Button>
                         </Grid>
                     </Grid>
-
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
-                        <Button variant="contained" color="primary" onClick={fetchStatistics} disabled={loading}>
-                            Aplicar filtros
-                        </Button>
-                        <Button variant="outlined" color="primary" onClick={generatePDF} disabled={loading || !result}>
-                            Generar PDF
-                        </Button>
-                    </Box>
                 </CardContent>
             </Card>
 
@@ -476,8 +562,9 @@ const FinancialStatisticsPage = () => {
                 </div>
             ) : (
                 <div ref={reportRef} style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
+                    {renderKPICards()}
                     <Typography variant="h6" gutterBottom>
-                        {groupBy === 'school' ? 'Detalle por colegio' : 'Totales globales'}
+                        Detalle por colegio
                         {rangeLabel ? ` · ${rangeLabel}` : ''}
                     </Typography>
                     {reportContent}
