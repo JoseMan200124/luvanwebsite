@@ -3303,11 +3303,14 @@ const SchoolPaymentsPage = () => {
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Tasa de Pago</Typography>
                                                             <Tooltip title={
-                                                                "Porcentaje de familias con cuota generada en el período seleccionado que la pagaron por completo. " +
-                                                                "Solo se cuentan familias con estado Activo o Suspendido, porque son las únicas que reciben facturación ese mes. " +
-                                                                "Por eso este número puede ser menor al total de familias registradas en el colegio: " +
-                                                                "las que están Pausadas o Inactivas no tienen cuota ese mes y no entran en el cálculo. " +
-                                                                "La condición de 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado."
+                                                                <Box>
+                                                                    <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                        {"Porcentaje de familias con cuota generada en el período seleccionado que la pagaron por completo."}
+                                                                    </Box>
+                                                                    <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                        {"Solo se cuentan las familias que tienen una cuota facturada en ese período, independientemente de su estado de servicio. Por eso este número puede ser menor al total de familias registradas en el colegio: las que no tienen tarifa asignada o no se les generó cuota ese mes no entran en el cálculo."}
+                                                                    </Box>
+                                                                </Box>
                                                             } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
@@ -3321,7 +3324,14 @@ const SchoolPaymentsPage = () => {
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Tasa de Mora</Typography>
                                                             <Tooltip title={
-                                                                "Porcentaje de familias con mora en el período seleccionado."
+                                                                <Box>
+                                                                    <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                        {"Porcentaje de familias con cuota generada en el período seleccionado que tienen mora sin pagar."}
+                                                                    </Box>
+                                                                    <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                        {"Se considera en mora cuando el período tiene una penalidad pendiente (parcial o total). Solo se cuentan las familias que tienen una cuota facturada en ese período."}
+                                                                    </Box>
+                                                                </Box>
                                                             } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
@@ -3335,9 +3345,14 @@ const SchoolPaymentsPage = () => {
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Eficiencia de Cobro</Typography>
                                                             <Tooltip title={
-                                                                "Porcentaje del monto neto facturado en el período que ya fue cobrado. Fórmula: (cobrado ÷ monto neto facturado) × 100. " +
-                                                                "El monto neto ya tiene descontados los descuentos especiales de cada familia. " +
-                                                                "Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar."
+                                                                <Box>
+                                                                    <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                        {"Porcentaje del monto neto facturado en el período que ya fue cobrado. Fórmula: (cobrado ÷ monto neto facturado) × 100."}
+                                                                    </Box>
+                                                                    <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                        {"El monto neto ya tiene descontados los descuentos especiales de cada familia. Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar."}
+                                                                    </Box>
+                                                                </Box>
                                                             } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
@@ -3351,8 +3366,14 @@ const SchoolPaymentsPage = () => {
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Typography variant="caption" color="text.secondary">Tasa de Puntualidad</Typography>
                                                             <Tooltip title={
-                                                                "De las familias que completaron su pago en el período seleccionado, qué porcentaje lo hizo antes o en la fecha límite de pago (sin generar mora). " +
-                                                                "Ejemplo: si 30 familias pagaron y 25 lo hicieron a tiempo, la tasa es 83.3%. Una tasa alta indica disciplina de pago en el colegio."
+                                                                <Box>
+                                                                    <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                        {"De las familias que completaron su pago en el período seleccionado, qué porcentaje lo hizo antes o en la fecha límite de pago (sin generar mora)."}
+                                                                    </Box>
+                                                                    <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                        {"Ejemplo: si 30 familias pagaron y 25 lo hicieron a tiempo, la tasa es 83.3%. Una tasa alta indica disciplina de pago en el colegio."}
+                                                                    </Box>
+                                                                </Box>
                                                             } arrow>
                                                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                             </Tooltip>
@@ -3372,10 +3393,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Ingreso del Mes</strong></Typography>
                                                         <Tooltip title={
-                                                            "Total de tarifas de colegiatura del período seleccionado. " +
-                                                            "Incluye pagos de todas las familias del ciclo. " +
-                                                            "Base Caja: pagos recibidos en este mes calendario. " +
-                                                            "Base Devengado: lo cobrado de la cuota de este mes, sin importar cuándo se recibió. No incluye mora ni pagos extraordinarios."
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Total de tarifas de colegiatura del período seleccionado. Incluye pagos de todas las familias del ciclo."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Base Caja: pagos recibidos en este mes calendario. Base Devengado: lo cobrado de la cuota de este mes, sin importar cuándo se recibió. No incluye mora ni pagos extraordinarios."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3386,9 +3411,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Ingreso por Mora</strong></Typography>
                                                         <Tooltip title={
-                                                            "Total cobrado por concepto de mora en el período seleccionado. Incluye pagos de todas las familias del ciclo. " +
-                                                            "Base Caja: pagos de mora recibidos en este mes. " +
-                                                            "Base Devengado: mora cobrada que pertenece a este período (distribuida desde el mes con mora más antiguo)."
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Total cobrado por concepto de mora en el período seleccionado. Incluye pagos de todas las familias del ciclo."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Base Caja: pagos de mora recibidos en este mes. Base Devengado: mora cobrada que pertenece a este período (distribuida desde el mes con mora más antiguo)."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3399,7 +3429,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Tarifa Pendiente</strong></Typography>
                                                         <Tooltip title={
-                                                            "Suma de todas las cuotas de tarifa sin pagar acumuladas del período seleccionado. "
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Suma de todas las cuotas de tarifa sin pagar de las familias que tienen un período facturado en el mes seleccionado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Refleja cuánto falta por pagar de las cuotas de ese período específico, sin incluir mora."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3410,7 +3447,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Mora Pendiente</strong></Typography>
                                                         <Tooltip title={
-                                                            "Suma de todas las penalidades por mora sin pagar acumuladas del período seleccionado."
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Suma de todas las penalidades por mora sin pagar de las familias que tienen un período facturado en el mes seleccionado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Corresponde a la mora generada específicamente en ese período, no incluye mora de meses anteriores."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3421,7 +3465,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Crédito a favor Acumulado</strong></Typography>
                                                         <Tooltip title={
-                                                            "Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado. "
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Se genera cuando una familia paga un monto mayor al de su tarifa del mes. Ese excedente queda como crédito disponible que se aplica automáticamente a la tarifa del próximo período al generar la facturación mensual."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3432,9 +3483,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Ingreso Esperado (Bruto)</strong></Typography>
                                                         <Tooltip title={
-                                                            "Monto total de tarifa que se obtendría si todas las familias pagaran completo en el período seleccionado, " +
-                                                            "SIN considerar descuentos familiares. Se calcula como la suma de tarifas originales (originalAmount) " +
-                                                            "de todos los períodos generados en el mes. Refleja el ingreso máximo potencial de tarifa del período."
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Monto total de tarifa que se obtendría si todas las familias pagaran completo en el período seleccionado, SIN considerar descuentos familiares."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Se calcula como la suma de tarifas originales (originalAmount) de todos los períodos generados en el mes. Refleja el ingreso máximo potencial de tarifa del período."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3445,10 +3501,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Ingreso Esperado (Neto)</strong></Typography>
                                                         <Tooltip title={
-                                                            "Monto total de tarifa que se obtendría si todas las familias pagaran completo en el período seleccionado, " +
-                                                            "CON descuentos familiares aplicados. Se calcula como la suma de montos netos (netAmount) " +
-                                                            "de todos los períodos generados en el mes. Representa el ingreso esperado real del período " +
-                                                            "después de aplicar los descuentos especiales de cada familia."
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Monto total de tarifa que se obtendría si todas las familias pagaran completo en el período seleccionado, CON descuentos familiares aplicados."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Se calcula como la suma de montos netos (netAmount) de todos los períodos generados en el mes. Representa el ingreso esperado real del período después de aplicar los descuentos especiales de cada familia."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3459,8 +3519,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Total Descuentos</strong></Typography>
                                                         <Tooltip title={
-                                                            "Suma de descuentos aplicados a las cuotas de tarifa en el período seleccionado." +
-                                                            "Incluye el descuento especial permanente de cada familia más los descuentos extraordinarios manuales realizados en el período. "
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Suma de descuentos aplicados a las cuotas de tarifa en el período seleccionado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Incluye el descuento especial permanente de cada familia más los descuentos extraordinarios manuales realizados en el período."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
@@ -3471,7 +3537,14 @@ const SchoolPaymentsPage = () => {
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Mora Exonerada</strong></Typography>
                                                         <Tooltip title={
-                                                            "Mora exonerada en el período seleccionado. "
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Monto total de mora que fue exonerada o descontada en el período seleccionado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Corresponde a descuentos de penalidad aplicados a las cuotas de las familias, ya sea por exoneraciones parciales o totales."}
+                                                                </Box>
+                                                            </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>

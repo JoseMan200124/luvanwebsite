@@ -125,41 +125,80 @@ const formatMetric = (metrics, col, basis) => {
     return formatMoneyOrNA(raw);
 };
 
-// Tooltip text helper por métrica (explica qué mide y alcance/base cuando aplica)
+// Tooltip text helper por métrica — devuelve JSX con descripción principal + secundaria
 const getMetricTooltip = (key) => {
+    let primary, secondary;
     switch (key) {
         case 'tasaDePago':
-            return "Porcentaje de familias que completaron el pago de su cuota en el período seleccionado. El denominador solo incluye familias con estado Activo o Suspendido (las que están usando el servicio ese mes). Las familias Pausadas o Inactivas no tienen cuota y no entran en el cálculo. La condición de 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado.";
+            primary = "Porcentaje de familias con cuota generada en el período seleccionado que la pagaron por completo.";
+            secondary = "Solo se cuentan las familias que tienen una cuota facturada en ese período. Por eso este número puede ser menor al total de familias registradas en el colegio: las que no tienen tarifa asignada o no se les generó cuota ese mes no entran en el cálculo.";
+            break;
         case 'tasaDeMora':
-            return "Porcentaje de familias con cuota en el período seleccionado (Activo o Suspendido) que tienen mora generada en ese mes específico. No incluye mora arrastrada de meses anteriores — esa se muestra en 'Mora Pendiente'. La pertenencia a 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado.";
+            primary = "Porcentaje de familias con cuota generada en el período seleccionado que tienen mora sin pagar.";
+            secondary = "Se considera en mora cuando el período tiene una penalidad pendiente (parcial o total). No incluye mora arrastrada de meses anteriores. Solo se cuentan las familias que tienen una cuota facturada en ese período.";
+            break;
         case 'eficienciaCobro':
-            return "Porcentaje del monto facturado en el período que ya fue cobrado. Fórmula: (monto cobrado ÷ monto neto facturado) × 100. El monto neto ya tiene descontados los descuentos especiales de cada familia.";
+            primary = "Porcentaje del monto neto facturado en el período que ya fue cobrado. Fórmula: (cobrado ÷ monto neto facturado) × 100.";
+            secondary = "El monto neto ya tiene descontados los descuentos especiales de cada familia. Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar.";
+            break;
         case 'tendencia':
-            return "Variación porcentual del ingreso del período seleccionado respecto al mes inmediato anterior. Verde (+) = más recaudado; rojo (−) = menos. Calculada con la base activa (Caja o Devengado).";
+            primary = "Variación porcentual del ingreso del período seleccionado respecto al mes inmediato anterior.";
+            secondary = "Verde (+) = más recaudado; rojo (−) = menos. Calculada con la base activa (Caja o Devengado).";
+            break;
         case 'tasaPuntualidad':
-            return "De las familias que completaron su pago en el período seleccionado, qué porcentaje lo hizo antes o exactamente en la fecha límite de pago (sin generar mora).";
+            primary = "De las familias que completaron su pago en el período seleccionado, qué porcentaje lo hizo antes o en la fecha límite de pago (sin generar mora).";
+            secondary = "Ejemplo: si 30 familias pagaron y 25 lo hicieron a tiempo, la tasa es 83.3%. Una tasa alta indica disciplina de pago en el colegio.";
+            break;
         case 'ingresoTarifa':
         case 'ingresoTotal':
-            return "Total de tarifas de colegiatura cobradas en el rango seleccionado. Base Caja: se agrupa por fecha de recepción del pago. Base Devengado: se agrupa por el mes al que corresponde la cuota. No incluye pagos extraordinarios.";
+            primary = "Total de tarifas de colegiatura cobradas en el rango seleccionado.";
+            secondary = "Base Caja: se agrupa por fecha de recepción del pago. Base Devengado: se agrupa por el mes al que corresponde la cuota. No incluye pagos extraordinarios.";
+            break;
         case 'ingresoPorMora':
-            return "Total cobrado por concepto de mora en el período seleccionado. Base Caja: pagos de mora recibidos en este mes. Base Devengado: mora asignada al período correspondiente.";
+            primary = "Total cobrado por concepto de mora en el período seleccionado.";
+            secondary = "Base Caja: pagos de mora recibidos en este mes. Base Devengado: mora asignada al período correspondiente.";
+            break;
         case 'promedioMensual':
-            return "Ingreso promedio mensual en lo que va del año (acumulado ÷ meses transcurridos). Varía según la base Caja/Devengado.";
+            primary = "Ingreso promedio mensual en lo que va del año (acumulado ÷ meses transcurridos).";
+            secondary = "Varía según la base Caja/Devengado.";
+            break;
         case 'promedioPorFamilia':
-            return "Ingreso del período seleccionado dividido entre el número de familias activas (Activo o Suspendido) al cierre del período. La clasificación de 'Activo'/'Suspendido' se evalúa según el estado que tenían al cierre del período seleccionado.";
+            primary = "Ingreso del período seleccionado dividido entre el número de familias con cuota facturada en ese período.";
+            secondary = "Refleja el ingreso promedio por familia. Varía según la base Caja/Devengado.";
+            break;
         case 'totalPendiente':
-            return "Suma de cuotas de colegiatura sin pagar acumuladas hasta el cierre del período seleccionado. Incluye todas las familias del ciclo, independientemente de su estado actual. No incluye mora (ver 'Mora Pendiente').";
+            primary = "Suma de cuotas de colegiatura sin pagar de las familias que tienen un período facturado en el mes seleccionado.";
+            secondary = "No incluye mora (ver Mora Pendiente). Refleja cuánto falta por pagar de las cuotas de ese período específico.";
+            break;
         case 'moraPendiente':
-            return "Suma total de penalidades por mora sin pagar hasta el cierre del período seleccionado. Incluye todas las familias del ciclo porque la mora no desaparece al cambiar de estado.";
+            primary = "Suma total de penalidades por mora sin pagar de las familias que tienen un período facturado en el mes seleccionado.";
+            secondary = "Corresponde a la mora generada específicamente en ese período. No incluye mora arrastrada de meses anteriores.";
+            break;
         case 'creditoAcumulado':
-            return "Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado. Incluye familias pausadas o inactivas porque el crédito es un derecho de la familia independientemente de su estado.";
+            primary = "Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado.";
+            secondary = "Se genera cuando una familia paga un monto mayor al de su tarifa del mes. Ese excedente queda como crédito disponible que se aplica automáticamente a la tarifa del próximo período.";
+            break;
         case 'totalDescuentos':
-            return "Suma de descuentos aplicados a las cuotas en el período seleccionado para familias con cuota activa. Incluye descuentos permanentes y extraordinarios. La condición de 'con cuota activa' se evalúa según el estado que tenían al cierre del período seleccionado. No incluye exoneraciones de mora.";
+            primary = "Suma de descuentos aplicados a las cuotas de tarifa en el período seleccionado.";
+            secondary = "Incluye el descuento especial permanente de cada familia más los descuentos extraordinarios manuales realizados en el período. No incluye exoneraciones de mora.";
+            break;
         case 'descuentosMoraExonerados':
-            return "Mora perdonada o condonada en el período seleccionado; representa deuda generada que se decidió no cobrar. Se reporta para familias con cuota activa y la condición se evalúa según el estado que tenían al cierre del período seleccionado.";
+            primary = "Monto total de mora que fue exonerada o descontada en el período seleccionado.";
+            secondary = "Corresponde a descuentos de penalidad aplicados a las cuotas de las familias, ya sea por exoneraciones parciales o totales.";
+            break;
         default:
             return '';
     }
+    return (
+        <Box>
+            <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                {primary}
+            </Box>
+            <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                {secondary}
+            </Box>
+        </Box>
+    );
 };
 
 const FinancialStatisticsPage = () => {
@@ -530,7 +569,11 @@ const FinancialStatisticsPage = () => {
 
                         <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', justifyContent: { md: 'flex-end' }, alignItems: 'center', gap: 1 }}>
                             <Typography variant="caption" color="text.secondary">Base</Typography>
-                            <Tooltip title="Caja = dinero efectivamente cobrado (por fecha de pago). Devengado = lo que correspondía facturar en el período." arrow>
+                            <Tooltip title={
+                                "Caja: agrupa los pagos por la fecha en que se recibió el dinero, sin importar a qué mes pertenece la cuota. " +
+                                "Devengado: agrupa los pagos por el mes al que corresponde la cuota, sin importar cuándo se recibió el dinero. " +
+                                "Ejemplo: una cuota de marzo pagada el 5 de abril aparece en abril en base Caja, y en marzo en base Devengado."
+                            } arrow>
                                 <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                             </Tooltip>
                             <ToggleButtonGroup
