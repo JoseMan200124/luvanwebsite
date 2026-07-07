@@ -163,8 +163,8 @@ const SchoolBusesPage = () => {
                 }
             });
             setRouteBusAssignments(assignments);
-            setRoutePilotAssignments(routePilots);
-            setRouteMonitorAssignments(routeMonitors);
+            setRoutePilotAssignments(prev => ({ ...prev, ...routePilots }));
+            setRouteMonitorAssignments(prev => ({ ...prev, ...routeMonitors }));
         } catch (err) {
             console.error('Error fetching buses:', err);
             setSnackbar({ open: true, message: 'Error al obtener buses', severity: 'error' });
