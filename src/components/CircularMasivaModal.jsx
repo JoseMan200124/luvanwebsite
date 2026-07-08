@@ -964,7 +964,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                             <Button variant="outlined" component="label" startIcon={<FileUpload />} size="small">
                                 Seleccionar Archivo
-                                <input type="file" hidden onChange={handleFileChange} />
+                                <input type="file" hidden accept="application/pdf,image/*" onChange={handleFileChange} />
                             </Button>
                             {file && <Typography variant="body2">{file.name}</Typography>}
                         </Box>
