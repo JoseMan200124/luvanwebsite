@@ -187,6 +187,11 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     const [refreshing, setRefreshing] = useState(false);
     const [appliedResult, setAppliedResult] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info', action: null });
+    const [applyLedger, setApplyLedger] = useState(true);
+    const [ledgerKeep, setLedgerKeep] = useState({});
+    const [ledgerEditData, setLedgerEditData] = useState({});
+    const [ledgerEditDialogIndex, setLedgerEditDialogIndex] = useState(null);
+    const [ledgerEditDialogData, setLedgerEditDialogData] = useState({});
 
     // Boletas
     const [receiptsOpen, setReceiptsOpen] = useState(false);
@@ -210,6 +215,11 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         setManualDeleteTransactionIds({});
         setManualTxForm({ type: 'TARIFA', date: '', amount: '', receiptNumber: '', extraordinaryDiscount: '', notes: '' });
         setAppliedResult(null);
+        setApplyLedger(true);
+        setLedgerKeep({});
+        setLedgerEditData({});
+        setLedgerEditDialogIndex(null);
+        setLedgerEditDialogData({});
         setTab(0);
         const init = {};
         (payment?.anomalies || []).forEach(a => {
@@ -521,6 +531,21 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 return cleaned;
             }).filter(p => Object.keys(p).length > 1);
 
+            // Construir manualLedgerEntries: solo las entradas marcadas como keep,
+            // aplicando ediciones donde existan
+            const hasLedgerDecisions = Object.keys(ledgerKeep).length > 0 || Object.keys(ledgerEditData).length > 0;
+            let manualLedgerEntries;
+            if (hasLedgerDecisions) {
+                manualLedgerEntries = [];
+                ledgerAfter.forEach((l, i) => {
+                    // Por defecto se conserva (si no está en ledgerKeep o está como true)
+                    const keep = ledgerKeep[i] !== false;
+                    if (!keep) return; // saltar entradas marcadas para eliminar
+                    const edit = ledgerEditData[i];
+                    manualLedgerEntries.push(edit ? { ...l, ...edit } : l);
+                });
+            }
+
             const body = {
                 paymentId: payment.paymentId,
                 ctxHash: payment.ctxHash,
@@ -532,7 +557,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 moraPaidAsTariffDecisions,
                 manualTransactions,
                 manualDeleteTransactionIds,
-                tariffOverrides
+                tariffOverrides,
+                applyLedger,
+                manualLedgerEntries: hasLedgerDecisions ? manualLedgerEntries : undefined
             };
 
             const { data } = await api.post('/payments/rebuild/apply', body);
@@ -598,7 +625,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
 
     return (
         <>
-            <Dialog open={open} onClose={onClose} maxWidth="xl" fullWidth>
+            <Dialog open={open} onClose={onClose} maxWidth={false} sx={{ '& .MuiDialog-paper': { maxWidth: '95vw', width: '95vw' } }}>
                 <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Box>
                         Reconstrucción · paymentId={payment.paymentId}
@@ -1051,18 +1078,193 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                     {tab === 4 && (
                         <Box>
                             <Alert severity="info" sx={{ mb: 2 }}>
-                                Ledger antes vs después. Después se reconstruye completamente.
+                                Ledger antes vs después. Usa los switches para decidir qué entradas conservar y el botón Editar para ajustar campos individuales.
                             </Alert>
+                            {!appliedResult && (
+                                <Box sx={{ mb: 2, p: 1.5, border: '1px solid #ddd', borderRadius: 1, bgcolor: '#f5f5f5' }}>
+                                    <FormControlLabel
+                                        control={
+                                            <Switch
+                                                checked={applyLedger}
+                                                onChange={e => setApplyLedger(e.target.checked)}
+                                                disabled={applying || refreshing}
+                                            />
+                                        }
+                                        label={
+                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                                {applyLedger ? 'Aplicar cambios de Ledger' : 'NO aplicar cambios de Ledger'}
+                                            </Typography>
+                                        }
+                                    />
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 5 }}>
+                                        {applyLedger
+                                            ? 'Al aplicar se reemplazarán las entradas de ledger (BILLING, PAYMENT, OVERPAYMENT, CREDIT_PAYMENT, MORA_PAYMENT).'
+                                            : 'El ledger no se modificará. Solo se actualizarán pagos, periodos y transacciones.'}
+                                    </Typography>
+                                </Box>
+                            )}
                             <Grid container spacing={2}>
                                 <Grid item xs={12} md={6}>
                                     <Typography variant="subtitle1" color="error" sx={{ mb: 1 }}>ANTES ({ledgerBefore.length})</Typography>
                                     <LedgerTable rows={ledgerBefore} />
                                 </Grid>
                                 <Grid item xs={12} md={6}>
-                                    <Typography variant="subtitle1" color="success.main" sx={{ mb: 1 }}>DESPUÉS ({ledgerAfter.length})</Typography>
-                                    <LedgerTable rows={ledgerAfter} />
+                                    <Typography variant="subtitle1" color="success.main" sx={{ mb: 1 }}>
+                                        DESPUÉS ({ledgerAfter.length})
+                                    </Typography>
+                                    {applyLedger && !appliedResult ? (
+                                        <LedgerActionTable
+                                            rows={ledgerAfter}
+                                            keepMap={ledgerKeep}
+                                            editData={ledgerEditData}
+                                            onToggleKeep={(index, keep) =>
+                                                setLedgerKeep(prev => ({ ...prev, [index]: keep }))
+                                            }
+                                            onEdit={(index) => {
+                                                const row = ledgerAfter[index] || {};
+                                                setLedgerEditDialogIndex(index);
+                                                setLedgerEditDialogData({
+                                                    date: row.date || '',
+                                                    operation: row.operation || '',
+                                                    balanceDueBefore: row.balanceDueBefore ?? '',
+                                                    balanceDueAfter: row.balanceDueAfter ?? '',
+                                                    penaltyDueBefore: row.penaltyDueBefore ?? '',
+                                                    penaltyDueAfter: row.penaltyDueAfter ?? '',
+                                                    creditBalanceBefore: row.creditBalanceBefore ?? '',
+                                                    creditBalanceAfter: row.creditBalanceAfter ?? '',
+                                                    description: row.description || ''
+                                                });
+                                            }}
+                                        />
+                                    ) : (
+                                        <LedgerTable rows={ledgerAfter} />
+                                    )}
+                                    {applyLedger && !appliedResult && (
+                                        <Box sx={{ mt: 1 }}>
+                                            <Alert severity="info" sx={{ mb: 1 }}>
+                                                {Object.keys(ledgerKeep).filter(k => ledgerKeep[k] === false).length} entrada(s) marcadas para eliminar.
+                                                {Object.keys(ledgerKeep).filter(k => ledgerKeep[k] === false).length === 0 && ' Todas las entradas se conservarán.'}
+                                            </Alert>
+                                        </Box>
+                                    )}
                                 </Grid>
                             </Grid>
+
+                            {/* Dialog de edición de ledger */}
+                            <Dialog
+                                open={ledgerEditDialogIndex !== null}
+                                onClose={() => setLedgerEditDialogIndex(null)}
+                                maxWidth="sm"
+                                fullWidth
+                            >
+                                <DialogTitle>
+                                    Editar entrada de ledger #{ledgerEditDialogIndex !== null ? ledgerEditDialogIndex + 1 : ''}
+                                    <IconButton onClick={() => setLedgerEditDialogIndex(null)} sx={{ float: 'right' }}><CloseIcon /></IconButton>
+                                </DialogTitle>
+                                <DialogContent dividers>
+                                    {ledgerEditDialogIndex !== null && (
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                                            <TextField
+                                                label="Fecha"
+                                                type="date"
+                                                size="small"
+                                                value={ledgerEditDialogData.date ? String(ledgerEditDialogData.date).slice(0, 10) : ''}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, date: e.target.value }))}
+                                                InputLabelProps={{ shrink: true }}
+                                                fullWidth
+                                            />
+                                            <TextField
+                                                label="Operación"
+                                                size="small"
+                                                value={ledgerEditDialogData.operation}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, operation: e.target.value }))}
+                                                fullWidth
+                                            />
+                                            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                                                <TextField
+                                                    label="balanceDue Before"
+                                                    type="number"
+                                                    size="small"
+                                                    value={ledgerEditDialogData.balanceDueBefore}
+                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, balanceDueBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                    slotProps={{ htmlInput: { step: '0.01' } }}
+                                                />
+                                                <TextField
+                                                    label="balanceDue After"
+                                                    type="number"
+                                                    size="small"
+                                                    value={ledgerEditDialogData.balanceDueAfter}
+                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, balanceDueAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                    slotProps={{ htmlInput: { step: '0.01' } }}
+                                                />
+                                                <TextField
+                                                    label="penaltyDue Before"
+                                                    type="number"
+                                                    size="small"
+                                                    value={ledgerEditDialogData.penaltyDueBefore}
+                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, penaltyDueBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                    slotProps={{ htmlInput: { step: '0.01' } }}
+                                                />
+                                                <TextField
+                                                    label="penaltyDue After"
+                                                    type="number"
+                                                    size="small"
+                                                    value={ledgerEditDialogData.penaltyDueAfter}
+                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, penaltyDueAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                    slotProps={{ htmlInput: { step: '0.01' } }}
+                                                />
+                                                <TextField
+                                                    label="creditBalance Before"
+                                                    type="number"
+                                                    size="small"
+                                                    value={ledgerEditDialogData.creditBalanceBefore}
+                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, creditBalanceBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                    slotProps={{ htmlInput: { step: '0.01' } }}
+                                                />
+                                                <TextField
+                                                    label="creditBalance After"
+                                                    type="number"
+                                                    size="small"
+                                                    value={ledgerEditDialogData.creditBalanceAfter}
+                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, creditBalanceAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                    slotProps={{ htmlInput: { step: '0.01' } }}
+                                                />
+                                            </Box>
+                                            <TextField
+                                                label="Descripción"
+                                                size="small"
+                                                value={ledgerEditDialogData.description}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, description: e.target.value }))}
+                                                multiline
+                                                rows={2}
+                                                fullWidth
+                                            />
+                                        </Box>
+                                    )}
+                                </DialogContent>
+                                <DialogActions>
+                                    <Button onClick={() => setLedgerEditDialogIndex(null)}>Cancelar</Button>
+                                    <Button
+                                        variant="contained"
+                                        onClick={() => {
+                                            if (ledgerEditDialogIndex !== null) {
+                                                const idx = ledgerEditDialogIndex;
+                                                // Asegurar que se mantenga (keep=true)
+                                                setLedgerKeep(prev => ({ ...prev, [idx]: true }));
+                                                // Guardar los datos editados
+                                                const clean = {};
+                                                Object.entries(ledgerEditDialogData).forEach(([k, v]) => {
+                                                    if (v !== '' && v !== undefined) clean[k] = v;
+                                                });
+                                                setLedgerEditData(prev => ({ ...prev, [idx]: clean }));
+                                                setLedgerEditDialogIndex(null);
+                                            }
+                                        }}
+                                    >
+                                        Guardar
+                                    </Button>
+                                </DialogActions>
+                            </Dialog>
                         </Box>
                     )}
 
@@ -1094,6 +1296,25 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                 </Button>
                             </Box>
                             <Divider sx={{ my: 1 }} />
+                            {appliedResult.ledgerSummary && (
+                                <Box sx={{ mb: 1, p: 1, bgcolor: '#c8e6c9', borderRadius: 1 }}>
+                                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                        Ledger: {appliedResult.ledgerSummary.applyLedger ? '✓ Aplicado' : '✗ NO aplicado'}
+                                        {' | '}Borradas todas las existentes: {appliedResult.ledgerSummary.ledgerToDeleteCount}
+                                        {' → '}Creadas: {appliedResult.ledgerSummary.ledgerToCreateCount}
+                                    </Typography>
+                                    <Typography variant="caption" display="block">
+                                        Antes: {appliedResult.ledgerSummary.beforeCount} entradas
+                                        {' → '}Después: {appliedResult.ledgerSummary.afterCount} entradas
+                                        {' | '}Simulación esperaba: {appliedResult.ledgerSummary.expectedLedgerCount}
+                                        {' | '}Registros cambiados: {appliedResult.ledgerSummary.entriesChanged}
+                                        {' | '}Registros eliminados: {appliedResult.ledgerSummary.entriesRemoved}
+                                        {appliedResult.ledgerSummary.manualLedgerEntriesProvided && (
+                                            <span> | manualLedgerEntries: {appliedResult.ledgerSummary.manualLedgerEntriesCount}</span>
+                                        )}
+                                    </Typography>
+                                </Box>
+                            )}
                             <Typography variant="caption">Snapshot DESPUÉS (post-aplicación):</Typography>
                             <pre style={{ fontSize: 11, background: '#fff', padding: 8, maxHeight: 220, overflow: 'auto' }}>
 {JSON.stringify(appliedResult.after, null, 2)}
@@ -1360,24 +1581,91 @@ function TxTable({ rows, markIds, updateIds, markFn, markStyle, creditAutoDecisi
 
 function LedgerTable({ rows }) {
     return (
-        <Table size="small" sx={{ '& td, & th': { fontSize: 11 } }}>
+        <Table size="small" sx={{ '& td, & th': { fontSize: 11, py: 0.75, px: 0.5 } }}>
             <TableHead>
                 <TableRow>
-                    <TableCell>Fecha</TableCell>
-                    <TableCell>Operación</TableCell>
-                    <TableCell align="right">balanceDue→</TableCell>
-                    <TableCell>Descripción</TableCell>
+                    <TableCell sx={{ py: 0.75, px: 0.5 }}>Fecha</TableCell>
+                    <TableCell sx={{ py: 0.75, px: 0.5 }}>Operación</TableCell>
+                    <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>balanceDue→</TableCell>
+                    <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>penaltyDue→</TableCell>
+                    <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>creditBalance→</TableCell>
+                    <TableCell sx={{ maxWidth: 200, py: 0.75, px: 0.5 }}>Descripción</TableCell>
                 </TableRow>
             </TableHead>
             <TableBody>
                 {rows.map((l, i) => (
                     <TableRow key={`l-${i}`}>
-                        <TableCell>{l.date ? String(l.date).slice(0, 10) : '—'}</TableCell>
-                        <TableCell>{l.operation || '—'}</TableCell>
-                        <TableCell align="right">{l.balanceDueBefore} → {l.balanceDueAfter}</TableCell>
-                        <TableCell sx={{ maxWidth: 280 }}>{l.description || '—'}</TableCell>
+                        <TableCell sx={{ py: 0.75, px: 0.5 }}>{l.date ? String(l.date).slice(0, 10) : '—'}</TableCell>
+                        <TableCell sx={{ py: 0.75, px: 0.5 }}>{l.operation || '—'}</TableCell>
+                        <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>{l.balanceDueBefore} → {l.balanceDueAfter}</TableCell>
+                        <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>{l.penaltyDueBefore} → {l.penaltyDueAfter}</TableCell>
+                        <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>{l.creditBalanceBefore} → {l.creditBalanceAfter}</TableCell>
+                        <TableCell sx={{ maxWidth: 200, py: 0.75, px: 0.5 }}>{l.description || '—'}</TableCell>
                     </TableRow>
                 ))}
+            </TableBody>
+        </Table>
+    );
+}
+
+function LedgerActionTable({ rows, keepMap, editData, onToggleKeep, onEdit }) {
+    return (
+        <Table size="small" sx={{ '& td, & th': { fontSize: 11, py: 0.75, px: 0.5 } }}>
+            <TableHead>
+                <TableRow>
+                    <TableCell sx={{ minWidth: 60, py: 0.75, px: 0.5, fontWeight: 700 }}>Conservar</TableCell>
+                    <TableCell sx={{ minWidth: 80, py: 0.75, px: 0.5, fontWeight: 700 }}>Fecha</TableCell>
+                    <TableCell sx={{ minWidth: 80, py: 0.75, px: 0.5, fontWeight: 700 }}>Operación</TableCell>
+                    <TableCell align="right" sx={{ minWidth: 70, py: 0.75, px: 0.5, fontWeight: 700 }}>balanceDue→</TableCell>
+                    <TableCell align="right" sx={{ minWidth: 70, py: 0.75, px: 0.5, fontWeight: 700 }}>penaltyDue→</TableCell>
+                    <TableCell align="right" sx={{ minWidth: 70, py: 0.75, px: 0.5, fontWeight: 700 }}>creditBalance→</TableCell>
+                    <TableCell sx={{ minWidth: 110, py: 0.75, px: 0.5, fontWeight: 700 }}>Descripción</TableCell>
+                    <TableCell align="center" sx={{ minWidth: 60, py: 0.75, px: 0.5, fontWeight: 700 }}>Acción</TableCell>
+                </TableRow>
+            </TableHead>
+            <TableBody>
+                {rows.length === 0 && (
+                    <TableRow>
+                        <TableCell colSpan={8} align="center" sx={{ py: 2, color: 'text.secondary' }}>
+                            Sin entradas de ledger
+                        </TableCell>
+                    </TableRow>
+                )}
+                {rows.map((l, i) => {
+                    const keep = keepMap[i] !== false;
+                    const hasEdit = !!editData?.[i];
+
+                    // Determinar bgcolor: rojo si se elimina, amarillo si se edita
+                    let bgcolor;
+                    if (!keep) bgcolor = '#ffebee';
+                    else if (hasEdit) bgcolor = '#fff8e1';
+
+                    return (
+                        <TableRow key={`l-${i}`} sx={{ bgcolor, opacity: keep ? 1 : 0.6 }}>
+                            <TableCell align="center" sx={{ py: 0.75, px: 0.5 }}>
+                                <Tooltip title={keep ? 'Desmarcar para eliminar esta entrada' : 'Marcar para conservar esta entrada'}>
+                                    <Switch
+                                        size="small"
+                                        checked={keep}
+                                        onChange={e => onToggleKeep(i, e.target.checked)}
+                                    />
+                                </Tooltip>
+                            </TableCell>
+                            <TableCell sx={{ py: 0.75, px: 0.5 }}>{l.date ? String(l.date).slice(0, 10) : '—'}</TableCell>
+                            <TableCell sx={{ py: 0.75, px: 0.5 }}>{l.operation || '—'}</TableCell>
+                            <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>{l.balanceDueBefore} → {l.balanceDueAfter}</TableCell>
+                            <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>{l.penaltyDueBefore} → {l.penaltyDueAfter}</TableCell>
+                            <TableCell align="right" sx={{ py: 0.75, px: 0.5 }}>{l.creditBalanceBefore} → {l.creditBalanceAfter}</TableCell>
+                            <TableCell sx={{ maxWidth: 140, py: 0.75, px: 0.5 }}>{l.description || '—'}</TableCell>
+                            <TableCell align="center" sx={{ py: 0.75, px: 0.5 }}>
+                                <Button size="small" variant="outlined" onClick={() => onEdit(i)}
+                                    sx={{ fontSize: 10, minWidth: 50, py: 0.25, lineHeight: 1.2 }}>
+                                    Editar
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    );
+                })}
             </TableBody>
         </Table>
     );
