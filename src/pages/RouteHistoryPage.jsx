@@ -100,6 +100,9 @@ const RouteHistoryPage = () => {
     const [routeSelected, setRouteSelected] = useState(null);
     const [loadingRoutes, setLoadingRoutes] = useState(false);
     const routesCacheRef = React.useRef(new Map());
+    const routeHistoryCacheRef = React.useRef(new Map());
+    const [pilotOpen, setPilotOpen] = useState(false);
+    const [busOpen, setBusOpen] = useState(false);
     const [pilotInput, setPilotInput] = useState('');
     const [busInput, setBusInput] = useState('');
     const [loadingPilots, setLoadingPilots] = useState(false);
@@ -173,35 +176,82 @@ const RouteHistoryPage = () => {
         return { start, end: `${monthStr}-${String(lastDay).padStart(2, '0')}` };
     };
 
+    const buildRouteHistoryParams = (overrides = {}) => {
+        const selectedClientId = (selectedClient && (selectedClient.id || selectedClient.value || selectedClient._id)) || clientId || null;
+        const selectedClientType = selectedClient?.type || null;
+
+        const clientParam = {};
+        if (selectedClientId && selectedClientType === 'school') {
+            clientParam.schoolId = selectedClientId;
+        } else if (selectedClientId && selectedClientType === 'corporation') {
+            clientParam.corporationId = selectedClientId;
+        }
+
+        const effectivePage = overrides.page ?? page;
+
+        return {
+            ...getCicloEscolarFilterParams(selectedCicloEscolar),
+            ...clientParam,
+            routeNumber: (selectedClientType === 'school' || selectedClientType === 'corporation') ? routeNumber : undefined,
+            page: effectivePage,
+            pageSize,
+            ...overrides
+        };
+    };
+
+    const getRouteHistoryCacheKey = (params) => {
+        const normalized = {
+            ...params,
+            page: Number(params.page || 1),
+            pageSize: Number(params.pageSize || pageSize)
+        };
+        return JSON.stringify(normalized);
+    };
+
     const fetchRouteHistory = async (opts = {}) => {
+        const params = buildRouteHistoryParams(opts);
+        const cacheKey = getRouteHistoryCacheKey(params);
+        const cached = routeHistoryCacheRef.current.get(cacheKey);
+
+        if (cached) {
+            setRoutes(cached.routes || []);
+            setTotal(cached.total || 0);
+            setInitialFetchDone(true);
+            setError(null);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         setError(null);
         try {
-            const selectedClientId = (selectedClient && (selectedClient.id || selectedClient.value || selectedClient._id)) || clientId || null;
-            const selectedClientType = selectedClient?.type || null;
+            const response = await api.get('/transportistas/historial-rutas', { params });
+            const responseData = response.data || {};
+            const routesData = responseData.routes || [];
+            const totalData = responseData.total || 0;
 
-            // Build client params only when a specific client is selected. If 'all' or no client, perform global search by placa/piloto.
-            const clientParam = {};
-            if (selectedClientId && selectedClientType === 'school') {
-                clientParam.schoolId = selectedClientId;
-            } else if (selectedClientId && selectedClientType === 'corporation') {
-                clientParam.corporationId = selectedClientId;
+            routeHistoryCacheRef.current.set(cacheKey, { routes: routesData, total: totalData });
+
+            const currentPage = Number(params.page || 1);
+            const nextPage = currentPage + 1;
+            if (totalData > currentPage * pageSize) {
+                const nextParams = buildRouteHistoryParams({ ...opts, page: nextPage });
+                const nextCacheKey = getRouteHistoryCacheKey(nextParams);
+                if (!routeHistoryCacheRef.current.has(nextCacheKey)) {
+                    api.get('/transportistas/historial-rutas', { params: nextParams })
+                        .then((nextResponse) => {
+                            const nextData = nextResponse.data || {};
+                            routeHistoryCacheRef.current.set(nextCacheKey, {
+                                routes: nextData.routes || [],
+                                total: nextData.total || 0
+                            });
+                        })
+                        .catch(() => {});
+                }
             }
 
-            const params = {
-                ...getCicloEscolarFilterParams(selectedCicloEscolar),
-                ...clientParam,
-                // Incluir routeNumber solo cuando el cliente es específico.
-                routeNumber: (selectedClientType === 'school' || selectedClientType === 'corporation') ? routeNumber : undefined,
-                page,
-                pageSize,
-                ...opts
-            };
-
-            const response = await api.get('/transportistas/historial-rutas', { params });
-
-            setRoutes(response.data.routes || []);
-            setTotal(response.data.total || 0);
+            setRoutes(routesData);
+            setTotal(totalData);
             setInitialFetchDone(true);
         } catch (err) {
             console.error('Error fetching route history (page):', err);
@@ -345,13 +395,16 @@ const RouteHistoryPage = () => {
         // clear previous timer
         if (pilotTimerRef.current) clearTimeout(pilotTimerRef.current);
 
-        // require at least 2 chars to search
-        if (!pilotInput || pilotInput.length < 2) {
+        const hasSearchText = Boolean(pilotInput && pilotInput.trim().length >= 2);
+        const isInitialListRequest = pilotOpen && !hasSearchText;
+
+        if (!hasSearchText && !isInitialListRequest) {
             setAvailablePilots([]);
             return;
         }
 
-        const cacheKey = `${selectedClient.type}:${selectedClient.id || 'ALL'}:` + pilotInput;
+        const cacheSuffix = hasSearchText ? `q:${pilotInput.trim()}` : 'initial';
+        const cacheKey = `${selectedClient.type}:${selectedClient.id || 'ALL'}:${cacheSuffix}`;
         if (pilotsCacheRef.current.has(cacheKey)) {
             setAvailablePilots(pilotsCacheRef.current.get(cacheKey));
             return;
@@ -360,10 +413,13 @@ const RouteHistoryPage = () => {
         pilotTimerRef.current = setTimeout(async () => {
             setLoadingPilots(true);
             try {
-                let url = `/users/pilots?query=${encodeURIComponent(pilotInput)}`;
+                const params = new URLSearchParams();
+                params.set('limit', '50');
+                if (hasSearchText) params.set('query', pilotInput.trim());
                 // only add client filters when a specific client is selected
-                if (selectedClient.type === 'school') url += `&schoolId=${selectedClient.id}`;
-                else if (selectedClient.type === 'corporation') url += `&corporationId=${selectedClient.id}`;
+                if (selectedClient.type === 'school') params.set('schoolId', selectedClient.id);
+                else if (selectedClient.type === 'corporation') params.set('corporationId', selectedClient.id);
+                const url = `/users/pilots?${params.toString()}`;
                 const resp = await api.get(url);
                 const pilots = Array.isArray(resp.data?.users) ? resp.data.users : (resp.data || []);
                 const pilotsOpts = pilots.map(p => ({ id: p.id || p._id, name: p.name || p.fullName || p.nombre }));
@@ -378,7 +434,7 @@ const RouteHistoryPage = () => {
         }, 300);
 
         return () => { if (pilotTimerRef.current) clearTimeout(pilotTimerRef.current); };
-    }, [pilotInput, selectedClient, auth.token]);
+    }, [pilotInput, pilotOpen, selectedClient, auth.token]);
 
     // Debounced server-side search for buses
     useEffect(() => {
@@ -389,12 +445,16 @@ const RouteHistoryPage = () => {
 
         if (busTimerRef.current) clearTimeout(busTimerRef.current);
 
-        if (!busInput || busInput.length < 2) {
+        const hasSearchText = Boolean(busInput && busInput.trim().length >= 2);
+        const isInitialListRequest = busOpen && !hasSearchText;
+
+        if (!hasSearchText && !isInitialListRequest) {
             setAvailableBuses([]);
             return;
         }
 
-        const cacheKey = `${selectedClient.type}:${selectedClient.id || 'ALL'}:` + busInput;
+        const cacheSuffix = hasSearchText ? `q:${busInput.trim()}` : 'initial';
+        const cacheKey = `${selectedClient.type}:${selectedClient.id || 'ALL'}:${cacheSuffix}`;
         if (busesCacheRef.current.has(cacheKey)) {
             setAvailableBuses(busesCacheRef.current.get(cacheKey));
             return;
@@ -403,10 +463,13 @@ const RouteHistoryPage = () => {
         busTimerRef.current = setTimeout(async () => {
             setLoadingBuses(true);
             try {
-                let url = `/buses?query=${encodeURIComponent(busInput)}`;
+                const params = new URLSearchParams();
+                params.set('limit', '50');
+                if (hasSearchText) params.set('query', busInput.trim());
                 // only add client filters when a specific client is selected
-                if (selectedClient.type === 'school') url += `&schoolId=${selectedClient.id}`;
-                else if (selectedClient.type === 'corporation') url += `&corporationId=${selectedClient.id}`;
+                if (selectedClient.type === 'school') params.set('schoolId', selectedClient.id);
+                else if (selectedClient.type === 'corporation') params.set('corporationId', selectedClient.id);
+                const url = `/buses/simple?${params.toString()}`;
                 const resp = await api.get(url);
                 const busesList = resp.data?.buses || resp.data || [];
                 const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
@@ -421,7 +484,7 @@ const RouteHistoryPage = () => {
         }, 300);
 
         return () => { if (busTimerRef.current) clearTimeout(busTimerRef.current); };
-    }, [busInput, selectedClient, auth.token]);
+    }, [busInput, busOpen, selectedClient, auth.token]);
 
     // Debounced server-side search for buses (stats)
     useEffect(() => {
@@ -449,7 +512,7 @@ const RouteHistoryPage = () => {
                 };
                 if (statsSelectedClient.type === 'school') params.schoolId = statsSelectedClient.id;
                 if (statsSelectedClient.type === 'corporation') params.corporationId = statsSelectedClient.id;
-                const resp = await api.get('/buses', { params });
+                const resp = await api.get('/buses/simple', { params });
                 const busesList = resp.data?.buses || resp.data || [];
                 const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
                 busesCacheRef.current.set(cacheKey, busesOpts);
@@ -1897,6 +1960,8 @@ const RouteHistoryPage = () => {
                                         value={pilotSelected}
                                         inputValue={pilotInput}
                                         onInputChange={(e, v) => setPilotInput(v)}
+                                        onOpen={() => setPilotOpen(true)}
+                                        onClose={() => setPilotOpen(false)}
                                         onChange={(e, newVal) => { setPilotSelected(newVal); setPilotoFilter(newVal ? newVal.name : ''); }}
                                         loading={loadingPilots}
                                         renderInput={(params) => (
@@ -1905,6 +1970,8 @@ const RouteHistoryPage = () => {
                                         clearOnEscape
                                         autoHighlight
                                         selectOnFocus
+                                        openOnFocus
+                                        noOptionsText={selectedClient ? (pilotInput.trim().length < 2 ? 'Abre el filtro o escribe para buscar' : 'Sin coincidencias') : 'Seleccione un cliente primero'}
                                     />
                                 </Grid>
                                         <Grid item xs={12} sm={6} md={0.8}>
@@ -1932,6 +1999,8 @@ const RouteHistoryPage = () => {
                                         value={busSelected}
                                         inputValue={busInput}
                                         onInputChange={(e, v) => setBusInput(v)}
+                                        onOpen={() => setBusOpen(true)}
+                                        onClose={() => setBusOpen(false)}
                                         onChange={(e, newVal) => { setBusSelected(newVal); setBusFilter(newVal ? newVal.placa : ''); }}
                                         loading={loadingBuses}
                                         renderInput={(params) => (
@@ -1940,6 +2009,8 @@ const RouteHistoryPage = () => {
                                         clearOnEscape
                                         autoHighlight
                                         selectOnFocus
+                                        openOnFocus
+                                        noOptionsText={selectedClient ? (busInput.trim().length < 2 ? 'Abre el filtro o escribe para buscar' : 'Sin coincidencias') : 'Seleccione un cliente primero'}
                                     />
                                 </Grid>
                                 <Grid item xs={12} sm={6} md={1}>
