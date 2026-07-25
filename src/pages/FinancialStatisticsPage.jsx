@@ -1,11 +1,8 @@
 // src/pages/FinancialStatisticsPage.jsx
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
     Typography,
-    Grid,
-    Card,
-    CardContent,
     Button,
     CircularProgress,
     Snackbar,
@@ -21,17 +18,19 @@ import {
     ToggleButton,
     ToggleButtonGroup,
     TextField,
+    InputAdornment,
+    IconButton,
     Tooltip,
+    Chip,
     Table,
     TableHead,
     TableBody,
     TableRow,
     TableCell,
     TableContainer,
-    Paper,
-    Chip
+    Paper
 } from '@mui/material';
-import { InfoOutlined } from '@mui/icons-material';
+import { InfoOutlined, Search, ChevronLeft, ChevronRight, Download } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getCurrentDateSync } from '../hooks/useCurrentDate';
@@ -39,13 +38,18 @@ import tw from 'twin.macro';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import moment from 'moment-timezone';
+import 'moment/locale/es';
 
 moment.tz.setDefault('America/Guatemala');
+moment.locale('es');
 
 // Contenedor principal con twin.macro
 const PageContainer = tw.div`
   p-8 w-full bg-gray-100 flex flex-col min-h-screen
 `;
+
+const ROWS_PER_PAGE_OPTIONS = [5, 8, 10, 15, 25, 50];
+const DEFAULT_ROWS_PER_PAGE = 8;
 
 // ----------------------------------------------------------------------------
 // Presentación: el backend calcula TODAS las métricas; el frontend sólo formatea.
@@ -67,52 +71,60 @@ const formatTrend = (value) => {
 };
 const basisValue = (obj, basis) => (obj && typeof obj === 'object') ? obj[basis] : null;
 
+// Grupos de métricas visibles/ocultables en la tabla, con su color de identificación.
+const GROUP_COLORS = {
+    Actividad: '#1976D2',
+    Cobranza: '#0288d1',
+    Ingresos: '#2e7d32',
+    Pendientes: '#E65100',
+    Descuentos: '#7b1fa2'
+};
+
 // Descriptores de métricas reutilizados por la tabla (por colegio) y las tarjetas (global).
-// Columnas de métricas agrupadas por categoría visual
 const METRIC_GROUPS = [
     {
         label: 'Actividad',
         columns: [
-            { key: 'familiasActivas', label: 'Familias Activas', type: 'int', color: '#1976d2' },
-            { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
-            { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
-            { key: 'tasaPuntualidad', label: 'Puntualidad', type: 'percent', color: '#00897b' }
+            { key: 'familiasActivas', label: 'Familias Activas', type: 'int' },
+            { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent' },
+            { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent' },
+            { key: 'tasaPuntualidad', label: 'Puntualidad', type: 'percent' }
         ]
     },
     {
         label: 'Cobranza',
         columns: [
-            { key: 'eficienciaCobro', label: 'Eficiencia de Cobro', type: 'percent', basis: true, color: '#2196f3' },
-            { key: 'promedioPorFamilia', label: 'Prom. por Familia', type: 'money', basis: true, color: '#5e35b1' }
+            { key: 'eficienciaCobro', label: 'Eficiencia de Cobro', type: 'percent', basis: true },
+            { key: 'promedioPorFamilia', label: 'Prom. por Familia', type: 'money', basis: true }
         ]
     },
     {
         label: 'Ingresos',
         columns: [
-            { key: 'ingresoTarifa', label: 'Ingreso por Tarifa', type: 'money', basis: true, color: '#4caf50' },
-            { key: 'ingresoPorMora', label: 'Ingreso por Mora', type: 'money', basis: true, color: '#ff9800' },
-            { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
-            { key: 'tendencia', label: 'Tendencia', type: 'trend', basis: true, color: '#607d8b' }
+            { key: 'ingresoTarifa', label: 'Ingreso por Tarifa', type: 'money', basis: true },
+            { key: 'ingresoPorMora', label: 'Ingreso por Mora', type: 'money', basis: true },
+            { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true },
+            { key: 'tendencia', label: 'Tendencia', type: 'trend', basis: true }
         ]
     },
     {
         label: 'Pendientes',
         columns: [
-            { key: 'totalPendiente', label: 'Total Pendiente', type: 'money', color: '#f44336' },
-            { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' },
-            { key: 'creditoAcumulado', label: 'Crédito Acumulado', type: 'money', color: '#9c27b0' }
+            { key: 'totalPendiente', label: 'Total Pendiente', type: 'money' },
+            { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money' },
+            { key: 'creditoAcumulado', label: 'Crédito Acumulado', type: 'money' }
         ]
     },
     {
         label: 'Descuentos',
         columns: [
-            { key: 'totalDescuentos', label: 'Total Descuentos', type: 'money', color: '#795548' },
-            { key: 'descuentosMoraExonerados', label: 'Mora Exonerada', type: 'money', color: '#607d8b' }
+            { key: 'totalDescuentos', label: 'Total Descuentos', type: 'money' },
+            { key: 'descuentosMoraExonerados', label: 'Mora Exonerada', type: 'money' }
         ]
     }
 ];
 
-// Flat list for global cards and formatMetric
+// Flat list for global cards, sorting and formatMetric
 const METRIC_COLUMNS = METRIC_GROUPS.flatMap(g => g.columns);
 
 const formatMetric = (metrics, col, basis) => {
@@ -211,10 +223,21 @@ const FinancialStatisticsPage = () => {
     const [metricsBasis, setMetricsBasis] = useState('caja'); // 'caja' | 'devengado'
     const [sortBy, setSortBy] = useState('schoolName');
     const [sortDir, setSortDir] = useState('asc');
+    const [visibleGroups, setVisibleGroups] = useState({
+        Actividad: true, Cobranza: false, Ingresos: true, Pendientes: false, Descuentos: false
+    });
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(0);
+    const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
+
     const handleSort = (colKey) => {
         setSortDir((prevDir) => sortBy === colKey ? (prevDir === 'asc' ? 'desc' : 'asc') : 'asc');
         setSortBy(colKey);
     };
+    const toggleGroup = (label) => setVisibleGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+    const onSearchChange = (e) => { setSearch(e.target.value); setPage(0); };
+    const onRowsPerPageChange = (e) => { setRowsPerPage(Number(e.target.value)); setPage(0); };
+
     // Helper to extract raw sortable value from a colegio row for a given column key
     const getSortValue = (colegio, colKey) => {
         if (colKey === 'schoolName') return (colegio.schoolName || '').toLowerCase();
@@ -242,18 +265,17 @@ const FinancialStatisticsPage = () => {
         }
     }, []);
 
-    const fetchStatistics = useCallback(async () => {
+    const fetchAll = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
             const isAll = selectedSchoolIds.length === 0 || selectedSchoolIds.includes('__ALL__');
             const schoolIdsParam = isAll ? 'all' : selectedSchoolIds.join(',');
-            const res = await api.get('/financial-statistics', {
-                params: { schoolIds: schoolIdsParam, from: fromMonth, to: toMonth, groupBy: 'school' }
-            });
-            setResult(res.data || null);
+            const statsRes = await api.get('/financial-statistics', { params: { schoolIds: schoolIdsParam, from: fromMonth, to: toMonth, groupBy: 'school' } });
+            setResult(statsRes.data || null);
+            setPage(0);
         } catch (e) {
-            console.error('fetchStatistics error', e);
+            console.error('fetchAll error', e);
             setError('Error al obtener las estadísticas financieras. Por favor, inténtalo de nuevo más tarde.');
             setResult(null);
         } finally {
@@ -267,14 +289,14 @@ const FinancialStatisticsPage = () => {
 
     useEffect(() => {
         // Carga inicial con los filtros por defecto.
-        fetchStatistics();
+        fetchAll();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Register page-level refresh handler for global refresh control
     useRegisterPageRefresh(async () => {
-        await fetchStatistics();
-    }, [fetchStatistics]);
+        await fetchAll();
+    }, [fetchAll]);
 
     // Group schools by ciclo escolar for the dropdown
     const schoolGroups = React.useMemo(() => {
@@ -352,252 +374,169 @@ const FinancialStatisticsPage = () => {
         tempDiv.remove();
     };
 
-    const renderSchoolTable = () => {
+    // Filtro (buscador) + orden aplicados sobre los colegios devueltos por el backend.
+    const filteredSortedColegios = useMemo(() => {
         const allColegios = result?.colegios || [];
-        // Apply sorting
-        const sorted = [...allColegios].sort((a, b) => {
+        let rows = allColegios;
+        if (search.trim()) {
+            const q = search.trim().toLowerCase();
+            rows = rows.filter((r) => (r.schoolName || '').toLowerCase().includes(q));
+        }
+        return [...rows].sort((a, b) => {
             const valA = getSortValue(a, sortBy);
             const valB = getSortValue(b, sortBy);
             if (valA < valB) return sortDir === 'asc' ? -1 : 1;
             if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-            // Secondary sort: by name then cycle for stability
             const nameCmp = (a.schoolName || '').localeCompare(b.schoolName || '');
             if (nameCmp !== 0) return nameCmp;
             return (a.cicloEscolarAnio || 0) - (b.cicloEscolarAnio || 0);
         });
-        // Use all sorted colegios (no inactive filter, total row suffices)
-        const colegios = sorted;
-        const totales = result?.totales?.metrics || null;
-        const basisLabel = metricsBasis === 'devengado' ? 'Devengado' : 'Caja';
-        const totalCols = METRIC_COLUMNS.length + 2; // + Colegio + Ciclo
-        const sortArrow = (colKey) => {
-            if (sortBy !== colKey) return null;
-            return sortDir === 'asc' ? ' ▲' : ' ▼';
-        };
-        return (
-            <TableContainer component={Paper} sx={{ boxShadow: 'none' }}>
-                <Table size="small" sx={{ '& td, & th': { whiteSpace: 'nowrap' } }}>
-                    <TableHead>
-                        <TableRow sx={{ background: '#e3f2fd' }}>
-                            <TableCell rowSpan={2} sx={{ fontWeight: 700, position: 'sticky', left: 0, background: '#e3f2fd', zIndex: 1, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('schoolName')}>
-                                Colegio{sortArrow('schoolName')}
-                            </TableCell>
-                            <TableCell rowSpan={2} sx={{ fontWeight: 700, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('cicloEscolarAnio')}>
-                                Ciclo{sortArrow('cicloEscolarAnio')}
-                            </TableCell>
-                            {METRIC_GROUPS.map((group) => (
-                                <TableCell key={group.label} colSpan={group.columns.length} align="center" sx={{ fontWeight: 700, borderBottom: '1px solid #bbdefb' }}>
-                                    {group.label}
-                                </TableCell>
-                            ))}
-                        </TableRow>
-                        <TableRow sx={{ background: '#f1f5f9' }}>
-                            {METRIC_COLUMNS.map((col) => {
-                                const tooltip = getMetricTooltip(col.key);
-                                const isActiveSort = sortBy === col.key;
-                                return (
-                                    <TableCell key={col.key} align="right" sx={{ fontWeight: 700, cursor: 'pointer' }} onClick={() => handleSort(col.key)}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-                                            <span>{col.label}{col.basis ? ` (${basisLabel})` : ''}{isActiveSort ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>
-                                            {tooltip ? (
-                                                <Tooltip title={tooltip} arrow>
-                                                    <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                </Tooltip>
-                                            ) : null}
-                                        </Box>
-                                    </TableCell>
-                                );
-                            })}
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {colegios.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={totalCols} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                                    No hay colegios para el filtro seleccionado.
-                                </TableCell>
-                            </TableRow>
-                        ) : colegios.map((colegio) => (
-                            <TableRow key={`${colegio.schoolId}-${colegio.cicloEscolarId || 'nc'}`} hover>
-                                <TableCell sx={{ fontWeight: 600, position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>
-                                    {colegio.schoolName}
-                                </TableCell>
-                                <TableCell>
-                                    {colegio.cicloEscolarAnio ? (
-                                        <Chip label={String(colegio.cicloEscolarAnio)} size="small" variant="outlined" color="primary" />
-                                    ) : (
-                                        <Typography variant="caption" color="text.secondary">—</Typography>
-                                    )}
-                                </TableCell>
-                                {METRIC_COLUMNS.map((col) => {
-                                    const text = formatMetric(colegio.metrics, col, metricsBasis);
-                                    let trendColor;
-                                    if (col.type === 'trend' && text !== 'N/A') {
-                                        trendColor = text.startsWith('-') ? '#f44336' : '#4caf50';
-                                    }
-                                    return (
-                                        <TableCell key={col.key} align="right" sx={{ color: trendColor }}>{text}</TableCell>
-                                    );
-                                })}
-                            </TableRow>
-                        ))}
-                        {totales && colegios.length > 0 && (
-                            <TableRow sx={{ background: '#eef2ff' }}>
-                                <TableCell sx={{ fontWeight: 800, position: 'sticky', left: 0, background: '#eef2ff', zIndex: 1 }}>TOTAL</TableCell>
-                                <TableCell sx={{ fontWeight: 800 }}>—</TableCell>
-                                {METRIC_COLUMNS.map((col) => (
-                                    <TableCell key={col.key} align="right" sx={{ fontWeight: 800 }}>
-                                        {formatMetric(totales, col, metricsBasis)}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </TableContainer>
-        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [result, search, sortBy, sortDir, metricsBasis]);
+
+    const totalRows = filteredSortedColegios.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage));
+    const currentPage = Math.min(page, totalPages - 1);
+    const pageColegios = filteredSortedColegios.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage);
+
+    const visibleGroupDefs = METRIC_GROUPS.filter((g) => visibleGroups[g.label]);
+    const visibleColumns = visibleGroupDefs.flatMap((g) => g.columns);
+    const basisLabel = metricsBasis === 'devengado' ? 'Devengado' : 'Caja';
+    const totales = result?.totales?.metrics || null;
+    const totalCols = visibleColumns.length + 2; // + Colegio + Ciclo
+
+    const sortArrow = (colKey) => {
+        if (sortBy !== colKey) return null;
+        return sortDir === 'asc' ? ' ▲' : ' ▼';
     };
 
-    const renderKPICards = () => {
-        const metrics = result?.totales?.metrics || null;
-        if (!metrics) return null;
-        const kpis = [
-            { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
-            { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
-            { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
-            { key: 'familiasActivas', label: 'Familias Activas', type: 'int', color: '#1976d2' },
-            { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' }
-        ];
-        return (
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-                {kpis.map((kpi) => (
-                    <Grid item xs={6} sm={4} md key={kpi.key}>
-                        <Card sx={{ p: 2, textAlign: 'center', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                            <Typography variant="caption" color="text.secondary">{kpi.label}</Typography>
-                            <Typography variant="h5" sx={{ fontWeight: 800, color: kpi.color }}>
-                                {formatMetric(metrics, kpi, metricsBasis)}
-                            </Typography>
-                        </Card>
-                    </Grid>
-                ))}
-            </Grid>
-        );
-    };
+    const topSchoolsChart = useMemo(() => {
+        const rows = result?.colegios || [];
+        const sorted = [...rows]
+            .sort((a, b) => (basisValue(b.metrics?.ingresoTotal, metricsBasis) || 0) - (basisValue(a.metrics?.ingresoTotal, metricsBasis) || 0))
+            .slice(0, 6);
+        const maxVal = Math.max(1, ...sorted.map((s) => basisValue(s.metrics?.ingresoTotal, metricsBasis) || 0));
+        return sorted.map((s) => {
+            const val = basisValue(s.metrics?.ingresoTotal, metricsBasis) || 0;
+            return { name: s.schoolName, pct: Math.round((val / maxVal) * 100), valueText: formatMoneyOrNA(val) };
+        });
+    }, [result, metricsBasis]);
 
-    let reportContent;
-    if (!result) {
-        reportContent = (
-            <Typography variant="body2" color="textSecondary">
-                No hay datos para mostrar con los filtros seleccionados.
-            </Typography>
-        );
-    } else {
-        reportContent = renderSchoolTable();
-    }
+    const kpis = totales ? [
+        { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
+        { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
+        { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
+        { key: 'familiasActivas', label: 'Familias Activas', type: 'int', color: '#1976d2' },
+        { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' }
+    ] : [];
 
     return (
         <PageContainer>
-            <Typography variant="h4" gutterBottom>
-                Estadísticas Financieras
-            </Typography>
-            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                Todas las métricas se calculan en el backend sobre el ciclo escolar vigente de cada colegio.
-            </Typography>
+            {/* Encabezado */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                <Box>
+                    <Typography sx={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#1976D2', fontWeight: 700, mb: 0.5 }}>
+                        Finanzas · Reporte
+                    </Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827', mb: 0.5 }}>
+                        Estadísticas Financieras
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#6B7280', maxWidth: 620 }}>
+                        Todas las métricas se calculan en el backend sobre el ciclo escolar vigente de cada colegio
+                        {rangeLabel ? ` · ${rangeLabel}` : ''}
+                    </Typography>
+                </Box>
+                <Button
+                    variant="outlined"
+                    startIcon={<Download />}
+                    onClick={generatePDF}
+                    disabled={loading || !result}
+                    sx={{ borderRadius: 1, fontWeight: 600 }}
+                >
+                    Exportar PDF
+                </Button>
+            </Box>
 
             {/* Filtros */}
-            <Card sx={{ mb: 2 }}>
-                <CardContent>
-                    <Grid container spacing={2} alignItems="flex-end">
-                        <Grid item xs={12} sm={6} md={3}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel id="school-select-label">Colegio</InputLabel>
-                                <Select
-                                    labelId="school-select-label"
-                                    multiple
-                                    value={selectedSchoolIds}
-                                    label="Colegio"
-                                    onChange={handleSchoolSelectChange}
-                                    renderValue={(selected) => {
-                                        if (selected.includes('__ALL__') || selected.length === 0) return 'Todos los colegios';
-                                        return selected.map(id => {
-                                            const s = schools.find(sch => String(sch.id) === id);
-                                            return s ? s.name : id;
-                                        }).join(', ');
-                                    }}
-                                >
-                                    <MenuItem value="__ALL__">
-                                        <Checkbox checked={selectedSchoolIds.includes('__ALL__')} size="small" />
-                                        <ListItemText primary="Todos los colegios" />
-                                    </MenuItem>
-                                    {schoolGroups.map((group) => [
-                                        <ListSubheader key={group.label} sx={{ fontWeight: 700, color: '#1976d2', lineHeight: '32px' }}>
-                                            {group.label}
-                                        </ListSubheader>,
-                                        ...group.schools.map((school) => (
-                                            <MenuItem key={school.id} value={String(school.id)} sx={{ pl: 4 }}>
-                                                <Checkbox checked={selectedSchoolIds.includes(String(school.id))} size="small" />
-                                                <ListItemText primary={school.name} />
-                                            </MenuItem>
-                                        ))
-                                    ])}
-                                </Select>
-                            </FormControl>
-                        </Grid>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-end', mb: 3 }}>
+                <FormControl size="small" sx={{ width: 280 }}>
+                    <InputLabel id="school-select-label">Colegio</InputLabel>
+                    <Select
+                        labelId="school-select-label"
+                        multiple
+                        value={selectedSchoolIds}
+                        label="Colegio"
+                        onChange={handleSchoolSelectChange}
+                        sx={{ bgcolor: '#fff', borderRadius: 1 }}
+                        renderValue={(selected) => {
+                            if (selected.includes('__ALL__') || selected.length === 0) return 'Todos los colegios';
+                            return selected.map(id => {
+                                const s = schools.find(sch => String(sch.id) === id);
+                                return s ? s.name : id;
+                            }).join(', ');
+                        }}
+                    >
+                        <MenuItem value="__ALL__">
+                            <Checkbox checked={selectedSchoolIds.includes('__ALL__')} size="small" />
+                            <ListItemText primary="Todos los colegios" />
+                        </MenuItem>
+                        {schoolGroups.map((group) => [
+                            <ListSubheader key={group.label} sx={{ fontWeight: 700, color: '#1976d2', lineHeight: '32px' }}>
+                                {group.label}
+                            </ListSubheader>,
+                            ...group.schools.map((school) => (
+                                <MenuItem key={school.id} value={String(school.id)} sx={{ pl: 4 }}>
+                                    <Checkbox checked={selectedSchoolIds.includes(String(school.id))} size="small" />
+                                    <ListItemText primary={school.name} />
+                                </MenuItem>
+                            ))
+                        ])}
+                    </Select>
+                </FormControl>
 
-                        <Grid item xs={6} sm={3} md={2}>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                type="month"
-                                label="Desde"
-                                value={fromMonth}
-                                onChange={(e) => setFromMonth(e.target.value)}
-                                slotProps={{ inputLabel: { shrink: true } }}
-                            />
-                        </Grid>
-                        <Grid item xs={6} sm={3} md={2}>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                type="month"
-                                label="Hasta"
-                                value={toMonth}
-                                onChange={(e) => setToMonth(e.target.value)}
-                                slotProps={{ inputLabel: { shrink: true } }}
-                            />
-                        </Grid>
+                <TextField
+                    size="small"
+                    type="month"
+                    label="Desde"
+                    value={fromMonth}
+                    onChange={(e) => setFromMonth(e.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    sx={{ width: 150, bgcolor: '#fff', borderRadius: 1 }}
+                />
+                <TextField
+                    size="small"
+                    type="month"
+                    label="Hasta"
+                    value={toMonth}
+                    onChange={(e) => setToMonth(e.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    sx={{ width: 150, bgcolor: '#fff', borderRadius: 1 }}
+                />
 
-                        <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', justifyContent: { md: 'flex-end' }, alignItems: 'center', gap: 1 }}>
-                            <Typography variant="caption" color="text.secondary">Base</Typography>
-                            <Tooltip title={
-                                "Caja: agrupa los pagos por la fecha en que se recibió el dinero, sin importar a qué mes pertenece la cuota. " +
-                                "Devengado: agrupa los pagos por el mes al que corresponde la cuota, sin importar cuándo se recibió el dinero. " +
-                                "Ejemplo: una cuota de marzo pagada el 5 de abril aparece en abril en base Caja, y en marzo en base Devengado."
-                            } arrow>
-                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                            </Tooltip>
-                            <ToggleButtonGroup
-                                size="small"
-                                exclusive
-                                value={metricsBasis}
-                                onChange={(e, v) => { if (v) setMetricsBasis(v); }}
-                            >
-                                <ToggleButton value="caja">Caja</ToggleButton>
-                                <ToggleButton value="devengado">Devengado</ToggleButton>
-                            </ToggleButtonGroup>
-                        </Grid>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="caption" color="text.secondary">Base</Typography>
+                    <Tooltip title={
+                        "Caja: agrupa los pagos por la fecha en que se recibió el dinero, sin importar a qué mes pertenece la cuota. " +
+                        "Devengado: agrupa los pagos por el mes al que corresponde la cuota, sin importar cuándo se recibió el dinero. " +
+                        "Ejemplo: una cuota de marzo pagada el 5 de abril aparece en abril en base Caja, y en marzo en base Devengado."
+                    } arrow>
+                        <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                    </Tooltip>
+                    <ToggleButtonGroup
+                        size="small"
+                        exclusive
+                        value={metricsBasis}
+                        onChange={(e, v) => { if (v) setMetricsBasis(v); }}
+                    >
+                        <ToggleButton value="caja">Caja</ToggleButton>
+                        <ToggleButton value="devengado">Devengado</ToggleButton>
+                    </ToggleButtonGroup>
+                </Box>
 
-                        <Grid item xs={12} sm={6} md={2} sx={{ display: 'flex', gap: 1 }}>
-                            <Button variant="contained" color="primary" onClick={fetchStatistics} disabled={loading}>
-                                Aplicar filtros
-                            </Button>
-                            <Button variant="outlined" color="primary" onClick={generatePDF} disabled={loading || !result}>
-                                PDF
-                            </Button>
-                        </Grid>
-                    </Grid>
-                </CardContent>
-            </Card>
+                <Button variant="contained" color="primary" onClick={fetchAll} disabled={loading} sx={{ borderRadius: 1, fontWeight: 600, height: 40 }}>
+                    {loading ? 'Aplicando…' : 'Aplicar filtros'}
+                </Button>
+            </Box>
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '16rem' }}>
@@ -605,12 +544,195 @@ const FinancialStatisticsPage = () => {
                 </div>
             ) : (
                 <div ref={reportRef} style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
-                    {renderKPICards()}
-                    <Typography variant="h6" gutterBottom>
-                        Detalle por colegio
-                        {rangeLabel ? ` · ${rangeLabel}` : ''}
-                    </Typography>
-                    {reportContent}
+                    {/* KPI cards */}
+                    {kpis.length > 0 && (
+                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 2, mb: 3 }}>
+                            {kpis.map((kpi) => (
+                                <Box key={kpi.key} sx={{ bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                                    <Typography sx={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600, mb: 0.75 }}>
+                                        {kpi.label}
+                                    </Typography>
+                                    <Typography sx={{ fontWeight: 700, fontSize: 26, color: kpi.color }}>
+                                        {formatMetric(totales, kpi, metricsBasis)}
+                                    </Typography>
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
+
+                    {/* Top colegios */}
+                    <Box sx={{ mb: 3 }}>
+                        <Box sx={{ bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                            <Typography sx={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600 }}>
+                                Top colegios · Ingreso Total ({basisLabel})
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, mt: 1.25 }}>
+                                {topSchoolsChart.length === 0 ? (
+                                    <Box sx={{ py: 2, textAlign: 'center', color: 'text.secondary', fontSize: 13 }}>Sin datos.</Box>
+                                ) : topSchoolsChart.map((bar) => (
+                                    <Box key={bar.name}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, mb: 0.5 }}>
+                                            <span>{bar.name}</span>
+                                            <span style={{ color: '#6B7280' }}>{bar.valueText}</span>
+                                        </Box>
+                                        <Box sx={{ height: 8, bgcolor: '#f0f0f0', borderRadius: 1, overflow: 'hidden' }}>
+                                            <Box sx={{ height: '100%', bgcolor: '#1976D2', width: `${bar.pct}%` }} />
+                                        </Box>
+                                    </Box>
+                                ))}
+                            </Box>
+                        </Box>
+                    </Box>
+
+                    {/* Detalle por colegio */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            <Typography variant="caption" color="text.secondary">Grupos:</Typography>
+                            {METRIC_GROUPS.map((g) => {
+                                const c = GROUP_COLORS[g.label];
+                                const active = !!visibleGroups[g.label];
+                                return (
+                                    <Chip
+                                        key={g.label}
+                                        label={g.label}
+                                        size="small"
+                                        clickable
+                                        onClick={() => toggleGroup(g.label)}
+                                        sx={{
+                                            fontWeight: 700,
+                                            fontSize: 11,
+                                            bgcolor: active ? c : 'transparent',
+                                            color: active ? '#fff' : c,
+                                            border: `1px solid ${c}`,
+                                            '&:hover': { bgcolor: active ? c : 'rgba(0,0,0,0.04)' }
+                                        }}
+                                    />
+                                );
+                            })}
+                        </Box>
+                        <TextField
+                            size="small"
+                            placeholder="Buscar colegio…"
+                            value={search}
+                            onChange={onSearchChange}
+                            sx={{ width: 220, bgcolor: '#fff', borderRadius: 1 }}
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Search sx={{ fontSize: 18, opacity: 0.5 }} />
+                                    </InputAdornment>
+                                )
+                            }}
+                        />
+                    </Box>
+
+                    <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid rgba(0,0,0,0.08)' }}>
+                        <Table size="small" sx={{ '& td, & th': { whiteSpace: 'nowrap' } }}>
+                            <TableHead>
+                                <TableRow sx={{ background: '#f7f7f8' }}>
+                                    <TableCell rowSpan={2} sx={{ fontWeight: 700, position: 'sticky', left: 0, background: '#f7f7f8', zIndex: 1, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('schoolName')}>
+                                        Colegio{sortArrow('schoolName')}
+                                    </TableCell>
+                                    <TableCell rowSpan={2} sx={{ fontWeight: 700, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('cicloEscolarAnio')}>
+                                        Ciclo{sortArrow('cicloEscolarAnio')}
+                                    </TableCell>
+                                    {visibleGroupDefs.map((group) => (
+                                        <TableCell key={group.label} colSpan={group.columns.length} align="center" sx={{ fontWeight: 700, color: '#374151', borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                                            {group.label}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                                <TableRow sx={{ background: '#fafafa' }}>
+                                    {visibleColumns.map((col) => {
+                                        const tooltip = getMetricTooltip(col.key);
+                                        const isActiveSort = sortBy === col.key;
+                                        return (
+                                            <TableCell key={col.key} align="right" sx={{ fontWeight: 700, cursor: 'pointer' }} onClick={() => handleSort(col.key)}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                                                    <span>{col.label}{col.basis ? ` (${basisLabel})` : ''}{isActiveSort ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>
+                                                    {tooltip ? (
+                                                        <Tooltip title={tooltip} arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    ) : null}
+                                                </Box>
+                                            </TableCell>
+                                        );
+                                    })}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {pageColegios.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={totalCols} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                                            No hay colegios para el filtro seleccionado.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : pageColegios.map((colegio) => (
+                                    <TableRow key={`${colegio.schoolId}-${colegio.cicloEscolarId || 'nc'}`} hover>
+                                        <TableCell sx={{ fontWeight: 600, position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>
+                                            {colegio.schoolName}
+                                        </TableCell>
+                                        <TableCell>
+                                            {colegio.cicloEscolarAnio ? (
+                                                <Chip label={String(colegio.cicloEscolarAnio)} size="small" sx={{ bgcolor: '#e3f2fd', color: '#1565c0', fontWeight: 700, fontSize: 11 }} />
+                                            ) : (
+                                                <Typography variant="caption" color="text.secondary">—</Typography>
+                                            )}
+                                        </TableCell>
+                                        {visibleColumns.map((col) => {
+                                            const text = formatMetric(colegio.metrics, col, metricsBasis);
+                                            let trendColor;
+                                            if (col.type === 'trend' && text !== 'N/A') {
+                                                trendColor = text.startsWith('-') ? '#DC2626' : '#2e7d32';
+                                            }
+                                            return (
+                                                <TableCell key={col.key} align="right" sx={{ color: trendColor }}>{text}</TableCell>
+                                            );
+                                        })}
+                                    </TableRow>
+                                ))}
+                                {totales && pageColegios.length > 0 && (
+                                    <TableRow sx={{ background: '#e3f2fd' }}>
+                                        <TableCell sx={{ fontWeight: 800, position: 'sticky', left: 0, background: '#e3f2fd', zIndex: 1 }}>TOTAL</TableCell>
+                                        <TableCell sx={{ fontWeight: 800 }}>—</TableCell>
+                                        {visibleColumns.map((col) => (
+                                            <TableCell key={col.key} align="right" sx={{ fontWeight: 800 }}>
+                                                {formatMetric(totales, col, metricsBasis)}
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5, flexWrap: 'wrap', gap: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            <Typography variant="caption" color="text.secondary">Filas por página</Typography>
+                            <Select
+                                size="small"
+                                value={rowsPerPage}
+                                onChange={onRowsPerPageChange}
+                                sx={{ height: 30, fontSize: 12, bgcolor: '#fff', borderRadius: 1 }}
+                            >
+                                {ROWS_PER_PAGE_OPTIONS.map((n) => (
+                                    <MenuItem key={n} value={n} sx={{ fontSize: 12 }}>{n}</MenuItem>
+                                ))}
+                            </Select>
+                            <Typography variant="caption" color="text.secondary">
+                                Página {currentPage + 1} de {totalPages} · {totalRows} colegio{totalRows === 1 ? '' : 's'}
+                            </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <IconButton size="small" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={currentPage <= 0} sx={{ border: '1px solid rgba(0,0,0,0.12)', borderRadius: 1, width: 32, height: 32 }}>
+                                <ChevronLeft fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" onClick={() => setPage((p) => p + 1)} disabled={currentPage >= totalPages - 1} sx={{ border: '1px solid rgba(0,0,0,0.12)', borderRadius: 1, width: 32, height: 32 }}>
+                                <ChevronRight fontSize="small" />
+                            </IconButton>
+                        </Box>
+                    </Box>
                 </div>
             )}
 
