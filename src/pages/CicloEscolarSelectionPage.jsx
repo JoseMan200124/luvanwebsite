@@ -57,6 +57,7 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import SubmissionPreview from './SubmissionPreview';
+import EnrollmentFeeTiersEditor from '../components/EnrollmentFeeTiersEditor';
 import ExcelJS from 'exceljs';
 import moment from 'moment';
 import PermissionGuard from '../components/PermissionGuard';
@@ -294,7 +295,8 @@ const CicloEscolarSelectionPage = () => {
         dailyPenalty: 0,
         penaltyPaused: false,
         operationStatus: getDefaultOperationStatusForNewSchool(),
-        enrollmentStatus: 'OPEN'
+        enrollmentStatus: 'OPEN',
+        enrollmentFeeAmount: 0
     });
 
     const normalizeRouteSchedulesFromSchool = (school, routeNumbers) => {
@@ -359,7 +361,8 @@ const CicloEscolarSelectionPage = () => {
             dailyPenalty: source.dailyPenalty ?? 0,
             penaltyPaused: !!source.penaltyPaused,
             operationStatus: getDefaultOperationStatusForNewSchool(),
-            enrollmentStatus: source.enrollmentStatus || 'OPEN'
+            enrollmentStatus: source.enrollmentStatus || 'OPEN',
+            enrollmentFeeAmount: source.enrollmentFeeAmount ?? 0
         } : buildEmptySchoolDraft());
         setSchoolSchedules(schedules);
         setSchoolGrades(parseArrayField(source.grades));
@@ -1063,6 +1066,10 @@ const CicloEscolarSelectionPage = () => {
             setSnackbar({ open: true, message: 'La mora diaria no puede ser negativa.', severity: 'error' });
             return;
         }
+        if (Number(selectedSchool.enrollmentFeeAmount) < 0) {
+            setSnackbar({ open: true, message: 'El monto de inscripción no puede ser negativo.', severity: 'error' });
+            return;
+        }
 
         // Validate schedules: codes must be 2-4 uppercase letters, no duplicates
         const schedulesWithCode = schoolSchedules.filter(s => s && s.code);
@@ -1169,6 +1176,7 @@ const CicloEscolarSelectionPage = () => {
                 // Penalty settings
                 dailyPenalty: Number(selectedSchool.dailyPenalty) || 0,
                 penaltyPaused: !!selectedSchool.penaltyPaused,
+                enrollmentFeeAmount: Number(selectedSchool.enrollmentFeeAmount) || 0,
                 // school year bounds
                 schoolYearStart: schoolYearStart || null,
                 schoolYearEnd: schoolYearEnd || null,
@@ -2043,6 +2051,22 @@ const CicloEscolarSelectionPage = () => {
                                     value={selectedSchool ? selectedSchool.bankAccount : ''}
                                     onChange={handleInputChange}
                                 />
+                                <TextField
+                                    name="enrollmentFeeAmount"
+                                    label="Inscripción por estudiante (Q)"
+                                    type="number"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={selectedSchool ? selectedSchool.enrollmentFeeAmount : 0}
+                                    onChange={handleInputChange}
+                                    inputProps={{ min: '0', step: '0.01' }}
+                                    helperText="Monto base de inscripción del ciclo, antes de aplicar los tramos de descuento por fecha."
+                                />
+
+                                {selectedSchool?.id ? (
+                                    <EnrollmentFeeTiersEditor schoolId={selectedSchool.id} />
+                                ) : null}
+
                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                     <TextField
                                         name="dailyPenalty"

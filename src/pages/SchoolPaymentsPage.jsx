@@ -63,6 +63,7 @@ import PaymentFilters from '../components/PaymentFilters';
 import PaymentTable from '../components/PaymentTable';
 import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
+import EnrollmentPaymentPanel from '../components/EnrollmentPaymentPanel';
 import CreateSchoolPeriodModal from '../components/modals/CreateSchoolPeriodModal';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
@@ -4020,7 +4021,7 @@ const SchoolPaymentsPage = () => {
                                         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                                             <Tabs value={paymentTab} onChange={(e, newValue) => setPaymentTab(newValue)}>
                                                 <Tab label="Pago de Tarifa" />
-                                                <Tab 
+                                                <Tab
                                                     label={`Pago de Mora ${effectivePenaltyDue > 0 ? `(Q ${effectivePenaltyDue.toFixed(2)})` : '(Q 0.00)'}`}
                                                     sx={{
                                                         color: effectivePenaltyDue > 0 ? 'error.main' : 'inherit',
@@ -4030,6 +4031,7 @@ const SchoolPaymentsPage = () => {
                                                         }
                                                     }}
                                                 />
+                                                <Tab label="Inscripción" />
                                             </Tabs>
                                         </Box>
 
@@ -4826,9 +4828,26 @@ const SchoolPaymentsPage = () => {
                                     )}
                                 </Box>
                                 )}
+
+                                {/* Tab Panel 2: Inscripción */}
+                                {paymentTab === 2 && (
+                                <Box>
+                                    <EnrollmentPaymentPanel
+                                        userId={
+                                            registerPaymentTarget?.User?.id
+                                            || registerPaymentTarget?.user?.id
+                                            || registerPaymentTarget?.userId
+                                            || null
+                                        }
+                                        schoolId={registerPaymentTarget?.schoolId || null}
+                                        cicloEscolarId={registerPaymentTarget?.cicloEscolarId || null}
+                                        onSaved={() => setSnackbar({ open: true, message: 'Inscripción actualizada.', severity: 'success' })}
+                                    />
+                                </Box>
+                                )}
                                     </Grid>
                                 </Grid>
-                                
+
                                 {/* Loading overlay when receipts/history are being fetched */}
                                 {(uploadedReceiptsLoading || regHistLoading) && (
                                     <Box sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', zIndex: 30 }}>

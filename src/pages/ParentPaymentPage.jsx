@@ -724,6 +724,7 @@ const ParentPaymentPage = () => {
     const [routeInfo, setRouteInfo] = useState(null);
     const [paymentAccount, setPaymentAccount] = useState(null);
     const [paymentHistory, setPaymentHistory] = useState(null);
+    const [enrollmentPayment, setEnrollmentPayment] = useState(null);
     const [receipts, setReceipts] = useState([]);
     const [activeTab, setActiveTab] = useState('resumen');
     const [hasSignedContract, setHasSignedContract] = useState(null);
@@ -757,6 +758,7 @@ const ParentPaymentPage = () => {
             setPaymentAccount(null);
             setPaymentHistory(null);
             setReceipts([]);
+            setEnrollmentPayment(null);
             setPageLoading(false);
             return;
         }
@@ -767,12 +769,13 @@ const ParentPaymentPage = () => {
         const unwrap = (result) => (result.status === 'fulfilled' ? result.value : null);
 
         try {
-            const [routeRes, serviceRes, accountRes, historyRes, receiptsRes] = await Promise.allSettled([
+            const [routeRes, serviceRes, accountRes, historyRes, receiptsRes, enrollmentRes] = await Promise.allSettled([
                 api.get(`/parents/${userId}/route-info`, { signal }),
                 api.get(`/parents/${userId}/service-status`, { signal }),
                 api.get(`/payments/family-account/${userId}`, { signal }),
                 api.get(`/parents/${userId}/payment-history`, { params: { limit: 80 }, signal }),
                 api.get(`/parents/${userId}/receipts`, { signal }),
+                api.get(`/enrollment-payments/by-user/${userId}`, { signal }),
             ]);
 
             if (signal?.aborted) return;
@@ -785,6 +788,7 @@ const ParentPaymentPage = () => {
             setPaymentAccount(unwrap(accountRes)?.data?.familyAccount || null);
             setPaymentHistory(unwrap(historyRes)?.data || null);
             setReceipts(unwrap(receiptsRes)?.data?.receipts || []);
+            setEnrollmentPayment(unwrap(enrollmentRes)?.data?.enrollmentPayment || null);
         } catch (error) {
             if (!signal?.aborted) {
                 console.error(error);
@@ -927,6 +931,23 @@ const ParentPaymentPage = () => {
                     </Box>
                 )}
             </SectionCard>
+
+            {enrollmentPayment && enrollmentPayment.status !== 'PAGADO' && (
+                <SectionCard title="Inscripción del ciclo" icon={ReceiptLongIcon}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ color: TEXT_COLOR, fontSize: 15, fontWeight: 700 }}>
+                                Saldo de inscripción: {formatMoney(enrollmentPayment.amountDue)}
+                            </Typography>
+                            <Typography sx={{ color: MUTED_COLOR, fontSize: 12, mt: 0.25 }}>
+                                {enrollmentPayment.status === 'PARCIAL' ? 'Abono parcial registrado. ' : ''}
+                                Este cobro es independiente de la mensualidad. Súbelo con tu boleta de pago habitual.
+                            </Typography>
+                        </Box>
+                        <StatusBadge status={enrollmentPayment.status === 'PARCIAL' ? 'PARCIAL' : 'PENDIENTE'} />
+                    </Box>
+                </SectionCard>
+            )}
 
             <SectionCard title="Información de depósito" icon={BusinessIcon}>
                 <InfoRow label="Banco" value={routeInfo?.bankName} />
