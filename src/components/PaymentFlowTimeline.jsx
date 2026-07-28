@@ -87,7 +87,7 @@ const OPERATION_META = {
     // Inscripción de ciclo: mismo icono y color teal en las tres operaciones para que se
     // distingan de un vistazo de la mensualidad/mora; el tipo lo aclara la etiqueta.
     ENROLLMENT_BILLING: { icon: <SchoolIcon fontSize="small" />, label: 'Cargo de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
-    ENROLLMENT_PAYMENT: { icon: <SchoolIcon fontSize="small" />, label: 'Abono de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
+    ENROLLMENT_PAYMENT: { icon: <SchoolIcon fontSize="small" />, label: 'Pago de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
     ENROLLMENT_ADJUSTMENT: { icon: <SchoolIcon fontSize="small" />, label: 'Ajuste de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
     DEFAULT: { icon: <MoreHorizIcon fontSize="small" />, label: 'Operación', color: '#757575', bgColor: '#f5f5f5' }
 };
@@ -374,8 +374,8 @@ function getOperationDescription(entry) {
             const applied = Number(meta.appliedAmount || 0);
             const receipt = meta.receiptNumber || '';
             const base = applied > 0
-                ? `Abono de inscripción — ${fmt(applied)}`
-                : (entry.description || 'Abono de inscripción');
+                ? `Pago de inscripción — ${fmt(applied)}`
+                : (entry.description || 'Pago de inscripción');
             return receipt ? `${base} (Boleta: ${receipt})` : base;
         }
         case 'ENROLLMENT_ADJUSTMENT': {
@@ -949,7 +949,7 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                         Inscripción: {fmt(enrollmentPayment.netAmount || 0)} neto
                         {Number(enrollmentPayment.discountApplied || 0) > 0 && ` (descuento ${fmt(enrollmentPayment.discountApplied)})`}
-                        {Number(enrollmentPayment.amountPaid || 0) > 0 && ` · abonado ${fmt(enrollmentPayment.amountPaid)}`}
+                        {Number(enrollmentPayment.amountPaid || 0) > 0 && ` · pagado ${fmt(enrollmentPayment.amountPaid)}`}
                         {Number(enrollmentPayment.manualAdjustmentAmount || 0) > 0 && ` · ajuste manual ${fmt(enrollmentPayment.manualAdjustmentAmount)}`}
                     </Typography>
                 )}
