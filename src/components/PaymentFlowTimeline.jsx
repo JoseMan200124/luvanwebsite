@@ -83,6 +83,9 @@ const OPERATION_META = {
     AUTO_DEBIT: { icon: <AutorenewIcon fontSize="small" />, label: 'Débito Automático', color: '#388e3c', bgColor: '#e8f5e9' },
     FULL_DISCOUNT: { icon: <MoneyOffIcon fontSize="small" />, label: 'Descuento Total', color: '#6a1b9a', bgColor: '#f3e5f5' },
     PENALTY_CLEARANCE: { icon: <MoneyOffIcon fontSize="small" />, label: 'Limpieza de Mora', color: '#6a1b9a', bgColor: '#f3e5f5' },
+    ENROLLMENT_BILLING: { icon: <ReceiptIcon fontSize="small" />, label: 'Cargo de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
+    ENROLLMENT_PAYMENT: { icon: <TrendingDownIcon fontSize="small" />, label: 'Abono de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
+    ENROLLMENT_ADJUSTMENT: { icon: <MoneyOffIcon fontSize="small" />, label: 'Ajuste de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
     DEFAULT: { icon: <MoreHorizIcon fontSize="small" />, label: 'Operación', color: '#757575', bgColor: '#f5f5f5' }
 };
 
