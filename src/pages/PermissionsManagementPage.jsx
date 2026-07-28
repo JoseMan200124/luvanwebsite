@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo, useCallback, memo } from 'react';
 import {
     Typography,
     Box,
@@ -12,509 +12,772 @@ import {
     Snackbar,
     Alert,
     CircularProgress,
-    Switch,
     Divider,
     Accordion,
     AccordionSummary,
     AccordionDetails,
     Chip,
     Grid,
+    TextField,
+    InputAdornment,
+    Checkbox,
+    Tooltip,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogContentText,
+    DialogActions,
+    ButtonGroup,
+    Stack,
+    Tabs,
+    Tab,
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
     Save as SaveIcon,
-    Dashboard as DashboardIcon,
-    ViewModule as ViewModuleIcon,
-    Storage as StorageIcon,
+    Search as SearchIcon,
+    Clear as ClearIcon,
+    PhoneIphone as PhoneIphoneIcon,
+    WarningAmber as WarningAmberIcon,
 } from '@mui/icons-material';
 import tw from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import usePermissions from '../hooks/usePermissions';
+import CatalogOrganizer from '../components/CatalogOrganizer';
 
 const PageContainer = tw.div`p-8 bg-gray-50 min-h-screen`;
 
+/** Grupo que se muestra aparte: no aplica a quien solo usa el sistema web. */
+const GRUPO_MOVIL = 'app-movil';
+
+/** Colores y etiquetas de cada nivel de acción. */
+const NIVELES = {
+    ver: { label: 'Ver', color: '#0277bd', bg: '#e1f5fe' },
+    crear: { label: 'Crear', color: '#2e7d32', bg: '#e8f5e9' },
+    editar: { label: 'Editar', color: '#ef6c00', bg: '#fff3e0' },
+    eliminar: { label: 'Eliminar', color: '#c62828', bg: '#ffebee' },
+};
+
+/** Permite que "gestion" encuentre "gestión" y viceversa. */
+const sinAcentos = (texto) =>
+    (texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Al buscar se expanden los grupos, pero solo si el resultado es manejable. */
+const LIMITE_AUTOEXPANDIR = 60;
+
+// Estilos constantes: definidos fuera del render para no recrear el objeto
+// en cada pasada, que es lo que invalida la memoización interna de MUI.
+const SX_CHIP = { height: 22 };
+const SX_FILA_BASE = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1.5,
+    px: 1.5,
+    py: 1,
+    borderRadius: 1,
+};
+
+/**
+ * Una fila de permiso.
+ *
+ * Va memoizada y fuera del componente padre a propósito: con ~360 permisos,
+ * definirla dentro hacía que React la tratara como un componente nuevo en cada
+ * render y desmontara el árbol completo con cada clic. Solo recibe primitivos,
+ * así que al marcar una casilla se vuelve a renderizar únicamente esa fila.
+ */
+const FilaPermiso = memo(function FilaPermiso({ permiso, activo, cambiado, onToggle }) {
+    const nivel = NIVELES[permiso.level] || NIVELES.ver;
+
+    return (
+        <Box
+            sx={{
+                ...SX_FILA_BASE,
+                borderLeft: cambiado ? '3px solid #ff9800' : '3px solid transparent',
+                bgcolor: activo ? '#f1f8e9' : 'transparent',
+                '&:hover': { bgcolor: activo ? '#dcedc8' : '#f5f5f5' },
+            }}
+        >
+            <Checkbox size="small" checked={activo} onChange={() => onToggle(permiso.key)} />
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <Typography variant="body2" sx={{ lineHeight: 1.4 }}>
+                    {permiso.description}
+                </Typography>
+            </Box>
+            {permiso.type === 'modulo' && (
+                <Chip size="small" label="Módulo" variant="outlined" sx={SX_CHIP} />
+            )}
+            <Chip
+                size="small"
+                label={nivel.label}
+                sx={{
+                    height: 22,
+                    color: nivel.color,
+                    bgcolor: nivel.bg,
+                    fontWeight: 500,
+                    minWidth: 68,
+                }}
+            />
+        </Box>
+    );
+});
+
+/**
+ * Tarjeta de un grupo.
+ *
+ * El contenido se desmonta al colapsar (`unmountOnExit`): sin eso, MUI mantiene
+ * montados los ~360 permisos de los 14 grupos al mismo tiempo.
+ */
+const TarjetaGrupo = memo(function TarjetaGrupo({
+    grupo,
+    permissions,
+    originalPermissions,
+    expandido,
+    onExpandir,
+    onToggle,
+    onAplicar,
+    onPedirConfirmacion,
+}) {
+    const activos = useMemo(
+        () => grupo.permissions.reduce((n, p) => n + (permissions[p.key] ? 1 : 0), 0),
+        [grupo.permissions, permissions]
+    );
+    const destructivos = useMemo(
+        () => grupo.permissions.filter((p) => p.level === 'eliminar').length,
+        [grupo.permissions]
+    );
+
+    const total = grupo.permissions.length;
+    const todos = activos === total;
+    const algunos = activos > 0 && !todos;
+
+    return (
+        <Accordion
+            expanded={expandido}
+            onChange={() => onExpandir(grupo.key)}
+            sx={{ mb: 1, boxShadow: 1 }}
+            TransitionProps={{ unmountOnExit: true }}
+        >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', pr: 2 }}>
+                    <Checkbox
+                        checked={todos}
+                        indeterminate={algunos}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (todos) onAplicar(grupo, 'ninguno');
+                            else onPedirConfirmacion(grupo);
+                        }}
+                        sx={{ mr: 1 }}
+                    />
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 600 }}>{grupo.label}</Typography>
+                        <Typography variant="caption" sx={{ color: '#666' }}>
+                            {grupo.description}
+                        </Typography>
+                    </Box>
+                    {destructivos > 0 && (
+                        <Tooltip title={`${destructivos} permiso(s) que eliminan información`}>
+                            <Chip
+                                size="small"
+                                icon={<WarningAmberIcon />}
+                                label={destructivos}
+                                sx={{ mr: 1, color: '#c62828', bgcolor: '#ffebee' }}
+                            />
+                        </Tooltip>
+                    )}
+                    <Chip
+                        size="small"
+                        label={`${activos} / ${total}`}
+                        color={activos > 0 ? 'success' : 'default'}
+                    />
+                </Box>
+            </AccordionSummary>
+            <AccordionDetails sx={{ pt: 0 }}>
+                <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+                    <ButtonGroup size="small" variant="outlined">
+                        <Button onClick={() => onAplicar(grupo, 'lectura')}>Solo lectura</Button>
+                        <Button onClick={() => onPedirConfirmacion(grupo)}>Acceso completo</Button>
+                        <Button onClick={() => onAplicar(grupo, 'ninguno')}>Sin acceso</Button>
+                    </ButtonGroup>
+                </Stack>
+                <Divider sx={{ mb: 1 }} />
+                {grupo.permissions.map((permiso) => (
+                    <FilaPermiso
+                        key={permiso.key}
+                        permiso={permiso}
+                        activo={!!permissions[permiso.key]}
+                        cambiado={!!permissions[permiso.key] !== !!originalPermissions[permiso.key]}
+                        onToggle={onToggle}
+                    />
+                ))}
+            </AccordionDetails>
+        </Accordion>
+    );
+});
+
 const PermissionsManagementPage = () => {
     const { auth } = useContext(AuthContext);
+    const { hasPermission } = usePermissions();
+    const puedeOrganizar = hasPermission('permisos-gestionar-catalogo');
 
-    // Estados
+    const [pestana, setPestana] = useState('asignar');
     const [roles, setRoles] = useState([]);
     const [selectedRoleId, setSelectedRoleId] = useState('');
+    const [catalog, setCatalog] = useState([]);
     const [permissions, setPermissions] = useState({});
+    const [originalPermissions, setOriginalPermissions] = useState({});
+    const [busquedaInput, setBusquedaInput] = useState('');
+    const [busqueda, setBusqueda] = useState('');
+    const [expandidos, setExpandidos] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success',
-    });
+    const [confirmacion, setConfirmacion] = useState(null);
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-    // Módulos del frontend agrupados
-    const frontendModules = [
-        {
-            category: 'Panel Principal',
-            icon: <DashboardIcon />,
-            modules: [
-                { key: 'dashboard', label: 'Dashboard' },
-            ]
-        },
-        {
-            category: 'Gestión de Usuarios y Roles',
-            icon: <ViewModuleIcon />,
-            modules: [
-                { key: 'usuarios', label: 'Usuarios' },
-            ]
-        },
-        {
-            category: 'Gestión de Clientes y Rutas',
-            icon: <ViewModuleIcon />,
-            modules: [
-                { key: 'colegios', label: 'Colegios' },
-                { key: 'corporaciones', label: 'Corporaciones' },
-                { key: 'buses', label: 'Buses' },
-                { key: 'carga-masiva-horarios', label: 'Carga Masiva de Horarios' },
-            ]
-        },
-        {
-            category: 'Reportes y Estadísticas',
-            icon: <ViewModuleIcon />,
-            modules: [
-                { key: 'circulares-admin-listar', label: 'Historial de Circulares' },
-                { key: 'reportes-uso', label: 'Reportes de Uso' },
-                { key: 'estadisticas-financieras', label: 'Estadísticas Financieras' },
-            ]
-        },
-        {
-            category: 'Gestión de Personal',
-            icon: <ViewModuleIcon />,
-            modules: [
-                { key: 'monitores', label: 'Monitores' },
-                { key: 'pilotos', label: 'Pilotos' },
-                { key: 'supervisores', label: 'Supervisores' },
-                { key: 'auxiliares', label: 'Auxiliares' },
-            ]
-        },
-        {
-            category: 'Operaciones Móviles',
-            icon: <ViewModuleIcon />,
-            modules: [
-                { key: 'asistencias', label: 'Asistencias' },
-                { key: 'incidentes-conducta', label: 'Reportes de Conducta' },
-                { key: 'incidentes-buses', label: 'Incidentes de Buses' },
-                { key: 'emergencias-buses', label: 'Emergencias de Buses' },
-                { key: 'solicitudes-mecanica', label: 'Solicitudes de Mecánica' },
-                { key: 'horarios-rutas', label: 'Horarios de Rutas' },
-                { key: 'registros-combustible', label: 'Registros de Combustible' },
-            ]
-        },
-        {
-            category: 'Seguridad y Auditoría',
-            icon: <ViewModuleIcon />,
-            modules: [
-                { key: 'registro-actividades', label: 'Registro de Actividades' },
-            ]
-        },
-    ];
+    const showSnackbar = useCallback((message, severity = 'success') => {
+        setSnackbar({ open: true, message, severity });
+    }, []);
 
-    // Endpoints del backend agrupados por módulo
-    const backendEndpoints = [
-        {
-            module: 'Dashboard',
-            endpoints: [
-                { key: 'dashboard-ver', label: 'Ver Dashboard' },
-            ]
-        },
-        {
-            module: 'Usuarios',
-            endpoints: [
-                { key: 'usuarios-listar', label: 'Listar Usuarios' },
-                { key: 'usuarios-crear', label: 'Crear Usuario' },
-                { key: 'usuarios-editar', label: 'Editar Usuario' },
-                { key: 'usuarios-eliminar', label: 'Eliminar Usuario' },
-                { key: 'usuarios-eliminar-permanente', label: 'Eliminar Permanentemente' },
-                { key: 'usuarios-listar-pilotos', label: 'Listar Pilotos' },
-                { key: 'usuarios-listar-monitoras', label: 'Listar Monitoras' },
-                { key: 'usuarios-listar-padres', label: 'Listar Padres' },
-                { key: 'usuarios-carga-masiva', label: 'Carga Masiva' },
-                { key: 'usuarios-activar', label: 'Activar Usuario' },
-                { key: 'usuarios-cambiar-estado', label: 'Cambiar Estado' },
-            ]
-        },
-        {
-            module: 'Colegios',
-            endpoints: [
-                { key: 'colegios-listar', label: 'Listar Colegios' },
-                { key: 'colegios-crear', label: 'Crear Colegio' },
-                { key: 'colegios-editar', label: 'Editar Colegio' },
-                { key: 'colegios-eliminar', label: 'Eliminar Colegio' },
-                { key: 'colegios-ver-detalle', label: 'Ver Detalle' },
-                { key: 'colegios-ver-horarios', label: 'Ver Horarios' },
-                { key: 'colegios-ver-inscripciones', label: 'Ver Inscripciones' },
-                { key: 'colegios-carga-masiva', label: 'Carga Masiva' },
-            ]
-        },
-        {
-            module: 'Corporaciones',
-            endpoints: [
-                { key: 'corporaciones-listar', label: 'Listar Corporaciones' },
-                { key: 'corporaciones-crear', label: 'Crear Corporación' },
-                { key: 'corporaciones-editar', label: 'Editar Corporación' },
-                { key: 'corporaciones-desactivar', label: 'Desactivar Corporación' },
-                { key: 'corporaciones-ver-detalle', label: 'Ver Detalle' },
-                { key: 'corporaciones-listar-colaboradores', label: 'Ver Colaboradores' },
-            ]
-        },
-        {
-            module: 'Buses',
-            endpoints: [
-                { key: 'buses-listar', label: 'Listar Buses' },
-                { key: 'buses-crear', label: 'Crear Bus' },
-                { key: 'buses-editar', label: 'Editar Bus' },
-                { key: 'buses-eliminar', label: 'Eliminar Bus' },
-                { key: 'buses-marcar-taller', label: 'Marcar en Taller' },
-                { key: 'buses-carga-masiva', label: 'Carga Masiva' },
-            ]
-        },
-        {
-            module: 'Pagos',
-            endpoints: [
-                { key: 'pagos-listar', label: 'Listar Pagos' },
-                { key: 'pagos-ver-detalle', label: 'Ver Detalle de Pago' },
-                { key: 'pagos-registrar', label: 'Registrar Pago' },
-                { key: 'pagos-editar', label: 'Editar Pago' },
-                { key: 'pagos-eliminar', label: 'Eliminar Pago' },
-                { key: 'pagos-estadisticas', label: 'Ver Estadísticas' },
-            ]
-        },
-        {
-            module: 'Personal (Listados)',
-            endpoints: [
-                { key: 'staff-listar-monitoras', label: 'Listar Monitores' },
-                { key: 'staff-listar-pilotos', label: 'Listar Pilotos' },
-                { key: 'staff-listar-supervisores', label: 'Listar Supervisores' },
-                { key: 'staff-listar-auxiliares', label: 'Listar Auxiliares' },
-                { key: 'usuarios-listar-pilotos', label: 'Listar Pilotos (Users)' },
-                { key: 'usuarios-listar-monitoras', label: 'Listar Monitoras (Users)' },
-            ]
-        },
-        {
-            module: 'Incidentes y Emergencias',
-            endpoints: [
-                { key: 'incidentes-buses-listar', label: 'Listar Incidentes' },
-                { key: 'incidentes-buses-ver-detalle', label: 'Ver Detalle' },
-                { key: 'incidentes-buses-eliminar', label: 'Eliminar Incidente' },
-                { key: 'emergencias-buses-listar', label: 'Listar Emergencias' },
-                { key: 'emergencias-buses-ver-detalle', label: 'Ver Detalle' },
-                { key: 'emergencias-buses-eliminar', label: 'Eliminar Emergencia' },
-            ]
-        },
-        {
-            module: 'Reportes',
-            endpoints: [
-                { key: 'reportes-uso-general', label: 'Reporte General de Uso' },
-                { key: 'reportes-financieros', label: 'Reportes Financieros' },
-                { key: 'reportes-asistencias', label: 'Reportes de Asistencias' },
-            ]
-        },
-    ];
-
-    // Cargar roles
+    // ----------------------------------------------------------------- carga
     useEffect(() => {
-        const fetchRoles = async () => {
+        const cargar = async () => {
             try {
-                const res = await api.get('/permissions/roles', {
-                    headers: { Authorization: `Bearer ${auth?.token}` },
-                });
-                setRoles(res.data.roles || []);
+                const [resRoles, resCatalogo] = await Promise.all([
+                    api.get('/permissions/roles', {
+                        headers: { Authorization: `Bearer ${auth?.token}` },
+                    }),
+                    api.get('/permissions/catalog', {
+                        headers: { Authorization: `Bearer ${auth?.token}` },
+                    }),
+                ]);
+                setRoles(resRoles.data.roles || []);
+                setCatalog(resCatalogo.data.groups || []);
             } catch (err) {
-                console.error('Error al obtener roles:', err);
-                showSnackbar('Error al cargar roles', 'error');
+                console.error('Error al cargar el catálogo de permisos:', err);
+                showSnackbar('No se pudo cargar el catálogo de permisos', 'error');
             }
         };
+        cargar();
+    }, [auth?.token, showSnackbar]);
 
-        if (auth?.token) {
-            fetchRoles();
-        }
-    }, [auth?.token]);
-
-    // Cargar permisos del rol seleccionado
     useEffect(() => {
-        const fetchPermissions = async () => {
+        const cargarPermisos = async () => {
             if (!selectedRoleId) {
                 setPermissions({});
+                setOriginalPermissions({});
                 return;
             }
-
             setIsLoading(true);
             try {
                 const res = await api.get(`/permissions/role/${selectedRoleId}`, {
                     headers: { Authorization: `Bearer ${auth?.token}` },
                 });
-                setPermissions(res.data.permissions || {});
+                const recibidos = res.data.permissions || {};
+                setPermissions(recibidos);
+                setOriginalPermissions(recibidos);
             } catch (err) {
                 console.error('Error al obtener permisos:', err);
-                showSnackbar('Error al cargar permisos', 'error');
+                showSnackbar('Error al cargar los permisos del rol', 'error');
             } finally {
                 setIsLoading(false);
             }
         };
+        cargarPermisos();
+    }, [selectedRoleId, auth?.token, showSnackbar]);
 
-        fetchPermissions();
-    }, [selectedRoleId, auth?.token]);
+    // ------------------------------------------------------------- derivados
+    const clavesCatalogo = useMemo(
+        () => catalog.flatMap((g) => g.permissions.map((p) => p.key)),
+        [catalog]
+    );
 
-    const handlePermissionToggle = (key) => {
-        setPermissions((prev) => ({
-            ...prev,
-            [key]: !prev[key],
-        }));
-    };
+    /** Texto normalizado por permiso, calculado una sola vez por catálogo. */
+    const indiceBusqueda = useMemo(() => {
+        const indice = new Map();
+        for (const grupo of catalog) {
+            const etiquetaGrupo = sinAcentos(grupo.label);
+            for (const permiso of grupo.permissions) {
+                indice.set(permiso.key, `${sinAcentos(permiso.description)} ${etiquetaGrupo}`);
+            }
+        }
+        return indice;
+    }, [catalog]);
 
-    const handleSavePermissions = async () => {
-        if (!selectedRoleId) return;
+    const cambios = useMemo(() => {
+        const lista = [];
+        for (const key of clavesCatalogo) {
+            const antes = !!originalPermissions[key];
+            const ahora = !!permissions[key];
+            if (antes !== ahora) lista.push({ key, ahora });
+        }
+        return lista;
+    }, [clavesCatalogo, permissions, originalPermissions]);
 
+    const hayCambios = cambios.length > 0;
+
+    const gruposFiltrados = useMemo(() => {
+        const termino = sinAcentos(busqueda.trim());
+        if (!termino) return catalog;
+        return catalog
+            .map((grupo) => ({
+                ...grupo,
+                permissions: grupo.permissions.filter((p) =>
+                    (indiceBusqueda.get(p.key) || '').includes(termino)
+                ),
+            }))
+            .filter((g) => g.permissions.length > 0);
+    }, [catalog, busqueda, indiceBusqueda]);
+
+    const totalFiltrado = useMemo(
+        () => gruposFiltrados.reduce((n, g) => n + g.permissions.length, 0),
+        [gruposFiltrados]
+    );
+
+    const gruposWeb = useMemo(
+        () => gruposFiltrados.filter((g) => g.key !== GRUPO_MOVIL),
+        [gruposFiltrados]
+    );
+    const grupoMovil = useMemo(
+        () => gruposFiltrados.find((g) => g.key === GRUPO_MOVIL),
+        [gruposFiltrados]
+    );
+
+    // Al buscar se abren los grupos, salvo que el resultado sea tan amplio que
+    // abrirlos signifique montar casi todo el catálogo otra vez.
+    useEffect(() => {
+        if (!busqueda) {
+            setExpandidos({});
+            return;
+        }
+        if (totalFiltrado > LIMITE_AUTOEXPANDIR) return;
+        const abiertos = {};
+        for (const grupo of gruposFiltrados) abiertos[grupo.key] = true;
+        setExpandidos(abiertos);
+    }, [busqueda, gruposFiltrados, totalFiltrado]);
+
+    useEffect(() => {
+        if (!hayCambios) return undefined;
+        const avisar = (e) => {
+            e.preventDefault();
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', avisar);
+        return () => window.removeEventListener('beforeunload', avisar);
+    }, [hayCambios]);
+
+    // ------------------------------------------------------------- acciones
+    // Todos los handlers van con useCallback y referencias estables: son props
+    // de componentes memoizados, y recrearlos anularía la memoización.
+    const alternarPermiso = useCallback((key) => {
+        setPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
+    }, []);
+
+    const alternarExpandido = useCallback((key) => {
+        setExpandidos((prev) => ({ ...prev, [key]: !prev[key] }));
+    }, []);
+
+    /** La búsqueda se aplica solo al pulsar Buscar o Enter, no al escribir. */
+    const ejecutarBusqueda = useCallback(() => {
+        setBusqueda(busquedaInput.trim());
+    }, [busquedaInput]);
+
+    const limpiarBusqueda = useCallback(() => {
+        setBusquedaInput('');
+        setBusqueda('');
+    }, []);
+
+    const aplicarAGrupo = useCallback((grupo, modo) => {
+        setPermissions((prev) => {
+            const siguiente = { ...prev };
+            for (const permiso of grupo.permissions) {
+                if (modo === 'ninguno') siguiente[permiso.key] = false;
+                else if (modo === 'lectura') siguiente[permiso.key] = permiso.level === 'ver';
+                // 'todo' concede el grupo salvo los permisos destructivos, que se
+                // activan uno por uno para que sea una decisión consciente.
+                else if (modo === 'todo') siguiente[permiso.key] = permiso.level !== 'eliminar';
+            }
+            return siguiente;
+        });
+    }, []);
+
+    /**
+     * "Acceso completo" concede mucho de una vez: se confirma antes.
+     * Depende de `permissions`, pero TarjetaGrupo ya lo recibe como prop y se
+     * vuelve a renderizar igual, así que no se pierde memoización por esto.
+     */
+    const pedirConfirmacion = useCallback(
+        (grupo) => {
+            const aConceder = grupo.permissions.filter(
+                (p) => p.level !== 'eliminar' && !permissions[p.key]
+            );
+            if (!aConceder.length) {
+                showSnackbar('Este grupo ya tiene concedidos todos esos permisos', 'info');
+                return;
+            }
+            const destructivos = grupo.permissions.filter((p) => p.level === 'eliminar');
+            setConfirmacion({ grupo, aConceder, destructivos });
+        },
+        [permissions, showSnackbar]
+    );
+
+    const confirmarAccesoCompleto = useCallback(() => {
+        if (!confirmacion) return;
+        aplicarAGrupo(confirmacion.grupo, 'todo');
+        setConfirmacion(null);
+    }, [confirmacion, aplicarAGrupo]);
+
+    const descartarCambios = useCallback(() => {
+        setPermissions(originalPermissions);
+        showSnackbar('Se descartaron los cambios', 'info');
+    }, [originalPermissions, showSnackbar]);
+
+    const guardar = async () => {
+        if (!selectedRoleId || !hayCambios) return;
         setIsSaving(true);
         try {
-            await api.put(
+            // Se envían únicamente las claves del catálogo. Las filas heredadas
+            // que aún viven en la base no se tocan.
+            const aEnviar = {};
+            for (const key of clavesCatalogo) aEnviar[key] = !!permissions[key];
+
+            const res = await api.put(
                 `/permissions/role/${selectedRoleId}`,
-                { permissions },
+                { permissions: aEnviar },
                 { headers: { Authorization: `Bearer ${auth?.token}` } }
             );
-            showSnackbar('Permisos actualizados exitosamente', 'success');
+            setOriginalPermissions({ ...permissions });
+            const { granted = 0, revoked = 0 } = res.data || {};
+            showSnackbar(`Permisos guardados: ${granted} concedidos, ${revoked} revocados`);
         } catch (err) {
             console.error('Error al actualizar permisos:', err);
-            showSnackbar('Error al actualizar permisos', 'error');
+            const detalle = err?.response?.data?.unknownPermissions;
+            showSnackbar(
+                detalle?.length
+                    ? `No se guardó: hay permisos desconocidos (${detalle.slice(0, 3).join(', ')})`
+                    : 'Error al guardar los permisos',
+                'error'
+            );
         } finally {
             setIsSaving(false);
         }
     };
 
-    const showSnackbar = (message, severity) => {
-        setSnackbar({ open: true, message, severity });
-    };
+    const rolSeleccionado = roles.find((r) => r.id === selectedRoleId);
 
-    const getSelectedRole = () => {
-        return roles.find(r => r.id === selectedRoleId);
-    };
-
-    const countActivePermissions = (moduleList) => {
-        return moduleList.filter(m => permissions[m.key]).length;
-    };
-
+    // ---------------------------------------------------------------- render
     return (
         <PageContainer>
-            <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
-                {/* Header */}
-                <Box sx={{ mb: 4 }}>
+            <Box sx={{ maxWidth: 1200, mx: 'auto', pb: 10 }}>
+                <Box sx={{ mb: 3 }}>
                     <Typography variant="h4" sx={{ fontWeight: 600, color: '#1a237e', mb: 1 }}>
                         Gestión de Permisos
                     </Typography>
                     <Typography variant="body1" sx={{ color: '#666' }}>
-                        Configura los permisos de acceso para cada rol del sistema
+                        {pestana === 'asignar'
+                            ? 'Elige un rol y define qué puede hacer dentro del sistema.'
+                            : 'Organiza cómo se agrupan y describen los permisos.'}
                     </Typography>
                 </Box>
 
-                {/* Selector de Rol */}
-                <Card sx={{ mb: 3, boxShadow: 2 }}>
-                    <CardContent>
-                        <Grid container spacing={2} alignItems="center">
-                            <Grid item xs={12} md={6}>
-                                <FormControl fullWidth>
-                                    <InputLabel>Seleccionar Rol</InputLabel>
-                                    <Select
-                                        value={selectedRoleId}
-                                        onChange={(e) => setSelectedRoleId(e.target.value)}
-                                        label="Seleccionar Rol"
-                                    >
-                                        <MenuItem value="">
-                                            <em>-- Seleccionar --</em>
-                                        </MenuItem>
-                                        {roles.map((role) => (
-                                            <MenuItem key={role.id} value={role.id}>
-                                                {role.name}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-                            {selectedRoleId && (
-                                <Grid item xs={12} md={6}>
-                                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                                        <Chip 
-                                            label={`Rol: ${getSelectedRole()?.name}`}
-                                            color="primary"
-                                            variant="outlined"
-                                        />
-                                    </Box>
-                                </Grid>
-                            )}
-                        </Grid>
-                    </CardContent>
-                </Card>
-
-                {isLoading && (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                        <CircularProgress />
-                    </Box>
+                {puedeOrganizar && (
+                    <Tabs
+                        value={pestana}
+                        onChange={(e, v) => {
+                            if (
+                                hayCambios &&
+                                !window.confirm(
+                                    'Hay cambios sin guardar. ¿Cambiar de pestaña y descartarlos?'
+                                )
+                            ) {
+                                return;
+                            }
+                            if (hayCambios) setPermissions(originalPermissions);
+                            setPestana(v);
+                        }}
+                        sx={{ mb: 3, borderBottom: '1px solid #e0e0e0' }}
+                    >
+                        <Tab value="asignar" label="Permisos por rol" />
+                        <Tab value="organizar" label="Organizar catálogo" />
+                    </Tabs>
                 )}
 
-                {!isLoading && selectedRoleId && (
+                {pestana === 'organizar' && puedeOrganizar && (
+                    <CatalogOrganizer onNotify={showSnackbar} />
+                )}
+
+                {pestana === 'asignar' && (
                     <>
-                        {/* Permisos del Frontend */}
                         <Card sx={{ mb: 3, boxShadow: 2 }}>
                             <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                    <ViewModuleIcon sx={{ mr: 1, color: '#1976d2' }} />
-                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                        Acceso a Módulos de la Aplicación
-                                    </Typography>
-                                </Box>
-                                <Divider sx={{ mb: 2 }} />
-
-                                {frontendModules.map((category, idx) => (
-                                    <Accordion key={idx} sx={{ mb: 1, boxShadow: 1 }}>
-                                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                                                {category.icon}
-                                                <Typography sx={{ ml: 1, fontWeight: 500, flexGrow: 1 }}>
-                                                    {category.category}
-                                                </Typography>
-                                                <Chip 
-                                                    size="small"
-                                                    label={`${countActivePermissions(category.modules)} / ${category.modules.length}`}
-                                                    color={countActivePermissions(category.modules) > 0 ? "success" : "default"}
-                                                    sx={{ mr: 1 }}
-                                                />
-                                            </Box>
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <Grid container spacing={2}>
-                                                {category.modules.map((module) => (
-                                                    <Grid item xs={12} sm={6} md={4} key={module.key}>
-                                                        <Box
-                                                            sx={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'space-between',
-                                                                p: 1.5,
-                                                                borderRadius: 1,
-                                                                bgcolor: permissions[module.key] ? '#e3f2fd' : '#f5f5f5',
-                                                                transition: 'all 0.2s',
-                                                                '&:hover': {
-                                                                    bgcolor: permissions[module.key] ? '#bbdefb' : '#eeeeee',
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Typography variant="body2">
-                                                                {module.label}
-                                                            </Typography>
-                                                            <Switch
-                                                                checked={!!permissions[module.key]}
-                                                                onChange={() => handlePermissionToggle(module.key)}
-                                                                color="primary"
-                                                            />
-                                                        </Box>
-                                                    </Grid>
+                                <Grid container spacing={2} alignItems="center">
+                                    <Grid item xs={12} md={5}>
+                                        <FormControl fullWidth>
+                                            <InputLabel>Seleccionar Rol</InputLabel>
+                                            <Select
+                                                value={selectedRoleId}
+                                                onChange={(e) => {
+                                                    if (
+                                                        hayCambios &&
+                                                        !window.confirm(
+                                                            'Hay cambios sin guardar. ¿Cambiar de rol y descartarlos?'
+                                                        )
+                                                    ) {
+                                                        return;
+                                                    }
+                                                    setSelectedRoleId(e.target.value);
+                                                }}
+                                                label="Seleccionar Rol"
+                                            >
+                                                <MenuItem value="">
+                                                    <em>-- Seleccionar --</em>
+                                                </MenuItem>
+                                                {roles.map((role) => (
+                                                    <MenuItem key={role.id} value={role.id}>
+                                                        {role.name}
+                                                    </MenuItem>
                                                 ))}
-                                            </Grid>
-                                        </AccordionDetails>
-                                    </Accordion>
-                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+                                    <Grid item xs={12} md={7}>
+                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                                            <TextField
+                                                fullWidth
+                                                placeholder="Buscar un permiso por lo que hace..."
+                                                value={busquedaInput}
+                                                onChange={(e) => setBusquedaInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') ejecutarBusqueda();
+                                                }}
+                                                disabled={!selectedRoleId}
+                                                InputProps={{
+                                                    startAdornment: (
+                                                        <InputAdornment position="start">
+                                                            <SearchIcon />
+                                                        </InputAdornment>
+                                                    ),
+                                                    endAdornment: (busquedaInput || busqueda) && (
+                                                        <InputAdornment position="end">
+                                                            <Tooltip title="Limpiar búsqueda">
+                                                                <Button
+                                                                    size="small"
+                                                                    onClick={limpiarBusqueda}
+                                                                    sx={{ minWidth: 0 }}
+                                                                >
+                                                                    <ClearIcon fontSize="small" />
+                                                                </Button>
+                                                            </Tooltip>
+                                                        </InputAdornment>
+                                                    ),
+                                                }}
+                                            />
+                                            <Button
+                                                variant="contained"
+                                                onClick={ejecutarBusqueda}
+                                                disabled={
+                                                    !selectedRoleId ||
+                                                    busquedaInput.trim() === busqueda
+                                                }
+                                                sx={{ px: 3, flexShrink: 0 }}
+                                            >
+                                                Buscar
+                                            </Button>
+                                        </Box>
+                                    </Grid>
+                                </Grid>
                             </CardContent>
                         </Card>
 
-                        {/* Permisos del Backend (Endpoints) 
-                        <Card sx={{ mb: 3, boxShadow: 2 }}>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                    <StorageIcon sx={{ mr: 1, color: '#1976d2' }} />
-                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                        Permisos de Endpoints (API)
+                        {isLoading && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+                                <CircularProgress />
+                            </Box>
+                        )}
+
+                        {!isLoading && !selectedRoleId && (
+                            <Card sx={{ boxShadow: 1 }}>
+                                <CardContent sx={{ textAlign: 'center', py: 6 }}>
+                                    <Typography sx={{ color: '#888' }}>
+                                        Selecciona un rol para ver y configurar sus permisos.
                                     </Typography>
-                                </Box>
-                                <Typography variant="body2" sx={{ mb: 2, color: '#666' }}>
-                                    Controla qué acciones específicas puede realizar este rol en el sistema
-                                </Typography>
-                                <Divider sx={{ mb: 2 }} />
+                                </CardContent>
+                            </Card>
+                        )}
 
-                                {backendEndpoints.map((category, idx) => (
-                                    <Accordion key={idx} sx={{ mb: 1, boxShadow: 1 }}>
-                                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                                                <Typography sx={{ fontWeight: 500, flexGrow: 1 }}>
-                                                    {category.module}
-                                                </Typography>
-                                                <Chip 
-                                                    size="small"
-                                                    label={`${countActivePermissions(category.endpoints)} / ${category.endpoints.length}`}
-                                                    color={countActivePermissions(category.endpoints) > 0 ? "success" : "default"}
-                                                    sx={{ mr: 1 }}
-                                                />
-                                            </Box>
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <Grid container spacing={2}>
-                                                {category.endpoints.map((endpoint) => (
-                                                    <Grid item xs={12} sm={6} md={4} key={endpoint.key}>
-                                                        <Box
-                                                            sx={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'space-between',
-                                                                p: 1.5,
-                                                                borderRadius: 1,
-                                                                bgcolor: permissions[endpoint.key] ? '#e8f5e9' : '#f5f5f5',
-                                                                transition: 'all 0.2s',
-                                                                '&:hover': {
-                                                                    bgcolor: permissions[endpoint.key] ? '#c8e6c9' : '#eeeeee',
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Typography variant="body2">
-                                                                {endpoint.label}
-                                                            </Typography>
-                                                            <Switch
-                                                                checked={!!permissions[endpoint.key]}
-                                                                onChange={() => handlePermissionToggle(endpoint.key)}
-                                                                color="success"
-                                                            />
-                                                        </Box>
-                                                    </Grid>
-                                                ))}
-                                            </Grid>
-                                        </AccordionDetails>
-                                    </Accordion>
+                        {!isLoading && selectedRoleId && (
+                            <>
+                                {busqueda && !gruposFiltrados.length && (
+                                    <Card sx={{ boxShadow: 1, mb: 2 }}>
+                                        <CardContent sx={{ textAlign: 'center', py: 4 }}>
+                                            <Typography sx={{ color: '#888' }}>
+                                                Ningún permiso coincide con “{busqueda}”.
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
+                                )}
+
+                                {busqueda && totalFiltrado > LIMITE_AUTOEXPANDIR && (
+                                    <Alert severity="info" sx={{ mb: 2 }}>
+                                        {totalFiltrado} permisos coinciden. Abre el grupo que te
+                                        interese o afina la búsqueda.
+                                    </Alert>
+                                )}
+
+                                {gruposWeb.map((grupo) => (
+                                    <TarjetaGrupo
+                                        key={grupo.key}
+                                        grupo={grupo}
+                                        permissions={permissions}
+                                        originalPermissions={originalPermissions}
+                                        expandido={!!expandidos[grupo.key]}
+                                        onExpandir={alternarExpandido}
+                                        onToggle={alternarPermiso}
+                                        onAplicar={aplicarAGrupo}
+                                        onPedirConfirmacion={pedirConfirmacion}
+                                    />
                                 ))}
-                            </CardContent>
-                        </Card>
-                        */}
 
-                        {/* Botón Guardar */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <Button
-                                variant="contained"
-                                size="large"
-                                startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-                                onClick={handleSavePermissions}
-                                disabled={isSaving}
-                                sx={{ 
-                                    px: 4,
-                                    py: 1.5,
-                                    bgcolor: '#1976d2',
-                                    '&:hover': { bgcolor: '#1565c0' }
-                                }}
-                            >
-                                {isSaving ? 'Guardando...' : 'Guardar Cambios'}
-                            </Button>
-                        </Box>
+                                {grupoMovil && (
+                                    <>
+                                        <Box
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                mt: 4,
+                                                mb: 1.5,
+                                            }}
+                                        >
+                                            <PhoneIphoneIcon sx={{ mr: 1, color: '#5e35b1' }} />
+                                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                                Aplicación Móvil
+                                            </Typography>
+                                        </Box>
+                                        <Typography variant="body2" sx={{ color: '#666', mb: 1.5 }}>
+                                            Estos permisos solo afectan a la app de pilotos,
+                                            monitoras, supervisores y auxiliares. No cambian nada en
+                                            el sistema web.
+                                        </Typography>
+                                        <TarjetaGrupo
+                                            grupo={grupoMovil}
+                                            permissions={permissions}
+                                            originalPermissions={originalPermissions}
+                                            expandido={!!expandidos[grupoMovil.key]}
+                                            onExpandir={alternarExpandido}
+                                            onToggle={alternarPermiso}
+                                            onAplicar={aplicarAGrupo}
+                                            onPedirConfirmacion={pedirConfirmacion}
+                                        />
+                                    </>
+                                )}
+                            </>
+                        )}
                     </>
                 )}
             </Box>
 
-            {/* Snackbar */}
+            {/* Barra fija de guardado: solo aparece cuando hay algo que guardar. */}
+            {hayCambios && pestana === 'asignar' && (
+                <Box
+                    sx={{
+                        position: 'fixed',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        bgcolor: '#fff',
+                        borderTop: '1px solid #e0e0e0',
+                        boxShadow: '0 -2px 12px rgba(0,0,0,0.08)',
+                        px: 4,
+                        py: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        zIndex: 1200,
+                    }}
+                >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Chip
+                            label={`${cambios.length} cambio${cambios.length === 1 ? '' : 's'} sin guardar`}
+                            sx={{ bgcolor: '#fff3e0', color: '#ef6c00', fontWeight: 600 }}
+                        />
+                        <Typography variant="body2" sx={{ color: '#666' }}>
+                            {cambios.filter((c) => c.ahora).length} por conceder,{' '}
+                            {cambios.filter((c) => !c.ahora).length} por revocar
+                            {rolSeleccionado ? ` · rol ${rolSeleccionado.name}` : ''}
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1.5 }}>
+                        <Button onClick={descartarCambios} disabled={isSaving}>
+                            Descartar
+                        </Button>
+                        <Button
+                            variant="contained"
+                            startIcon={
+                                isSaving ? (
+                                    <CircularProgress size={18} color="inherit" />
+                                ) : (
+                                    <SaveIcon />
+                                )
+                            }
+                            onClick={guardar}
+                            disabled={isSaving}
+                            sx={{ px: 3, bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
+                        >
+                            {isSaving ? 'Guardando...' : 'Guardar cambios'}
+                        </Button>
+                    </Box>
+                </Box>
+            )}
+
+            <Dialog
+                open={!!confirmacion}
+                onClose={() => setConfirmacion(null)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Conceder acceso completo</DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ mb: 2 }}>
+                        Se van a conceder <strong>{confirmacion?.aConceder.length}</strong> permisos
+                        del grupo <strong>{confirmacion?.grupo.label}</strong>
+                        {rolSeleccionado ? ` al rol ${rolSeleccionado.name}` : ''}:
+                    </DialogContentText>
+                    <Box
+                        sx={{
+                            maxHeight: 260,
+                            overflowY: 'auto',
+                            bgcolor: '#fafafa',
+                            borderRadius: 1,
+                            p: 1.5,
+                        }}
+                    >
+                        {confirmacion?.aConceder.map((p) => (
+                            <Typography key={p.key} variant="body2" sx={{ py: 0.3 }}>
+                                • {p.description}
+                            </Typography>
+                        ))}
+                    </Box>
+                    {!!confirmacion?.destructivos.length && (
+                        <Alert severity="warning" sx={{ mt: 2 }}>
+                            {confirmacion.destructivos.length} permiso(s) de este grupo eliminan
+                            información y <strong>no</strong> se conceden aquí. Si hacen falta,
+                            actívalos uno por uno.
+                        </Alert>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmacion(null)}>Cancelar</Button>
+                    <Button variant="contained" onClick={confirmarAccesoCompleto}>
+                        Conceder
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={4000}
                 onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
             >
                 <Alert
                     onClose={() => setSnackbar({ ...snackbar, open: false })}
