@@ -47,9 +47,7 @@ import {
     ResponsiveContainer,
     Cell,
     Tooltip as RechartsTooltip,
-    Legend,
-    PieChart,
-    Pie
+    Legend
 } from 'recharts';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowBack, School as SchoolIcon, CalendarToday, InfoOutlined, People, ChevronLeft, ChevronRight } from '@mui/icons-material';
@@ -3558,7 +3556,7 @@ const SchoolPaymentsPage = () => {
 
                                         {/* Gráficos */}
                                         <Grid container spacing={3} sx={{ mt: 2 }}>
-                                            <Grid item xs={12} md={8}>
+                                            <Grid item xs={12} md={12}>
                                                 <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: 1 }}>
                                                     <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
                                                         📈 Ingresos Mensuales (Pagos + Extraordinarios)
@@ -3588,36 +3586,6 @@ const SchoolPaymentsPage = () => {
                                                             </Bar>
                                                         </BarChart>
                                                     </ResponsiveContainer>
-                                                    </Box>
-                                                </Box>
-                                            </Grid>
-                                            <Grid item xs={12} md={4}>
-                                                <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: 1, height: '100%' }}>
-                                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
-                                                        🎯 Estado de Pagos
-                                                    </Typography>
-                                                    <Box sx={{ width: '100%', height: 300 }}>
-                                                        <ResponsiveContainer width="100%" height="100%">
-                                                            <PieChart>
-                                                                <Pie
-                                                                    data={[
-                                                                        { name: 'Pagado', value: displayPaid, fill: '#4caf50' },
-                                                                        { name: 'Adelantado', value: displayAdelantado, fill: '#1976D2' },
-                                                                        { name: 'En Mora', value: displayMora, fill: '#f44336' },
-                                                                        { name: 'Pendientes', value: displayPendiente, fill: '#ff9800' },
-                                                                        { name: 'En Proceso', value: displayEnProceso, fill: '#2196f3' }
-                                                                    ].filter(item => item.value > 0)}
-                                                                    cx="50%"
-                                                                    cy="50%"
-                                                                    labelLine={false}
-                                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                                                                    outerRadius={80}
-                                                                    dataKey="value"
-                                                                >
-                                                                </Pie>
-                                                                <RechartsTooltip formatter={(value, name) => [value + ' familias', name]} />
-                                                            </PieChart>
-                                                        </ResponsiveContainer>
                                                     </Box>
                                                 </Box>
                                             </Grid>

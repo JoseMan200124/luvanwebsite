@@ -2771,13 +2771,13 @@ const SchoolUsersPage = () => {
                                                         )}
 
                                                         {(() => {
-                                                            const isInactive = user && (user.state === 0 || user.state === '0' || user.state === false);
+                                                            const isInactive = serviceStatus === 'INACTIVE';
                                                             return isInactive ? (
-                                                                <IconButton size="small" title="Activar familia" onClick={() => handleActivateClick(user)} color={Number(user.state) === 1 ? 'warning' : 'success'}>
+                                                                <IconButton size="small" title="Activar familia" onClick={() => handleActivateClick(user)} color="success">
                                                                     <ToggleOff fontSize="small" />
                                                                 </IconButton>
                                                             ) : (
-                                                                <IconButton size="small" title="Suspender familia" onClick={() => handleSuspendClick(user)} color={Number(user.state) === 1 ? 'warning' : 'success'}>
+                                                                <IconButton size="small" title="Suspender familia" onClick={() => handleSuspendClick(user)} color="warning">
                                                                     <ToggleOn fontSize="small" />
                                                                 </IconButton>
                                                             );

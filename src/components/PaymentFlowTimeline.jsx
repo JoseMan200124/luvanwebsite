@@ -211,17 +211,21 @@ function getOperationDescription(entry) {
                 : `Cargo tarifa mensual — ${fmt(amount)}`;
         }
         case 'PAYMENT': {
-            let amt = Math.max(0, Number(entry.balanceDueBefore - entry.balanceDueAfter || 0));
+            const receipt = meta.receiptNumber || '';
+            // Monto total pagado (efectivo recibido) = amountToBalance + overpayment
+            const totalPaid = Number(meta.amountToBalance || 0) + Number(meta.overpayment || 0);
+            let amt = totalPaid > 0.01
+                ? totalPaid
+                : Math.max(0, Number(entry.balanceDueBefore - entry.balanceDueAfter || 0));
             if (amt === 0) {
                 amt = Number(meta.amountToBalance || meta.overpayment || meta.overpaymentAmount || 0);
             }
-            const receipt = meta.receiptNumber || '';
             // Añadir información de descuento extraordinario si existe
             const unusedDisc = Number(meta.unusedExtraordinaryDiscount || 0);
             const appliedDisc = Number(meta.extraordinaryDiscountAppliedToBalance || 0);
             const extraDisc = Number(meta.extraordinaryDiscount || 0);
-            // El monto mostrado debe incluir el descuento extraordinario (efectivo + descuento)
-            const displayAmt = unusedDisc > 0.01 ? amt + unusedDisc : amt;
+            // Mostrar el monto total del pago (no solo lo aplicado al balance)
+            const displayAmt = totalPaid > 0.01 ? totalPaid : (unusedDisc > 0.01 ? amt + unusedDisc : amt);
             let base;
             if (unusedDisc > 0.01) {
                 base = receipt
