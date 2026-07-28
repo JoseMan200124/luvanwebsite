@@ -28,7 +28,7 @@ const formatCurrency = (value) => `Q${Number(value || 0).toFixed(2)}`;
 
 /**
  * Panel de inscripción de ciclo escolar dentro del detalle de pago de una familia (staff).
- * Muestra el estado del cargo y permite registrar un abono (al procesar la boleta subida
+ * Muestra el estado del cargo y permite registrar un pago (al procesar la boleta subida
  * por la familia) o aplicar un ajuste/exoneración manual. No hay contraparte para el padre.
  */
 export default function EnrollmentPaymentPanel({ userId, cicloEscolarId, onSaved }) {
@@ -81,12 +81,12 @@ export default function EnrollmentPaymentPanel({ userId, cicloEscolarId, onSaved
             });
             setPayDialogOpen(false);
             await loadStatus();
-            setSnackbar({ open: true, message: 'Abono de inscripción registrado.', severity: 'success' });
+            setSnackbar({ open: true, message: 'Pago de inscripción registrado.', severity: 'success' });
             if (onSaved) onSaved();
         } catch (err) {
             setSnackbar({
                 open: true,
-                message: err.response?.data?.error || 'Error al registrar el abono.',
+                message: err.response?.data?.error || 'Error al registrar el pago.',
                 severity: 'error',
             });
         } finally {
@@ -186,7 +186,7 @@ export default function EnrollmentPaymentPanel({ userId, cicloEscolarId, onSaved
                     onClick={handleOpenPay}
                     disabled={enrollmentPayment.amountDue <= 0}
                 >
-                    Registrar Abono
+                    Registrar Pago
                 </Button>
                 <Button
                     variant="outlined"
@@ -198,9 +198,9 @@ export default function EnrollmentPaymentPanel({ userId, cicloEscolarId, onSaved
                 </Button>
             </Box>
 
-            {/* Diálogo: registrar abono */}
+            {/* Diálogo: registrar pago */}
             <Dialog open={payDialogOpen} onClose={() => setPayDialogOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle>Registrar abono de inscripción</DialogTitle>
+                <DialogTitle>Registrar pago de inscripción</DialogTitle>
                 <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
                     <TextField
                         label="Monto pagado (Q)"
