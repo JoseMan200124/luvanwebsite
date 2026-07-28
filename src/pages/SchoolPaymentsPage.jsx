@@ -1226,6 +1226,18 @@ const SchoolPaymentsPage = () => {
                 familyAccount = null;
             }
 
+            // Cargo de inscripción del ciclo (saldo independiente de la mensualidad)
+            let enrollmentPaymentForPdf = null;
+            try {
+                const cicloEscolarId = payment?.cicloEscolarId || null;
+                const enrollmentRes = await api.get(`/enrollment-payments/by-user/${userId}`, {
+                    params: cicloEscolarId ? { cicloEscolarId } : {}
+                });
+                enrollmentPaymentForPdf = enrollmentRes?.data?.enrollmentPayment || null;
+            } catch (e) {
+                enrollmentPaymentForPdf = null;
+            }
+
             const attemptFetch = async (params) => {
                 try {
                     const r = await api.get('/payments/paymenthistory', { params });
@@ -1695,20 +1707,25 @@ const SchoolPaymentsPage = () => {
 
             cursorY += cicloLabel ? 26 : 18;
 
+            const metricCards = [
+                { label: 'Tarifa pendiente', value: moneyCard(totals?.balanceDue || 0) },
+                { label: 'Mora pendiente', value: moneyCard(totals?.penaltyDue || 0) },
+                // Solo se agrega cuando existe cargo de inscripción, para no alterar el layout
+                // de 4 tarjetas en colegios que no cobran inscripción.
+                ...(enrollmentPaymentForPdf
+                    ? [{ label: 'Inscripción pendiente', value: moneyCard(enrollmentPaymentForPdf.amountDue || 0) }]
+                    : []),
+                { label: 'Crédito a favor', value: moneyCard(totals?.creditBalance || 0) },
+                { label: 'Períodos pendientes', value: String(totals?.unpaidPeriodsCount || 0) },
+            ];
+
             const cardGap = 10;
-            const cardsCount = 4;
+            const cardsCount = metricCards.length;
             const cardW = Number.isFinite(Number(pageWidth))
                 ? ((Number(pageWidth) - 80 - (cardGap * (cardsCount - 1))) / cardsCount)
                 : ((595 - 80 - (cardGap * (cardsCount - 1))) / cardsCount);
             const cardH = 54;
             const cardY = cursorY;
-
-            const metricCards = [
-                { label: 'Tarifa pendiente', value: moneyCard(totals?.balanceDue || 0) },
-                { label: 'Mora pendiente', value: moneyCard(totals?.penaltyDue || 0) },
-                { label: 'Crédito a favor', value: moneyCard(totals?.creditBalance || 0) },
-                { label: 'Períodos pendientes', value: String(totals?.unpaidPeriodsCount || 0) },
-            ];
 
             ensureSpace(cardH + 12);
             for (let i = 0; i < metricCards.length; i++) {
@@ -1725,12 +1742,13 @@ const SchoolPaymentsPage = () => {
                     doc.rect(sx, cardY, sW, sH, 'FD');
                 }
 
-                doc.setFontSize(8.5);
+                // Con 5 tarjetas el ancho baja (~95pt): reducir la etiqueta evita que se corte.
+                doc.setFontSize(cardsCount > 4 ? 7.5 : 8.5);
                 doc.setFont(undefined, 'normal');
                 doc.setTextColor(90);
                 doc.text(metricCards[i].label, x + 10, cardY + 16);
                 doc.setTextColor(0, 0, 0);
-                doc.setFontSize(13);
+                doc.setFontSize(cardsCount > 4 ? 11.5 : 13);
                 doc.setFont(undefined, 'bold');
                 doc.text(String(metricCards[i].value || '-'), x + 10, cardY + 38);
             }

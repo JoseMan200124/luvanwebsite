@@ -915,12 +915,27 @@ const ParentPaymentPage = () => {
                     <StatusBadge status={currentStatus} />
                 </Box>
 
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' }, gap: 1.25 }}>
+                {/* La tarjeta de inscripción solo aparece si la familia tiene cargo de inscripción,
+                    y en ese caso el grid pasa a 5 columnas para no dejarla sola en otra fila. */}
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: enrollmentPayment ? 'repeat(5, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))' }, gap: 1.25 }}>
                     <MetricCard label="Tarifa pendiente" value={formatMoney(paymentAccount?.totals?.balanceDue)} icon={CreditCardIcon} tone="primary" />
                     <MetricCard label="Mora pendiente" value={formatMoney(paymentAccount?.totals?.penaltyDue)} icon={ErrorOutlineIcon} tone="danger" />
+                    {enrollmentPayment && (
+                        <MetricCard label="Inscripción pendiente" value={formatMoney(enrollmentPayment.amountDue)} icon={ReceiptLongIcon} tone="warning" />
+                    )}
                     <MetricCard label="Crédito" value={formatMoney(paymentAccount?.totals?.creditBalance)} icon={TrendingUpIcon} tone="info" />
                     <MetricCard label="Períodos pendientes" value={`${paymentAccount?.totals?.unpaidPeriodsCount || 0}`} icon={CalendarMonthIcon} tone="warning" />
                 </Box>
+
+                {enrollmentPayment && enrollmentPayment.status !== 'PAGADO' && (
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, mt: 1.5, borderRadius: 1.5, backgroundColor: '#FFF4E6', color: '#7C3A00' }}>
+                        <ReceiptLongIcon sx={{ fontSize: 20, color: '#B45309', mt: 0.1 }} />
+                        <Typography sx={{ fontSize: 13, lineHeight: 1.55 }}>
+                            {enrollmentPayment.status === 'PARCIAL' ? 'Inscripción con abono parcial. ' : 'Inscripción del ciclo pendiente. '}
+                            Este cobro es independiente de la mensualidad; súbelo con tu boleta de pago habitual.
+                        </Typography>
+                    </Box>
+                )}
 
                 {(primaryPayment?.penaltyGlobalFrozen || toNumber(primaryPayment?.frozenPenaltyPeriodsCount) > 0) && (
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, mt: 1.5, borderRadius: 1.5, backgroundColor: '#EEF6FF', color: '#1E3A8A' }}>
@@ -931,23 +946,6 @@ const ParentPaymentPage = () => {
                     </Box>
                 )}
             </SectionCard>
-
-            {enrollmentPayment && enrollmentPayment.status !== 'PAGADO' && (
-                <SectionCard title="Inscripción del ciclo" icon={ReceiptLongIcon}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-                        <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ color: TEXT_COLOR, fontSize: 15, fontWeight: 700 }}>
-                                Saldo de inscripción: {formatMoney(enrollmentPayment.amountDue)}
-                            </Typography>
-                            <Typography sx={{ color: MUTED_COLOR, fontSize: 12, mt: 0.25 }}>
-                                {enrollmentPayment.status === 'PARCIAL' ? 'Abono parcial registrado. ' : ''}
-                                Este cobro es independiente de la mensualidad. Súbelo con tu boleta de pago habitual.
-                            </Typography>
-                        </Box>
-                        <StatusBadge status={enrollmentPayment.status === 'PARCIAL' ? 'PARCIAL' : 'PENDIENTE'} />
-                    </Box>
-                </SectionCard>
-            )}
 
             <SectionCard title="Información de depósito" icon={BusinessIcon}>
                 <InfoRow label="Banco" value={routeInfo?.bankName} />

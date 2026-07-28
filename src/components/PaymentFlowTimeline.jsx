@@ -36,7 +36,8 @@ import {
     KeyboardArrowUp as ExpandLessIcon,
     MoreHoriz as MoreHorizIcon,
     SwapVert as SortIcon,
-    Autorenew as AutorenewIcon
+    Autorenew as AutorenewIcon,
+    School as SchoolIcon
 } from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
@@ -83,11 +84,39 @@ const OPERATION_META = {
     AUTO_DEBIT: { icon: <AutorenewIcon fontSize="small" />, label: 'Débito Automático', color: '#388e3c', bgColor: '#e8f5e9' },
     FULL_DISCOUNT: { icon: <MoneyOffIcon fontSize="small" />, label: 'Descuento Total', color: '#6a1b9a', bgColor: '#f3e5f5' },
     PENALTY_CLEARANCE: { icon: <MoneyOffIcon fontSize="small" />, label: 'Limpieza de Mora', color: '#6a1b9a', bgColor: '#f3e5f5' },
-    ENROLLMENT_BILLING: { icon: <ReceiptIcon fontSize="small" />, label: 'Cargo de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
-    ENROLLMENT_PAYMENT: { icon: <TrendingDownIcon fontSize="small" />, label: 'Abono de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
-    ENROLLMENT_ADJUSTMENT: { icon: <MoneyOffIcon fontSize="small" />, label: 'Ajuste de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
+    // Inscripción de ciclo: mismo icono y color teal en las tres operaciones para que se
+    // distingan de un vistazo de la mensualidad/mora; el tipo lo aclara la etiqueta.
+    ENROLLMENT_BILLING: { icon: <SchoolIcon fontSize="small" />, label: 'Cargo de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
+    ENROLLMENT_PAYMENT: { icon: <SchoolIcon fontSize="small" />, label: 'Abono de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
+    ENROLLMENT_ADJUSTMENT: { icon: <SchoolIcon fontSize="small" />, label: 'Ajuste de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
     DEFAULT: { icon: <MoreHorizIcon fontSize="small" />, label: 'Operación', color: '#757575', bgColor: '#f5f5f5' }
 };
+
+const ENROLLMENT_OPERATIONS = new Set(['ENROLLMENT_BILLING', 'ENROLLMENT_PAYMENT', 'ENROLLMENT_ADJUSTMENT']);
+
+function isEnrollmentOperation(op) {
+    return ENROLLMENT_OPERATIONS.has(String(op || '').toUpperCase());
+}
+
+/**
+ * Movimiento del saldo de inscripción de una entrada de ledger.
+ * Los asientos nuevos lo guardan en metadata (las columnas de saldo describen la
+ * mensualidad y quedan sin cambio); los asientos antiguos, previos a esa corrección,
+ * lo tienen en balanceDueBefore/After, por lo que se usan como respaldo.
+ */
+function getEnrollmentBalanceShift(entry) {
+    const meta = entry?.metadata || {};
+    if (meta.enrollmentAmountDueBefore !== undefined && meta.enrollmentAmountDueAfter !== undefined) {
+        return { before: Number(meta.enrollmentAmountDueBefore || 0), after: Number(meta.enrollmentAmountDueAfter || 0) };
+    }
+    if (String(entry?.operation || '').toUpperCase() === 'ENROLLMENT_BILLING') {
+        const netAmount = Number(meta.netAmount || 0);
+        return { before: 0, after: netAmount };
+    }
+    const before = Number(entry?.balanceDueBefore || 0);
+    const after = Number(entry?.balanceDueAfter || 0);
+    return before !== after ? { before, after } : null;
+}
 
 function getOperationMeta(op) {
     return OPERATION_META[String(op || '').toUpperCase()] || OPERATION_META.DEFAULT;
@@ -332,6 +361,32 @@ function getOperationDescription(entry) {
                 : 'Limpieza de mora';
             return periodLabel ? `${base} (${periodLabel})` : base;
         }
+        case 'ENROLLMENT_BILLING': {
+            const net = Number(meta.netAmount || 0);
+            const disc = Number(meta.discountApplied || 0);
+            const students = Number(meta.studentsCount || 0);
+            let text = `Cargo de inscripción del ciclo — ${fmt(net)}`;
+            if (students > 0) text += ` (${students} ${students === 1 ? 'estudiante' : 'estudiantes'})`;
+            if (disc > 0) text += ` · descuento por fecha: ${fmt(disc)}`;
+            return text;
+        }
+        case 'ENROLLMENT_PAYMENT': {
+            const applied = Number(meta.appliedAmount || 0);
+            const receipt = meta.receiptNumber || '';
+            const base = applied > 0
+                ? `Abono de inscripción — ${fmt(applied)}`
+                : (entry.description || 'Abono de inscripción');
+            return receipt ? `${base} (Boleta: ${receipt})` : base;
+        }
+        case 'ENROLLMENT_ADJUSTMENT': {
+            const applied = Number(meta.appliedAdjustment || 0);
+            if (applied <= 0) {
+                // Asiento antiguo: la descripción ya incluye monto y motivo, no volver a anexarlo.
+                return entry.description || 'Ajuste manual de inscripción';
+            }
+            const base = `Ajuste manual de inscripción — ${fmt(applied)}`;
+            return meta.reason ? `${base} — ${meta.reason}` : base;
+        }
         default:
             return entry.description || 'Operación del sistema';
     }
@@ -363,10 +418,16 @@ const TimelineEntryDesktop = ({ entry, isLast }) => {
     const description = getOperationDescription(entry);
     const operator = getOperatorLabel(entry);
 
-    const hasBalanceChange = Number(entry.balanceDueAfter || 0) !== Number(entry.balanceDueBefore || 0);
-    const hasPenaltyChange = Number(entry.penaltyDueAfter || 0) !== Number(entry.penaltyDueBefore || 0);
-    const hasCreditChange = Number(entry.creditBalanceAfter || 0) !== Number(entry.creditBalanceBefore || 0);
-    const hasAnyChange = hasBalanceChange || hasPenaltyChange || hasCreditChange;
+    // En operaciones de inscripción se muestra el saldo de inscripción, no el de mensualidad:
+    // las columnas de saldo no cambian (y en asientos antiguos contenían montos de inscripción,
+    // lo que hacía que el chip "Balance" mostrara cifras engañosas).
+    const isEnrollment = isEnrollmentOperation(entry.operation);
+    const enrollmentShift = isEnrollment ? getEnrollmentBalanceShift(entry) : null;
+
+    const hasBalanceChange = !isEnrollment && Number(entry.balanceDueAfter || 0) !== Number(entry.balanceDueBefore || 0);
+    const hasPenaltyChange = !isEnrollment && Number(entry.penaltyDueAfter || 0) !== Number(entry.penaltyDueBefore || 0);
+    const hasCreditChange = !isEnrollment && Number(entry.creditBalanceAfter || 0) !== Number(entry.creditBalanceBefore || 0);
+    const hasAnyChange = hasBalanceChange || hasPenaltyChange || hasCreditChange || !!enrollmentShift;
 
     return (
         <Box sx={{ display: 'flex', gap: 2, position: 'relative', pb: isLast ? 1 : 3 }}>
@@ -422,6 +483,21 @@ const TimelineEntryDesktop = ({ entry, isLast }) => {
                 {/* Efecto en balances */}
                 {hasAnyChange && (
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {enrollmentShift && (
+                            <Chip
+                                size="small"
+                                icon={<SchoolIcon sx={{ fontSize: '0.85rem !important' }} />}
+                                label={`Inscripción: ${fmt(enrollmentShift.before)} → ${fmt(enrollmentShift.after)}`}
+                                variant="outlined"
+                                sx={{
+                                    height: 22,
+                                    color: '#00695c',
+                                    borderColor: '#4db6ac',
+                                    '& .MuiChip-icon': { color: '#00695c' },
+                                    '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 }
+                                }}
+                            />
+                        )}
                         {hasBalanceChange && (
                             <Chip
                                 size="small"
@@ -465,9 +541,13 @@ const TimelineEntryMobile = ({ entry }) => {
     const description = getOperationDescription(entry);
     const operator = getOperatorLabel(entry);
 
-    const hasBalanceChange = Number(entry.balanceDueAfter || 0) !== Number(entry.balanceDueBefore || 0);
-    const hasPenaltyChange = Number(entry.penaltyDueAfter || 0) !== Number(entry.penaltyDueBefore || 0);
-    const hasCreditChange = Number(entry.creditBalanceAfter || 0) !== Number(entry.creditBalanceBefore || 0);
+    // Ver nota en TimelineEntryDesktop sobre el saldo de inscripción.
+    const isEnrollment = isEnrollmentOperation(entry.operation);
+    const enrollmentShift = isEnrollment ? getEnrollmentBalanceShift(entry) : null;
+
+    const hasBalanceChange = !isEnrollment && Number(entry.balanceDueAfter || 0) !== Number(entry.balanceDueBefore || 0);
+    const hasPenaltyChange = !isEnrollment && Number(entry.penaltyDueAfter || 0) !== Number(entry.penaltyDueBefore || 0);
+    const hasCreditChange = !isEnrollment && Number(entry.creditBalanceAfter || 0) !== Number(entry.creditBalanceBefore || 0);
 
     return (
         <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
@@ -497,8 +577,13 @@ const TimelineEntryMobile = ({ entry }) => {
                         Por usuario {operator}
                     </Typography>
                 )}
-                {(hasBalanceChange || hasPenaltyChange || hasCreditChange) && (
+                {(hasBalanceChange || hasPenaltyChange || hasCreditChange || !!enrollmentShift) && (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {enrollmentShift && (
+                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#00695c' }}>
+                                Inscripción: {fmt(enrollmentShift.before)} → {fmt(enrollmentShift.after)}
+                            </Typography>
+                        )}
                         {hasBalanceChange && (
                             <Typography variant="caption" sx={{ fontWeight: 600, color: Number(entry.balanceDueAfter) > Number(entry.balanceDueBefore) ? 'warning.dark' : 'success.dark' }}>
                                 Balance: {fmt(entry.balanceDueBefore)} → {fmt(entry.balanceDueAfter)}
@@ -772,6 +857,7 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
     const summary = flowData?.summary || null;
     const periods = flowData?.periods || [];
     const transactions = flowData?.transactions || [];
+    const enrollmentPayment = flowData?.enrollmentPayment || null;
 
     // ============================================================
     // Loading State
@@ -842,6 +928,15 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                             {fmt(payment?.penaltyDue || 0)}
                         </Typography>
                     </Box>
+                    {/* Solo si la familia tiene cargo de inscripción para este ciclo */}
+                    {enrollmentPayment && (
+                        <Box sx={{ flex: '1 1 130px', minWidth: 110, p: 1.5, bgcolor: '#fff', borderRadius: 1.5, border: '1px solid #e0e0e0' }}>
+                            <Typography variant="caption" color="text.secondary">Inscripción Pendiente</Typography>
+                            <Typography variant="body1" sx={{ fontWeight: 700, color: Number(enrollmentPayment.amountDue || 0) > 0 ? 'warning.dark' : 'success.dark' }}>
+                                {fmt(enrollmentPayment.amountDue || 0)}
+                            </Typography>
+                        </Box>
+                    )}
                     <Box sx={{ flex: '1 1 130px', minWidth: 110, p: 1.5, bgcolor: '#fff', borderRadius: 1.5, border: '1px solid #e0e0e0' }}>
                         <Typography variant="caption" color="text.secondary">Crédito Disponible</Typography>
                         <Typography variant="body1" sx={{ fontWeight: 700, color: Number(payment?.creditBalance || 0) > 0 ? 'info.main' : 'text.disabled' }}>
@@ -849,6 +944,15 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                         </Typography>
                     </Box>
                 </Box>
+
+                {enrollmentPayment && Number(enrollmentPayment.amountDue || 0) > 0 && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        Inscripción: {fmt(enrollmentPayment.netAmount || 0)} neto
+                        {Number(enrollmentPayment.discountApplied || 0) > 0 && ` (descuento ${fmt(enrollmentPayment.discountApplied)})`}
+                        {Number(enrollmentPayment.amountPaid || 0) > 0 && ` · abonado ${fmt(enrollmentPayment.amountPaid)}`}
+                        {Number(enrollmentPayment.manualAdjustmentAmount || 0) > 0 && ` · ajuste manual ${fmt(enrollmentPayment.manualAdjustmentAmount)}`}
+                    </Typography>
+                )}
                 {summary && (
                     <Box sx={{ mt: 1, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                         {Number(summary.totalExonerated || 0) > 0 && (
