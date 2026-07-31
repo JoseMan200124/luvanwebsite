@@ -54,6 +54,10 @@ const roleOptionsStatic = [
     { id: 7, name: 'Auxiliar' }
 ];
 
+// A colegio is identified by its NAME, not its id: the same school has one row per ciclo
+// escolar. Must mirror `normalizeSchoolIdentityForStaffScope` in the backend.
+const normalizeSchoolName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
 /* ================== Responsive Table & Mobile Cards =================== */
 // Contenedor principal de la página
 const RolesContainer = styled.div`
@@ -166,6 +170,12 @@ const RolesManagementPage = () => {
 
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
+    // Canonical school list (one entry per school name) used to assign Supervisor/Auxiliar
+    // clients. Independent of the ciclo escolar filter: staff assignments are global.
+    const [assignableSchools, setAssignableSchools] = useState([]);
+    // Map<schoolId, canonicalSchoolId> — resolves any per-cycle school row to the entry
+    // rendered in the assignment selector.
+    const [canonicalSchoolIdById, setCanonicalSchoolIdById] = useState(new Map());
     const [corporations, setCorporations] = useState([]);
     const [roleOptions, setRoleOptions] = useState(roleOptionsStatic);
     // Buses no longer needed for route report generation (slots carry routeNumber)
@@ -245,6 +255,7 @@ const RolesManagementPage = () => {
         (async () => {
             fetchUsers();
             fetchSchools();
+            fetchAssignableSchools();
             fetchCorporations();
             fetchRoles();
             fetchAllPilots();
@@ -347,6 +358,49 @@ const RolesManagementPage = () => {
         }
     };
 
+    // A school is identified by its NAME: the same colegio exists as one row per ciclo
+    // escolar, each with a different id. Staff clients are picked once per name, so this
+    // list must never be filtered by the selected cycle nor contain repeated names.
+    // The backend already collapses staff assignments to one id per school name, but a
+    // legacy `user.school` (or a stale row) may still point at a sibling-cycle record.
+    const toCanonicalSchoolIds = (schoolIds) => [...new Set(
+        (schoolIds || [])
+            .map(id => Number(id))
+            .filter(Boolean)
+            .map(id => canonicalSchoolIdById.get(id) ?? id)
+    )];
+
+    const fetchAssignableSchools = async () => {
+        try {
+            const [latestResp, allResp] = await Promise.all([
+                api.get('/schools', { params: { latestPerSchool: true }, skipSchoolCycleContext: true }),
+                api.get('/schools', { params: { allCycles: true }, skipSchoolCycleContext: true })
+            ]);
+
+            const canonicalByName = new Map();
+            for (const school of latestResp.data.schools || []) {
+                const key = normalizeSchoolName(school.name);
+                const current = canonicalByName.get(key);
+                if (!current || Number(school.id) > Number(current.id)) canonicalByName.set(key, school);
+            }
+            setAssignableSchools(
+                [...canonicalByName.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)))
+            );
+
+            // Maps every per-cycle school row to the canonical id shown in the selector,
+            // so data keyed by a sibling record (e.g. a monitora's school) still resolves.
+            const canonicalBySchoolId = new Map();
+            for (const school of allResp.data.schools || []) {
+                const canonical = canonicalByName.get(normalizeSchoolName(school.name));
+                if (canonical) canonicalBySchoolId.set(Number(school.id), Number(canonical.id));
+            }
+            setCanonicalSchoolIdById(canonicalBySchoolId);
+        } catch (err) {
+            console.error('[fetchAssignableSchools] Error:', err);
+            setSnackbar({ open: true, message: 'Error al obtener colegios asignables', severity: 'error' });
+        }
+    };
+
     const fetchCorporations = async () => {
         try {
             const resp = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar), skipSchoolCycleContext: true });
@@ -395,9 +449,9 @@ const RolesManagementPage = () => {
                 // If backend provides attachedSupervisorSchools (optional), use it. Otherwise try to infer from user's school
                 const attachedSchools = user.attachedSupervisorSchools || [];
                 if (attachedSchools.length > 0) {
-                    setSelectedSupervisorSchools(attachedSchools.map(s => Number(s)));
+                    setSelectedSupervisorSchools(toCanonicalSchoolIds(attachedSchools));
                 } else if (user.school) {
-                    setSelectedSupervisorSchools([Number(user.school)]);
+                    setSelectedSupervisorSchools(toCanonicalSchoolIds([user.school]));
                 } else {
                     setSelectedSupervisorSchools([]);
                 }
@@ -413,17 +467,12 @@ const RolesManagementPage = () => {
         
         // Para el caso de Auxiliar
         if (parsedRoleId === 7 || (user.Role && user.Role.name === 'Auxiliar')) {
-            console.log('🔍 Auxiliar detected, user data:', { 
-                attachedAuxiliarSchools: user.attachedAuxiliarSchools,
-                auxiliarSchools: user.auxiliarSchools,
-                school: user.school 
-            });
             // Load attached schools for auxiliar
             const attachedSchools = user.attachedAuxiliarSchools || [];
             if (attachedSchools.length > 0) {
-                setSelectedAuxiliarSchools(attachedSchools.map(s => Number(s)));
+                setSelectedAuxiliarSchools(toCanonicalSchoolIds(attachedSchools));
             } else if (user.school) {
-                setSelectedAuxiliarSchools([Number(user.school)]);
+                setSelectedAuxiliarSchools(toCanonicalSchoolIds([user.school]));
             } else {
                 setSelectedAuxiliarSchools([]);
             }
@@ -1538,7 +1587,7 @@ const RolesManagementPage = () => {
                                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
                                     Selecciona uno o más clientes (colegios y corporaciones); todos los pilotos asignados serán enlazados automáticamente.
                                 </Typography>
-                                
+
                                 <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
                                     Colegios
                                 </Typography>
@@ -1549,9 +1598,9 @@ const RolesManagementPage = () => {
                                         value={selectedSupervisorSchools}
                                         onChange={(e) => setSelectedSupervisorSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
                                         label="Seleccionar Colegios"
-                                        renderValue={(selected) => selected.map(id => (schools.find(s => s.id === id)?.name || id)).join(', ')}
+                                        renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
                                     >
-                                        {schools.map(s => (
+                                        {assignableSchools.map(s => (
                                             <MenuItem key={s.id} value={s.id}>
                                                 <Checkbox checked={selectedSupervisorSchools.includes(s.id)} />
                                                 <ListItemText primary={s.name} />
@@ -1609,7 +1658,7 @@ const RolesManagementPage = () => {
                                 </Paper>
                             </Box>
                         )}
-                        {selectedUser?.roleId === 7 && (
+                        {Number(selectedUser?.roleId) === 7 && (
                             <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
                                 <Typography variant="h6" sx={{ mb: 1 }}>
                                     Clientes a cargo
@@ -1617,7 +1666,7 @@ const RolesManagementPage = () => {
                                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
                                     Selecciona uno o más colegios; todas las monitoras asignadas serán enlazadas automáticamente.
                                 </Typography>
-                                
+
                                 <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
                                     Colegios
                                 </Typography>
@@ -1628,9 +1677,9 @@ const RolesManagementPage = () => {
                                         value={selectedAuxiliarSchools}
                                         onChange={(e) => setSelectedAuxiliarSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
                                         label="Seleccionar Colegios"
-                                        renderValue={(selected) => selected.map(id => (schools.find(s => s.id === id)?.name || id)).join(', ')}
+                                        renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
                                     >
-                                        {schools.map(s => (
+                                        {assignableSchools.map(s => (
                                             <MenuItem key={s.id} value={s.id}>
                                                 <Checkbox checked={selectedAuxiliarSchools.includes(s.id)} />
                                                 <ListItemText primary={s.name} />
@@ -1663,9 +1712,15 @@ const RolesManagementPage = () => {
                                 <Typography variant="subtitle2" sx={{ mt: 2 }}>Monitoras enlazadas automáticamente:</Typography>
                                 <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
                                     {(() => {
-                                        // Compute monitoras that belong to selected schools or corporations
-                                        const schoolMonitoras = selectedAuxiliarSchools.length > 0 
-                                            ? allMonitoras.filter(m => selectedAuxiliarSchools.includes(Number(m.school)))
+                                        // Compute monitoras that belong to selected schools or corporations.
+                                        // A monitora's school may be a sibling-cycle record of the selected
+                                        // one, so compare canonical ids.
+                                        const schoolMonitoras = selectedAuxiliarSchools.length > 0
+                                            ? allMonitoras.filter(m => {
+                                                const schoolId = Number(m.school);
+                                                if (!schoolId) return false;
+                                                return selectedAuxiliarSchools.includes(canonicalSchoolIdById.get(schoolId) ?? schoolId);
+                                            })
                                             : [];
                                         const corpMonitoras = selectedAuxiliarCorporations.length > 0
                                             ? allMonitoras.filter(m => selectedAuxiliarCorporations.includes(Number(m.corporationId)))
