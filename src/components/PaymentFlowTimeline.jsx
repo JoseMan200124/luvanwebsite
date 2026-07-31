@@ -37,7 +37,10 @@ import {
     MoreHoriz as MoreHorizIcon,
     SwapVert as SortIcon,
     Autorenew as AutorenewIcon,
-    School as SchoolIcon
+    School as SchoolIcon,
+    ReceiptLong as ReceiptLongIcon,
+    EventAvailable as EventAvailableIcon,
+    Block as BlockIcon
 } from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
@@ -410,6 +413,113 @@ function getOperatorLabel(entry) {
 }
 
 // ============================================================
+// Desglose de aplicación (a qué se aplicó el dinero de esta operación)
+// ============================================================
+
+const BREAKDOWN_MONEY_FIELDS = [
+    { keys: ['amountToBalance', 'creditApplied', 'appliedAmount', 'amountApplied'], label: 'Aplicado a saldo' },
+    { keys: ['extraordinaryDiscountAppliedToBalance', 'discountApplied'], label: 'Descuento extraordinario aplicado' },
+    { keys: ['overpayment', 'overpaymentAmount'], label: 'Sobrepago → crédito' },
+    { keys: ['unusedExtraordinaryDiscount'], label: 'Descuento no usado → crédito' },
+    { keys: ['creditToAdd'], label: 'Total generado a crédito' },
+    { keys: ['penaltyExonerated'], label: 'Mora exonerada' },
+];
+
+function firstNumeric(meta, keys) {
+    for (const key of keys) {
+        const val = Number(meta?.[key]);
+        if (Number.isFinite(val) && val > 0.01) return val;
+    }
+    return 0;
+}
+
+/**
+ * Reúne lo necesario para el ícono de desglose de una entrada: montos por concepto
+ * (de metadata, ya calculados por el backend) + el detalle por período (periodBreakdown,
+ * armado en getPaymentFlow desde las filas TARIFA_PERIOD o, si no existen, desde
+ * metadata.periodsApplied — ver paymentsControllerV2.js).
+ */
+function getEntryBreakdown(entry) {
+    const meta = entry.metadata || {};
+    const moneyRows = BREAKDOWN_MONEY_FIELDS
+        .map(({ keys, label }) => ({ label, amount: firstNumeric(meta, keys) }))
+        .filter(row => row.amount > 0);
+    const periods = Array.isArray(entry.periodBreakdown) ? entry.periodBreakdown : [];
+    return { moneyRows, periods, hasBreakdown: moneyRows.length > 0 || periods.length > 0 };
+}
+
+const EntryBreakdownPanel = ({ entry }) => {
+    const [open, setOpen] = useState(false);
+    const { moneyRows, periods, hasBreakdown } = getEntryBreakdown(entry);
+
+    if (!hasBreakdown) return null;
+
+    return (
+        <Box sx={{ mt: 0.75 }}>
+            <Box
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
+                onClick={() => setOpen(!open)}
+            >
+                <ReceiptLongIcon sx={{ fontSize: '1rem' }} />
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                    Desglose de aplicación
+                </Typography>
+                {open ? <ExpandLessIcon sx={{ fontSize: '1rem' }} /> : <ExpandMoreIcon sx={{ fontSize: '1rem' }} />}
+            </Box>
+            <Collapse in={open}>
+                <Box sx={{ mt: 0.75, p: 1.25, bgcolor: '#fafafa', borderRadius: 1.5, border: '1px solid #e8e8e8' }}>
+                    {moneyRows.length > 0 && (
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: periods.length ? 1 : 0 }}>
+                            {moneyRows.map(row => (
+                                <Chip
+                                    key={row.label}
+                                    size="small"
+                                    label={`${row.label}: ${fmt(row.amount)}`}
+                                    variant="outlined"
+                                    sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
+                                />
+                            ))}
+                        </Stack>
+                    )}
+                    {periods.length > 0 && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Período</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Aplicado</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Desc.</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Saldo período</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Mora período</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {periods.map((p, idx) => (
+                                        <TableRow key={`${p.period}-${idx}`}>
+                                            <TableCell sx={{ fontSize: '0.75rem', py: 0.5 }}>{formatPeriodLabel(p.period) || '—'}</TableCell>
+                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, color: 'success.main' }}>{fmt(p.amountApplied)}</TableCell>
+                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, color: p.discountApplied > 0 ? 'error.main' : undefined }}>
+                                                {p.discountApplied > 0 ? fmt(p.discountApplied) : '—'}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
+                                                {p.before && p.after ? `${fmt(p.before.amountDue)} → ${fmt(p.after.amountDue)}` : '—'}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
+                                                {p.penaltyBefore && p.penaltyAfter ? `${fmt(p.penaltyBefore.penaltyDue)} → ${fmt(p.penaltyAfter.penaltyDue)}` : '—'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                </Box>
+            </Collapse>
+        </Box>
+    );
+};
+
+// ============================================================
 // Subcomponente: Timeline Entry (desktop)
 // ============================================================
 
@@ -417,6 +527,10 @@ const TimelineEntryDesktop = ({ entry, isLast }) => {
     const opMeta = getOperationMeta(entry.operation);
     const description = getOperationDescription(entry);
     const operator = getOperatorLabel(entry);
+
+    // Movimiento anulado por una reversión: se conserva para que la línea de tiempo muestre
+    // el flujo completo (qué se pagó y qué lo revirtió), pero ya no cuenta en ningún total.
+    const isReversed = !!entry.reversed;
 
     // En operaciones de inscripción se muestra el saldo de inscripción, no el de mensualidad:
     // las columnas de saldo no cambian (y en asientos antiguos contenían montos de inscripción,
@@ -448,8 +562,8 @@ const TimelineEntryDesktop = ({ entry, isLast }) => {
                 width: 40,
                 height: 40,
                 borderRadius: '50%',
-                backgroundColor: opMeta.bgColor,
-                color: opMeta.color,
+                backgroundColor: isReversed ? '#f0f0f0' : opMeta.bgColor,
+                color: isReversed ? '#9e9e9e' : opMeta.color,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -460,16 +574,40 @@ const TimelineEntryDesktop = ({ entry, isLast }) => {
             </Box>
 
             {/* Contenido */}
-            <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Box sx={{ flex: 1, minWidth: 0, opacity: isReversed ? 0.6 : 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: opMeta.color }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: isReversed ? 'text.disabled' : opMeta.color }}>
                         {opMeta.label}
                     </Typography>
+                    {/* Único indicador de la reversión: su asiento REVERSAL se oculta de la
+                        línea de tiempo (ver el filtro en ledgerFiltered). */}
+                    {isReversed && (
+                        <Chip
+                            size="small"
+                            icon={<BlockIcon sx={{ fontSize: '0.8rem !important' }} />}
+                            label={entry.reversedAt ? `Revertido ${formatDateShort(entry.reversedAt)}` : 'Revertido'}
+                            color="error"
+                            variant="outlined"
+                            sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6, fontWeight: 700 } }}
+                        />
+                    )}
                     <Typography variant="caption" color="text.secondary">
-                        {formatDate(entry.createdAt)}
+                        registrado {formatDate(entry.createdAt)}
                     </Typography>
+                    {entry.realPaymentDate && (
+                        <Chip
+                            size="small"
+                            icon={<EventAvailableIcon sx={{ fontSize: '0.8rem !important' }} />}
+                            label={`Fecha de pago: ${formatDateShort(entry.realPaymentDate)}`}
+                            variant="outlined"
+                            sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6 } }}
+                        />
+                    )}
                 </Box>
-                <Typography variant="body2" sx={{ mb: 0.75, color: 'text.primary' }}>
+                <Typography
+                    variant="body2"
+                    sx={{ mb: 0.75, color: 'text.primary', textDecoration: isReversed ? 'line-through' : 'none' }}
+                >
                     {description}
                 </Typography>
 
@@ -479,6 +617,9 @@ const TimelineEntryDesktop = ({ entry, isLast }) => {
                         Por usuario {operator}
                     </Typography>
                 )}
+
+                {/* Desglose de aplicación (períodos, crédito, descuento, etc.) */}
+                <EntryBreakdownPanel entry={entry} />
 
                 {/* Efecto en balances */}
                 {hasAnyChange && (
@@ -541,6 +682,9 @@ const TimelineEntryMobile = ({ entry }) => {
     const description = getOperationDescription(entry);
     const operator = getOperatorLabel(entry);
 
+    // Ver nota en TimelineEntryDesktop.
+    const isReversed = !!entry.reversed;
+
     // Ver nota en TimelineEntryDesktop sobre el saldo de inscripción.
     const isEnrollment = isEnrollmentOperation(entry.operation);
     const enrollmentShift = isEnrollment ? getEnrollmentBalanceShift(entry) : null;
@@ -550,26 +694,49 @@ const TimelineEntryMobile = ({ entry }) => {
     const hasCreditChange = !isEnrollment && Number(entry.creditBalanceAfter || 0) !== Number(entry.creditBalanceBefore || 0);
 
     return (
-        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, opacity: isReversed ? 0.6 : 1 }}>
             <Stack spacing={1}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box sx={{
                         width: 32, height: 32, borderRadius: '50%',
-                        backgroundColor: opMeta.bgColor, color: opMeta.color,
+                        backgroundColor: isReversed ? '#f0f0f0' : opMeta.bgColor,
+                        color: isReversed ? '#9e9e9e' : opMeta.color,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                     }}>
                         {opMeta.icon}
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: opMeta.color, fontSize: '0.85rem' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: isReversed ? 'text.disabled' : opMeta.color, fontSize: '0.85rem' }}>
                             {opMeta.label}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                            {formatDate(entry.createdAt)}
+                            registrado {formatDate(entry.createdAt)}
                         </Typography>
                     </Box>
                 </Box>
-                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                    {/* Ver nota en TimelineEntryDesktop. */}
+                    {isReversed && (
+                        <Chip
+                            size="small"
+                            icon={<BlockIcon sx={{ fontSize: '0.8rem !important' }} />}
+                            label={entry.reversedAt ? `Revertido ${formatDateShort(entry.reversedAt)}` : 'Revertido'}
+                            color="error"
+                            variant="outlined"
+                            sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6, fontWeight: 700 } }}
+                        />
+                    )}
+                    {entry.realPaymentDate && (
+                        <Chip
+                            size="small"
+                            icon={<EventAvailableIcon sx={{ fontSize: '0.8rem !important' }} />}
+                            label={`Fecha de pago: ${formatDateShort(entry.realPaymentDate)}`}
+                            variant="outlined"
+                            sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6 } }}
+                        />
+                    )}
+                </Stack>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem', textDecoration: isReversed ? 'line-through' : 'none' }}>
                     {description}
                 </Typography>
                 {operator && (
@@ -577,6 +744,7 @@ const TimelineEntryMobile = ({ entry }) => {
                         Por usuario {operator}
                     </Typography>
                 )}
+                <EntryBreakdownPanel entry={entry} />
                 {(hasBalanceChange || hasPenaltyChange || hasCreditChange || !!enrollmentShift) && (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                         {enrollmentShift && (
@@ -775,6 +943,12 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
             return meta.kind !== 'TARIFA_PERIOD';
         });
 
+        // Ocultar los asientos REVERSAL: la reversión y el movimiento que anula son el mismo
+        // hecho, y la fila tachada con su chip "Revertido" ya lo comunica. El asiento se
+        // conserva en el backend — es la única fila que lleva el saldo posterior a la
+        // reversión, del que dependen las métricas — así que esto es solo presentación.
+        items = items.filter(e => String(e.operation || '').toUpperCase() !== 'REVERSAL');
+
         // Filtro por fecha desde
         if (dateFrom) {
             const from = new Date(dateFrom).getTime();
@@ -809,6 +983,9 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                     const next = items[j];
                     const nextOp = String(next.operation || '').toUpperCase();
                     if (nextOp !== op) break;
+                    // Nunca mezclar anuladas con vigentes: la entrada agrupada hereda el
+                    // estado de la primera y marcaría un pago vivo como revertido (o al revés).
+                    if (!!next.reversed !== !!current.reversed) break;
                     const nextKeyAmt = op === 'MORA_PAYMENT'
                         ? Math.max(0, Number(next.penaltyDueBefore - next.penaltyDueAfter || 0))
                         : Math.max(0, Number(next.balanceDueBefore - next.balanceDueAfter || 0));
@@ -837,7 +1014,10 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                         creditBalanceBefore: first.creditBalanceBefore,
                         creditBalanceAfter: last.creditBalanceAfter,
                         _grouped: { count: batch.length, periods },
-                        createdAt: sortOrder === 'desc' ? first.createdAt : last.createdAt
+                        createdAt: sortOrder === 'desc' ? first.createdAt : last.createdAt,
+                        // El desglose por período debe cubrir TODO el lote agrupado, no solo
+                        // el primero — si no, el desglose miente sobre cuántos períodos tocó.
+                        periodBreakdown: batch.flatMap(e => e.periodBreakdown || [])
                     });
                     i = j;
                 } else {
