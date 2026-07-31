@@ -2384,9 +2384,11 @@ const SchoolPaymentsPage = () => {
                 await api.put(`/payments/${payment.id}/set-invoice-need`, { requiresInvoice: !!val });
                 setSnackbar({ open: true, message: `Requiere factura: ${val ? 'Sí' : 'No'}`, severity: 'success' });
             } else if (actionName === 'deletePayment') {
-                // Revert last payment transaction
+                // Revert last payment transaction. '/payments/revert' con { paymentId } reemplaza
+                // a '/payments/:id/revert': mismo comportamiento (resuelve la última transacción
+                // del pago), consolidado en el único entrypoint de reversión.
                 try {
-                    await api.post(`/payments/${payment.id}/revert`);
+                    await api.post('/payments/revert', { paymentId: payment.id });
                     setSnackbar({ open: true, message: 'Pago revertido', severity: 'success' });
                     // invalidate caches for this payment/user and refresh payments/analysis
                     invalidatePaymentHistCache(payment || manageTarget);
@@ -2397,7 +2399,10 @@ const SchoolPaymentsPage = () => {
                     await fetchPaymentsAnalysis(schoolId);
                 } catch (e) {
                     console.error('Error revirtiendo pago', e);
-                    setSnackbar({ open: true, message: 'Error revirtiendo pago', severity: 'error' });
+                    // El backend puede rechazar con un motivo específico (mora ya limpiada,
+                    // crédito ya auto-aplicado): mostrarlo en vez de un mensaje genérico.
+                    const errorMsg = e?.response?.data?.error || 'Error revirtiendo pago';
+                    setSnackbar({ open: true, message: errorMsg, severity: 'error' });
                 }
             } else if (actionName === 'payPenalty') {
                 // Pagar mora congelada
