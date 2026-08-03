@@ -931,7 +931,7 @@ const ParentPaymentPage = () => {
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, mt: 1.5, borderRadius: 1.5, backgroundColor: '#FFF4E6', color: '#7C3A00' }}>
                         <ReceiptLongIcon sx={{ fontSize: 20, color: '#B45309', mt: 0.1 }} />
                         <Typography sx={{ fontSize: 13, lineHeight: 1.55 }}>
-                            {enrollmentPayment.status === 'PARCIAL' ? 'Inscripción con abono parcial. ' : 'Inscripción del ciclo pendiente. '}
+                            {enrollmentPayment.status === 'PARCIAL' ? 'Inscripción con pago parcial. ' : 'Inscripción del ciclo pendiente. '}
                             Este cobro es independiente de la mensualidad; súbelo con tu boleta de pago habitual.
                         </Typography>
                     </Box>

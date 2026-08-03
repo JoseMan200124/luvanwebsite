@@ -160,6 +160,7 @@ const normalizeParentInfo = (raw) => {
 
   return {
     // Familia
+    familyDetailId: data.familyDetailId ?? null,
     familyLastName: safeStr(data.familyLastName),
     serviceAddress: safeStr(data.serviceAddress),
     zoneOrSector:   safeStr(data.zoneOrSector),
@@ -483,8 +484,8 @@ const ParentDashboardPage = () => {
 
   // ---------- Firma de contratos desde el dashboard ----------
   const handleOpenContractsDialog = async () => {
-    const parentId = auth?.user?.id;
-    if (!parentId) {
+    const familyDetailId = parentInfo?.familyDetailId;
+    if (!familyDetailId) {
       setSnackbar({ open: true, sev: 'warning', msg: 'Sesión no encontrada. Inicia sesión nuevamente.' });
       return;
     }
@@ -493,8 +494,8 @@ const ParentDashboardPage = () => {
       setContractsLoading(true);
       // Obtener contratos disponibles del colegio
       const [contractsRes, filledRes] = await Promise.all([
-        api.get(`/parents/${parentId}/contracts`),
-        api.get(`/parents/${parentId}/filled-contracts`)
+        api.get(`/contracts/family/${familyDetailId}/contracts`),
+        api.get(`/contracts/family/${familyDetailId}/filled-contracts`)
       ]);
 
       const contracts = Array.isArray(contractsRes.data?.contracts) ? contractsRes.data.contracts : [];
