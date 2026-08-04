@@ -724,6 +724,7 @@ const ParentPaymentPage = () => {
     const [routeInfo, setRouteInfo] = useState(null);
     const [paymentAccount, setPaymentAccount] = useState(null);
     const [paymentHistory, setPaymentHistory] = useState(null);
+    const [enrollmentPayment, setEnrollmentPayment] = useState(null);
     const [receipts, setReceipts] = useState([]);
     const [activeTab, setActiveTab] = useState('resumen');
     const [hasSignedContract, setHasSignedContract] = useState(null);
@@ -757,6 +758,7 @@ const ParentPaymentPage = () => {
             setPaymentAccount(null);
             setPaymentHistory(null);
             setReceipts([]);
+            setEnrollmentPayment(null);
             setPageLoading(false);
             return;
         }
@@ -767,12 +769,13 @@ const ParentPaymentPage = () => {
         const unwrap = (result) => (result.status === 'fulfilled' ? result.value : null);
 
         try {
-            const [routeRes, serviceRes, accountRes, historyRes, receiptsRes] = await Promise.allSettled([
+            const [routeRes, serviceRes, accountRes, historyRes, receiptsRes, enrollmentRes] = await Promise.allSettled([
                 api.get(`/parents/${userId}/route-info`, { signal }),
                 api.get(`/parents/${userId}/service-status`, { signal }),
                 api.get(`/payments/family-account/${userId}`, { signal }),
                 api.get(`/parents/${userId}/payment-history`, { params: { limit: 80 }, signal }),
                 api.get(`/parents/${userId}/receipts`, { signal }),
+                api.get(`/enrollment-payments/by-user/${userId}`, { signal }),
             ]);
 
             if (signal?.aborted) return;
@@ -785,6 +788,7 @@ const ParentPaymentPage = () => {
             setPaymentAccount(unwrap(accountRes)?.data?.familyAccount || null);
             setPaymentHistory(unwrap(historyRes)?.data || null);
             setReceipts(unwrap(receiptsRes)?.data?.receipts || []);
+            setEnrollmentPayment(unwrap(enrollmentRes)?.data?.enrollmentPayment || null);
         } catch (error) {
             if (!signal?.aborted) {
                 console.error(error);
@@ -911,12 +915,27 @@ const ParentPaymentPage = () => {
                     <StatusBadge status={currentStatus} />
                 </Box>
 
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' }, gap: 1.25 }}>
+                {/* La tarjeta de inscripción solo aparece si la familia tiene cargo de inscripción,
+                    y en ese caso el grid pasa a 5 columnas para no dejarla sola en otra fila. */}
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: enrollmentPayment ? 'repeat(5, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))' }, gap: 1.25 }}>
                     <MetricCard label="Tarifa pendiente" value={formatMoney(paymentAccount?.totals?.balanceDue)} icon={CreditCardIcon} tone="primary" />
                     <MetricCard label="Mora pendiente" value={formatMoney(paymentAccount?.totals?.penaltyDue)} icon={ErrorOutlineIcon} tone="danger" />
+                    {enrollmentPayment && (
+                        <MetricCard label="Inscripción pendiente" value={formatMoney(enrollmentPayment.amountDue)} icon={ReceiptLongIcon} tone="warning" />
+                    )}
                     <MetricCard label="Crédito" value={formatMoney(paymentAccount?.totals?.creditBalance)} icon={TrendingUpIcon} tone="info" />
                     <MetricCard label="Períodos pendientes" value={`${paymentAccount?.totals?.unpaidPeriodsCount || 0}`} icon={CalendarMonthIcon} tone="warning" />
                 </Box>
+
+                {enrollmentPayment && enrollmentPayment.status !== 'PAGADO' && (
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, mt: 1.5, borderRadius: 1.5, backgroundColor: '#FFF4E6', color: '#7C3A00' }}>
+                        <ReceiptLongIcon sx={{ fontSize: 20, color: '#B45309', mt: 0.1 }} />
+                        <Typography sx={{ fontSize: 13, lineHeight: 1.55 }}>
+                            {enrollmentPayment.status === 'PARCIAL' ? 'Inscripción con pago parcial. ' : 'Inscripción del ciclo pendiente. '}
+                            Este cobro es independiente de la mensualidad; súbelo con tu boleta de pago habitual.
+                        </Typography>
+                    </Box>
+                )}
 
                 {(primaryPayment?.penaltyGlobalFrozen || toNumber(primaryPayment?.frozenPenaltyPeriodsCount) > 0) && (
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, mt: 1.5, borderRadius: 1.5, backgroundColor: '#EEF6FF', color: '#1E3A8A' }}>

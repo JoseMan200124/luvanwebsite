@@ -63,6 +63,7 @@ import PaymentFilters from '../components/PaymentFilters';
 import PaymentTable from '../components/PaymentTable';
 import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
+import EnrollmentPaymentPanel from '../components/EnrollmentPaymentPanel';
 import CreateSchoolPeriodModal from '../components/modals/CreateSchoolPeriodModal';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
@@ -1225,6 +1226,18 @@ const SchoolPaymentsPage = () => {
                 familyAccount = null;
             }
 
+            // Cargo de inscripción del ciclo (saldo independiente de la mensualidad)
+            let enrollmentPaymentForPdf = null;
+            try {
+                const cicloEscolarId = payment?.cicloEscolarId || null;
+                const enrollmentRes = await api.get(`/enrollment-payments/by-user/${userId}`, {
+                    params: cicloEscolarId ? { cicloEscolarId } : {}
+                });
+                enrollmentPaymentForPdf = enrollmentRes?.data?.enrollmentPayment || null;
+            } catch (e) {
+                enrollmentPaymentForPdf = null;
+            }
+
             const attemptFetch = async (params) => {
                 try {
                     const r = await api.get('/payments/paymenthistory', { params });
@@ -1694,20 +1707,25 @@ const SchoolPaymentsPage = () => {
 
             cursorY += cicloLabel ? 26 : 18;
 
+            const metricCards = [
+                { label: 'Tarifa pendiente', value: moneyCard(totals?.balanceDue || 0) },
+                { label: 'Mora pendiente', value: moneyCard(totals?.penaltyDue || 0) },
+                // Solo se agrega cuando existe cargo de inscripción, para no alterar el layout
+                // de 4 tarjetas en colegios que no cobran inscripción.
+                ...(enrollmentPaymentForPdf
+                    ? [{ label: 'Inscripción pendiente', value: moneyCard(enrollmentPaymentForPdf.amountDue || 0) }]
+                    : []),
+                { label: 'Crédito a favor', value: moneyCard(totals?.creditBalance || 0) },
+                { label: 'Períodos pendientes', value: String(totals?.unpaidPeriodsCount || 0) },
+            ];
+
             const cardGap = 10;
-            const cardsCount = 4;
+            const cardsCount = metricCards.length;
             const cardW = Number.isFinite(Number(pageWidth))
                 ? ((Number(pageWidth) - 80 - (cardGap * (cardsCount - 1))) / cardsCount)
                 : ((595 - 80 - (cardGap * (cardsCount - 1))) / cardsCount);
             const cardH = 54;
             const cardY = cursorY;
-
-            const metricCards = [
-                { label: 'Tarifa pendiente', value: moneyCard(totals?.balanceDue || 0) },
-                { label: 'Mora pendiente', value: moneyCard(totals?.penaltyDue || 0) },
-                { label: 'Crédito a favor', value: moneyCard(totals?.creditBalance || 0) },
-                { label: 'Períodos pendientes', value: String(totals?.unpaidPeriodsCount || 0) },
-            ];
 
             ensureSpace(cardH + 12);
             for (let i = 0; i < metricCards.length; i++) {
@@ -1724,12 +1742,13 @@ const SchoolPaymentsPage = () => {
                     doc.rect(sx, cardY, sW, sH, 'FD');
                 }
 
-                doc.setFontSize(8.5);
+                // Con 5 tarjetas el ancho baja (~95pt): reducir la etiqueta evita que se corte.
+                doc.setFontSize(cardsCount > 4 ? 7.5 : 8.5);
                 doc.setFont(undefined, 'normal');
                 doc.setTextColor(90);
                 doc.text(metricCards[i].label, x + 10, cardY + 16);
                 doc.setTextColor(0, 0, 0);
-                doc.setFontSize(13);
+                doc.setFontSize(cardsCount > 4 ? 11.5 : 13);
                 doc.setFont(undefined, 'bold');
                 doc.text(String(metricCards[i].value || '-'), x + 10, cardY + 38);
             }
@@ -2365,9 +2384,11 @@ const SchoolPaymentsPage = () => {
                 await api.put(`/payments/${payment.id}/set-invoice-need`, { requiresInvoice: !!val });
                 setSnackbar({ open: true, message: `Requiere factura: ${val ? 'Sí' : 'No'}`, severity: 'success' });
             } else if (actionName === 'deletePayment') {
-                // Revert last payment transaction
+                // Revert last payment transaction. '/payments/revert' con { paymentId } reemplaza
+                // a '/payments/:id/revert': mismo comportamiento (resuelve la última transacción
+                // del pago), consolidado en el único entrypoint de reversión.
                 try {
-                    await api.post(`/payments/${payment.id}/revert`);
+                    await api.post('/payments/revert', { paymentId: payment.id });
                     setSnackbar({ open: true, message: 'Pago revertido', severity: 'success' });
                     // invalidate caches for this payment/user and refresh payments/analysis
                     invalidatePaymentHistCache(payment || manageTarget);
@@ -2378,7 +2399,10 @@ const SchoolPaymentsPage = () => {
                     await fetchPaymentsAnalysis(schoolId);
                 } catch (e) {
                     console.error('Error revirtiendo pago', e);
-                    setSnackbar({ open: true, message: 'Error revirtiendo pago', severity: 'error' });
+                    // El backend puede rechazar con un motivo específico (mora ya limpiada,
+                    // crédito ya auto-aplicado): mostrarlo en vez de un mensaje genérico.
+                    const errorMsg = e?.response?.data?.error || 'Error revirtiendo pago';
+                    setSnackbar({ open: true, message: errorMsg, severity: 'error' });
                 }
             } else if (actionName === 'payPenalty') {
                 // Pagar mora congelada
@@ -4020,7 +4044,7 @@ const SchoolPaymentsPage = () => {
                                         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                                             <Tabs value={paymentTab} onChange={(e, newValue) => setPaymentTab(newValue)}>
                                                 <Tab label="Pago de Tarifa" />
-                                                <Tab 
+                                                <Tab
                                                     label={`Pago de Mora ${effectivePenaltyDue > 0 ? `(Q ${effectivePenaltyDue.toFixed(2)})` : '(Q 0.00)'}`}
                                                     sx={{
                                                         color: effectivePenaltyDue > 0 ? 'error.main' : 'inherit',
@@ -4030,6 +4054,7 @@ const SchoolPaymentsPage = () => {
                                                         }
                                                     }}
                                                 />
+                                                <Tab label="Inscripción" />
                                             </Tabs>
                                         </Box>
 
@@ -4826,9 +4851,26 @@ const SchoolPaymentsPage = () => {
                                     )}
                                 </Box>
                                 )}
+
+                                {/* Tab Panel 2: Inscripción */}
+                                {paymentTab === 2 && (
+                                <Box>
+                                    <EnrollmentPaymentPanel
+                                        userId={
+                                            registerPaymentTarget?.User?.id
+                                            || registerPaymentTarget?.user?.id
+                                            || registerPaymentTarget?.userId
+                                            || null
+                                        }
+                                        schoolId={registerPaymentTarget?.schoolId || null}
+                                        cicloEscolarId={registerPaymentTarget?.cicloEscolarId || null}
+                                        onSaved={() => setSnackbar({ open: true, message: 'Inscripción actualizada.', severity: 'success' })}
+                                    />
+                                </Box>
+                                )}
                                     </Grid>
                                 </Grid>
-                                
+
                                 {/* Loading overlay when receipts/history are being fetched */}
                                 {(uploadedReceiptsLoading || regHistLoading) && (
                                     <Box sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', zIndex: 30 }}>
