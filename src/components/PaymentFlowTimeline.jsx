@@ -1125,14 +1125,6 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                     </Box>
                 </Box>
 
-                {enrollmentPayment && Number(enrollmentPayment.amountDue || 0) > 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                        Inscripción: {fmt(enrollmentPayment.netAmount || 0)} neto
-                        {Number(enrollmentPayment.discountApplied || 0) > 0 && ` (descuento ${fmt(enrollmentPayment.discountApplied)})`}
-                        {Number(enrollmentPayment.amountPaid || 0) > 0 && ` · pagado ${fmt(enrollmentPayment.amountPaid)}`}
-                        {Number(enrollmentPayment.manualAdjustmentAmount || 0) > 0 && ` · ajuste manual ${fmt(enrollmentPayment.manualAdjustmentAmount)}`}
-                    </Typography>
-                )}
                 {summary && (
                     <Box sx={{ mt: 1, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                         {Number(summary.totalExonerated || 0) > 0 && (
