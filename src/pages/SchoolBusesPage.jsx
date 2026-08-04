@@ -24,7 +24,8 @@ import {
     // FormControl, InputLabel, Select, MenuItem removed - replaced by Autocomplete
     TextField,
     Autocomplete,
-    Chip
+    Chip,
+    Tooltip
 } from '@mui/material';
 import { DirectionsBus, Save, Clear, ArrowBack, Refresh, ContentCopy } from '@mui/icons-material';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
@@ -525,6 +526,18 @@ const SchoolBusesPage = () => {
         return `${bus.plate} (Cap: ${bus.capacity || 'N/A'})`;
     };
 
+    const getBusOccupiedByLabel = (bus) => {
+        if (!bus) return null;
+        const currentSchoolIdNum = Number.parseInt(schoolId, 10);
+        if (bus.schoolId && bus.schoolId !== currentSchoolIdNum) {
+            return `Asignado a: ${bus.school?.name || `colegio ID ${bus.schoolId}`}`;
+        }
+        if (bus.corporationId) {
+            return `Asignado a: ${bus.corporation?.name || `corporación ID ${bus.corporationId}`}`;
+        }
+        return null;
+    };
+
     return (
         <PageContainer>
             <HeaderCard>
@@ -670,11 +683,19 @@ const SchoolBusesPage = () => {
                                                                 variant="outlined"
                                                             />
                                                         )}
-                                                        renderOption={(props, option) => (
-                                                            <li {...props} key={option.id}>
-                                                                {getBusInfo(option.id)}
-                                                            </li>
-                                                        )}
+                                                        renderOption={(props, option) => {
+                                                            const occupiedLabel = getBusOccupiedByLabel(option);
+                                                            const optionItem = (
+                                                                <li {...props} key={option.id} style={occupiedLabel ? { color: '#d32f2f' } : undefined}>
+                                                                    {getBusInfo(option.id)}
+                                                                </li>
+                                                            );
+                                                            return occupiedLabel ? (
+                                                                <Tooltip key={option.id} title={occupiedLabel} placement="right">
+                                                                    {optionItem}
+                                                                </Tooltip>
+                                                            ) : optionItem;
+                                                        }}
                                                     />
                                                 </TableCell>
                                                 <TableCell>
