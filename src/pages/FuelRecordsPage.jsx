@@ -106,9 +106,11 @@ const FuelRecordsPage = () => {
     const [editCorporations, setEditCorporations] = useState([]);
     const [editBuses, setEditBuses] = useState([]);
     const [editRecordCycleId, setEditRecordCycleId] = useState(null);
+    const [editClientRouteNumbers, setEditClientRouteNumbers] = useState([]);
     const [editForm, setEditForm] = useState({
         client: null,
         busId: '',
+        routeNumber: '',
         fuelingReason: '',
         fuelType: '',
         pricePerGallon: '',
@@ -279,6 +281,16 @@ const FuelRecordsPage = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedClient]);
 
+    // keep routeNumbers in sync for the edit modal when its client changes
+    useEffect(() => {
+        if (editForm.client) {
+            fetchRouteNumbersForClient(editForm.client, setEditClientRouteNumbers).catch(() => setEditClientRouteNumbers([]));
+        } else {
+            setEditClientRouteNumbers([]);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editForm.client]);
+
     // keep routeNumbers in sync for the create modal when its client changes
     useEffect(() => {
         if (createForm.client) {
@@ -293,9 +305,9 @@ const FuelRecordsPage = () => {
     }, [createForm.client]);
 
     // Fetch route numbers (routeNumbers field) for a given client object { type, id }
-    const fetchRouteNumbersForClient = async (client) => {
+    const fetchRouteNumbersForClient = async (client, setter = setClientRouteNumbers) => {
         if (!client) {
-            setClientRouteNumbers([]);
+            setter([]);
             return [];
         }
         try {
@@ -304,22 +316,22 @@ const FuelRecordsPage = () => {
                 const resp = await api.get(`/schools/${id}`);
                 const rn = resp.data?.school?.routeNumbers || [];
                 const arr = Array.isArray(rn) ? rn.map(x => String(x)) : [];
-                setClientRouteNumbers(arr);
+                setter(arr);
                 return arr;
             }
             if (type === 'corp') {
                 const resp = await api.get(`/corporations/${id}`);
                 const rn = resp.data?.corporation?.routeNumbers || [];
                 const arr = Array.isArray(rn) ? rn.map(x => String(x)) : [];
-                setClientRouteNumbers(arr);
+                setter(arr);
                 return arr;
             }
         } catch (error) {
             console.error('Error al cargar routeNumbers del cliente:', error);
-            setClientRouteNumbers([]);
+            setter([]);
             return [];
         }
-        setClientRouteNumbers([]);
+        setter([]);
         return [];
     };
 
@@ -562,6 +574,7 @@ const FuelRecordsPage = () => {
         return {
             client,
             busId: record?.busId ? String(record.busId) : '',
+            routeNumber: record?.routeNumber !== undefined && record?.routeNumber !== null ? String(record.routeNumber) : '',
             fuelingReason: record?.fuelingReason || '',
             fuelType: record?.fuelType || '',
             pricePerGallon: record?.pricePerGallon !== undefined && record?.pricePerGallon !== null ? String(record.pricePerGallon) : '',
@@ -599,9 +612,11 @@ const FuelRecordsPage = () => {
         setEditSchools([]);
         setEditCorporations([]);
         setEditBuses([]);
+        setEditClientRouteNumbers([]);
         setEditForm({
             client: null,
             busId: '',
+            routeNumber: '',
             fuelingReason: '',
             fuelType: '',
             pricePerGallon: '',
@@ -614,7 +629,7 @@ const FuelRecordsPage = () => {
 
     const handleEditChange = (field, value) => {
         if (field === 'client') {
-            setEditForm(prev => ({ ...prev, client: value }));
+            setEditForm(prev => ({ ...prev, client: value, routeNumber: '' }));
             return;
         }
         setEditForm(prev => ({ ...prev, [field]: value }));
@@ -626,7 +641,7 @@ const FuelRecordsPage = () => {
             return;
         }
 
-        const required = ['client', 'busId', 'fuelingReason', 'fuelType', 'pricePerGallon', 'gallonage'];
+        const required = ['client', 'busId', 'routeNumber', 'fuelingReason', 'fuelType', 'pricePerGallon', 'gallonage'];
         for (const key of required) {
             if (editForm[key] === '' || editForm[key] === null || editForm[key] === undefined) {
                 setEditSnackbar({ open: true, message: 'Por favor complete los campos requeridos.', severity: 'error' });
@@ -650,6 +665,7 @@ const FuelRecordsPage = () => {
             fuelingReason: editForm.fuelingReason,
             fuelType: editForm.fuelType,
             busId: Number(editForm.busId),
+            routeNumber: editForm.routeNumber,
             schoolId: editForm.client?.type === 'school' ? Number(editForm.client.id) : undefined,
             corporationId: editForm.client?.type === 'corp' ? Number(editForm.client.id) : undefined,
             pilotId: selectedRecord.pilotId || undefined,
@@ -1628,6 +1644,18 @@ const FuelRecordsPage = () => {
                                     renderInput={(params) => <TextField {...params} label="Placa / Bus" variant="outlined" />}
                                     fullWidth
                                     isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <Autocomplete
+                                    options={editClientRouteNumbers.map(String).sort((a, b) => a - b)}
+                                    value={editForm.routeNumber || null}
+                                    onChange={(e, newValue) => handleEditChange('routeNumber', newValue || '')}
+                                    getOptionLabel={(option) => String(option)}
+                                    renderInput={(params) => <TextField {...params} label="Número de Ruta" variant="outlined" />}
+                                    fullWidth
+                                    disabled={!editForm.client}
                                 />
                             </Grid>
 
