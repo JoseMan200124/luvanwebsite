@@ -632,6 +632,13 @@ const FuelRecordsPage = () => {
             setEditForm(prev => ({ ...prev, client: value, routeNumber: '' }));
             return;
         }
+        if (field === 'busId') {
+            const bus = editBuses.find((item) => String(item.id) === String(value));
+            const busRouteNumber = bus?.routeNumber !== undefined && bus?.routeNumber !== null ? String(bus.routeNumber) : '';
+            const belongsToClient = busRouteNumber && editClientRouteNumbers.includes(busRouteNumber);
+            setEditForm(prev => ({ ...prev, busId: value, routeNumber: belongsToClient ? busRouteNumber : prev.routeNumber }));
+            return;
+        }
         setEditForm(prev => ({ ...prev, [field]: value }));
     };
 
