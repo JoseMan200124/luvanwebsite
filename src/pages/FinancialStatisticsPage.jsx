@@ -1,6 +1,6 @@
 // src/pages/FinancialStatisticsPage.jsx
 
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
     Typography,
     Button,
@@ -36,7 +36,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getCurrentDateSync } from '../hooks/useCurrentDate';
 import tw from 'twin.macro';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import autoTable from 'jspdf-autotable';
 import moment from 'moment-timezone';
 import 'moment/locale/es';
 
@@ -214,8 +214,6 @@ const getMetricTooltip = (key) => {
 };
 
 const FinancialStatisticsPage = () => {
-    const reportRef = useRef();
-
     const [schools, setSchools] = useState([]);
     const [selectedSchoolIds, setSelectedSchoolIds] = useState([]);
     const [fromMonth, setFromMonth] = useState(() => getCurrentDateSync().clone().subtract(5, 'month').format('YYYY-MM'));
@@ -329,49 +327,201 @@ const FinancialStatisticsPage = () => {
         rangeLabel = `${fromLabel} — ${toLabel}`;
     }
 
-    // Función para generar PDF (se conserva la lógica original; envuelve el contenido del reporte).
-    const generatePDF = async () => {
-        if (!reportRef.current) return;
+    const hexToRgb = (hex) => {
+        const n = parseInt(hex.replace('#', ''), 16);
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    };
+
+    // Genera el PDF dibujando el reporte directamente con jsPDF/autoTable
+    // (no es una captura de pantalla): incluye TODOS los colegios filtrados, no solo la página visible en UI.
+    const generatePDF = () => {
+        if (!result) return;
         const now = moment();
-        const dateString = now.format('YYYY_MM_DD_HH_mm');
-        const fileName = `estadisticas_financieras_${dateString}.pdf`.toLowerCase();
+        const fileName = `estadisticas_financieras_${now.format('YYYY_MM_DD_HH_mm')}.pdf`.toLowerCase();
 
-        const printableArea = reportRef.current.cloneNode(true);
-
-        const tempDiv = document.createElement('div');
-        tempDiv.style.padding = '20px';
-        tempDiv.style.backgroundColor = '#fff';
-        tempDiv.style.color = '#000';
-        tempDiv.style.width = '297mm';
-        tempDiv.style.minHeight = '210mm';
-        tempDiv.style.margin = '0 auto';
-
-        const heading = document.createElement('h2');
-        heading.style.textAlign = 'center';
-        heading.textContent = 'Reporte de Estadísticas Financieras';
-
-        const dateInfo = document.createElement('p');
-        dateInfo.style.textAlign = 'center';
-        dateInfo.style.marginBottom = '20px';
-        dateInfo.textContent = `Generado el: ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`;
-
-        tempDiv.appendChild(heading);
-        tempDiv.appendChild(dateInfo);
-        tempDiv.appendChild(printableArea);
-
-        document.body.appendChild(tempDiv);
-
-        const canvas = await html2canvas(tempDiv, { scale: 2 });
-        const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('l', 'mm', 'a4');
-        const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const marginX = 12;
 
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        // --- Encabezado ---
+        pdf.setFont(undefined, 'bold');
+        pdf.setFontSize(16);
+        pdf.setTextColor(17, 24, 39);
+        pdf.text('Reporte de Estadísticas Financieras', marginX, 16);
+
+        pdf.setFont(undefined, 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(107, 114, 128);
+        const scope = (selectedSchoolIds.length === 0 || selectedSchoolIds.includes('__ALL__'))
+            ? 'Todos los colegios'
+            : `${selectedSchoolIds.length} colegio${selectedSchoolIds.length === 1 ? '' : 's'} seleccionado${selectedSchoolIds.length === 1 ? '' : 's'}`;
+        pdf.text(`${rangeLabel}  ·  Base ${basisLabel}  ·  ${scope}  ·  ${totalRows} colegio${totalRows === 1 ? '' : 's'}`, marginX, 22);
+
+        pdf.setFontSize(9);
+        pdf.text(`Generado el ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`, pageWidth - marginX, 16, { align: 'right' });
+
+        pdf.setDrawColor(230);
+        pdf.line(marginX, 26, pageWidth - marginX, 26);
+
+        let cursorY = 32;
+
+        // --- Tarjetas KPI ---
+        if (kpis.length > 0) {
+            const gap = 4;
+            const boxWidth = (pageWidth - marginX * 2 - gap * (kpis.length - 1)) / kpis.length;
+            const boxHeight = 20;
+            kpis.forEach((kpi, i) => {
+                const x = marginX + i * (boxWidth + gap);
+                pdf.setDrawColor(225);
+                pdf.setFillColor(255, 255, 255);
+                pdf.roundedRect(x, cursorY, boxWidth, boxHeight, 1.5, 1.5, 'FD');
+
+                pdf.setFont(undefined, 'bold');
+                pdf.setFontSize(7);
+                pdf.setTextColor(107, 114, 128);
+                pdf.text(kpi.label.toUpperCase(), x + 3, cursorY + 6.5);
+
+                const [r, g, b] = hexToRgb(kpi.color);
+                pdf.setFont(undefined, 'bold');
+                pdf.setFontSize(12.5);
+                pdf.setTextColor(r, g, b);
+                pdf.text(formatMetric(totales, kpi, metricsBasis), x + 3, cursorY + 15.5);
+            });
+            cursorY += boxHeight + 7;
+        }
+
+        // --- Top colegios por ingreso total ---
+        const chartRows = Math.max(topSchoolsChart.length, 1);
+        const chartTitleH = 8;
+        const chartRowH = 6.5;
+        const chartHeight = chartTitleH + chartRows * chartRowH + 4;
+
+        pdf.setDrawColor(225);
+        pdf.setFillColor(255, 255, 255);
+        pdf.roundedRect(marginX, cursorY, pageWidth - marginX * 2, chartHeight, 1.5, 1.5, 'FD');
+
+        pdf.setFont(undefined, 'bold');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(107, 114, 128);
+        pdf.text(`TOP COLEGIOS · INGRESO TOTAL (${basisLabel.toUpperCase()})`, marginX + 3, cursorY + 6);
+
+        if (topSchoolsChart.length === 0) {
+            pdf.setFont(undefined, 'normal');
+            pdf.setFontSize(9);
+            pdf.setTextColor(150, 150, 150);
+            pdf.text('Sin datos.', pageWidth / 2, cursorY + chartHeight / 2 + 2, { align: 'center' });
+        } else {
+            const nameX = marginX + 3;
+            const barX = marginX + 65;
+            const valueRightX = pageWidth - marginX - 3;
+            const barWidth = pageWidth - marginX * 2 - 65 - 35 - 3;
+            let barY = cursorY + chartTitleH + 3;
+            topSchoolsChart.forEach((bar) => {
+                pdf.setFont(undefined, 'normal');
+                pdf.setFontSize(8);
+                pdf.setTextColor(30, 30, 30);
+                pdf.text(bar.name, nameX, barY, { maxWidth: 60 });
+
+                pdf.setFillColor(240, 240, 240);
+                pdf.rect(barX, barY - 3, barWidth, 3.6, 'F');
+                pdf.setFillColor(25, 118, 210);
+                pdf.rect(barX, barY - 3, barWidth * (bar.pct / 100), 3.6, 'F');
+
+                pdf.setFontSize(8);
+                pdf.setTextColor(107, 114, 128);
+                pdf.text(bar.valueText, valueRightX, barY, { align: 'right' });
+
+                barY += chartRowH;
+            });
+        }
+        cursorY += chartHeight + 7;
+
+        // --- Tabla detalle por colegio (todos los colegios filtrados, no solo la página en pantalla) ---
+        const head = [
+            [
+                { content: 'Colegio', rowSpan: 2, styles: { valign: 'middle' } },
+                { content: 'Ciclo', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
+                ...visibleGroupDefs.map((g) => ({
+                    content: g.label,
+                    colSpan: g.columns.length,
+                    styles: { halign: 'center', fillColor: hexToRgb(GROUP_COLORS[g.label]), textColor: 255 }
+                }))
+            ],
+            visibleColumns.map((col) => ({
+                content: col.label + (col.basis ? ` (${basisLabel})` : ''),
+                styles: { halign: 'right' }
+            }))
+        ];
+
+        const body = filteredSortedColegios.map((colegio) => ([
+            colegio.schoolName,
+            colegio.cicloEscolarAnio ? String(colegio.cicloEscolarAnio) : '—',
+            ...visibleColumns.map((col) => formatMetric(colegio.metrics, col, metricsBasis))
+        ]));
+        if (totales && body.length > 0) {
+            body.push([
+                'TOTAL',
+                '—',
+                ...visibleColumns.map((col) => formatMetric(totales, col, metricsBasis))
+            ]);
+        }
+
+        const columnStyles = { 0: { halign: 'left', cellWidth: 42 }, 1: { halign: 'center', cellWidth: 14 } };
+        const trendColIndexes = new Set();
+        visibleColumns.forEach((col, i) => {
+            columnStyles[i + 2] = { halign: 'right' };
+            if (col.type === 'trend') trendColIndexes.add(i + 2);
+        });
+
+        const isTotalRow = (rowIndex) => totales && body.length > 0 && rowIndex === body.length - 1;
+
+        autoTable(pdf, {
+            head,
+            body,
+            startY: cursorY,
+            margin: { left: marginX, right: marginX, top: 20, bottom: 14 },
+            styles: { fontSize: 7, cellPadding: 1.6, textColor: [30, 30, 30] },
+            headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+            alternateRowStyles: { fillColor: [247, 247, 248] },
+            columnStyles,
+            didParseCell: (data) => {
+                if (data.section !== 'body') return;
+                if (trendColIndexes.has(data.column.index)) {
+                    const txt = String(data.cell.raw || '');
+                    if (txt !== 'N/A' && txt !== '—') {
+                        data.cell.styles.textColor = txt.startsWith('-') ? [220, 38, 38] : [46, 125, 50];
+                    }
+                }
+                if (isTotalRow(data.row.index)) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [227, 242, 253];
+                }
+            },
+            didDrawPage: (data) => {
+                if (data.pageNumber > 1) {
+                    pdf.setFont(undefined, 'bold');
+                    pdf.setFontSize(10);
+                    pdf.setTextColor(17, 24, 39);
+                    pdf.text('Reporte de Estadísticas Financieras (continuación)', marginX, 12);
+                    pdf.setFont(undefined, 'normal');
+                    pdf.setFontSize(8);
+                    pdf.setTextColor(107, 114, 128);
+                    pdf.text(rangeLabel, pageWidth - marginX, 12, { align: 'right' });
+                }
+            }
+        });
+
+        const pageCount = pdf.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            pdf.setPage(i);
+            pdf.setFont(undefined, 'normal');
+            pdf.setFontSize(8);
+            pdf.setTextColor(150, 150, 150);
+            pdf.text(`Página ${i} de ${pageCount}`, pageWidth - marginX, pageHeight - 6, { align: 'right' });
+        }
+
         pdf.save(fileName);
-
-        tempDiv.remove();
     };
 
     // Filtro (buscador) + orden aplicados sobre los colegios devueltos por el backend.
@@ -440,10 +590,6 @@ const FinancialStatisticsPage = () => {
                     </Typography>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827', mb: 0.5 }}>
                         Estadísticas Financieras
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: '#6B7280', maxWidth: 620 }}>
-                        Todas las métricas se calculan en el backend sobre el ciclo escolar vigente de cada colegio
-                        {rangeLabel ? ` · ${rangeLabel}` : ''}
                     </Typography>
                 </Box>
                 <Button
@@ -543,7 +689,7 @@ const FinancialStatisticsPage = () => {
                     <CircularProgress />
                 </div>
             ) : (
-                <div ref={reportRef} style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
+                <div style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
                     {/* KPI cards */}
                     {kpis.length > 0 && (
                         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 2, mb: 3 }}>
