@@ -17,8 +17,8 @@ const TARIFF_OVERRIDE_MODE_LABELS = {
 const ROUTE_TYPE_LABELS = {
     ALL: 'Todos',
     COMPLETA: 'Completa',
-    MEDIA_AM: 'Media AM',
-    MEDIA_PM: 'Media PM'
+    'MEDIA AM': 'Media AM',
+    'MEDIA PM': 'Media PM'
 };
 
 function parsePeriodsInput(value) {
@@ -207,8 +207,8 @@ export default function AdminRebuildPaymentsHidden() {
                             >
                                 <MenuItem value="ALL">Todos</MenuItem>
                                 <MenuItem value="COMPLETA">Completa</MenuItem>
-                                <MenuItem value="MEDIA_AM">Media AM</MenuItem>
-                                <MenuItem value="MEDIA_PM">Media PM</MenuItem>
+                                <MenuItem value="MEDIA AM">Media AM</MenuItem>
+                                <MenuItem value="MEDIA PM">Media PM</MenuItem>
                             </TextField>
                             <TextField
                                 select

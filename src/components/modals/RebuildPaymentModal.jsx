@@ -13,7 +13,7 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import api from '../../utils/axiosConfig';
 
-const ROUTE_TYPE_LABELS = { ALL: 'Todos', COMPLETA: 'Completa', MEDIA_AM: 'Media AM', MEDIA_PM: 'Media PM' };
+const ROUTE_TYPE_LABELS = { ALL: 'Todos', COMPLETA: 'Completa', 'MEDIA AM': 'Media AM', 'MEDIA PM': 'Media PM' };
 const TARIFF_MODE_LABELS  = { SET: 'Fijar', INCREMENT: 'Aumentar', DECREMENT: 'Disminuir' };
 function tariffOverrideSummary(overrides = {}) {
     return Object.entries(overrides).map(([key, val]) => {
