@@ -29,12 +29,12 @@ const emptyTierRow = () => ({ untilDate: '', discountType: 'PERCENT', discountVa
 
 /**
  * Editor de tramos de descuento de inscripción por fecha, para un colegio (fila de un ciclo específico).
- * Se guarda de forma independiente al formulario general del colegio, contra
- * PUT /enrollment-payments/schools/:schoolId/config.
  */
-export default function EnrollmentFeeTiersEditor({ schoolId }) {
-    const [tiers, setTiers] = useState([]);
+export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraftTiersChange }) {
+    const isDraft = !schoolId;
+    const [tiers, setTiers] = useState(() => (isDraft && Array.isArray(draftTiers) ? draftTiers : []));
     const [loading, setLoading] = useState(false);
+    const [loadFailed, setLoadFailed] = useState(false);
     const [saving, setSaving] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
@@ -42,23 +42,31 @@ export default function EnrollmentFeeTiersEditor({ schoolId }) {
         if (!schoolId) return;
         setLoading(true);
         try {
-            const { data } = await api.get(`/enrollment-payments/schools/${schoolId}/config`);
+            const { data } = await api.get(`/schools/${schoolId}/enrollment-fee-config`);
             setTiers((data?.tiers || []).map((tier) => ({
                 id: tier.id,
                 untilDate: tier.untilDate ? String(tier.untilDate).slice(0, 10) : '',
                 discountType: tier.discountType,
                 discountValue: tier.discountValue,
             })));
+            setLoadFailed(false);
         } catch (err) {
             console.error('Error cargando tramos de inscripción:', err);
+            setLoadFailed(true);
         } finally {
             setLoading(false);
         }
     }, [schoolId]);
 
     useEffect(() => {
-        loadTiers();
-    }, [loadTiers]);
+        if (!isDraft) loadTiers();
+    }, [isDraft, loadTiers]);
+
+    // En modo borrador (colegio aún no creado) no hay endpoint contra qué guardar;
+    // se reporta el estado al formulario padre para persistirlo tras crear el colegio.
+    useEffect(() => {
+        if (isDraft) onDraftTiersChange?.(tiers);
+    }, [isDraft, tiers, onDraftTiersChange]);
 
     const handleAddRow = () => setTiers((prev) => [...prev, emptyTierRow()]);
 
@@ -69,6 +77,11 @@ export default function EnrollmentFeeTiersEditor({ schoolId }) {
     };
 
     const handleSaveTiers = async () => {
+        if (loadFailed) {
+            setSnackbar({ open: true, message: 'No se pudieron cargar los tramos actuales, así que no se pueden guardar cambios (evita sobrescribirlos a ciegas). Reintenta abrir el colegio.', severity: 'error' });
+            return;
+        }
+
         const invalidRow = tiers.find((row) => !row.untilDate || !row.discountType);
         if (invalidRow) {
             setSnackbar({ open: true, message: 'Cada tramo requiere fecha límite y tipo de descuento.', severity: 'error' });
@@ -77,25 +90,20 @@ export default function EnrollmentFeeTiersEditor({ schoolId }) {
 
         setSaving(true);
         try {
-            const { data } = await api.put(`/enrollment-payments/schools/${schoolId}/config`, {
-                tiers: tiers.map((row) => ({
+            await api.put(`/schools/${schoolId}`, {
+                enrollmentFeeTiers: tiers.map((row) => ({
                     untilDate: row.untilDate,
                     discountType: row.discountType,
                     discountValue: row.discountType === 'FREE' ? 0 : Number(row.discountValue) || 0,
                 })),
             });
-            setTiers((data?.tiers || []).map((tier) => ({
-                id: tier.id,
-                untilDate: tier.untilDate ? String(tier.untilDate).slice(0, 10) : '',
-                discountType: tier.discountType,
-                discountValue: tier.discountValue,
-            })));
+            await loadTiers();
             setSnackbar({ open: true, message: 'Tramos de inscripción guardados.', severity: 'success' });
         } catch (err) {
             console.error('Error guardando tramos de inscripción:', err);
             setSnackbar({
                 open: true,
-                message: err.response?.data?.error || 'Error al guardar los tramos de inscripción.',
+                message: err.response?.data?.message || 'Error al guardar los tramos de inscripción.',
                 severity: 'error',
             });
         } finally {
@@ -108,7 +116,14 @@ export default function EnrollmentFeeTiersEditor({ schoolId }) {
             <Typography variant="subtitle2">Tramos de descuento por fecha de inscripción</Typography>
             <Typography variant="caption" color="text.secondary">
                 Familias que se inscriban hasta la fecha indicada reciben el descuento de ese tramo. Sin tramos configurados, se cobra el monto completo.
+                {isDraft ? ' Estos tramos se guardarán al crear el colegio.' : ''}
             </Typography>
+
+            {!isDraft && loadFailed && (
+                <Alert severity="warning">
+                    No se pudieron cargar los tramos actuales (permiso o error de red). No se puede guardar hasta poder verlos.
+                </Alert>
+            )}
 
             {loading ? (
                 <Typography variant="body2">Cargando tramos...</Typography>
@@ -171,9 +186,11 @@ export default function EnrollmentFeeTiersEditor({ schoolId }) {
 
             <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button size="small" startIcon={<Add />} onClick={handleAddRow}>Agregar tramo</Button>
-                <Button size="small" variant="contained" onClick={handleSaveTiers} disabled={saving}>
-                    {saving ? 'Guardando...' : 'Guardar tramos'}
-                </Button>
+                {!isDraft && (
+                    <Button size="small" variant="contained" onClick={handleSaveTiers} disabled={saving || loadFailed}>
+                        {saving ? 'Guardando...' : 'Guardar tramos'}
+                    </Button>
+                )}
             </Box>
 
             <Snackbar
@@ -190,5 +207,7 @@ export default function EnrollmentFeeTiersEditor({ schoolId }) {
 }
 
 EnrollmentFeeTiersEditor.propTypes = {
-    schoolId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
+    schoolId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    draftTiers: PropTypes.array,
+    onDraftTiersChange: PropTypes.func,
 };

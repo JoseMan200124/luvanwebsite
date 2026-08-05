@@ -187,6 +187,7 @@ const CicloEscolarSelectionPage = () => {
     const [prefillSchools, setPrefillSchools] = useState([]);
     const [prefillSchoolsLoading, setPrefillSchoolsLoading] = useState(false);
     const [selectedPrefillSchoolId, setSelectedPrefillSchoolId] = useState('');
+    const [draftEnrollmentTiers, setDraftEnrollmentTiers] = useState([]);
     const [openEditSchedulesModal, setOpenEditSchedulesModal] = useState(false);
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissions, setSubmissions] = useState([]);
@@ -372,6 +373,7 @@ const CicloEscolarSelectionPage = () => {
         setSchoolYearStart(source.schoolYearStart || '');
         setSchoolYearEnd(source.schoolYearEnd || '');
         setNewGradeName('');
+        setDraftEnrollmentTiers([]);
     };
 
     const isPreviousCycleSchool = (school) => {
@@ -818,6 +820,7 @@ const CicloEscolarSelectionPage = () => {
         setSchoolExtraFields([]);
         setSchoolRouteNumbers([]);
         setSchoolRouteSchedules([]);
+        setDraftEnrollmentTiers([]);
         // Resetear acordeones
         setExpandedPanels({
             basicInfo: true,
@@ -1070,6 +1073,14 @@ const CicloEscolarSelectionPage = () => {
             setSnackbar({ open: true, message: 'El monto de inscripción no puede ser negativo.', severity: 'error' });
             return;
         }
+        // Validate draft enrollment fee tiers (new school, saved after creation)
+        if (!selectedSchool.id) {
+            const invalidTier = draftEnrollmentTiers.find((row) => !row.untilDate || !row.discountType);
+            if (invalidTier) {
+                setSnackbar({ open: true, message: 'Cada tramo de inscripción requiere fecha límite y tipo de descuento.', severity: 'error' });
+                return;
+            }
+        }
 
         // Validate schedules: codes must be 2-4 uppercase letters, no duplicates
         const schedulesWithCode = schoolSchedules.filter(s => s && s.code);
@@ -1177,6 +1188,14 @@ const CicloEscolarSelectionPage = () => {
                 dailyPenalty: Number(selectedSchool.dailyPenalty) || 0,
                 penaltyPaused: !!selectedSchool.penaltyPaused,
                 enrollmentFeeAmount: Number(selectedSchool.enrollmentFeeAmount) || 0,
+                // Tramos de descuento por fecha, solo aplican al crear (en edición se guardan aparte vía EnrollmentFeeTiersEditor)
+                ...(selectedSchool.id ? {} : {
+                    enrollmentFeeTiers: draftEnrollmentTiers.map((row) => ({
+                        untilDate: row.untilDate,
+                        discountType: row.discountType,
+                        discountValue: row.discountType === 'FREE' ? 0 : Number(row.discountValue) || 0,
+                    }))
+                }),
                 // school year bounds
                 schoolYearStart: schoolYearStart || null,
                 schoolYearEnd: schoolYearEnd || null,
@@ -1199,7 +1218,7 @@ const CicloEscolarSelectionPage = () => {
                     severity: 'success'
                 });
             } else {
-                // Create new school
+                // Create new school (enrollmentFeeTiers, if any, are persisted atomically by the backend)
                 await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
@@ -2063,9 +2082,11 @@ const CicloEscolarSelectionPage = () => {
                                     helperText="Monto base de inscripción del ciclo, antes de aplicar los tramos de descuento por fecha."
                                 />
 
-                                {selectedSchool?.id ? (
-                                    <EnrollmentFeeTiersEditor schoolId={selectedSchool.id} />
-                                ) : null}
+                                <EnrollmentFeeTiersEditor
+                                    schoolId={selectedSchool?.id}
+                                    draftTiers={draftEnrollmentTiers}
+                                    onDraftTiersChange={setDraftEnrollmentTiers}
+                                />
 
                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                     <TextField
