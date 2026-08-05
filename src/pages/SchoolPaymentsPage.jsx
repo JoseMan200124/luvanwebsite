@@ -63,7 +63,6 @@ import PaymentFilters from '../components/PaymentFilters';
 import PaymentTable from '../components/PaymentTable';
 import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
-import EnrollmentPaymentPanel from '../components/EnrollmentPaymentPanel';
 import CreateSchoolPeriodModal from '../components/modals/CreateSchoolPeriodModal';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
@@ -115,6 +114,12 @@ const formatMoneyOrNA = (value) => (value === null || value === undefined)
 const formatPercentOrNA = (value) => (value === null || value === undefined)
     ? 'N/A'
     : `${Number(value).toFixed(1)}%`;
+
+const ENROLLMENT_STATUS_LABEL = {
+    PENDIENTE: { label: 'Pendiente', color: 'warning' },
+    PARCIAL: { label: 'Parcial', color: 'info' },
+    PAGADO: { label: 'Pagado', color: 'success' },
+};
 
 const SchoolPaymentsPage = () => {
     useContext(AuthContext); // keep context hook for future auth-based features
@@ -716,7 +721,7 @@ const SchoolPaymentsPage = () => {
 
     // Dialog states
     const [openRegisterDialog, setOpenRegisterDialog] = useState(false);
-    const [paymentTab, setPaymentTab] = useState(0); // 0 = Pago de Tarifa, 1 = Pago de Mora
+    const [paymentTab, setPaymentTab] = useState(0); // 0 = Pago de Tarifa, 1 = Pago de Mora, 2 = Inscripción
     const [registerPaymentTarget, setRegisterPaymentTarget] = useState(null);
     const [registerAmount, setRegisterAmount] = useState('');
     const [registerPaymentExtra, setRegisterPaymentExtra] = useState({
@@ -875,6 +880,15 @@ const SchoolPaymentsPage = () => {
     const [discountPenaltyAmount, setDiscountPenaltyAmount] = useState('');
     const [discountPenaltyType, setDiscountPenaltyType] = useState('DISCOUNT');
     const [discountPenaltyNotes, setDiscountPenaltyNotes] = useState('');
+
+    // Tab de Inscripción de Ciclo (Tab Panel 2 del modal de registro de pago)
+    const [enrollmentPayment, setEnrollmentPayment] = useState(null);
+    const [payEnrollmentAmount, setPayEnrollmentAmount] = useState('');
+    const [payEnrollmentDiscount, setPayEnrollmentDiscount] = useState('');
+    const [payEnrollmentDate, setPayEnrollmentDate] = useState(moment().format('YYYY-MM-DD'));
+    const [payEnrollmentReceiptNumber, setPayEnrollmentReceiptNumber] = useState('');
+    const [payEnrollmentNotes, setPayEnrollmentNotes] = useState('');
+    const [enrollmentSaving, setEnrollmentSaving] = useState(false);
     
     // Exonerate toggle
     const [isExonerating, setIsExonerating] = useState(false);
@@ -937,6 +951,14 @@ const SchoolPaymentsPage = () => {
         setIsExonerating(false);
         setExonerateAmount('');
 
+        // Inicializar campos de la pestaña de Inscripción con los mismos valores por defecto
+        setEnrollmentPayment(null);
+        setPayEnrollmentAmount('');
+        setPayEnrollmentDiscount('');
+        setPayEnrollmentDate(moment().format('YYYY-MM-DD'));
+        setPayEnrollmentReceiptNumber(payment.receiptNumber || '');
+        setPayEnrollmentNotes('');
+
     // Do not open dialog immediately. We'll open it after initial loads complete so the UI shows data-ready state.
 
         // load uploaded receipts and histories for this user's family (payment.User.id)
@@ -998,8 +1020,11 @@ const SchoolPaymentsPage = () => {
                 const histPromise = cached && (now - cached.ts) < 1000 * 60 * 5
                     ? Promise.resolve({ data: { histories: cached.data || [] }, __fromCache: true })
                     : api.get('/payments/paymenthistory', { params: { userId, page: regHistPage, limit: regHistLimit } }).catch(e => ({ data: { histories: [] } }));
+                const cicloEscolarId = updatedPayment?.cicloEscolarId || payment?.cicloEscolarId || null;
+                const enrollmentPromise = api.get(`/enrollment-payments/by-user/${userId}`, { params: cicloEscolarId ? { cicloEscolarId } : {} })
+                    .catch(e => ({ data: { enrollmentPayment: null } }));
 
-                const [receiptsRes, histRes] = await Promise.all([receiptsPromise, histPromise]);
+                const [receiptsRes, histRes, enrollmentRes] = await Promise.all([receiptsPromise, histPromise, enrollmentPromise]);
 
                 // receipts
                 setUploadedReceipts(receiptsRes.data?.receipts || []);
@@ -1009,6 +1034,11 @@ const SchoolPaymentsPage = () => {
                 const histories = histRes.data?.histories || [];
                 if (!histRes.__fromCache) regHistCacheRef.current.set(cacheKey, { ts: now, data: histories });
                 setRegHistLoading(false);
+
+                // inscripción de ciclo
+                const ep = enrollmentRes.data?.enrollmentPayment || null;
+                setEnrollmentPayment(ep);
+                setPayEnrollmentAmount(ep ? String(ep.amountDue) : '');
 
                 // open dialog now that initial data is ready
                 setOpenRegisterDialog(true);
@@ -4855,17 +4885,95 @@ const SchoolPaymentsPage = () => {
                                 {/* Tab Panel 2: Inscripción */}
                                 {paymentTab === 2 && (
                                 <Box>
-                                    <EnrollmentPaymentPanel
-                                        userId={
-                                            registerPaymentTarget?.User?.id
-                                            || registerPaymentTarget?.user?.id
-                                            || registerPaymentTarget?.userId
-                                            || null
-                                        }
-                                        schoolId={registerPaymentTarget?.schoolId || null}
-                                        cicloEscolarId={registerPaymentTarget?.cicloEscolarId || null}
-                                        onSaved={() => setSnackbar({ open: true, message: 'Inscripción actualizada.', severity: 'success' })}
-                                    />
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                        <Typography variant="h6">🎓 Inscripción de Ciclo</Typography>
+                                        {enrollmentPayment && (
+                                            <Chip
+                                                label={ENROLLMENT_STATUS_LABEL[enrollmentPayment.status]?.label || enrollmentPayment.status}
+                                                color={ENROLLMENT_STATUS_LABEL[enrollmentPayment.status]?.color || 'default'}
+                                                size="small"
+                                            />
+                                        )}
+                                    </Box>
+
+                                    {!enrollmentPayment && (
+                                        <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                            <Typography variant="body2" color="text.secondary">
+                                                Esta familia no tiene cargo de inscripción para este ciclo (el colegio no tiene monto de inscripción configurado, o aún no se ha generado).
+                                            </Typography>
+                                        </Box>
+                                    )}
+
+                                    {enrollmentPayment && (
+                                        <>
+                                            <Box sx={{ mb: 2, p: 2, bgcolor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">Monto original ({enrollmentPayment.studentsCount} est.)</Typography>
+                                                    <Typography variant="body2">{formatCurrency(enrollmentPayment.originalAmount)}</Typography>
+                                                </Box>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">Descuento aplicado</Typography>
+                                                    <Typography variant="body2">{formatCurrency(enrollmentPayment.discountApplied)}</Typography>
+                                                </Box>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">Monto neto</Typography>
+                                                    <Typography variant="body2">{formatCurrency(enrollmentPayment.netAmount)}</Typography>
+                                                </Box>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">Pagado</Typography>
+                                                    <Typography variant="body2">{formatCurrency(enrollmentPayment.amountPaid)}</Typography>
+                                                </Box>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>Saldo pendiente</Typography>
+                                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatCurrency(enrollmentPayment.amountDue)}</Typography>
+                                                </Box>
+                                                {enrollmentPayment.manualAdjustmentAmount > 0 && (
+                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                                        Ajuste manual acumulado: {formatCurrency(enrollmentPayment.manualAdjustmentAmount)}
+                                                        {enrollmentPayment.manualAdjustmentReason ? ` — ${enrollmentPayment.manualAdjustmentReason}` : ''}
+                                                    </Typography>
+                                                )}
+                                            </Box>
+
+                                            {enrollmentPayment.amountDue > 0 && (
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                    <TextField
+                                                        label="Monto pagado (Q)"
+                                                        type="number"
+                                                        value={payEnrollmentAmount}
+                                                        onChange={(e) => setPayEnrollmentAmount(e.target.value)}
+                                                        inputProps={{ min: '0', step: '0.01' }}
+                                                    />
+                                                    <TextField
+                                                        label={`Descuento extraordinario / exoneración (Q, opcional, máx. Q${Number(enrollmentPayment.amountDue).toFixed(2)})`}
+                                                        type="number"
+                                                        value={payEnrollmentDiscount}
+                                                        onChange={(e) => setPayEnrollmentDiscount(e.target.value)}
+                                                        inputProps={{ min: '0', step: '0.01', max: enrollmentPayment.amountDue }}
+                                                    />
+                                                    <TextField
+                                                        label="Fecha real de pago"
+                                                        type="date"
+                                                        value={payEnrollmentDate}
+                                                        onChange={(e) => setPayEnrollmentDate(e.target.value)}
+                                                        InputLabelProps={{ shrink: true }}
+                                                    />
+                                                    <TextField
+                                                        label="Número de boleta (opcional)"
+                                                        value={payEnrollmentReceiptNumber}
+                                                        onChange={(e) => setPayEnrollmentReceiptNumber(e.target.value)}
+                                                    />
+                                                    <TextField
+                                                        label="Notas / motivo del descuento (opcional)"
+                                                        multiline
+                                                        minRows={2}
+                                                        value={payEnrollmentNotes}
+                                                        onChange={(e) => setPayEnrollmentNotes(e.target.value)}
+                                                    />
+                                                </Box>
+                                            )}
+                                        </>
+                                    )}
                                 </Box>
                                 )}
                                     </Grid>
@@ -4999,6 +5107,54 @@ const SchoolPaymentsPage = () => {
                                         return !payPenaltyDate || !payPenaltyAccount;
                                     })()}>
                                         {isExonerating ? 'Confirmar Exoneración' : payPenaltyUseCredit && Number(payPenaltyBoletaAmount || 0) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago de Mora'}
+                                    </Button>
+                                )}
+
+                                {/* Botón para Inscripción */}
+                                {paymentTab === 2 && (
+                                    <Button
+                                        variant="contained"
+                                        onClick={async () => {
+                                            const amount = Number(payEnrollmentAmount) || 0;
+                                            const extraordinaryDiscount = Number(payEnrollmentDiscount) || 0;
+                                            if (amount <= 0 && extraordinaryDiscount <= 0) {
+                                                setSnackbar({ open: true, message: 'Debe indicar un monto pagado o un descuento extraordinario.', severity: 'error' });
+                                                return;
+                                            }
+                                            setEnrollmentSaving(true);
+                                            try {
+                                                await api.post('/enrollment-payments/pay', {
+                                                    enrollmentPaymentId: enrollmentPayment.id,
+                                                    amount,
+                                                    extraordinaryDiscount: extraordinaryDiscount || undefined,
+                                                    realPaymentDate: payEnrollmentDate,
+                                                    receiptNumber: payEnrollmentReceiptNumber || undefined,
+                                                    notes: payEnrollmentNotes || undefined,
+                                                });
+                                                setSnackbar({ open: true, message: 'Pago de inscripción registrado.', severity: 'success' });
+                                                setOpenRegisterDialog(false);
+                                                setPaymentTab(0);
+                                                await fetchAllPayments(statusFilter, search);
+                                            } catch (err) {
+                                                setSnackbar({
+                                                    open: true,
+                                                    message: err.response?.data?.error || 'Error al registrar el pago.',
+                                                    severity: 'error',
+                                                });
+                                            } finally {
+                                                setEnrollmentSaving(false);
+                                            }
+                                        }}
+                                        disabled={
+                                            enrollmentSaving
+                                            || uploadedReceiptsLoading
+                                            || regHistLoading
+                                            || !enrollmentPayment
+                                            || enrollmentPayment.amountDue <= 0
+                                            || (!Number(payEnrollmentAmount) && !Number(payEnrollmentDiscount))
+                                        }
+                                    >
+                                        {enrollmentSaving ? 'Guardando...' : 'Registrar Pago / Exoneración'}
                                     </Button>
                                 )}
                             </DialogActions>
