@@ -54,12 +54,13 @@ function App() {
         modules.forEach((module) => {
             module.submodules.forEach((submodule) => {
                 const C = submodule.component;
+                const skipSchoolContext = submodule.key === 'corporaciones';
                 routes.push(
                     <Route
                         key={submodule.path}
                         path={submodule.path}
                         element={
-                            <ProtectedRoute moduleKey={submodule.key}>
+                            <ProtectedRoute moduleKey={submodule.key} requireSchoolContext={skipSchoolContext ? false : undefined}>
                                 <C />
                             </ProtectedRoute>
                         }
@@ -126,7 +127,7 @@ function App() {
                     <Route
                         path="/admin/*"
                         element={
-                            <ProtectedRoute>
+                            <ProtectedRoute requireSchoolContext={false}>
                                 <ProtectedLayout />
                             </ProtectedRoute>
                         }
@@ -208,7 +209,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId"
                             element={
-                                <ProtectedRoute moduleKey={'corporaciones'}>
+                                <ProtectedRoute moduleKey={'corporaciones'} requireSchoolContext={false}>
                                     <CorporateDashboardPage />
                                 </ProtectedRoute>
                             }
@@ -216,7 +217,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId/colaboradores"
                             element={
-                                <ProtectedRoute moduleKey={'corporaciones-colaboradores'}>
+                                <ProtectedRoute moduleKey={'corporaciones-colaboradores'} requireSchoolContext={false}>
                                     <ColaboradoresPage />
                                 </ProtectedRoute>
                             }
@@ -224,7 +225,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId/buses-gestion"
                             element={
-                                <ProtectedRoute moduleKey={'corporaciones-gestion-buses'}>
+                                <ProtectedRoute moduleKey={'corporaciones-gestion-buses'} requireSchoolContext={false}>
                                     <CorporateBusesPage />
                                 </ProtectedRoute>
                             }
@@ -232,7 +233,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId/protocolos"
                             element={
-                                <ProtectedRoute moduleKey={'corporaciones-protocolos-reglamentos'}>
+                                <ProtectedRoute moduleKey={'corporaciones-protocolos-reglamentos'} requireSchoolContext={false}>
                                     <CorporateProtocolsPage />
                                 </ProtectedRoute>
                             }
@@ -240,7 +241,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId/pagos"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute roles={['Gestor','Administrador']} requireSchoolContext={false}>
                                     <SchoolPaymentsPage />
                                 </ProtectedRoute>
                             }

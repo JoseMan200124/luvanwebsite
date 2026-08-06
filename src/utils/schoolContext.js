@@ -2,7 +2,7 @@ const SELECTED_SCHOOL_ID_KEY = 'selectedSchoolId';
 const SELECTED_CICLO_ESCOLAR_ID_KEY = 'selectedCicloEscolarId';
 const SELECTED_SCHOOL_CONTEXT_KEY = 'selectedSchoolContext';
 
-const SCHOOL_CONTEXT_REQUIRED_ROLE_IDS = new Set([3, 8]);
+const SCHOOL_CONTEXT_REQUIRED_ROLE_IDS = new Set([3, 8, 9]);
 
 const safeString = (value) => (value === undefined || value === null ? '' : String(value));
 
@@ -14,6 +14,7 @@ export const getDefaultPathForRole = (roleId) => {
     const parsedRoleId = Number(roleId);
     if (parsedRoleId === 3) return '/parent/dashboard';
     if (parsedRoleId === 8) return '/colaborador/dashboard';
+    if (parsedRoleId === 9) return '/admin/colegios';
     return '/admin/dashboard';
 };
 
