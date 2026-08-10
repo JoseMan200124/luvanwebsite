@@ -43,6 +43,10 @@ const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '
 
     const userRoleName = auth.user?.role || 'Desconocido';
     const userRoleId = auth.user?.roleId;
+    const isInvitado = userRoleId === 9;
+    const invitedRedirectTo = isInvitado
+        ? (auth.user?.corporationId ? '/admin/corporaciones' : '/admin/colegios')
+        : redirectTo;
 
     if (requireSchoolContext && isSchoolContextRequiredRole(userRoleId) && !hasStoredSchoolContext()) {
         return <Navigate to="/select-context" replace state={{ nextPath: `${location.pathname}${location.search}` }} />;
@@ -52,7 +56,7 @@ const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '
     // Nota: el provider muestra loading mientras carga, así que aquí normalmente ya estará cargado.
     if (moduleKey) {
         if (!permissionsLoaded || !hasPermission(moduleKey)) {
-            return <Navigate to={redirectTo} replace />;
+            return <Navigate to={invitedRedirectTo} replace />;
         }
         // Si tiene el permiso en BD, permitir acceso (no verificar roles hardcodeados)
         return children;
@@ -61,7 +65,7 @@ const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '
     // 5) Si se requiere verificar roles (solo si NO hay moduleKey):
     if (roles.length > 0) {
         const allowed = roles.some((r) => r === userRoleName || (userRoleId != null && r === userRoleId));
-        if (!allowed) return <Navigate to={redirectTo} replace />;
+        if (!allowed) return <Navigate to={invitedRedirectTo} replace />;
     }
 
     // 6) Si pasa todas las condiciones, renderiza la ruta protegida

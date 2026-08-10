@@ -56,13 +56,36 @@ const AuthProvider = ({ children }) => {
                 const refreshToken = localStorage.getItem('refreshToken'); if (!refreshToken) return;
                 const res = await api.post('/auth/refresh', { refreshToken });
                 const { token: newToken, refreshToken: newRefresh } = res.data;
-                if (newToken) { localStorage.setItem('token', newToken); if (newRefresh) localStorage.setItem('refreshToken', newRefresh); setAuth(prev => ({ ...prev, token: newToken })); }
+                if (newToken) {
+                    localStorage.setItem('token', newToken);
+                    if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
+                    setAuth(prev => ({ ...prev, token: newToken }));
+                }
             }
         } catch (err) {
             try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
             logout();
         }
     }, [logout]);
+
+    const verifyToken = useCallback(async (tokenToVerify) => {
+        const token = tokenToVerify || auth.token;
+        if (!token) return;
+
+        try {
+            const response = await api.get('/auth/verify', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            setAuth(prev => ({
+                ...prev,
+                user: { ...response.data.user, roleId: response.data.user.roleId },
+                token
+            }));
+        } catch (error) {
+            logout();
+        }
+    }, [auth.token, logout]);
 
     // Permisos ahora se cargan exclusivamente en PermissionsProvider
 
@@ -98,27 +121,44 @@ const AuthProvider = ({ children }) => {
 
     // On mount, restore token if valid
     useEffect(() => {
-        try {
-            const storedToken = localStorage.getItem('token');
-            if (storedToken) {
-                const decoded = jwtDecode(storedToken);
-                if (decoded.exp * 1000 >= Date.now()) {
-                    setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: storedToken });
-                } else {
-                    localStorage.removeItem('token');
-                    clearStoredSchoolContext();
+        const restoreSession = async () => {
+            try {
+                const storedToken = localStorage.getItem('token');
+                if (storedToken) {
+                    const decoded = jwtDecode(storedToken);
+                    if (decoded.exp * 1000 >= Date.now()) {
+                        if (decoded.roleId === 9) {
+                            await verifyToken(storedToken);
+                        } else {
+                            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: storedToken });
+                        }
+                    } else {
+                        localStorage.removeItem('token');
+                        clearStoredSchoolContext();
+                    }
                 }
-            }
-            const params = new URLSearchParams(location.search); const tokenFromOAuth = params.get('token');
-            if (tokenFromOAuth) {
-                const decoded = jwtDecode(tokenFromOAuth);
+                const params = new URLSearchParams(location.search);
+                const tokenFromOAuth = params.get('token');
+                if (tokenFromOAuth) {
+                    const decoded = jwtDecode(tokenFromOAuth);
+                    clearStoredSchoolContext();
+                    localStorage.setItem('token', tokenFromOAuth);
+                    if (decoded.roleId === 9) {
+                        await verifyToken(tokenFromOAuth);
+                    } else {
+                        setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: tokenFromOAuth });
+                    }
+                }
+            } catch (e) {
+                localStorage.removeItem('token');
                 clearStoredSchoolContext();
-                localStorage.setItem('token', tokenFromOAuth);
-                setAuth({ user: { ...decoded, roleId: decoded.roleId }, token: tokenFromOAuth });
+            } finally {
+                setInitialLoad(false);
             }
-        } catch (e) { localStorage.removeItem('token'); clearStoredSchoolContext(); }
-        setInitialLoad(false);
-    }, [location]);
+        };
+
+        restoreSession();
+    }, [location, verifyToken]);
 
     useEffect(() => { if (auth.user?.id) initSocket(auth.user.id); }, [auth.user]);
 
@@ -126,12 +166,18 @@ const AuthProvider = ({ children }) => {
     const loginUpdateParentsInfo = async (email, password) => {
         try {
             const response = await loginUser({ email, password });
-            const { token, passwordExpired, refreshToken } = response.data; const decoded = jwtDecode(token);
+            const { token, passwordExpired, refreshToken } = response.data;
+            const decoded = jwtDecode(token);
             const restrictedRoles = [3, 8]; // allow Padres (3) and Colaboradores (8) to use this dialog
             if (!restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la página principal.`);
             clearStoredSchoolContext();
-            localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
+            localStorage.setItem('token', token);
+            if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+            if (decoded.roleId === 9) {
+                await verifyToken(token);
+            } else {
+                setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
+            }
             return { passwordExpired, roleId: decoded.roleId };
         } catch (error) { throw error; }
     };
@@ -139,25 +185,19 @@ const AuthProvider = ({ children }) => {
     const login = async (email, password) => {
         try {
             const response = await loginUser({ email, password });
-            const { token, passwordExpired, refreshToken } = response.data; const decoded = jwtDecode(token);
+            const { token, passwordExpired, refreshToken } = response.data;
+            const decoded = jwtDecode(token);
             const restrictedRoles = [4,5]; if (restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la app móvil.`);
             clearStoredSchoolContext();
-            localStorage.setItem('token', token); if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-            setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
+            localStorage.setItem('token', token);
+            if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+            if (decoded.roleId === 9) {
+                await verifyToken(token);
+            } else {
+                setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
+            }
             return { passwordExpired, roleId: decoded.roleId };
         } catch (error) { throw error; }
-    };
-
-    const verifyToken = async () => {
-        try { 
-            const response = await api.get('/auth/verify', { headers: { Authorization: `Bearer ${auth.token}` } }); 
-            setAuth(prev => ({ 
-                ...prev, 
-                user: { ...response.data.user, roleId: response.data.user.roleId }, 
-                token: auth.token 
-            })); 
-        }
-        catch (error) { logout(); }
     };
 
     const value = { auth, initialLoad, loginUpdateParentsInfo, login, logout, verifyToken };
