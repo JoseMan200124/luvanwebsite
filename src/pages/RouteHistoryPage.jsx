@@ -273,8 +273,8 @@ const RouteHistoryPage = () => {
         await fetchRouteHistory({
             startDate: startDate || undefined,
             endDate: endDate || undefined,
-            pilotoName: pilotoFilter || undefined,
-            busPlaca: busFilter || undefined,
+            pilotoId: pilotSelected?.id || undefined,
+            busId: busSelected?.id || undefined,
             onlyFailures: onlyFailures ? '1' : undefined,
             status: statusFilter || undefined,
             startHour: startHour || undefined,
@@ -282,7 +282,7 @@ const RouteHistoryPage = () => {
             routeNumber: routeNumber || undefined,
             page: 1
         });
-    }, [fetchRouteHistory, startDate, endDate, pilotoFilter, busFilter, onlyFailures, statusFilter, startHour, endHour, routeNumber, selectedCicloEscolar]);
+    }, [fetchRouteHistory, startDate, endDate, pilotSelected, busSelected, onlyFailures, statusFilter, startHour, endHour, routeNumber, selectedCicloEscolar]);
 
     useEffect(() => {
         if (!initialFetchDone && (selectedClient || clientId)) {
@@ -1941,7 +1941,7 @@ const RouteHistoryPage = () => {
                             </Box>
                             <Box sx={{ display:'flex', gap:1 }}>
                                         <Button size="small" variant="outlined" color="inherit" startIcon={<ClearIcon />} onClick={() => { setStartDate(''); setEndDate(''); setPilotoFilter(''); setBusFilter(''); setPilotSelected(null); setBusSelected(null); setRouteNumber(''); setRouteSelected(null); /* preserve selectedClient for comparison */ setOnlyFailures(false); setStatusFilter(''); setStartHour(''); setEndHour(''); setPage(1); }}>LIMPIAR</Button>
-                                <Button size="small" variant="contained" color="primary" startIcon={<SearchIcon />} onClick={() => { setPage(1); fetchRouteHistory({ startDate: startDate||undefined, endDate: endDate||undefined, pilotoName: pilotoFilter||undefined, busPlaca: busFilter||undefined, onlyFailures: onlyFailures?'1':undefined, status: statusFilter||undefined, startHour: startHour||undefined, endHour: endHour||undefined, page: 1 }); }}>APLICAR FILTROS</Button>
+                                <Button size="small" variant="contained" color="primary" startIcon={<SearchIcon />} onClick={() => { setPage(1); fetchRouteHistory({ startDate: startDate||undefined, endDate: endDate||undefined, pilotoId: pilotSelected?.id||undefined, busPlaca: busSelected?.id||undefined, onlyFailures: onlyFailures?'1':undefined, status: statusFilter||undefined, startHour: startHour||undefined, endHour: endHour||undefined, page: 1 }); }}>APLICAR FILTROS</Button>
                             </Box>
                         </Box>
                     </Grid>
@@ -2163,7 +2163,7 @@ const RouteHistoryPage = () => {
                         <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
                             <Box sx={{ width: 56 }} />
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflowX: 'auto' }}>
-                                <Pagination count={Math.max(1, Math.ceil((total || 0) / pageSize))} page={page} onChange={(e, p) => { setPage(p); fetchRouteHistory({ startDate: startDate || undefined, endDate: endDate || undefined, pilotoName: pilotoFilter || undefined, busPlaca: busFilter || undefined, onlyFailures: onlyFailures ? '1' : undefined, status: statusFilter || undefined, startHour: startHour || undefined, endHour: endHour || undefined, page: p }); }} color="primary" />
+                                <Pagination count={Math.max(1, Math.ceil((total || 0) / pageSize))} page={page} onChange={(e, p) => { setPage(p); fetchRouteHistory({ startDate: startDate || undefined, endDate: endDate || undefined, pilotoId: pilotSelected?.id || undefined, busPlaca: busSelected?.id || undefined, onlyFailures: onlyFailures ? '1' : undefined, status: statusFilter || undefined, startHour: startHour || undefined, endHour: endHour || undefined, page: p }); }} color="primary" />
                             </Box>
                         </Box>
                     </Grid>
