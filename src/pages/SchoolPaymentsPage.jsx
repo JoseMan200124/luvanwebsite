@@ -3368,7 +3368,8 @@ const SchoolPaymentsPage = () => {
                                                             </Tooltip>
                                                         </Box>
                                                         <Typography variant="h4" sx={{ fontWeight: 700, color: '#4caf50' }}>{formatPercentOrNA(fin?.tasaDePago)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{fin?.countPagado ?? '—'} de {familiasActivas ?? '—'} con tarifa este período</Typography>
+                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.countPagado ?? '—'} de {familiasActivas ?? '—'} familias con tarifa este período</Typography>
+                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.studentsPagado ?? '—'} de {fin?.studentsActivas ?? '—'} estudiantes</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
@@ -3389,7 +3390,8 @@ const SchoolPaymentsPage = () => {
                                                             </Tooltip>
                                                         </Box>
                                                         <Typography variant="h4" sx={{ fontWeight: 700, color: '#f44336' }}>{formatPercentOrNA(fin?.tasaDeMora)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{fin?.countMora ?? '—'} de {familiasActivas ?? '—'} con mora este período</Typography>
+                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.countMora ?? '—'} de {familiasActivas ?? '—'} familias con mora este período</Typography>
+                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.studentsMora ?? '—'} de {fin?.studentsActivas ?? '—'} estudiantes</Typography>
                                                     </Box>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
@@ -3431,7 +3433,8 @@ const SchoolPaymentsPage = () => {
                                                             </Tooltip>
                                                         </Box>
                                                         <Typography variant="h4" sx={{ fontWeight: 700, color: '#00897b' }}>{formatPercentOrNA(fin?.tasaPuntualidad)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{fin?.countPagadoSinMora ?? '—'} de {fin?.countPagado ?? '—'} pagaron sin entrar en mora este período</Typography>
+                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.countPagadoSinMora ?? '—'} de {fin?.countPagado ?? '—'} familias pagaron sin entrar en mora este período</Typography>
+                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.studentsPagadoSinMora ?? '—'} de {fin?.studentsPagado ?? '—'} estudiantes</Typography>
                                                     </Box>
                                                 </Grid>
                                             </Grid>
