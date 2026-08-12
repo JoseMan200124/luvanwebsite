@@ -28,9 +28,10 @@ import {
     TableRow,
     TableCell,
     TableContainer,
-    Paper
+    Paper,
+    Collapse
 } from '@mui/material';
-import { InfoOutlined, Search, ChevronLeft, ChevronRight, Download } from '@mui/icons-material';
+import { InfoOutlined, Search, ChevronLeft, ChevronRight, Download, KeyboardArrowRight, KeyboardArrowDown } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getCurrentDateSync } from '../hooks/useCurrentDate';
@@ -85,7 +86,7 @@ const METRIC_GROUPS = [
     {
         label: 'Actividad',
         columns: [
-            { key: 'familiasActivas', label: 'Familias Activas', type: 'int' },
+            { key: 'familiasActivas', label: 'Familias Facturadas', type: 'int' },
             { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent' },
             { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent' },
             { key: 'tasaPuntualidad', label: 'Puntualidad', type: 'percent' }
@@ -110,9 +111,9 @@ const METRIC_GROUPS = [
     {
         label: 'Pendientes',
         columns: [
-            { key: 'totalPendiente', label: 'Total Pendiente', type: 'money' },
+            { key: 'totalPendiente', label: 'Tarifa Pendiente', type: 'money' },
             { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money' },
-            { key: 'creditoAcumulado', label: 'Crédito Acumulado', type: 'money' }
+            { key: 'creditoAcumulado', label: 'Crédito a favor Acumulado', type: 'money' }
         ]
     },
     {
@@ -141,17 +142,27 @@ const formatMetric = (metrics, col, basis) => {
 const getMetricTooltip = (key) => {
     let primary, secondary;
     switch (key) {
+        case 'familiasActivas':
+            primary = "Familias distintas que tuvieron al menos una cuota facturada en algún mes del rango seleccionado.";
+            secondary = "Deduplicado por familia dentro de cada colegio: una familia facturada en varios meses del rango cuenta una sola vez. Con varios colegios seleccionados, se suma el total de cada uno.";
+            break;
         case 'tasaDePago':
             primary = "Porcentaje de familias con cuota generada en el período seleccionado que la pagaron por completo.";
-            secondary = "Solo se cuentan las familias que tienen una cuota facturada en ese período. Por eso este número puede ser menor al total de familias registradas en el colegio: las que no tienen tarifa asignada o no se les generó cuota ese mes no entran en el cálculo.";
+            secondary = "Solo se cuentan las familias que tienen una cuota facturada en este período, independientemente de su estado de servicio. Por eso este número puede ser menor al total de familias registradas en el colegio: las que no tienen tarifa asignada o no se les generó cuota este mes no entran en el cálculo.";
             break;
         case 'tasaDeMora':
             primary = "Porcentaje de familias con cuota generada en el período seleccionado que tienen mora sin pagar.";
-            secondary = "Se considera en mora cuando el período tiene una penalidad pendiente (parcial o total). No incluye mora arrastrada de meses anteriores. Solo se cuentan las familias que tienen una cuota facturada en ese período.";
+            secondary = "Se considera en mora cuando el período tiene una penalidad pendiente (parcial o total). Solo se cuentan las familias que tienen una cuota facturada en este período.";
             break;
         case 'eficienciaCobro':
-            primary = "Porcentaje del monto neto facturado en el período que ya fue cobrado. Fórmula: (cobrado ÷ monto neto facturado) × 100.";
-            secondary = "El monto neto ya tiene descontados los descuentos especiales de cada familia. Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar.";
+            primary = "Porcentaje del monto neto facturado en el período que ya fue cobrado.";
+            secondary = (
+                <>
+                    {"El monto neto ya incluye los descuentos familiares."}
+                    <br /><br />
+                    {"Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar. Puede superar 100% cuando en Base Caja entran pagos de cuotas de meses anteriores, o cuando hay adelantos; en Base Devengado, cuando el pago de una cuota se registra en un período anterior al que corresponde."}
+                </>
+            );
             break;
         case 'tendencia':
             primary = "Variación porcentual del ingreso del período seleccionado respecto al mes inmediato anterior.";
@@ -162,13 +173,22 @@ const getMetricTooltip = (key) => {
             secondary = "Ejemplo: si 30 familias pagaron y 25 lo hicieron a tiempo, la tasa es 83.3%. Una tasa alta indica disciplina de pago en el colegio.";
             break;
         case 'ingresoTarifa':
+            primary = "Total de tarifas del rango seleccionado. No incluye mora ni pagos extraordinarios.";
+            secondary = (
+                <>
+                    {"Base Caja: pagos recibidos en este rango de fechas, incluye cuotas atrasadas o adelantadas de otros meses."}
+                    <br />
+                    {"Base Devengado: lo cobrado de las cuotas del rango, sin importar cuándo se recibió."}
+                </>
+            );
+            break;
         case 'ingresoTotal':
-            primary = "Total de tarifas de colegiatura cobradas en el rango seleccionado.";
-            secondary = "Base Caja: se agrupa por fecha de recepción del pago. Base Devengado: se agrupa por el mes al que corresponde la cuota. No incluye pagos extraordinarios.";
+            primary = "Total cobrado en el rango seleccionado: tarifa más mora.";
+            secondary = "Suma de Ingreso por Tarifa e Ingreso por Mora en la base activa (Caja o Devengado). No incluye pagos extraordinarios.";
             break;
         case 'ingresoPorMora':
             primary = "Total cobrado por concepto de mora en el período seleccionado.";
-            secondary = "Base Caja: pagos de mora recibidos en este mes. Base Devengado: mora asignada al período correspondiente.";
+            secondary = "Base Caja: pagos de mora recibidos en este mes. Base Devengado: mora cobrada que pertenece a este período (distribuida desde el mes con mora más antiguo).";
             break;
         case 'promedioMensual':
             primary = "Ingreso promedio mensual en lo que va del año (acumulado ÷ meses transcurridos).";
@@ -179,20 +199,20 @@ const getMetricTooltip = (key) => {
             secondary = "Refleja el ingreso promedio por familia. Varía según la base Caja/Devengado.";
             break;
         case 'totalPendiente':
-            primary = "Suma de cuotas de colegiatura sin pagar de las familias que tienen un período facturado en el mes seleccionado.";
-            secondary = "No incluye mora (ver Mora Pendiente). Refleja cuánto falta por pagar de las cuotas de ese período específico.";
+            primary = "Suma de todas las cuotas de tarifa sin pagar de las familias que tienen un período facturado en el mes seleccionado.";
+            secondary = "Refleja cuánto falta por pagar de las cuotas de este período específico, sin incluir mora.";
             break;
         case 'moraPendiente':
-            primary = "Suma total de penalidades por mora sin pagar de las familias que tienen un período facturado en el mes seleccionado.";
-            secondary = "Corresponde a la mora generada específicamente en ese período. No incluye mora arrastrada de meses anteriores.";
+            primary = "Suma de todas las penalidades por mora sin pagar de las familias que tienen un período facturado en el mes seleccionado.";
+            secondary = "Corresponde a la mora generada específicamente en este período, no incluye mora de meses anteriores.";
             break;
         case 'creditoAcumulado':
             primary = "Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado.";
-            secondary = "Se genera cuando una familia paga un monto mayor al de su tarifa del mes. Ese excedente queda como crédito disponible que se aplica automáticamente a la tarifa del próximo período.";
+            secondary = "Se genera cuando una familia paga un monto mayor al de su tarifa del mes. Ese excedente queda como crédito disponible que se aplica automáticamente a la tarifa del próximo período al generar la facturación mensual.";
             break;
         case 'totalDescuentos':
             primary = "Suma de descuentos aplicados a las cuotas de tarifa en el período seleccionado.";
-            secondary = "Incluye el descuento especial permanente de cada familia más los descuentos extraordinarios manuales realizados en el período. No incluye exoneraciones de mora.";
+            secondary = "Incluye el descuento especial permanente de cada familia más los descuentos extraordinarios manuales realizados en el período.";
             break;
         case 'descuentosMoraExonerados':
             primary = "Monto total de mora que fue exonerada o descontada en el período seleccionado.";
@@ -227,6 +247,11 @@ const FinancialStatisticsPage = () => {
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
+
+    // Desglose por período (expandir fila de colegio): un solo colegio expandido a la vez.
+    const [expandedSchoolId, setExpandedSchoolId] = useState(null);
+    const [breakdownCache, setBreakdownCache] = useState({}); // { [schoolId]: periods[] }
+    const [breakdownLoading, setBreakdownLoading] = useState(null); // schoolId en carga
 
     const handleSort = (colKey) => {
         setSortDir((prevDir) => sortBy === colKey ? (prevDir === 'asc' ? 'desc' : 'asc') : 'asc');
@@ -272,6 +297,8 @@ const FinancialStatisticsPage = () => {
             const statsRes = await api.get('/financial-statistics', { params: { schoolIds: schoolIdsParam, from: fromMonth, to: toMonth, groupBy: 'school' } });
             setResult(statsRes.data || null);
             setPage(0);
+            setExpandedSchoolId(null);
+            setBreakdownCache({});
         } catch (e) {
             console.error('fetchAll error', e);
             setError('Error al obtener las estadísticas financieras. Por favor, inténtalo de nuevo más tarde.');
@@ -280,6 +307,24 @@ const FinancialStatisticsPage = () => {
             setLoading(false);
         }
     }, [selectedSchoolIds, fromMonth, toMonth]);
+
+    const toggleExpand = useCallback(async (schoolId) => {
+        if (expandedSchoolId === schoolId) {
+            setExpandedSchoolId(null);
+            return;
+        }
+        setExpandedSchoolId(schoolId);
+        if (breakdownCache[schoolId] || !result) return;
+        setBreakdownLoading(schoolId);
+        try {
+            const res = await api.get('/financial-statistics/breakdown', { params: { schoolId, from: result.from, to: result.to } });
+            setBreakdownCache((prev) => ({ ...prev, [schoolId]: res.data?.periods || [] }));
+        } catch (e) {
+            console.error('breakdown fetch error', e);
+        } finally {
+            setBreakdownLoading(null);
+        }
+    }, [expandedSchoolId, breakdownCache, result]);
 
     useEffect(() => {
         fetchSchools();
@@ -553,7 +598,8 @@ const FinancialStatisticsPage = () => {
     const visibleColumns = visibleGroupDefs.flatMap((g) => g.columns);
     const basisLabel = metricsBasis === 'devengado' ? 'Devengado' : 'Caja';
     const totales = result?.totales?.metrics || null;
-    const totalCols = visibleColumns.length + 2; // + Colegio + Ciclo
+    const canExpandBreakdown = result ? result.from !== result.to : false;
+    const totalCols = visibleColumns.length + 2 + (canExpandBreakdown ? 1 : 0); // + Colegio + Ciclo (+ Expandir)
 
     const sortArrow = (colKey) => {
         if (sortBy !== colKey) return null;
@@ -576,7 +622,7 @@ const FinancialStatisticsPage = () => {
         { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
         { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
         { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
-        { key: 'familiasActivas', label: 'Familias Activas', type: 'int', color: '#1976d2' },
+        { key: 'familiasActivas', label: 'Familias Facturadas', type: 'int', color: '#1976d2' },
         { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' }
     ] : [];
 
@@ -693,16 +739,26 @@ const FinancialStatisticsPage = () => {
                     {/* KPI cards */}
                     {kpis.length > 0 && (
                         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 2, mb: 3 }}>
-                            {kpis.map((kpi) => (
-                                <Box key={kpi.key} sx={{ bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-                                    <Typography sx={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600, mb: 0.75 }}>
-                                        {kpi.label}
-                                    </Typography>
-                                    <Typography sx={{ fontWeight: 700, fontSize: 26, color: kpi.color }}>
-                                        {formatMetric(totales, kpi, metricsBasis)}
-                                    </Typography>
-                                </Box>
-                            ))}
+                            {kpis.map((kpi) => {
+                                const kpiTooltip = getMetricTooltip(kpi.key);
+                                return (
+                                    <Box key={kpi.key} sx={{ bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.75 }}>
+                                            <Typography sx={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600 }}>
+                                                {kpi.label}
+                                            </Typography>
+                                            {kpiTooltip ? (
+                                                <Tooltip title={kpiTooltip} arrow>
+                                                    <InfoOutlined sx={{ fontSize: 13, color: 'text.disabled', cursor: 'help' }} />
+                                                </Tooltip>
+                                            ) : null}
+                                        </Box>
+                                        <Typography sx={{ fontWeight: 700, fontSize: 26, color: kpi.color }}>
+                                            {formatMetric(totales, kpi, metricsBasis)}
+                                        </Typography>
+                                    </Box>
+                                );
+                            })}
                         </Box>
                     )}
 
@@ -776,7 +832,10 @@ const FinancialStatisticsPage = () => {
                         <Table size="small" sx={{ '& td, & th': { whiteSpace: 'nowrap' } }}>
                             <TableHead>
                                 <TableRow sx={{ background: '#f7f7f8' }}>
-                                    <TableCell rowSpan={2} sx={{ fontWeight: 700, position: 'sticky', left: 0, background: '#f7f7f8', zIndex: 1, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('schoolName')}>
+                                    {canExpandBreakdown && (
+                                        <TableCell rowSpan={2} sx={{ width: 36, p: 0.5, background: '#f7f7f8' }} />
+                                    )}
+                                    <TableCell rowSpan={2} sx={{ fontWeight: 700, position: 'sticky', left: canExpandBreakdown ? 36 : 0, background: '#f7f7f8', zIndex: 1, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('schoolName')}>
                                         Colegio{sortArrow('schoolName')}
                                     </TableCell>
                                     <TableCell rowSpan={2} sx={{ fontWeight: 700, verticalAlign: 'middle', cursor: 'pointer' }} onClick={() => handleSort('cicloEscolarAnio')}>
@@ -814,33 +873,98 @@ const FinancialStatisticsPage = () => {
                                             No hay colegios para el filtro seleccionado.
                                         </TableCell>
                                     </TableRow>
-                                ) : pageColegios.map((colegio) => (
-                                    <TableRow key={`${colegio.schoolId}-${colegio.cicloEscolarId || 'nc'}`} hover>
-                                        <TableCell sx={{ fontWeight: 600, position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>
-                                            {colegio.schoolName}
-                                        </TableCell>
-                                        <TableCell>
-                                            {colegio.cicloEscolarAnio ? (
-                                                <Chip label={String(colegio.cicloEscolarAnio)} size="small" sx={{ bgcolor: '#e3f2fd', color: '#1565c0', fontWeight: 700, fontSize: 11 }} />
-                                            ) : (
-                                                <Typography variant="caption" color="text.secondary">—</Typography>
+                                ) : pageColegios.map((colegio) => {
+                                    const isExpanded = expandedSchoolId === colegio.schoolId;
+                                    const isBreakdownLoading = breakdownLoading === colegio.schoolId;
+                                    const periods = breakdownCache[colegio.schoolId];
+                                    return (
+                                        <React.Fragment key={`${colegio.schoolId}-${colegio.cicloEscolarId || 'nc'}`}>
+                                            <TableRow hover>
+                                                {canExpandBreakdown && (
+                                                    <TableCell sx={{ width: 36, p: 0.5 }}>
+                                                        <IconButton size="small" onClick={() => toggleExpand(colegio.schoolId)}>
+                                                            {isExpanded ? <KeyboardArrowDown fontSize="small" /> : <KeyboardArrowRight fontSize="small" />}
+                                                        </IconButton>
+                                                    </TableCell>
+                                                )}
+                                                <TableCell sx={{ fontWeight: 600, position: 'sticky', left: canExpandBreakdown ? 36 : 0, background: '#fff', zIndex: 1 }}>
+                                                    {colegio.schoolName}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {colegio.cicloEscolarAnio ? (
+                                                        <Chip label={String(colegio.cicloEscolarAnio)} size="small" sx={{ bgcolor: '#e3f2fd', color: '#1565c0', fontWeight: 700, fontSize: 11 }} />
+                                                    ) : (
+                                                        <Typography variant="caption" color="text.secondary">—</Typography>
+                                                    )}
+                                                </TableCell>
+                                                {visibleColumns.map((col) => {
+                                                    const text = formatMetric(colegio.metrics, col, metricsBasis);
+                                                    let trendColor;
+                                                    if (col.type === 'trend' && text !== 'N/A') {
+                                                        trendColor = text.startsWith('-') ? '#DC2626' : '#2e7d32';
+                                                    }
+                                                    return (
+                                                        <TableCell key={col.key} align="right" sx={{ color: trendColor }}>{text}</TableCell>
+                                                    );
+                                                })}
+                                            </TableRow>
+                                            {canExpandBreakdown && isExpanded && (
+                                                <TableRow>
+                                                    <TableCell colSpan={totalCols} sx={{ p: 0, borderBottom: isExpanded ? undefined : 'none' }}>
+                                                        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                                            <Box sx={{ p: 2, background: '#f7f9fc' }}>
+                                                                <Typography variant="caption" sx={{ fontWeight: 700, color: '#374151', mb: 1, display: 'block' }}>
+                                                                    Desglose por período — {colegio.schoolName}
+                                                                </Typography>
+                                                                {isBreakdownLoading ? (
+                                                                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                                                                        <CircularProgress size={22} />
+                                                                    </Box>
+                                                                ) : !periods || periods.length === 0 ? (
+                                                                    <Box sx={{ py: 1, color: 'text.secondary', fontSize: 13 }}>Sin datos para este colegio en el rango seleccionado.</Box>
+                                                                ) : (
+                                                                    <Table size="small" sx={{ bgcolor: '#fff', '& td, & th': { whiteSpace: 'nowrap' } }}>
+                                                                        <TableHead>
+                                                                            <TableRow>
+                                                                                <TableCell sx={{ fontWeight: 700 }}>Mes</TableCell>
+                                                                                {visibleColumns.map((col) => (
+                                                                                    <TableCell key={col.key} align="right" sx={{ fontWeight: 700 }}>
+                                                                                        {col.label}{col.basis ? ` (${basisLabel})` : ''}
+                                                                                    </TableCell>
+                                                                                ))}
+                                                                            </TableRow>
+                                                                        </TableHead>
+                                                                        <TableBody>
+                                                                            {periods.map((p) => (
+                                                                                <TableRow key={p.period}>
+                                                                                    <TableCell sx={{ textTransform: 'capitalize' }}>{moment(`${p.period}-01`).format('MMMM YYYY')}</TableCell>
+                                                                                    {visibleColumns.map((col) => {
+                                                                                        const text = formatMetric(p.metrics, col, metricsBasis);
+                                                                                        let trendColor;
+                                                                                        if (col.type === 'trend' && text !== 'N/A') {
+                                                                                            trendColor = text.startsWith('-') ? '#DC2626' : '#2e7d32';
+                                                                                        }
+                                                                                        return (
+                                                                                            <TableCell key={col.key} align="right" sx={{ color: trendColor }}>{text}</TableCell>
+                                                                                        );
+                                                                                    })}
+                                                                                </TableRow>
+                                                                            ))}
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                )}
+                                                            </Box>
+                                                        </Collapse>
+                                                    </TableCell>
+                                                </TableRow>
                                             )}
-                                        </TableCell>
-                                        {visibleColumns.map((col) => {
-                                            const text = formatMetric(colegio.metrics, col, metricsBasis);
-                                            let trendColor;
-                                            if (col.type === 'trend' && text !== 'N/A') {
-                                                trendColor = text.startsWith('-') ? '#DC2626' : '#2e7d32';
-                                            }
-                                            return (
-                                                <TableCell key={col.key} align="right" sx={{ color: trendColor }}>{text}</TableCell>
-                                            );
-                                        })}
-                                    </TableRow>
-                                ))}
+                                        </React.Fragment>
+                                    );
+                                })}
                                 {totales && pageColegios.length > 0 && (
                                     <TableRow sx={{ background: '#e3f2fd' }}>
-                                        <TableCell sx={{ fontWeight: 800, position: 'sticky', left: 0, background: '#e3f2fd', zIndex: 1 }}>TOTAL</TableCell>
+                                        {canExpandBreakdown && <TableCell sx={{ background: '#e3f2fd' }} />}
+                                        <TableCell sx={{ fontWeight: 800, position: 'sticky', left: canExpandBreakdown ? 36 : 0, background: '#e3f2fd', zIndex: 1 }}>TOTAL</TableCell>
                                         <TableCell sx={{ fontWeight: 800 }}>—</TableCell>
                                         {visibleColumns.map((col) => (
                                             <TableCell key={col.key} align="right" sx={{ fontWeight: 800 }}>

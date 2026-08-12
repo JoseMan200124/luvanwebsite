@@ -3360,7 +3360,7 @@ const SchoolPaymentsPage = () => {
                                                                         {"Porcentaje de familias con cuota generada en el período seleccionado que la pagaron por completo."}
                                                                     </Box>
                                                                     <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                        {"Solo se cuentan las familias que tienen una cuota facturada en ese período, independientemente de su estado de servicio. Por eso este número puede ser menor al total de familias registradas en el colegio: las que no tienen tarifa asignada o no se les generó cuota ese mes no entran en el cálculo."}
+                                                                        {"Solo se cuentan las familias que tienen una cuota facturada en este período, independientemente de su estado de servicio. Por eso este número puede ser menor al total de familias registradas en el colegio: las que no tienen tarifa asignada o no se les generó cuota este mes no entran en el cálculo."}
                                                                     </Box>
                                                                 </Box>
                                                             } arrow>
@@ -3382,7 +3382,7 @@ const SchoolPaymentsPage = () => {
                                                                         {"Porcentaje de familias con cuota generada en el período seleccionado que tienen mora sin pagar."}
                                                                     </Box>
                                                                     <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                        {"Se considera en mora cuando el período tiene una penalidad pendiente (parcial o total). Solo se cuentan las familias que tienen una cuota facturada en ese período."}
+                                                                        {"Se considera en mora cuando el período tiene una penalidad pendiente (parcial o total). Solo se cuentan las familias que tienen una cuota facturada en este período."}
                                                                     </Box>
                                                                 </Box>
                                                             } arrow>
@@ -3401,10 +3401,13 @@ const SchoolPaymentsPage = () => {
                                                             <Tooltip title={
                                                                 <Box>
                                                                     <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
-                                                                        {"Porcentaje del monto neto facturado en el período que ya fue cobrado. Fórmula: (cobrado ÷ monto neto facturado) × 100."}
+                                                                        {"Porcentaje del monto neto facturado en el período que ya fue cobrado."}
                                                                     </Box>
                                                                     <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                        {"El monto neto ya tiene descontados los descuentos especiales de cada familia. Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar."}
+                                                                        {"El monto neto ya incluye los descuentos familiares."}
+                                                                        <br />
+                                                                        <br />
+                                                                        {"Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar. Puede superar 100% cuando en Base Caja entran pagos de cuotas de meses anteriores, o cuando hay adelantos; en Base Devengado, cuando el pago de una cuota se registra en un período anterior al que corresponde."}
                                                                     </Box>
                                                                 </Box>
                                                             } arrow>
@@ -3446,21 +3449,23 @@ const SchoolPaymentsPage = () => {
                                             <Grid container spacing={2}>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso del Mes</strong></Typography>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso por Tarifa</strong></Typography>
                                                         <Tooltip title={
                                                             <Box>
                                                                 <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
-                                                                    {"Total de tarifas de colegiatura del período seleccionado. Incluye pagos de todas las familias del ciclo."}
+                                                                    {"Total de tarifas del período seleccionado. No incluye mora ni pagos extraordinarios."}
                                                                 </Box>
                                                                 <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                    {"Base Caja: pagos recibidos en este mes calendario. Base Devengado: lo cobrado de la cuota de este mes, sin importar cuándo se recibió. No incluye mora ni pagos extraordinarios."}
+                                                                    {"Base Caja: pagos recibidos en este mes calendario, incluye cuotas atrasadas o adelantadas de otros meses."}
+                                                                    <br />
+                                                                    {"Base Devengado: lo cobrado de la cuota de este mes, sin importar cuándo se recibió."}
                                                                 </Box>
                                                             </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#2196f3', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoMes))}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#2196f3', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoTarifa))}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3468,7 +3473,7 @@ const SchoolPaymentsPage = () => {
                                                         <Tooltip title={
                                                             <Box>
                                                                 <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
-                                                                    {"Total cobrado por concepto de mora en el período seleccionado. Incluye pagos de todas las familias del ciclo."}
+                                                                    {"Total cobrado por concepto de mora en el período seleccionado."}
                                                                 </Box>
                                                                 <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
                                                                     {"Base Caja: pagos de mora recibidos en este mes. Base Devengado: mora cobrada que pertenece a este período (distribuida desde el mes con mora más antiguo)."}
@@ -3489,7 +3494,7 @@ const SchoolPaymentsPage = () => {
                                                                     {"Suma de todas las cuotas de tarifa sin pagar de las familias que tienen un período facturado en el mes seleccionado."}
                                                                 </Box>
                                                                 <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                    {"Refleja cuánto falta por pagar de las cuotas de ese período específico, sin incluir mora."}
+                                                                    {"Refleja cuánto falta por pagar de las cuotas de este período específico, sin incluir mora."}
                                                                 </Box>
                                                             </Box>
                                                         } arrow>
@@ -3507,7 +3512,7 @@ const SchoolPaymentsPage = () => {
                                                                     {"Suma de todas las penalidades por mora sin pagar de las familias que tienen un período facturado en el mes seleccionado."}
                                                                 </Box>
                                                                 <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                    {"Corresponde a la mora generada específicamente en ese período, no incluye mora de meses anteriores."}
+                                                                    {"Corresponde a la mora generada específicamente en este período, no incluye mora de meses anteriores."}
                                                                 </Box>
                                                             </Box>
                                                         } arrow>
@@ -3536,14 +3541,14 @@ const SchoolPaymentsPage = () => {
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Esperado (Bruto)</strong></Typography>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Tarifa Esperado (Bruto)</strong></Typography>
                                                         <Tooltip title={
                                                             <Box>
                                                                 <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
                                                                     {"Monto total de tarifa que se obtendría si todas las familias pagaran completo en el período seleccionado, SIN considerar descuentos familiares."}
                                                                 </Box>
                                                                 <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                    {"Se calcula como la suma de tarifas originales (originalAmount) de todos los períodos generados en el mes. Refleja el ingreso máximo potencial de tarifa del período."}
+                                                                    {"Refleja el ingreso máximo potencial de tarifa del período."}
                                                                 </Box>
                                                             </Box>
                                                         } arrow>
@@ -3554,14 +3559,14 @@ const SchoolPaymentsPage = () => {
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Esperado (Neto)</strong></Typography>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso Tarifa Esperado (Neto)</strong></Typography>
                                                         <Tooltip title={
                                                             <Box>
                                                                 <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
                                                                     {"Monto total de tarifa que se obtendría si todas las familias pagaran completo en el período seleccionado, CON descuentos familiares aplicados."}
                                                                 </Box>
                                                                 <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                    {"Se calcula como la suma de montos netos (netAmount) de todos los períodos generados en el mes. Representa el ingreso esperado real del período después de aplicar los descuentos especiales de cada familia."}
+                                                                    {"Representa el ingreso esperado real del período después de aplicar los descuentos familiares."}
                                                                 </Box>
                                                             </Box>
                                                         } arrow>
