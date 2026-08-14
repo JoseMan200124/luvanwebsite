@@ -102,7 +102,7 @@ PaymentStatusChip.propTypes = {
     status: PropTypes.string,
 };
 
-const ServiceStatusChip = ({ serviceStatus, isDeleted }) => {
+export const ServiceStatusChip = ({ serviceStatus, isDeleted }) => {
     if (isDeleted) {
         return <Chip label="Eliminado" size="small" sx={{ backgroundColor: '#000000', color: 'white' }} />;
     }
