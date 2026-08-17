@@ -26,6 +26,24 @@ export const getFuelRecords = async (filters = {}) => {
 };
 
 /**
+ * Exportar a Excel los registros de combustible que coinciden con los filtros dados.
+ * Mismos filtros que getFuelRecords, pero sin page/limit (el backend trae todo lo que matchea).
+ * @param {Object} filters - Filtros para la consulta
+ * @returns {Promise<import('axios').AxiosResponse>} Respuesta completa (response.data es un Blob)
+ */
+export const exportFuelRecordsExcel = async (filters = {}) => {
+    const params = new URLSearchParams();
+
+    Object.keys(filters).forEach(key => {
+        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+            params.append(key, filters[key]);
+        }
+    });
+
+    return api.get(`/fuel-records/export/excel?${params.toString()}`, { responseType: 'blob' });
+};
+
+/**
  * Obtener registros recientes de combustible
  * @param {number} schoolId - ID del colegio
  * @param {number} limit - Cantidad de registros
