@@ -64,6 +64,8 @@ import PaymentTable from '../components/PaymentTable';
 import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
 import CreateSchoolPeriodModal from '../components/modals/CreateSchoolPeriodModal';
+import CreditRefundModal from '../components/modals/CreditRefundModal';
+import PermissionGuard from '../components/PermissionGuard';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
@@ -786,6 +788,7 @@ const SchoolPaymentsPage = () => {
     const [openExtraAnchorEl, setOpenExtraAnchorEl] = useState(null);
     const openExtraMenu = Boolean(openExtraAnchorEl);
     const [openCreateSchoolPeriodModal, setOpenCreateSchoolPeriodModal] = useState(false);
+    const [openCreditRefundModal, setOpenCreditRefundModal] = useState(false);
 
     // derive month options only from uploaded receipts (Boletas should show uploaded files only)
     const boletaMonthOptions = React.useMemo(() => {
@@ -3280,6 +3283,11 @@ const SchoolPaymentsPage = () => {
                             <MenuItem onClick={() => { setOpenCreateSchoolPeriodModal(true); setOpenExtraAnchorEl(null); }}>
                                 Crear período extracurricular
                             </MenuItem>
+                            <PermissionGuard permission="pagos-v2-reintegrar-credito">
+                                <MenuItem onClick={() => { setOpenCreditRefundModal(true); setOpenExtraAnchorEl(null); }}>
+                                    Reintegrar crédito a favor
+                                </MenuItem>
+                            </PermissionGuard>
                         </Menu>
                     </Box>
                 </CardContent>
@@ -3532,12 +3540,33 @@ const SchoolPaymentsPage = () => {
                                                                 <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
                                                                     {"Se genera cuando una familia paga un monto mayor al de su tarifa del mes. Ese excedente queda como crédito disponible que se aplica automáticamente a la tarifa del próximo período al generar la facturación mensual."}
                                                                 </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3, mt: 0.5 }}>
+                                                                    {"El crédito ya reintegrado a la familia no cuenta acá — ver \"Crédito a favor Reintegrado\"."}
+                                                                </Box>
                                                             </Box>
                                                         } arrow>
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
                                                     <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>{formatMoneyOrNA(fin?.creditoAcumulado)}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Crédito a favor Reintegrado</strong></Typography>
+                                                        <Tooltip title={
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Total de crédito a favor devuelto a las familias del ciclo por transferencia, acumulado hasta el cierre del período seleccionado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Complementa el Crédito a favor Acumulado: lo acumulado es lo que las familias aún tienen a favor; lo reintegrado es lo que ya se les devolvió. No forma parte de los ingresos."}
+                                                                </Box>
+                                                            </Box>
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>{formatMoneyOrNA(fin?.creditoReintegrado)}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3843,6 +3872,21 @@ const SchoolPaymentsPage = () => {
                                 // refrescar datos tras creación
                                 fetchAllPayments(statusFilter, search);
                                 fetchPaymentsAnalysis(schoolId);
+                                if (message) {
+                                    setSnackbar({ open: true, message, severity: 'success' });
+                                }
+                            }}
+                        />
+
+                        <CreditRefundModal
+                            open={openCreditRefundModal}
+                            onClose={() => setOpenCreditRefundModal(false)}
+                            schoolId={schoolId}
+                            cicloEscolarId={currentCicloEscolarId}
+                            buildPaymentParams={buildPaymentParams}
+                            onApplied={(message) => {
+                                fetchAllPayments(statusFilter, search);
+                                fetchMetrics(selectedPeriod);
                                 if (message) {
                                     setSnackbar({ open: true, message, severity: 'success' });
                                 }

@@ -46,7 +46,8 @@ import {
     LocalOffer as LocalOfferIcon,
     Business as BusinessIcon,
     PauseCircleOutline as PauseCircleIcon,
-    Build as BuildIcon
+    Build as BuildIcon,
+    AssignmentReturn as AssignmentReturnIcon
 } from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
@@ -129,7 +130,8 @@ const TYPE_ICONS = {
     AUTO_DEBIT_CHANGED: <AutorenewIcon fontSize="small" />,
     SCHOOL_FEE_CHANGED: <BusinessIcon fontSize="small" />,
     SCHOOL_POLICY_CHANGED: <BusinessIcon fontSize="small" />,
-    PAYMENT_REBUILT: <BuildIcon fontSize="small" />
+    PAYMENT_REBUILT: <BuildIcon fontSize="small" />,
+    CREDIT_REFUND: <AssignmentReturnIcon fontSize="small" />
 };
 
 const CATEGORY_STYLE = {
@@ -161,6 +163,7 @@ const BREAKDOWN_MONEY_FIELDS = [
     { keys: ['unusedExtraordinaryDiscount'], label: 'Descuento no usado → crédito' },
     { keys: ['creditToAdd'], label: 'Total generado a crédito' },
     { keys: ['penaltyExonerated'], label: 'Mora exonerada' },
+    { keys: ['refundedAmount'], label: 'Reintegrado' },
 ];
 
 function firstNumeric(meta, keys) {
