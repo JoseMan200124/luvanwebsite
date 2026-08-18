@@ -186,12 +186,24 @@ function getEventBreakdown(event) {
         .filter(row => row.amount > 0);
     const periods = Array.isArray(event.periodBreakdown) ? event.periodBreakdown : [];
     const changes = Array.isArray(event.changes) ? event.changes : [];
-    return { moneyRows, periods, changes, hasBreakdown: moneyRows.length > 0 || periods.length > 0 || changes.length > 0 };
+    // Descuento familiar / tipo de ruta con alcance retroactivo guardan el impacto por
+    // período en metadata.changes (period, netBefore/After, dueBefore/After, creditDelta),
+    // distinto del desglose de dinero (periodBreakdown) y de la lista de campo (changes).
+    const configPeriods = Array.isArray(meta.changes)
+        ? meta.changes.filter((row) => row && row.period)
+        : [];
+    return {
+        moneyRows,
+        periods,
+        changes,
+        configPeriods,
+        hasBreakdown: moneyRows.length > 0 || periods.length > 0 || changes.length > 0 || configPeriods.length > 0
+    };
 }
 
 const EventBreakdownPanel = ({ event }) => {
     const [open, setOpen] = useState(false);
-    const { moneyRows, periods, changes, hasBreakdown } = getEventBreakdown(event);
+    const { moneyRows, periods, changes, configPeriods, hasBreakdown } = getEventBreakdown(event);
 
     if (!hasBreakdown) return null;
 
@@ -213,7 +225,7 @@ const EventBreakdownPanel = ({ event }) => {
             <Collapse in={open}>
                 <Box sx={{ mt: 0.75, p: 1.25, bgcolor: '#fafafa', borderRadius: 1.5, border: '1px solid #e8e8e8' }}>
                     {changes.length > 0 && (
-                        <Stack spacing={0.5} sx={{ mb: (moneyRows.length || periods.length) ? 1 : 0 }}>
+                        <Stack spacing={0.5} sx={{ mb: (moneyRows.length || periods.length || configPeriods.length) ? 1 : 0 }}>
                             {changes.map((change, idx) => (
                                 <Typography key={`${change.field}-${idx}`} variant="caption" sx={{ fontSize: '0.72rem' }}>
                                     <Box component="span" sx={{ fontWeight: 600 }}>{change.field}</Box>
@@ -224,7 +236,7 @@ const EventBreakdownPanel = ({ event }) => {
                         </Stack>
                     )}
                     {moneyRows.length > 0 && (
-                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: periods.length ? 1 : 0 }}>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: (periods.length || configPeriods.length) ? 1 : 0 }}>
                             {moneyRows.map(row => (
                                 <Chip
                                     key={row.label}
@@ -261,6 +273,36 @@ const EventBreakdownPanel = ({ event }) => {
                                             </TableCell>
                                             <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
                                                 {p.penaltyBefore && p.penaltyAfter ? `${fmt(p.penaltyBefore.penaltyDue)} → ${fmt(p.penaltyAfter.penaltyDue)}` : '—'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                    {configPeriods.length > 0 && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Período</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Tarifa neta</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Saldo</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.7rem', py: 0.5 }}>Crédito gen.</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {configPeriods.map((p, idx) => (
+                                        <TableRow key={`${p.period}-${idx}`}>
+                                            <TableCell sx={{ fontSize: '0.75rem', py: 0.5 }}>{formatPeriodLabel(p.period) || '—'}</TableCell>
+                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
+                                                {p.netBefore != null && p.netAfter != null ? `${fmt(p.netBefore)} → ${fmt(p.netAfter)}` : '—'}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
+                                                {p.dueBefore != null && p.dueAfter != null ? `${fmt(p.dueBefore)} → ${fmt(p.dueAfter)}` : '—'}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, color: p.creditDelta > 0 ? 'success.main' : undefined }}>
+                                                {p.creditDelta > 0 ? fmt(p.creditDelta) : '—'}
                                             </TableCell>
                                         </TableRow>
                                     ))}
