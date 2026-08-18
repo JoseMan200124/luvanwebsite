@@ -37,22 +37,24 @@ import {
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
-import { 
-    Refresh as RefreshIcon, 
+import {
+    Refresh as RefreshIcon,
     Edit as EditIcon,
     Visibility as VisibilityIcon,
     LocalGasStation as GasIcon,
     WarningAmber as WarningAmberIcon,
-    InfoOutlined as InfoOutlinedIcon
+    InfoOutlined as InfoOutlinedIcon,
+    Download as DownloadIcon
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import tw from 'twin.macro';
-import { 
-    getFuelRecords, 
-    getFuelStatistics, 
+import {
+    getFuelRecords,
+    getFuelStatistics,
     getFuelRecordById,
     createFuelRecordWeb,
     updateFuelRecord,
+    exportFuelRecordsExcel,
     FUELING_REASONS,
     FUEL_TYPES
 } from '../services/fuelRecordService';
@@ -71,6 +73,7 @@ const cardMd = SHOW_NEW_FUEL_METRIC ? 2.4 : 3;
 const FuelRecordsPage = () => {
     const [fuelRecords, setFuelRecords] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [totalCount, setTotalCount] = useState(0);
@@ -510,6 +513,48 @@ const FuelRecordsPage = () => {
     const handleRefresh = () => {
         fetchFuelRecords();
         fetchStatistics();
+    };
+
+    const handleDownloadExcel = async () => {
+        if (!totalCount || totalCount === 0) {
+            window.alert('No hay registros para exportar con los filtros seleccionados.');
+            return;
+        }
+        try {
+            setExporting(true);
+
+            const filters = {
+                ...getCicloEscolarFilterParams(selectedCicloEscolar),
+            };
+
+            if (selectedClient) {
+                const { type, id } = selectedClient;
+                if (type === 'school') filters.schoolId = id;
+                if (type === 'corp') filters.corporationId = id;
+            }
+            if (selectedPlate) filters.plate = selectedPlate;
+            if (selectedRoute) filters.routeNumber = selectedRoute;
+            if (selectedFuelingReason) filters.fuelingReason = selectedFuelingReason;
+            if (selectedFuelType) filters.fuelType = selectedFuelType;
+            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
+            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+
+            const response = await exportFuelRecordsExcel(filters);
+            const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `registros_combustible_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error al generar el reporte de combustible:', error);
+            window.alert('Error al generar el reporte. Revise la consola.');
+        } finally {
+            setExporting(false);
+        }
     };
 
     // Register handler so the global refresh control triggers this page's refresh
@@ -1107,6 +1152,19 @@ const FuelRecordsPage = () => {
                                 </Tooltip>
                                 <Button onClick={() => setCreateOpen(true)} variant="contained" color="primary" sx={{ mr: 1 }}>
                                     Nuevo Registro
+                                </Button>
+                                <Button
+                                    onClick={handleDownloadExcel}
+                                    variant="outlined"
+                                    startIcon={<DownloadIcon />}
+                                    disabled={exporting || totalCount === 0}
+                                    sx={{
+                                        color: 'success.main',
+                                        borderColor: 'success.main',
+                                        '&:hover': { backgroundColor: 'rgba(33,115,70,0.08)', borderColor: 'success.dark' }
+                                    }}
+                                >
+                                    {exporting ? 'Generando...' : 'Generar reporte'}
                                 </Button>
                                 {/* Local refresh removed; use global refresh button */}
                             </Box>

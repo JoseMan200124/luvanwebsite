@@ -40,7 +40,14 @@ import {
     School as SchoolIcon,
     ReceiptLong as ReceiptLongIcon,
     EventAvailable as EventAvailableIcon,
-    Block as BlockIcon
+    Block as BlockIcon,
+    Groups as GroupsIcon,
+    AltRoute as AltRouteIcon,
+    LocalOffer as LocalOfferIcon,
+    Business as BusinessIcon,
+    PauseCircleOutline as PauseCircleIcon,
+    Build as BuildIcon,
+    AssignmentReturn as AssignmentReturnIcon
 } from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
@@ -72,348 +79,81 @@ const formatPeriodLabel = (period) => {
 };
 
 // ============================================================
-// Operation meta (icon, label, color)
+// Presentación de eventos
 // ============================================================
+//
+// El texto de cada evento lo arma el backend (paymentTimelineService), que es donde
+// está el contexto para interpretarlo. Aquí solo se decide cómo se ve.
 
-const OPERATION_META = {
-    BILLING: { icon: <ReceiptIcon fontSize="small" />, label: 'Facturación', color: '#1976d2', bgColor: '#e3f2fd' },
-    PAYMENT: { icon: <TrendingDownIcon fontSize="small" />, label: 'Pago', color: '#2e7d32', bgColor: '#e8f5e9' },
-    MORA_PAYMENT: { icon: <WarningAmberIcon fontSize="small" />, label: 'Pago de Mora', color: '#e65100', bgColor: '#fff3e0' },
-    CREDIT_PAYMENT: { icon: <CreditScoreIcon fontSize="small" />, label: 'Uso de Crédito', color: '#1565c0', bgColor: '#e3f2fd' },
-    OVERPAYMENT: { icon: <TrendingUpIcon fontSize="small" />, label: 'Sobrepago', color: '#2e7d32', bgColor: '#c8e6c9' },
-    REVERSAL: { icon: <RestoreIcon fontSize="small" />, label: 'Reversión', color: '#d32f2f', bgColor: '#ffebee' },
-    EXONERATION: { icon: <MoneyOffIcon fontSize="small" />, label: 'Exoneración', color: '#7b1fa2', bgColor: '#f3e5f5' },
-    ADJUSTMENT: { icon: <InfoIcon fontSize="small" />, label: 'Ajuste', color: '#f57c00', bgColor: '#fff8e1' },
-    AUTO_DEBIT: { icon: <AutorenewIcon fontSize="small" />, label: 'Débito Automático', color: '#388e3c', bgColor: '#e8f5e9' },
-    FULL_DISCOUNT: { icon: <MoneyOffIcon fontSize="small" />, label: 'Descuento Total', color: '#6a1b9a', bgColor: '#f3e5f5' },
-    PENALTY_CLEARANCE: { icon: <MoneyOffIcon fontSize="small" />, label: 'Limpieza de Mora', color: '#6a1b9a', bgColor: '#f3e5f5' },
-    // Inscripción de ciclo: mismo icono y color teal en las tres operaciones para que se
-    // distingan de un vistazo de la mensualidad/mora; el tipo lo aclara la etiqueta.
-    ENROLLMENT_BILLING: { icon: <SchoolIcon fontSize="small" />, label: 'Cargo de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
-    ENROLLMENT_PAYMENT: { icon: <SchoolIcon fontSize="small" />, label: 'Pago de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
-    ENROLLMENT_ADJUSTMENT: { icon: <SchoolIcon fontSize="small" />, label: 'Ajuste de Inscripción', color: '#00695c', bgColor: '#e0f2f1' },
-    DEFAULT: { icon: <MoreHorizIcon fontSize="small" />, label: 'Operación', color: '#757575', bgColor: '#f5f5f5' }
+// Categorías filtrables. El orden es el de los botones.
+const CATEGORIES = [
+    { key: 'MONEY', label: 'Dinero', color: '#2e7d32' },
+    { key: 'PENALTY', label: 'Mora', color: '#e65100' },
+    { key: 'STATUS', label: 'Estado', color: '#0277bd' },
+    { key: 'CONFIG', label: 'Configuración', color: '#6a1b9a' },
+    { key: 'SCHOOL', label: 'Colegio', color: '#455a64' },
+    { key: 'SYSTEM', label: 'Sistema', color: '#757575' }
+];
+
+const ALL_CATEGORY_KEYS = CATEGORIES.map((c) => c.key);
+
+// Solo los eventos de dinero mueven saldos: el resto se dibuja con círculo hueco y sin
+// chips de balance, para que un cambio de configuración no se confunda con un pago.
+const MONEY_CATEGORIES = new Set(['MONEY', 'PENALTY']);
+
+// Icono por tipo de evento; si el tipo no está, se cae al icono de su categoría.
+const TYPE_ICONS = {
+    BILLING: <ReceiptIcon fontSize="small" />,
+    PAYMENT: <TrendingDownIcon fontSize="small" />,
+    MORA_PAYMENT: <WarningAmberIcon fontSize="small" />,
+    CREDIT_PAYMENT: <CreditScoreIcon fontSize="small" />,
+    OVERPAYMENT: <TrendingUpIcon fontSize="small" />,
+    EXONERATION: <MoneyOffIcon fontSize="small" />,
+    ADJUSTMENT: <InfoIcon fontSize="small" />,
+    AUTO_DEBIT: <AutorenewIcon fontSize="small" />,
+    FULL_DISCOUNT: <MoneyOffIcon fontSize="small" />,
+    PARTIAL_DISCOUNT: <MoneyOffIcon fontSize="small" />,
+    PENALTY_CLEARANCE: <MoneyOffIcon fontSize="small" />,
+    PENALTY_FREEZE: <BlockIcon fontSize="small" />,
+    PENALTY_RESET: <RestoreIcon fontSize="small" />,
+    PENALTY_MANUAL_ADJUSTMENT: <InfoIcon fontSize="small" />,
+    PENALTY_EXONERATION: <MoneyOffIcon fontSize="small" />,
+    PENALTY_ACCRUED: <TrendingUpIcon fontSize="small" />,
+    ENROLLMENT_BILLING: <SchoolIcon fontSize="small" />,
+    ENROLLMENT_PAYMENT: <SchoolIcon fontSize="small" />,
+    ENROLLMENT_ADJUSTMENT: <SchoolIcon fontSize="small" />,
+    SERVICE_STATUS_CHANGED: <PauseCircleIcon fontSize="small" />,
+    FAMILY_CONFIG_CHANGED: <GroupsIcon fontSize="small" />,
+    PAYMENT_CONFIG_CHANGED: <AutorenewIcon fontSize="small" />,
+    ROUTE_TYPE_CHANGED: <AltRouteIcon fontSize="small" />,
+    FAMILY_DISCOUNT_CHANGED: <LocalOfferIcon fontSize="small" />,
+    AUTO_DEBIT_CHANGED: <AutorenewIcon fontSize="small" />,
+    SCHOOL_FEE_CHANGED: <BusinessIcon fontSize="small" />,
+    SCHOOL_POLICY_CHANGED: <BusinessIcon fontSize="small" />,
+    PAYMENT_REBUILT: <BuildIcon fontSize="small" />,
+    CREDIT_REFUND: <AssignmentReturnIcon fontSize="small" />
 };
 
-const ENROLLMENT_OPERATIONS = new Set(['ENROLLMENT_BILLING', 'ENROLLMENT_PAYMENT', 'ENROLLMENT_ADJUSTMENT']);
+const CATEGORY_STYLE = {
+    MONEY: { color: '#2e7d32', bgColor: '#e8f5e9', icon: <TrendingDownIcon fontSize="small" /> },
+    PENALTY: { color: '#e65100', bgColor: '#fff3e0', icon: <WarningAmberIcon fontSize="small" /> },
+    STATUS: { color: '#0277bd', bgColor: '#e1f5fe', icon: <PauseCircleIcon fontSize="small" /> },
+    CONFIG: { color: '#6a1b9a', bgColor: '#f3e5f5', icon: <GroupsIcon fontSize="small" /> },
+    SCHOOL: { color: '#455a64', bgColor: '#eceff1', icon: <BusinessIcon fontSize="small" /> },
+    SYSTEM: { color: '#757575', bgColor: '#f5f5f5', icon: <MoreHorizIcon fontSize="small" /> }
+};
 
-function isEnrollmentOperation(op) {
-    return ENROLLMENT_OPERATIONS.has(String(op || '').toUpperCase());
+function getEventStyle(event) {
+    const base = CATEGORY_STYLE[event.category] || CATEGORY_STYLE.SYSTEM;
+    return { ...base, icon: TYPE_ICONS[event.type] || base.icon };
 }
 
-/**
- * Movimiento del saldo de inscripción de una entrada de ledger.
- * Los asientos nuevos lo guardan en metadata (las columnas de saldo describen la
- * mensualidad y quedan sin cambio); los asientos antiguos, previos a esa corrección,
- * lo tienen en balanceDueBefore/After, por lo que se usan como respaldo.
- */
-function getEnrollmentBalanceShift(entry) {
-    const meta = entry?.metadata || {};
-    if (meta.enrollmentAmountDueBefore !== undefined && meta.enrollmentAmountDueAfter !== undefined) {
-        return { before: Number(meta.enrollmentAmountDueBefore || 0), after: Number(meta.enrollmentAmountDueAfter || 0) };
-    }
-    if (String(entry?.operation || '').toUpperCase() === 'ENROLLMENT_BILLING') {
-        const netAmount = Number(meta.netAmount || 0);
-        return { before: 0, after: netAmount };
-    }
-    const before = Number(entry?.balanceDueBefore || 0);
-    const after = Number(entry?.balanceDueAfter || 0);
-    return before !== after ? { before, after } : null;
-}
-
-function getOperationMeta(op) {
-    return OPERATION_META[String(op || '').toUpperCase()] || OPERATION_META.DEFAULT;
+function isMoneyEvent(event) {
+    return MONEY_CATEGORIES.has(event.category);
 }
 
 // ============================================================
-// Legendas de operación (texto legible)
-// ============================================================
-
-function getAdjustmentFreezeDesc(meta, entry) {
-    if (meta.action === 'FREEZE_GLOBAL' || meta.freezeLevel === 'FAMILY') {
-        const freezeAmt = Number(meta.originalPenalty || entry.penaltyDueBefore || 0);
-        return freezeAmt > 0 ? `Congelamiento global de mora — ${fmt(freezeAmt)}` : 'Congelamiento global de mora';
-    }
-    if (meta.action === 'UNFREEZE_GLOBAL') return 'Descongelamiento global de mora (reanuda acumulación sin retroactivo)';
-    if (meta.action === 'FREEZE_PERIOD') {
-        const periods = (meta.periodsAffected || []).map(p => formatPeriodLabel(p)).filter(Boolean);
-        const pLabel = periods.length ? periods.join(', ') : formatPeriodLabel(meta.period);
-        return pLabel ? `Congelamiento de mora — período(s) ${pLabel}` : 'Congelamiento de mora por período';
-    }
-    if (meta.action === 'UNFREEZE_PERIOD') {
-        const periods = (meta.periodsAffected || []).map(p => formatPeriodLabel(p)).filter(Boolean);
-        const pLabel = periods.length ? periods.join(', ') : formatPeriodLabel(meta.period);
-        return pLabel ? `Descongelamiento de mora — período(s) ${pLabel}` : 'Descongelamiento de mora por período';
-    }
-    if (meta.action === 'RESET') return null; // fallback a description
-    return null;
-}
-
-function getAdjustmentRouteDesc(meta) {
-    if (meta.routeTypeBefore === undefined && meta.routeTypeAfter === undefined) return null;
-    const from = meta.routeTypeBefore || '(sin asignar)';
-    const to = meta.routeTypeAfter || '(sin asignar)';
-    if (meta.scope === 'NEXT_FROM') return `Tipo de ruta configurado para próximos períodos: ${to}`;
-    const scopeLabel = formatScopeLabel(meta.scope);
-    return `Cambio de tipo de ruta (${scopeLabel}) de "${from}" a "${to}" en ${(meta.periods || []).length} período(s)`;
-}
-
-function formatScopeLabel(scope) {
-    const labels = {
-        'CURRENT': 'período actual',
-        'ALL_PENDING': 'períodos pendientes',
-        'SELECTED': 'períodos seleccionados',
-        'CURRENT_AND_NEXT_FROM': 'período actual y próximos',
-        'NEXT_FROM': 'próximos períodos'
-    };
-    return labels[scope] || scope;
-}
-
-function getAdjustmentDiscountDesc(meta) {
-    if (meta.appliedSpecialFee === undefined && meta.scope !== 'NEXT_FROM') return null;
-    const fee = Number(meta.appliedSpecialFee || meta.familySpecialFeeAfter || 0);
-    const percent = meta.familyPercentAfter != null ? Number(meta.familyPercentAfter) : null;
-    const periods = (meta.periods || []).length;
-    if (meta.scope === 'NEXT_FROM') {
-        if (percent !== null && percent > 0) {
-            return `Descuento familiar configurado para próximos períodos: ${(percent * 100).toFixed(1)}%`;
-        }
-        if (fee > 0) {
-            return `Descuento familiar configurado para próximos períodos: ${fmt(fee)}`;
-        }
-        return 'Descuento familiar eliminado para próximos períodos';
-    }
-    const scopeLabel = formatScopeLabel(meta.scope);
-    if (fee > 0) {
-        return `Descuento familiar aplicado (${scopeLabel}) — ${fmt(fee)} en ${periods} período(s)`;
-    }
-    if (percent !== null && percent > 0) {
-        return `Descuento familiar aplicado (${scopeLabel}) — ${(percent * 100).toFixed(1)}% en ${periods} período(s)`;
-    }
-    return `Descuento familiar eliminado (${scopeLabel}) en ${periods} período(s)`;
-}
-
-function getAdjustmentMiscDesc(meta) {
-    if (meta.reason === 'auto_debit_activation' || meta.reason === 'auto_debit_activation_current_month') {
-        const exAmt = Number(meta.originalPenalty || 0);
-        return exAmt > 0 ? `Exoneración de mora por activación de auto débito — ${fmt(exAmt)}` : 'Exoneración de mora por activación de auto débito';
-    }
-    if (meta.penaltyExonerated) {
-        const exAmt = Number(meta.penaltyExonerated || 0);
-        return exAmt > 0 ? `Exoneración — ${fmt(exAmt)}` : 'Exoneración aplicada';
-    }
-    return null;
-}
-
-function getAdjustmentDescription(entry) {
-    const meta = entry.metadata || {};
-    const freezeDesc = getAdjustmentFreezeDesc(meta, entry);
-    if (freezeDesc) return freezeDesc;
-    if (meta.action === 'RESET') {
-        const amt = Number(meta.oldPenalty || 0);
-        return amt > 0 ? `Reset de mora — ${fmt(amt)} eliminados` : (entry.description || 'Reset de mora');
-    }
-    if (meta.action === 'MANUAL_ADJUSTMENT') {
-        const oldP = Number(meta.oldPenalty || 0);
-        const newP = Number(meta.newPenalty || 0);
-        const periodStr = meta.period ? `período ${formatPeriodLabel(meta.period)}` : 'manual';
-        if (oldP !== newP) return `Ajuste de mora (${periodStr}): ${fmt(oldP)} → ${fmt(newP)}`;
-        return entry.description || `Ajuste de mora (${periodStr})`;
-    }
-
-    const miscDesc = getAdjustmentMiscDesc(meta);
-    if (miscDesc) return miscDesc;
-
-    const routeDesc = getAdjustmentRouteDesc(meta);
-    if (routeDesc) return routeDesc;
-
-    const discountDesc = getAdjustmentDiscountDesc(meta);
-    if (discountDesc) return discountDesc;
-
-    return entry.description || meta.reason || 'Ajuste administrativo';
-}
-
-function getOperationDescription(entry) {
-    const op = String(entry.operation || '').toUpperCase();
-    const meta = entry.metadata || {};
-
-    switch (op) {
-        case 'BILLING': {
-            const period = meta.period || '';
-            const amount = Number(meta.amount || meta.billedAmount || 0) || Math.max(0, Number(entry.balanceDueAfter - entry.balanceDueBefore || 0));
-            return period
-                ? `Cargo tarifa del período ${formatPeriodLabel(period)} — ${fmt(amount)}`
-                : `Cargo tarifa mensual — ${fmt(amount)}`;
-        }
-        case 'PAYMENT': {
-            const receipt = meta.receiptNumber || '';
-            // Monto total pagado (efectivo recibido) = amountToBalance + overpayment
-            const totalPaid = Number(meta.amountToBalance || 0) + Number(meta.overpayment || 0);
-            let amt = totalPaid > 0.01
-                ? totalPaid
-                : Math.max(0, Number(entry.balanceDueBefore - entry.balanceDueAfter || 0));
-            if (amt === 0) {
-                amt = Number(meta.amountToBalance || meta.overpayment || meta.overpaymentAmount || 0);
-            }
-            // Añadir información de descuento extraordinario si existe
-            const unusedDisc = Number(meta.unusedExtraordinaryDiscount || 0);
-            const appliedDisc = Number(meta.extraordinaryDiscountAppliedToBalance || 0);
-            const extraDisc = Number(meta.extraordinaryDiscount || 0);
-            // Mostrar el monto total del pago (no solo lo aplicado al balance)
-            const displayAmt = totalPaid > 0.01 ? totalPaid : (unusedDisc > 0.01 ? amt + unusedDisc : amt);
-            let base;
-            if (unusedDisc > 0.01) {
-                base = receipt
-                    ? `Pago registrado — ${fmt(displayAmt)} / Desc.extraordinario no usado: ${fmt(unusedDisc)} (Boleta: ${receipt})`
-                    : `Pago registrado — ${fmt(displayAmt)} / Desc.extraordinario no usado: ${fmt(unusedDisc)}`;
-            } else if (appliedDisc > 0.01) {
-                base = receipt
-                    ? `Pago registrado — ${fmt(displayAmt)} (Desc.extraordinario: ${fmt(appliedDisc)}) (Boleta: ${receipt})`
-                    : `Pago registrado — ${fmt(displayAmt)} (Desc.extraordinario: ${fmt(appliedDisc)})`;
-            } else if (extraDisc > 0.01) {
-                base = receipt
-                    ? `Pago registrado — ${fmt(displayAmt)} (Desc.extraordinario: ${fmt(extraDisc)}) (Boleta: ${receipt})`
-                    : `Pago registrado — ${fmt(displayAmt)} (Desc.extraordinario: ${fmt(extraDisc)})`;
-            } else {
-                base = receipt ? `Pago registrado — ${fmt(displayAmt)} (Boleta: ${receipt})` : `Pago registrado — ${fmt(displayAmt)}`;
-            }
-            return base;
-        }
-        case 'MORA_PAYMENT': {
-            const amt = Math.max(0, Number(entry.penaltyDueBefore - entry.penaltyDueAfter || 0));
-            const receipt = meta.receiptNumber || '';
-            const discApplied = Number(meta.discountApplied || 0);
-            const paidApplied = Number(meta.paidApplied || 0);
-            let base;
-            if (discApplied > 0.01) {
-                const paidPortion = paidApplied > 0.01 ? paidApplied : Math.max(0, amt - discApplied);
-                base = `Pago de mora — ${fmt(paidPortion)} pagado + ${fmt(discApplied)} desc.extraordinario`;
-                if (receipt) base += ` (Boleta: ${receipt})`;
-            } else {
-                base = `Pago de mora — ${fmt(amt)}`;
-                if (receipt) base += ` (Boleta: ${receipt})`;
-            }
-            if (entry._grouped) {
-                const periodsStr = entry._grouped.periods.join(', ');
-                base += ` (${entry._grouped.count} períodos: ${periodsStr})`;
-            }
-            return base;
-        }
-        case 'CREDIT_PAYMENT': {
-            const amt = Math.max(0, Number(entry.creditBalanceBefore - entry.creditBalanceAfter || 0));
-            if (meta.source === 'credit_to_penalty') {
-                return meta.period
-                    ? `Crédito aplicado a mora del período ${formatPeriodLabel(meta.period)} — ${fmt(amt)}`
-                    : `Crédito aplicado a mora — ${fmt(amt)}`;
-            }
-            return meta.period
-                ? `Crédito aplicado a ${formatPeriodLabel(meta.period)} — ${fmt(amt)}`
-                : `Uso de crédito disponible — ${fmt(amt)}`;
-        }
-        case 'OVERPAYMENT': {
-            const overpaymentAmt = Number(meta.overpaymentAmount || meta.overpayment || 0);
-            const unusedDisc = Number(meta.unusedExtraordinaryDiscount || 0);
-            const creditToAdd = Number(meta.creditToAdd || 0);
-            if (unusedDisc > 0.01 && overpaymentAmt > 0.01) {
-                return `Sobrepago ${fmt(overpaymentAmt)} + Desc.extraordinario ${fmt(unusedDisc)} convertidos a crédito — ${fmt(creditToAdd || overpaymentAmt + unusedDisc)}`;
-            }
-            if (unusedDisc > 0.01) {
-                return `Descuento extraordinario no usado convertido a crédito — ${fmt(unusedDisc)}`;
-            }
-            return `Sobrepago convertido a crédito — ${fmt(overpaymentAmt)}`;
-        }
-        case 'REVERSAL':
-            return entry.description || meta.reason || 'Reversión de transacción';
-        case 'EXONERATION': {
-            const amt = Number(meta.originalPenalty || meta.exoneratedAmount || meta.amount || 0);
-            return amt > 0 ? `Exoneración de mora — ${fmt(amt)}` : (entry.description || 'Exoneración de mora');
-        }
-        case 'ADJUSTMENT':
-            return getAdjustmentDescription(entry);
-        case 'AUTO_DEBIT': {
-            const amt = Number(meta.amountApplied || meta.amountToBalance || 0) || Math.max(0, Number(entry.balanceDueBefore - entry.balanceDueAfter || 0));
-            const hasPenaltyExoneration = Number(meta.penaltyExonerated || 0) > 0;
-            let text = amt > 0 ? `Débito automático — ${fmt(amt)}` : (entry.description || 'Débito automático procesado');
-            if (hasPenaltyExoneration) {
-                text += ` (mora exonerada: ${fmt(meta.penaltyExonerated)})`;
-            }
-            if (meta.activatedAfterDueDate) {
-                text += ' [retroactivo]';
-            }
-            return text;
-        }
-        case 'FULL_DISCOUNT': {
-            const amt = Math.max(0, Number(entry.balanceDueBefore - entry.balanceDueAfter || 0));
-            if (entry._grouped) {
-                const totalAmt = amt * entry._grouped.count;
-                const periodsStr = entry._grouped.periods.join(', ');
-                return `Descuento total aplicado — ${fmt(totalAmt)} (${entry._grouped.count} períodos: ${periodsStr})`;
-            }
-            return entry.description || `Descuento total aplicado — ${amt > 0 ? fmt(amt) : ''}`;
-        }
-        case 'PENALTY_CLEARANCE': {
-            const clearedAmt = Number(meta.clearedAmount || 0);
-            const periodsCleared = meta.periodsCleared;
-            const periodLabel = meta.period === 'ALL'
-                ? 'total'
-                : (periodsCleared && Array.isArray(periodsCleared)
-                    ? periodsCleared.map(p => formatPeriodLabel(p)).join(', ')
-                    : formatPeriodLabel(meta.period));
-            const base = clearedAmt > 0
-                ? `Limpieza de mora — ${fmt(clearedAmt)}`
-                : 'Limpieza de mora';
-            return periodLabel ? `${base} (${periodLabel})` : base;
-        }
-        case 'ENROLLMENT_BILLING': {
-            const net = Number(meta.netAmount || 0);
-            const disc = Number(meta.discountApplied || 0);
-            const students = Number(meta.studentsCount || 0);
-            let text = `Cargo de inscripción del ciclo — ${fmt(net)}`;
-            if (students > 0) text += ` (${students} ${students === 1 ? 'estudiante' : 'estudiantes'})`;
-            if (disc > 0) text += ` · descuento por fecha: ${fmt(disc)}`;
-            return text;
-        }
-        case 'ENROLLMENT_PAYMENT': {
-            const applied = Number(meta.appliedAmount || 0);
-            const receipt = meta.receiptNumber || '';
-            const base = applied > 0
-                ? `Pago de inscripción — ${fmt(applied)}`
-                : (entry.description || 'Pago de inscripción');
-            return receipt ? `${base} (Boleta: ${receipt})` : base;
-        }
-        case 'ENROLLMENT_ADJUSTMENT': {
-            const applied = Number(meta.appliedAdjustment || 0);
-            if (applied <= 0) {
-                // Asiento antiguo: la descripción ya incluye monto y motivo, no volver a anexarlo.
-                return entry.description || 'Ajuste manual de inscripción';
-            }
-            const base = `Ajuste manual de inscripción — ${fmt(applied)}`;
-            return meta.reason ? `${base} — ${meta.reason}` : base;
-        }
-        default:
-            return entry.description || 'Operación del sistema';
-    }
-}
-
-// ============================================================
-// Helper: Extraer operador desde metadata
-// ============================================================
-
-function getOperatorLabel(entry) {
-    const meta = entry.metadata || {};
-    // Buscar en orden de prioridad: frozenBy, unfrozenBy, resetBy, registeredBy
-    const operatorId = meta.frozenBy || meta.unfrozenBy || meta.resetBy;
-    if (operatorId) return `#${operatorId}`;
-
-    const registeredBy = meta.registeredBy || entry.registeredBy;
-    if (registeredBy?.name) return registeredBy.name;
-    if (registeredBy?.id) return `#${registeredBy.id}`;
-
-    return null;
-}
-
-// ============================================================
-// Desglose de aplicación (a qué se aplicó el dinero de esta operación)
+// Desglose de un evento (a qué se aplicó el dinero / qué cambió)
 // ============================================================
 
 const BREAKDOWN_MONEY_FIELDS = [
@@ -423,6 +163,7 @@ const BREAKDOWN_MONEY_FIELDS = [
     { keys: ['unusedExtraordinaryDiscount'], label: 'Descuento no usado → crédito' },
     { keys: ['creditToAdd'], label: 'Total generado a crédito' },
     { keys: ['penaltyExonerated'], label: 'Mora exonerada' },
+    { keys: ['refundedAmount'], label: 'Reintegrado' },
 ];
 
 function firstNumeric(meta, keys) {
@@ -434,25 +175,28 @@ function firstNumeric(meta, keys) {
 }
 
 /**
- * Reúne lo necesario para el ícono de desglose de una entrada: montos por concepto
- * (de metadata, ya calculados por el backend) + el detalle por período (periodBreakdown,
- * armado en getPaymentFlow desde las filas TARIFA_PERIOD o, si no existen, desde
- * metadata.periodsApplied — ver paymentsControllerV2.js).
+ * Reúne el detalle expandible de un evento: los montos por concepto y el desglose por
+ * período que arma el backend, o —en eventos de contexto— la lista de campos que
+ * cambiaron.
  */
-function getEntryBreakdown(entry) {
-    const meta = entry.metadata || {};
+function getEventBreakdown(event) {
+    const meta = event.metadata || {};
     const moneyRows = BREAKDOWN_MONEY_FIELDS
         .map(({ keys, label }) => ({ label, amount: firstNumeric(meta, keys) }))
         .filter(row => row.amount > 0);
-    const periods = Array.isArray(entry.periodBreakdown) ? entry.periodBreakdown : [];
-    return { moneyRows, periods, hasBreakdown: moneyRows.length > 0 || periods.length > 0 };
+    const periods = Array.isArray(event.periodBreakdown) ? event.periodBreakdown : [];
+    const changes = Array.isArray(event.changes) ? event.changes : [];
+    return { moneyRows, periods, changes, hasBreakdown: moneyRows.length > 0 || periods.length > 0 || changes.length > 0 };
 }
 
-const EntryBreakdownPanel = ({ entry }) => {
+const EventBreakdownPanel = ({ event }) => {
     const [open, setOpen] = useState(false);
-    const { moneyRows, periods, hasBreakdown } = getEntryBreakdown(entry);
+    const { moneyRows, periods, changes, hasBreakdown } = getEventBreakdown(event);
 
     if (!hasBreakdown) return null;
+
+    const isContext = !isMoneyEvent(event);
+    const label = isContext ? 'Detalle del cambio' : 'Desglose de aplicación';
 
     return (
         <Box sx={{ mt: 0.75 }}>
@@ -462,12 +206,23 @@ const EntryBreakdownPanel = ({ entry }) => {
             >
                 <ReceiptLongIcon sx={{ fontSize: '1rem' }} />
                 <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                    Desglose de aplicación
+                    {label}
                 </Typography>
                 {open ? <ExpandLessIcon sx={{ fontSize: '1rem' }} /> : <ExpandMoreIcon sx={{ fontSize: '1rem' }} />}
             </Box>
             <Collapse in={open}>
                 <Box sx={{ mt: 0.75, p: 1.25, bgcolor: '#fafafa', borderRadius: 1.5, border: '1px solid #e8e8e8' }}>
+                    {changes.length > 0 && (
+                        <Stack spacing={0.5} sx={{ mb: (moneyRows.length || periods.length) ? 1 : 0 }}>
+                            {changes.map((change, idx) => (
+                                <Typography key={`${change.field}-${idx}`} variant="caption" sx={{ fontSize: '0.72rem' }}>
+                                    <Box component="span" sx={{ fontWeight: 600 }}>{change.field}</Box>
+                                    {': '}
+                                    {String(change.before ?? '—')} → {String(change.after ?? '—')}
+                                </Typography>
+                            ))}
+                        </Stack>
+                    )}
                     {moneyRows.length > 0 && (
                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: periods.length ? 1 : 0 }}>
                             {moneyRows.map(row => (
@@ -520,28 +275,85 @@ const EntryBreakdownPanel = ({ entry }) => {
 };
 
 // ============================================================
-// Subcomponente: Timeline Entry (desktop)
+// Chips de efecto en balances (solo eventos de dinero)
 // ============================================================
 
-const TimelineEntryDesktop = ({ entry, isLast }) => {
-    const opMeta = getOperationMeta(entry.operation);
-    const description = getOperationDescription(entry);
-    const operator = getOperatorLabel(entry);
+const BalanceChips = ({ event }) => {
+    const hasBalance = event.balanceBefore != null && event.balanceAfter != null
+        && Number(event.balanceAfter) !== Number(event.balanceBefore);
+    const hasPenalty = event.penaltyBefore != null && event.penaltyAfter != null
+        && Number(event.penaltyAfter) !== Number(event.penaltyBefore);
+    const hasCredit = event.creditBefore != null && event.creditAfter != null
+        && Number(event.creditAfter) !== Number(event.creditBefore);
 
-    // Movimiento anulado por una reversión: se conserva para que la línea de tiempo muestre
-    // el flujo completo (qué se pagó y qué lo revirtió), pero ya no cuenta en ningún total.
-    const isReversed = !!entry.reversed;
+    // En operaciones de inscripción el saldo que se mueve es el del cargo de inscripción,
+    // no el de la mensualidad: sus columnas de balance no cambian y mostrarlas engañaría.
+    const meta = event.metadata || {};
+    const enrollmentShift = meta.enrollmentAmountDueBefore !== undefined && meta.enrollmentAmountDueAfter !== undefined
+        ? { before: Number(meta.enrollmentAmountDueBefore || 0), after: Number(meta.enrollmentAmountDueAfter || 0) }
+        : null;
 
-    // En operaciones de inscripción se muestra el saldo de inscripción, no el de mensualidad:
-    // las columnas de saldo no cambian (y en asientos antiguos contenían montos de inscripción,
-    // lo que hacía que el chip "Balance" mostrara cifras engañosas).
-    const isEnrollment = isEnrollmentOperation(entry.operation);
-    const enrollmentShift = isEnrollment ? getEnrollmentBalanceShift(entry) : null;
+    if (!hasBalance && !hasPenalty && !hasCredit && !enrollmentShift) return null;
 
-    const hasBalanceChange = !isEnrollment && Number(entry.balanceDueAfter || 0) !== Number(entry.balanceDueBefore || 0);
-    const hasPenaltyChange = !isEnrollment && Number(entry.penaltyDueAfter || 0) !== Number(entry.penaltyDueBefore || 0);
-    const hasCreditChange = !isEnrollment && Number(entry.creditBalanceAfter || 0) !== Number(entry.creditBalanceBefore || 0);
-    const hasAnyChange = hasBalanceChange || hasPenaltyChange || hasCreditChange || !!enrollmentShift;
+    return (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {enrollmentShift && (
+                <Chip
+                    size="small"
+                    icon={<SchoolIcon sx={{ fontSize: '0.85rem !important' }} />}
+                    label={`Inscripción: ${fmt(enrollmentShift.before)} → ${fmt(enrollmentShift.after)}`}
+                    variant="outlined"
+                    sx={{
+                        height: 22,
+                        color: '#00695c',
+                        borderColor: '#4db6ac',
+                        '& .MuiChip-icon': { color: '#00695c' },
+                        '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 }
+                    }}
+                />
+            )}
+            {hasBalance && (
+                <Chip
+                    size="small"
+                    label={`Balance: ${fmt(event.balanceBefore)} → ${fmt(event.balanceAfter)}`}
+                    color={Number(event.balanceAfter) > Number(event.balanceBefore) ? 'warning' : 'success'}
+                    variant="outlined"
+                    sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
+                />
+            )}
+            {hasPenalty && (
+                <Chip
+                    size="small"
+                    label={`Mora: ${fmt(event.penaltyBefore)} → ${fmt(event.penaltyAfter)}`}
+                    color={Number(event.penaltyAfter) > Number(event.penaltyBefore) ? 'error' : 'success'}
+                    variant="outlined"
+                    sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
+                />
+            )}
+            {hasCredit && (
+                <Chip
+                    size="small"
+                    label={`Crédito: ${fmt(event.creditBefore)} → ${fmt(event.creditAfter)}`}
+                    color={Number(event.creditAfter) > Number(event.creditBefore) ? 'success' : 'info'}
+                    variant="outlined"
+                    sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
+                />
+            )}
+        </Stack>
+    );
+};
+
+// ============================================================
+// Subcomponente: entrada de la línea de tiempo (desktop)
+// ============================================================
+
+const TimelineEventDesktop = ({ event, isLast }) => {
+    const style = getEventStyle(event);
+    const isMoney = isMoneyEvent(event);
+
+    // Movimiento anulado por una reversión: se conserva para que la línea de tiempo
+    // muestre el flujo completo (qué se pagó y qué lo revirtió), pero ya no cuenta.
+    const isSuperseded = !!event.superseded;
 
     return (
         <Box sx={{ display: 'flex', gap: 2, position: 'relative', pb: isLast ? 1 : 3 }}>
@@ -557,48 +369,48 @@ const TimelineEntryDesktop = ({ entry, isLast }) => {
                 }} />
             )}
 
-            {/* Icono */}
+            {/* Icono. Relleno = movió dinero; hueco = solo cambió el contexto. */}
             <Box sx={{
                 width: 40,
                 height: 40,
                 borderRadius: '50%',
-                backgroundColor: isReversed ? '#f0f0f0' : opMeta.bgColor,
-                color: isReversed ? '#9e9e9e' : opMeta.color,
+                backgroundColor: isSuperseded ? '#f0f0f0' : (isMoney ? style.bgColor : 'transparent'),
+                border: isMoney ? 'none' : `2px solid ${isSuperseded ? '#bdbdbd' : style.color}`,
+                color: isSuperseded ? '#9e9e9e' : style.color,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                zIndex: 1
+                zIndex: 1,
+                boxSizing: 'border-box'
             }}>
-                {opMeta.icon}
+                {style.icon}
             </Box>
 
             {/* Contenido */}
-            <Box sx={{ flex: 1, minWidth: 0, opacity: isReversed ? 0.6 : 1 }}>
+            <Box sx={{ flex: 1, minWidth: 0, opacity: isSuperseded ? 0.6 : 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: isReversed ? 'text.disabled' : opMeta.color }}>
-                        {opMeta.label}
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: isSuperseded ? 'text.disabled' : style.color }}>
+                        {event.title}
                     </Typography>
-                    {/* Único indicador de la reversión: su asiento REVERSAL se oculta de la
-                        línea de tiempo (ver el filtro en ledgerFiltered). */}
-                    {isReversed && (
+                    {isSuperseded && (
                         <Chip
                             size="small"
                             icon={<BlockIcon sx={{ fontSize: '0.8rem !important' }} />}
-                            label={entry.reversedAt ? `Revertido ${formatDateShort(entry.reversedAt)}` : 'Revertido'}
+                            label={event.supersededAt ? `Revertido ${formatDateShort(event.supersededAt)}` : 'Revertido'}
                             color="error"
                             variant="outlined"
                             sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6, fontWeight: 700 } }}
                         />
                     )}
                     <Typography variant="caption" color="text.secondary">
-                        registrado {formatDate(entry.createdAt)}
+                        registrado {formatDate(event.occurredAt)}
                     </Typography>
-                    {entry.realPaymentDate && (
+                    {event.realPaymentDate && (
                         <Chip
                             size="small"
                             icon={<EventAvailableIcon sx={{ fontSize: '0.8rem !important' }} />}
-                            label={`Fecha de pago: ${formatDateShort(entry.realPaymentDate)}`}
+                            label={`Fecha de pago: ${formatDateShort(event.realPaymentDate)}`}
                             variant="outlined"
                             sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6 } }}
                         />
@@ -606,169 +418,98 @@ const TimelineEntryDesktop = ({ entry, isLast }) => {
                 </Box>
                 <Typography
                     variant="body2"
-                    sx={{ mb: 0.75, color: 'text.primary', textDecoration: isReversed ? 'line-through' : 'none' }}
+                    sx={{ mb: 0.75, color: 'text.primary', textDecoration: isSuperseded ? 'line-through' : 'none' }}
                 >
-                    {description}
+                    {event.description}
                 </Typography>
 
-                {/* Operador */}
-                {operator && (
+                {event.actor?.name && (
                     <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
-                        Por usuario {operator}
+                        Por {event.actor.name}
+                    </Typography>
+                )}
+                {!event.actor?.name && event.actor?.id && (
+                    <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                        Por usuario #{event.actor.id}
                     </Typography>
                 )}
 
-                {/* Desglose de aplicación (períodos, crédito, descuento, etc.) */}
-                <EntryBreakdownPanel entry={entry} />
+                <EventBreakdownPanel event={event} />
 
-                {/* Efecto en balances */}
-                {hasAnyChange && (
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        {enrollmentShift && (
-                            <Chip
-                                size="small"
-                                icon={<SchoolIcon sx={{ fontSize: '0.85rem !important' }} />}
-                                label={`Inscripción: ${fmt(enrollmentShift.before)} → ${fmt(enrollmentShift.after)}`}
-                                variant="outlined"
-                                sx={{
-                                    height: 22,
-                                    color: '#00695c',
-                                    borderColor: '#4db6ac',
-                                    '& .MuiChip-icon': { color: '#00695c' },
-                                    '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 }
-                                }}
-                            />
-                        )}
-                        {hasBalanceChange && (
-                            <Chip
-                                size="small"
-                                label={`Balance: ${fmt(entry.balanceDueBefore)} → ${fmt(entry.balanceDueAfter)}`}
-                                color={Number(entry.balanceDueAfter) > Number(entry.balanceDueBefore) ? 'warning' : 'success'}
-                                variant="outlined"
-                                sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
-                            />
-                        )}
-                        {hasPenaltyChange && (
-                            <Chip
-                                size="small"
-                                label={`Mora: ${fmt(entry.penaltyDueBefore)} → ${fmt(entry.penaltyDueAfter)}`}
-                                color={Number(entry.penaltyDueAfter) > Number(entry.penaltyDueBefore) ? 'error' : 'success'}
-                                variant="outlined"
-                                sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
-                            />
-                        )}
-                        {hasCreditChange && (
-                            <Chip
-                                size="small"
-                                label={`Crédito: ${fmt(entry.creditBalanceBefore)} → ${fmt(entry.creditBalanceAfter)}`}
-                                color={Number(entry.creditBalanceAfter) > Number(entry.creditBalanceBefore) ? 'success' : 'info'}
-                                variant="outlined"
-                                sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
-                            />
-                        )}
-                    </Stack>
-                )}
+                {isMoney && <BalanceChips event={event} />}
             </Box>
         </Box>
     );
 };
 
 // ============================================================
-// Subcomponente: Timeline Entry (mobile card)
+// Subcomponente: entrada de la línea de tiempo (móvil)
 // ============================================================
 
-const TimelineEntryMobile = ({ entry }) => {
-    const opMeta = getOperationMeta(entry.operation);
-    const description = getOperationDescription(entry);
-    const operator = getOperatorLabel(entry);
-
-    // Ver nota en TimelineEntryDesktop.
-    const isReversed = !!entry.reversed;
-
-    // Ver nota en TimelineEntryDesktop sobre el saldo de inscripción.
-    const isEnrollment = isEnrollmentOperation(entry.operation);
-    const enrollmentShift = isEnrollment ? getEnrollmentBalanceShift(entry) : null;
-
-    const hasBalanceChange = !isEnrollment && Number(entry.balanceDueAfter || 0) !== Number(entry.balanceDueBefore || 0);
-    const hasPenaltyChange = !isEnrollment && Number(entry.penaltyDueAfter || 0) !== Number(entry.penaltyDueBefore || 0);
-    const hasCreditChange = !isEnrollment && Number(entry.creditBalanceAfter || 0) !== Number(entry.creditBalanceBefore || 0);
+const TimelineEventMobile = ({ event }) => {
+    const style = getEventStyle(event);
+    const isMoney = isMoneyEvent(event);
+    const isSuperseded = !!event.superseded;
 
     return (
-        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, opacity: isReversed ? 0.6 : 1 }}>
+        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, opacity: isSuperseded ? 0.6 : 1 }}>
             <Stack spacing={1}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box sx={{
-                        width: 32, height: 32, borderRadius: '50%',
-                        backgroundColor: isReversed ? '#f0f0f0' : opMeta.bgColor,
-                        color: isReversed ? '#9e9e9e' : opMeta.color,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        backgroundColor: isSuperseded ? '#f0f0f0' : (isMoney ? style.bgColor : 'transparent'),
+                        border: isMoney ? 'none' : `2px solid ${isSuperseded ? '#bdbdbd' : style.color}`,
+                        color: isSuperseded ? '#9e9e9e' : style.color,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxSizing: 'border-box'
                     }}>
-                        {opMeta.icon}
+                        {style.icon}
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: isReversed ? 'text.disabled' : opMeta.color, fontSize: '0.85rem' }}>
-                            {opMeta.label}
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: isSuperseded ? 'text.disabled' : style.color, fontSize: '0.85rem' }}>
+                            {event.title}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                            registrado {formatDate(entry.createdAt)}
+                            registrado {formatDate(event.occurredAt)}
                         </Typography>
                     </Box>
                 </Box>
                 <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                    {/* Ver nota en TimelineEntryDesktop. */}
-                    {isReversed && (
+                    {isSuperseded && (
                         <Chip
                             size="small"
                             icon={<BlockIcon sx={{ fontSize: '0.8rem !important' }} />}
-                            label={entry.reversedAt ? `Revertido ${formatDateShort(entry.reversedAt)}` : 'Revertido'}
+                            label={event.supersededAt ? `Revertido ${formatDateShort(event.supersededAt)}` : 'Revertido'}
                             color="error"
                             variant="outlined"
                             sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6, fontWeight: 700 } }}
                         />
                     )}
-                    {entry.realPaymentDate && (
+                    {event.realPaymentDate && (
                         <Chip
                             size="small"
                             icon={<EventAvailableIcon sx={{ fontSize: '0.8rem !important' }} />}
-                            label={`Fecha de pago: ${formatDateShort(entry.realPaymentDate)}`}
+                            label={`Fecha de pago: ${formatDateShort(event.realPaymentDate)}`}
                             variant="outlined"
                             sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6 } }}
                         />
                     )}
                 </Stack>
-                <Typography variant="body2" sx={{ fontSize: '0.8rem', textDecoration: isReversed ? 'line-through' : 'none' }}>
-                    {description}
+                <Typography variant="body2" sx={{ fontSize: '0.8rem', textDecoration: isSuperseded ? 'line-through' : 'none' }}>
+                    {event.description}
                 </Typography>
-                {operator && (
+                {(event.actor?.name || event.actor?.id) && (
                     <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
-                        Por usuario {operator}
+                        Por {event.actor.name || `usuario #${event.actor.id}`}
                     </Typography>
                 )}
-                <EntryBreakdownPanel entry={entry} />
-                {(hasBalanceChange || hasPenaltyChange || hasCreditChange || !!enrollmentShift) && (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                        {enrollmentShift && (
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#00695c' }}>
-                                Inscripción: {fmt(enrollmentShift.before)} → {fmt(enrollmentShift.after)}
-                            </Typography>
-                        )}
-                        {hasBalanceChange && (
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: Number(entry.balanceDueAfter) > Number(entry.balanceDueBefore) ? 'warning.dark' : 'success.dark' }}>
-                                Balance: {fmt(entry.balanceDueBefore)} → {fmt(entry.balanceDueAfter)}
-                            </Typography>
-                        )}
-                        {hasPenaltyChange && (
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: Number(entry.penaltyDueAfter) > Number(entry.penaltyDueBefore) ? 'error.dark' : 'success.dark' }}>
-                                Mora: {fmt(entry.penaltyDueBefore)} → {fmt(entry.penaltyDueAfter)}
-                            </Typography>
-                        )}
-                        {hasCreditChange && (
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: Number(entry.creditBalanceAfter) > Number(entry.creditBalanceBefore) ? 'success.dark' : 'info.dark' }}>
-                                Crédito: {fmt(entry.creditBalanceBefore)} → {fmt(entry.creditBalanceAfter)}
-                            </Typography>
-                        )}
-                    </Box>
-                )}
+                <EventBreakdownPanel event={event} />
+                {isMoney && <BalanceChips event={event} />}
             </Stack>
         </Paper>
     );
@@ -906,18 +647,21 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
     const [sortOrder, setSortOrder] = useState('desc');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
+    const [categories, setCategories] = useState(ALL_CATEGORY_KEYS);
 
-    const fetchFlow = useCallback(async (page, limit, order) => {
+    const fetchFlow = useCallback(async (page, limit, order, activeCategories) => {
         if (!paymentId) return;
         setLoading(true);
         setError(null);
         try {
-            const res = await api.get(`/payments/v2/${paymentId}/flow`, {
-                params: { page, limit, sortOrder: order }
-            });
+            const params = { page, limit, sortOrder: order };
+            // Sin filtro cuando están todas: evita mandar una lista larga en cada consulta.
+            if (activeCategories.length > 0 && activeCategories.length < ALL_CATEGORY_KEYS.length) {
+                params.categories = activeCategories.join(',');
+            }
+            const res = await api.get(`/payments/v2/${paymentId}/flow`, { params });
             setFlowData(res.data);
-            // Usar ledgerTotal para la paginación (el timeline es el elemento principal)
-            setFlowTotal(res.data.pagination?.ledgerTotal || res.data.pagination?.total || 0);
+            setFlowTotal(res.data.timeline?.total || 0);
         } catch (err) {
             console.error('[PaymentFlowTimeline] Error loading flow data:', err);
             setError(err.response?.data?.error || 'Error al cargar el flujo de pagos');
@@ -927,117 +671,33 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
     }, [paymentId]);
 
     useEffect(() => {
-        fetchFlow(flowPage, flowLimit, sortOrder);
-    }, [fetchFlow, flowPage, flowLimit, sortOrder]);
+        fetchFlow(flowPage, flowLimit, sortOrder, categories);
+    }, [fetchFlow, flowPage, flowLimit, sortOrder, categories]);
 
-    // Filtrar ledger por rango de fechas (el backend ya ordena según sortOrder)
-    const ledgerFiltered = useMemo(() => {
-        if (!flowData?.ledger) return [];
+    // El backend ya ordena, pagina y filtra por categoría; aquí solo queda el rango de
+    // fechas, que es un filtro local sobre la página cargada.
+    const eventsFiltered = useMemo(() => {
+        const events = flowData?.timeline?.events || [];
+        if (!dateFrom && !dateTo) return events;
 
-        let items = flowData.ledger;
-
-        // Excluir entradas internas de distribución por período (TARIFA_PERIOD)
-        // para evitar duplicados — el asiento principal de PAYMENT ya refleja la operación
-        items = items.filter(e => {
-            const meta = e.metadata || {};
-            return meta.kind !== 'TARIFA_PERIOD';
+        return events.filter((event) => {
+            const at = new Date(event.occurredAt || 0).getTime();
+            if (dateFrom && at < new Date(dateFrom).getTime()) return false;
+            if (dateTo && at > new Date(`${dateTo}T23:59:59`).getTime()) return false;
+            return true;
         });
-
-        // Ocultar los asientos REVERSAL: la reversión y el movimiento que anula son el mismo
-        // hecho, y la fila tachada con su chip "Revertido" ya lo comunica. El asiento se
-        // conserva en el backend — es la única fila que lleva el saldo posterior a la
-        // reversión, del que dependen las métricas — así que esto es solo presentación.
-        items = items.filter(e => String(e.operation || '').toUpperCase() !== 'REVERSAL');
-
-        // Filtro por fecha desde
-        if (dateFrom) {
-            const from = new Date(dateFrom).getTime();
-            items = items.filter(e => new Date(e.createdAt || 0).getTime() >= from);
-        }
-        // Filtro por fecha hasta (incluye todo el día)
-        if (dateTo) {
-            const toEnd = new Date(dateTo + 'T23:59:59').getTime();
-            items = items.filter(e => new Date(e.createdAt || 0).getTime() <= toEnd);
-        }
-
-        // Agrupar entradas consecutivas MORA_PAYMENT o FULL_DISCOUNT con el mismo monto
-        // para evitar ruido cuando cubren varios períodos con valores iguales
-        const GROUPABLE_OPS = new Set(['MORA_PAYMENT', 'FULL_DISCOUNT']);
-        const grouped = [];
-        let i = 0;
-        while (i < items.length) {
-            const current = items[i];
-            const op = String(current.operation || '').toUpperCase();
-
-            if (GROUPABLE_OPS.has(op)) {
-                // Calcular el "key amount" de esta operación
-                const keyAmount = op === 'MORA_PAYMENT'
-                    ? Math.max(0, Number(current.penaltyDueBefore - current.penaltyDueAfter || 0))
-                    : Math.max(0, Number(current.balanceDueBefore - current.balanceDueAfter || 0));
-                const roundedKey = Math.round(keyAmount * 100);
-
-                // Acumular entradas consecutivas con el mismo monto
-                const batch = [current];
-                let j = i + 1;
-                while (j < items.length) {
-                    const next = items[j];
-                    const nextOp = String(next.operation || '').toUpperCase();
-                    if (nextOp !== op) break;
-                    // Nunca mezclar anuladas con vigentes: la entrada agrupada hereda el
-                    // estado de la primera y marcaría un pago vivo como revertido (o al revés).
-                    if (!!next.reversed !== !!current.reversed) break;
-                    const nextKeyAmt = op === 'MORA_PAYMENT'
-                        ? Math.max(0, Number(next.penaltyDueBefore - next.penaltyDueAfter || 0))
-                        : Math.max(0, Number(next.balanceDueBefore - next.balanceDueAfter || 0));
-                    if (Math.round(nextKeyAmt * 100) !== roundedKey) break;
-                    batch.push(next);
-                    j++;
-                }
-
-                if (batch.length > 1) {
-                    // Agrupar en una sola entrada
-                    const periods = batch.map(e => {
-                        const m = e.metadata || {};
-                        const rawPeriod = m.period || '';
-                        return rawPeriod ? formatPeriodLabel(rawPeriod) : '';
-                    }).filter(Boolean);
-                    const first = batch[0];
-                    const last = batch[batch.length - 1];
-                    const totalKeyAmt = roundedKey / 100;
-
-                    grouped.push({
-                        ...first,
-                        balanceDueBefore: first.balanceDueBefore,
-                        balanceDueAfter: last.balanceDueAfter,
-                        penaltyDueBefore: first.penaltyDueBefore,
-                        penaltyDueAfter: last.penaltyDueAfter,
-                        creditBalanceBefore: first.creditBalanceBefore,
-                        creditBalanceAfter: last.creditBalanceAfter,
-                        _grouped: { count: batch.length, periods },
-                        createdAt: sortOrder === 'desc' ? first.createdAt : last.createdAt,
-                        // El desglose por período debe cubrir TODO el lote agrupado, no solo
-                        // el primero — si no, el desglose miente sobre cuántos períodos tocó.
-                        periodBreakdown: batch.flatMap(e => e.periodBreakdown || [])
-                    });
-                    i = j;
-                } else {
-                    grouped.push(current);
-                    i++;
-                }
-            } else {
-                grouped.push(current);
-                i++;
-            }
-        }
-
-        return grouped;
-    }, [flowData?.ledger, dateFrom, dateTo, sortOrder]);
+    }, [flowData?.timeline?.events, dateFrom, dateTo]);
 
     const payment = flowData?.payment || null;
     const summary = flowData?.summary || null;
     const periods = flowData?.periods || [];
-    const transactions = flowData?.transactions || [];
     const enrollmentPayment = flowData?.enrollmentPayment || null;
+
+    const handleCategoryChange = (event, next) => {
+        // Deseleccionar todo dejaría la vista vacía sin decir por qué: se vuelve a todas.
+        setCategories(next.length === 0 ? ALL_CATEGORY_KEYS : next);
+        setFlowPage(0);
+    };
 
     // ============================================================
     // Loading State
@@ -1068,9 +728,8 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
     // ============================================================
     // Empty State
     // ============================================================
-    // Empty State: si no hay payment ni ledger entries, mostrar placeholder
-    // Si hay payment pero no ledger, igual mostrar el estado financiero
-    if (!flowData || (!payment && !flowData.periods?.length && ledgerFiltered.length === 0)) {
+    // Si hay payment pero no eventos, igual se muestra el estado financiero.
+    if (!flowData || (!payment && !flowData.periods?.length && eventsFiltered.length === 0)) {
         return (
             <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderRadius: 2, mt: 1 }}>
                 <Typography variant="body2" color="text.secondary">
@@ -1148,10 +807,35 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                 📋 Línea de Tiempo de Operaciones
                 {flowTotal > 0 && (
                     <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
-                        ({flowTotal} operaciones)
+                        ({flowTotal} evento{flowTotal === 1 ? '' : 's'})
                     </Typography>
                 )}
             </Typography>
+
+            {/* Filtro por categoría */}
+            <Box sx={{ mb: 1.5 }}>
+                <ToggleButtonGroup
+                    size="small"
+                    value={categories}
+                    onChange={handleCategoryChange}
+                    sx={{ flexWrap: 'wrap' }}
+                >
+                    {CATEGORIES.map((category) => (
+                        <ToggleButton
+                            key={category.key}
+                            value={category.key}
+                            sx={{
+                                textTransform: 'none',
+                                fontSize: '0.75rem',
+                                px: 1.25,
+                                '&.Mui-selected': { color: category.color, fontWeight: 700 }
+                            }}
+                        >
+                            {category.label}
+                        </ToggleButton>
+                    ))}
+                </ToggleButtonGroup>
+            </Box>
 
             {/* Controles: Orden + Rango de fechas */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
@@ -1207,26 +891,26 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                 </Stack>
             )}
 
-            {!loading && ledgerFiltered.length === 0 && (
+            {!loading && eventsFiltered.length === 0 && (
                 <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary">No hay operaciones registradas.</Typography>
                 </Paper>
             )}
 
-            {!loading && ledgerFiltered.length > 0 && (
+            {!loading && eventsFiltered.length > 0 && (
                 isMobile ? (
                     <Stack spacing={1.25}>
-                        {ledgerFiltered.map((entry, idx) => (
-                            <TimelineEntryMobile key={entry.id || idx} entry={entry} />
+                        {eventsFiltered.map((event, idx) => (
+                            <TimelineEventMobile key={event.id || idx} event={event} />
                         ))}
                     </Stack>
                 ) : (
                     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                        {ledgerFiltered.map((entry, idx) => (
-                            <TimelineEntryDesktop
-                                key={entry.id || idx}
-                                entry={entry}
-                                isLast={idx === ledgerFiltered.length - 1}
+                        {eventsFiltered.map((event, idx) => (
+                            <TimelineEventDesktop
+                                key={event.id || idx}
+                                event={event}
+                                isLast={idx === eventsFiltered.length - 1}
                             />
                         ))}
                     </Paper>
@@ -1247,7 +931,7 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                             setFlowPage(0);
                         }}
                         rowsPerPageOptions={[10, 20, 50]}
-                        labelRowsPerPage="Operaciones"
+                        labelRowsPerPage="Eventos"
                         sx={{
                             '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
                             '& .MuiTablePagination-spacer': { display: 'none' }
@@ -1260,18 +944,6 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
             {/* SECCIÓN 3: Distribución por Período */}
             {/* ========================================================= */}
             <PeriodBreakdownTable periods={periods} />
-
-            {/* ========================================================= */}
-            {/* Resumen de transacciones recientes */}
-            {/* ========================================================= */}
-            {transactions.length > 0 && (
-                <Box sx={{ mt: 1, p: 1.5, bgcolor: '#f5f7fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <InfoIcon fontSize="inherit" />
-                        Últimas {transactions.length} transacción(es) cargada(s). Navega las páginas del timeline para ver más.
-                    </Typography>
-                </Box>
-            )}
         </Box>
     );
 };
