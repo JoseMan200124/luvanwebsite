@@ -269,7 +269,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
             open={open}
             onClose={submitting ? undefined : handleClose}
             fullWidth
-            maxWidth="lg"
+            maxWidth="sm"
             fullScreen={isMobile}
             PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 } } }}
         >
@@ -290,7 +290,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                         </Typography>
                         {cicloEscolar && (
                             <Typography variant="body2" sx={{ opacity: 0.95 }}>
-                                Ciclo {cicloEscolar.label || cicloEscolar.nombre}
+                                {cicloEscolar.label || cicloEscolar.nombre}
                             </Typography>
                         )}
                     </Box>
@@ -391,7 +391,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                                 </Box>
 
                                 {selectedFamilies.length === 0 && (
-                                    <Alert severity="info">Seleccioná al menos una familia para capturar los datos del reintegro.</Alert>
+                                    <Alert severity="info">Selecciona al menos una familia para capturar los datos del reintegro.</Alert>
                                 )}
 
                                 <Box sx={{ display: 'grid', gap: 2 }}>
@@ -477,12 +477,32 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
 
                 {step === 'confirm' && (
                     <Box>
-                        <Typography variant="body1" sx={{ mb: 2 }}>
-                            Vas a registrar <strong>{validSelectedFamilies.length}</strong> reintegro{validSelectedFamilies.length === 1 ? '' : 's'} de crédito a favor por un total de <strong>{formatMoney(validTotal)}</strong>.
-                        </Typography>
-                        <Alert severity="warning">
-                            Esta acción queda registrada en la Línea de Tiempo de cada familia y afecta las métricas financieras del colegio. Se puede revertir individualmente después, como cualquier otra transacción.
-                        </Alert>
+                        <TableContainer component={Paper} variant="outlined" sx={{ mt: 2, mb: 2 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Familia</TableCell>
+                                        <TableCell align="right">Monto</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {validSelectedFamilies.map((family) => {
+                                        const detail = details[family.paymentId] || {};
+                                        const amount = Number.parseFloat(detail.amount) || 0;
+                                        return (
+                                            <TableRow key={family.paymentId}>
+                                                <TableCell>{family.familyLastName || '-'}</TableCell>
+                                                <TableCell align="right">{formatMoney(amount)}</TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                    <TableRow sx={{ fontWeight: 'bold', backgroundColor: 'action.hover' }}>
+                                        <TableCell>Total ({validSelectedFamilies.length} reintegro{validSelectedFamilies.length === 1 ? '' : 's'})</TableCell>
+                                        <TableCell align="right">{formatMoney(validTotal)}</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
                         {submitError && <Alert severity="error" sx={{ mt: 2 }}>{submitError}</Alert>}
                     </Box>
                 )}
