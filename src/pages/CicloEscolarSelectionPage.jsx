@@ -457,6 +457,7 @@ const CicloEscolarSelectionPage = () => {
                     // Penalty fields defaults
                     dailyPenalty: Number(school.dailyPenalty) || 0,
                     penaltyPaused: !!school.penaltyPaused,
+                    isTrainingSchool: !!school.isTrainingSchool,
                     operationStatus: school.operationStatus || 'ACTIVE',
                     enrollmentStatus: school.enrollmentStatus || 'OPEN'
                 };
@@ -1395,6 +1396,15 @@ const CicloEscolarSelectionPage = () => {
                     color={enrollment.color}
                     variant={String(school.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN' ? 'filled' : 'outlined'}
                 />
+                {/* Evita que se confunda con un colegio real: sus datos se borran cada noche. */}
+                {school.isTrainingSchool && (
+                    <Chip
+                        label="Capacitación"
+                        size="small"
+                        color="warning"
+                        variant="filled"
+                    />
+                )}
             </Box>
         );
     };
@@ -1984,6 +1994,12 @@ const CicloEscolarSelectionPage = () => {
                                         </Select>
                                     </FormControl>
                                 </Box>
+                                {selectedSchool?.isTrainingSchool && (
+                                    <Alert severity="warning" variant="outlined">
+                                        Este es el colegio de capacitación. Sus registros se borran automáticamente cada
+                                        noche y el personal puede reiniciar su práctica desde la app.
+                                    </Alert>
+                                )}
                             </Box>
                         </AccordionDetails>
                     </StyledAccordion>
