@@ -106,7 +106,8 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
         scheduleId: null,
         affectedScheduleSlots: 0,
         affectedStudents: 0,
-        affectedFamilies: 0
+        affectedFamilies: 0,
+        affectedRoutes: 0
       });
       setConfirmDeleteOpen(true);
       return;
@@ -128,7 +129,8 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
         scheduleId: null,
         affectedScheduleSlots: 0,
         affectedStudents: 0,
-        affectedFamilies: 0
+        affectedFamilies: 0,
+        affectedRoutes: 0
       });
     } finally {
       setDeleteImpactLoading(false);
@@ -379,6 +381,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>Editar Horarios de {school?.name || 'Colegio'}</DialogTitle>
       <DialogContent>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Cambiar la hora base de un horario aquí NO actualiza automáticamente los horarios de alerta configurados por ruta (Asignación de Buses → Horarios). Si mueves una hora, revisa y ajusta esas alertas manualmente si corresponde.
+        </Alert>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {schedules.map((sch, scheduleIndex) => {
             const codeError = sch.code && (sch.code.length < 2 || !/^[A-Z]{2,4}$/.test(sch.code));
@@ -528,6 +533,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
           ) : (
             <Alert severity="warning" sx={{ mb: 2 }}>
               {`Al eliminar este horario se verán afectados ${deleteImpact?.affectedStudents ?? 0} estudiantes de ${deleteImpact?.affectedFamilies ?? 0} familias.`}
+              {(deleteImpact?.affectedRoutes ?? 0) > 0 && (
+                ` También se perderá la configuración de alertas de horario de ${deleteImpact.affectedRoutes} ruta${deleteImpact.affectedRoutes > 1 ? 's' : ''} (Asignación de Buses → Horarios), sin posibilidad de recuperarla.`
+              )}
             </Alert>
           )}
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>

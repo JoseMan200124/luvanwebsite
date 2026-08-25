@@ -112,7 +112,8 @@ export const getScheduleDeletionImpact = async (schoolId, schedulePayload) => {
     scheduleId: null,
     affectedScheduleSlots: 0,
     affectedStudents: 0,
-    affectedFamilies: 0
+    affectedFamilies: 0,
+    affectedRoutes: 0
   };
 };
 
