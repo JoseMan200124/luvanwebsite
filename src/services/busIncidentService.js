@@ -13,7 +13,7 @@ import api from '../utils/axiosConfig';
  * @param {string} filters.startDate - Fecha inicial (YYYY-MM-DD)
  * @param {string} filters.endDate - Fecha final (YYYY-MM-DD)
  * @param {boolean} filters.noFallas - Sin fallas reportadas
- * @param {boolean} filters.impacto - Con impacto
+ * @param {boolean} filters.routeAffected - Afectó recorrido
  * @param {number} filters.page - Página
  * @param {number} filters.limit - Registros por página
  */
