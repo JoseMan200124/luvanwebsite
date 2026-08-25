@@ -1,6 +1,6 @@
 // src/pages/SchoolBusesPage.jsx
 
-import React, { useEffect, useState, useContext, useCallback } from 'react';
+import React, { useEffect, useState, useContext, useCallback, useMemo } from 'react';
 import {
     Typography,
     Box,
@@ -21,17 +21,21 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    // FormControl, InputLabel, Select, MenuItem removed - replaced by Autocomplete
     TextField,
     Autocomplete,
     Chip,
-    Tooltip
+    Tooltip,
+    Tabs,
+    Tab
 } from '@mui/material';
-import { DirectionsBus, Save, Clear, ArrowBack, Refresh, ContentCopy } from '@mui/icons-material';
+import { useTheme } from '@mui/material/styles';
+import { DirectionsBus, Save, Clear, ArrowBack, Refresh, ContentCopy, Schedule } from '@mui/icons-material';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
+import { getSchoolSchedules } from '../services/scheduleService';
+import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, getScheduleColor, getScheduleLabel } from '../utils/scheduleConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 
@@ -48,6 +52,182 @@ const HeaderCard = styled(Card)`
     color: white;
 `;
 
+// Formatea "HH:mm" (24h) a "h:mm AM/PM" para mostrar la hora de clase del colegio de forma legible.
+function formatTime12h(hhmm) {
+    if (!hhmm) return '';
+    const [hoursStr, minutesStr] = String(hhmm).split(':');
+    const hours = Number.parseInt(hoursStr, 10);
+    if (Number.isNaN(hours)) return hhmm;
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 === 0 ? 12 : hours % 12;
+    return `${hours12}:${minutesStr} ${period}`;
+}
+
+// Extraído para que cambiar de pestaña solo re-renderice este diálogo, no la tabla de rutas completa.
+function ScheduleThresholdsDialog({
+    open,
+    routeNumber,
+    scheduleCodes,
+    scheduleNames,
+    scheduleTimes,
+    thresholds,
+    onThresholdChange,
+    onClose,
+    onSave,
+    saving
+}) {
+    const [activeTab, setActiveTab] = useState(0);
+    const theme = useTheme();
+
+    useEffect(() => {
+        if (open) setActiveTab(0);
+    }, [open, routeNumber]);
+
+    const sortedCodes = useMemo(() => {
+        const timeToMinutes = (hhmm) => {
+            if (!hhmm) return Infinity;
+            const [h, m] = hhmm.split(':').map(Number);
+            return h * 60 + m;
+        };
+        return [...scheduleCodes].sort((a, b) => timeToMinutes(scheduleTimes[a]) - timeToMinutes(scheduleTimes[b]));
+    }, [scheduleCodes, scheduleTimes]);
+
+    const tabColors = useMemo(() => {
+        const map = {};
+        sortedCodes.forEach((code) => {
+            const colorKey = getScheduleColor(code);
+            map[code] = theme.palette[colorKey]?.main || theme.palette.text.primary;
+        });
+        return map;
+    }, [sortedCodes, theme]);
+
+    const activeTabColor = tabColors[sortedCodes[activeTab]] || theme.palette.text.primary;
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+            <DialogTitle>Horarios de la Ruta {routeNumber}</DialogTitle>
+            <DialogContent>
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+                    Configura estas horas para que el sistema avise automáticamente a los Auxiliares cuando la ruta se atrasa. Deja un campo vacío si no aplica.
+                </Typography>
+                <Tabs
+                    value={activeTab}
+                    onChange={(e, newValue) => setActiveTab(newValue)}
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    TabIndicatorProps={{
+                        sx: {
+                            transition: 'none',
+                            backgroundColor: activeTabColor
+                        }
+                    }}
+                    sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+                >
+                    {sortedCodes.map((code) => (
+                        <Tab
+                            key={code}
+                            label={code}
+                            disableRipple
+                            sx={{
+                                transition: 'none',
+                                '&.Mui-selected': {
+                                    color: tabColors[code]
+                                }
+                            }}
+                        />
+                    ))}
+                </Tabs>
+                {sortedCodes.map((code, index) => {
+                    if (index !== activeTab) return null;
+                    const entry = thresholds[code] || {};
+                    const isAM = code === 'AM';
+                    return (
+                        <Box key={code}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                                <Typography variant="subtitle1">{scheduleNames[code] || getScheduleLabel(code)}</Typography>
+                                {scheduleTimes[code] && (
+                                    <Chip
+                                        label={`Hora colegio: ${formatTime12h(scheduleTimes[code])}`}
+                                        size="small"
+                                        variant="outlined"
+                                    />
+                                )}
+                            </Box>
+                            {isAM ? (
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                                    <TextField
+                                        type="time"
+                                        size="small"
+                                        fullWidth
+                                        label="Hora de inicio (primera parada)"
+                                        helperText="Avisa si a esta hora aún no marcan la primera parada."
+                                        InputLabelProps={{ shrink: true }}
+                                        inputProps={{ step: 300 }}
+                                        value={entry.firstStopTime || ''}
+                                        onChange={(e) => onThresholdChange(code, 'firstStopTime', e.target.value)}
+                                    />
+                                    <TextField
+                                        type="time"
+                                        size="small"
+                                        fullWidth
+                                        label="Hora de llegada al colegio"
+                                        helperText="Avisa si a esta hora aún no marcan la llegada."
+                                        InputLabelProps={{ shrink: true }}
+                                        inputProps={{ step: 300 }}
+                                        value={entry.schoolArrivalTime || ''}
+                                        onChange={(e) => onThresholdChange(code, 'schoolArrivalTime', e.target.value)}
+                                    />
+                                </Box>
+                            ) : (
+                                <Box>
+                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                                        <TextField
+                                            type="time"
+                                            size="small"
+                                            fullWidth
+                                            label="Hora máxima de salida del colegio"
+                                            helperText="Avisa si a esta hora aún no marcan la salida."
+                                            InputLabelProps={{ shrink: true }}
+                                            inputProps={{ step: 300 }}
+                                            value={entry.schoolDepartureMaxTime || ''}
+                                            onChange={(e) => onThresholdChange(code, 'schoolDepartureMaxTime', e.target.value)}
+                                        />
+                                        <TextField
+                                            type="number"
+                                            size="small"
+                                            fullWidth
+                                            label="Margen primera parada (min)"
+                                            helperText="No es hora fija: minutos de espera después de la salida real."
+                                            InputLabelProps={{ shrink: true }}
+                                            inputProps={{ min: 0 }}
+                                            value={entry.firstStopMarginMinutes || ''}
+                                            onChange={(e) => onThresholdChange(code, 'firstStopMarginMinutes', e.target.value)}
+                                        />
+                                    </Box>
+                                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 2.5 }}>
+                                        Ejemplo: si el margen es 60 min y el bus marca salida a las 12:00pm, la alerta se dispara si no marcan la primera parada del regreso antes de la 1:00pm.
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Box>
+                    );
+                })}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={saving}>Cancelar</Button>
+                <Button
+                    variant="contained"
+                    startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
+                    onClick={onSave}
+                    disabled={saving}
+                >
+                    {saving ? 'Guardando...' : 'Guardar Horarios'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
 const SchoolBusesPage = () => {
     const { auth } = useContext(AuthContext);
     const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
@@ -63,6 +243,15 @@ const SchoolBusesPage = () => {
     // Per-route assignments when no bus is selected (routeNumber -> userId)
     const [routePilotAssignments, setRoutePilotAssignments] = useState({});
     const [routeMonitorAssignments, setRouteMonitorAssignments] = useState({});
+    const [schoolScheduleCodes, setSchoolScheduleCodes] = useState(DEFAULT_SCHEDULE_CODES);
+    // Hora de clase del colegio por código (AM/MD/PM/EX), solo como referencia visual en el modal de Horarios
+    const [schoolScheduleTimes, setSchoolScheduleTimes] = useState({});
+    // Nombre que el colegio le dio a cada horario (AM/MD/PM/EX), para mostrar en las pestañas del modal
+    const [schoolScheduleNames, setSchoolScheduleNames] = useState({});
+    // Umbrales de horario por ruta: { [routeNumber]: { [scheduleCode]: { firstStopTime, schoolArrivalTime, schoolDepartureMaxTime, firstStopMarginMinutes } } }
+    const [routeThresholds, setRouteThresholds] = useState({});
+    const [scheduleModalRoute, setScheduleModalRoute] = useState(null);
+    const [savingSchedule, setSavingSchedule] = useState(false);
     const [availablePilots, setAvailablePilots] = useState([]);
     const [availableMonitors, setAvailableMonitors] = useState([]);
     const [schoolData, setSchoolData] = useState(null);
@@ -173,6 +362,30 @@ const SchoolBusesPage = () => {
         }
     }, [auth.token, schoolId]);
 
+    const fetchSchoolSchedules = useCallback(async () => {
+        if (!schoolId) return;
+        try {
+            const schedules = await getSchoolSchedules(schoolId);
+            setSchoolScheduleCodes(getScheduleCodesFromSchool(schedules));
+
+            const timesByCode = {};
+            const namesByCode = {};
+            (Array.isArray(schedules) ? schedules : []).forEach((s) => {
+                const code = s?.code ? String(s.code).toUpperCase() : null;
+                const time = Array.isArray(s?.times) ? s.times[0] : null;
+                if (code && time && time !== 'N/A') timesByCode[code] = time;
+                if (code && s?.name) namesByCode[code] = s.name;
+            });
+            setSchoolScheduleTimes(timesByCode);
+            setSchoolScheduleNames(namesByCode);
+        } catch (err) {
+            console.error('Error fetching school schedules:', err);
+            setSchoolScheduleCodes(DEFAULT_SCHEDULE_CODES);
+            setSchoolScheduleTimes({});
+            setSchoolScheduleNames({});
+        }
+    }, [schoolId]);
+
     const fetchPilots = useCallback(async () => {
         if (!schoolId) return;
         try {
@@ -215,14 +428,27 @@ const SchoolBusesPage = () => {
             const assignments = response.data.assignments || response.data || [];
             const routePilots = {};
             const routeMonitors = {};
+            const routeThresholdsMap = {};
             assignments.forEach(assignment => {
                 if (assignment.routeNumber) {
                     routePilots[assignment.routeNumber] = assignment.pilotId || null;
                     routeMonitors[assignment.routeNumber] = assignment.monitoraId || null;
+
+                    const thresholdsForRoute = {};
+                    (assignment.scheduleThresholds || []).forEach((threshold) => {
+                        thresholdsForRoute[threshold.scheduleCode] = {
+                            firstStopTime: threshold.firstStopTime || '',
+                            schoolArrivalTime: threshold.schoolArrivalTime || '',
+                            schoolDepartureMaxTime: threshold.schoolDepartureMaxTime || '',
+                            firstStopMarginMinutes: threshold.firstStopMarginMinutes != null ? String(threshold.firstStopMarginMinutes) : ''
+                        };
+                    });
+                    routeThresholdsMap[assignment.routeNumber] = thresholdsForRoute;
                 }
             });
             setRoutePilotAssignments(prev => ({ ...prev, ...routePilots }));
             setRouteMonitorAssignments(prev => ({ ...prev, ...routeMonitors }));
+            setRouteThresholds(prev => ({ ...prev, ...routeThresholdsMap }));
         } catch (err) {
             console.error('Error fetching route assignments:', err);
         }
@@ -275,10 +501,10 @@ const SchoolBusesPage = () => {
     useEffect(() => {
         if (auth.token && schoolId) {
             setLoading(true);
-            Promise.all([fetchSchoolData(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()])
+            Promise.all([fetchSchoolData(), fetchSchoolSchedules(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()])
                 .finally(() => setLoading(false));
         }
-    }, [auth.token, schoolId, fetchSchoolData, fetchBuses, fetchPilots, fetchMonitors, fetchRouteAssignments]);
+    }, [auth.token, schoolId, fetchSchoolData, fetchSchoolSchedules, fetchBuses, fetchPilots, fetchMonitors, fetchRouteAssignments]);
 
     useEffect(() => {
         fetchPreviousCycleAssignments();
@@ -335,6 +561,71 @@ const SchoolBusesPage = () => {
         });
     };
 
+    const handleThresholdChange = (routeNumber, scheduleCode, field, value) => {
+        setRouteThresholds(prev => ({
+            ...prev,
+            [routeNumber]: {
+                ...prev[routeNumber],
+                [scheduleCode]: {
+                    ...((prev[routeNumber] || {})[scheduleCode] || {}),
+                    [field]: value
+                }
+            }
+        }));
+    };
+
+    const buildScheduleThresholdsPayload = (routeNumber) => {
+        const routeSchedules = routeThresholds[routeNumber] || {};
+        return schoolScheduleCodes
+            .map((code) => {
+                const entry = routeSchedules[code] || {};
+                const isAM = code === 'AM';
+                const hasValue = isAM
+                    ? Boolean(entry.firstStopTime || entry.schoolArrivalTime)
+                    : Boolean(entry.schoolDepartureMaxTime || entry.firstStopMarginMinutes);
+                if (!hasValue) return null;
+
+                return {
+                    code,
+                    firstStopTime: isAM ? (entry.firstStopTime || null) : null,
+                    schoolArrivalTime: isAM ? (entry.schoolArrivalTime || null) : null,
+                    schoolDepartureMaxTime: isAM ? null : (entry.schoolDepartureMaxTime || null),
+                    firstStopMarginMinutes: isAM ? null : (entry.firstStopMarginMinutes !== '' ? Number(entry.firstStopMarginMinutes) : null)
+                };
+            })
+            .filter(Boolean);
+    };
+
+    // Guarda los horarios de UNA ruta de inmediato, sin tocar placa/piloto/monitora ni depender
+    // del botón "Guardar Asignaciones" general.
+    const handleSaveScheduleModal = async () => {
+        if (!scheduleModalRoute) return;
+        setSavingSchedule(true);
+        try {
+            await api.post('/route-assignments/schedules', {
+                schoolId: Number.parseInt(schoolId, 10),
+                cicloEscolarId: currentSchoolCycleId || null,
+                routeNumber: scheduleModalRoute,
+                schedules: buildScheduleThresholdsPayload(scheduleModalRoute)
+            }, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+
+            setSnackbar({ open: true, message: `Horarios de la Ruta ${scheduleModalRoute} guardados`, severity: 'success' });
+            setScheduleModalRoute(null);
+            await fetchRouteAssignments();
+        } catch (err) {
+            console.error('Error saving route schedules:', err);
+            setSnackbar({
+                open: true,
+                message: `Error al guardar horarios: ${err.response?.data?.message || err.message}`,
+                severity: 'error'
+            });
+        } finally {
+            setSavingSchedule(false);
+        }
+    };
+
     const handleSaveAssignments = async () => {
         setSaving(true);
         try {
@@ -350,7 +641,8 @@ const SchoolBusesPage = () => {
                         monitoraTouched: Boolean(intent.monitoraTouched),
                         unassignPilot: Boolean(intent.unassignPilot),
                         unassignMonitora: Boolean(intent.unassignMonitora)
-                    }
+                    },
+                    schedules: buildScheduleThresholdsPayload(routeNumber)
                 };
             });
 
@@ -425,6 +717,7 @@ const SchoolBusesPage = () => {
         setRouteBusAssignments({});
         setRoutePilotAssignments({});
         setRouteMonitorAssignments({});
+        setRouteThresholds({});
         setCrewChangeIntent({});
     };
 
@@ -432,7 +725,7 @@ const SchoolBusesPage = () => {
         if (!schoolId) return;
         setLoading(true);
         try {
-            await Promise.all([fetchSchoolData(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()]);
+            await Promise.all([fetchSchoolData(), fetchSchoolSchedules(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()]);
             await fetchPreviousCycleAssignments();
             setCrewChangeIntent({});
             setSnackbar({ open: true, message: 'Datos actualizados', severity: 'success' });
@@ -644,13 +937,14 @@ const SchoolBusesPage = () => {
                         </Box>
                     ) : (
                         <TableContainer component={Paper} sx={{ mt: 2, overflowX: 'auto' }}>
-                            <Table sx={{ minWidth: 980 }}>
+                            <Table sx={{ minWidth: 1320 }}>
                                 <TableHead>
                                     <TableRow>
                                         <TableCell><strong>Número de Ruta</strong></TableCell>
                                         <TableCell><strong>Bus Asignado</strong></TableCell>
                                         <TableCell><strong>Piloto</strong></TableCell>
                                         <TableCell><strong>Monitora</strong></TableCell>
+                                        <TableCell><strong>Horarios</strong></TableCell>
                                         <TableCell><strong>Estado</strong></TableCell>
                                     </TableRow>
                                 </TableHead>
@@ -660,7 +954,8 @@ const SchoolBusesPage = () => {
                                         const availableBusesForThisRoute = getAvailableBusesForRoute(routeNumber);
                                         const availablePilotsForThisRoute = getAvailablePilotsForRoute(routeNumber);
                                         const availableMonitorsForThisRoute = getAvailableMonitorsForRoute(routeNumber);
-                                        
+                                        const configuredScheduleCount = buildScheduleThresholdsPayload(routeNumber).length;
+
                                         return (
                                             <TableRow key={routeNumber}>
                                                 <TableCell>
@@ -735,6 +1030,24 @@ const SchoolBusesPage = () => {
                                                     />
                                                 </TableCell>
                                                 <TableCell>
+                                                    <Button
+                                                        variant="outlined"
+                                                        size="small"
+                                                        startIcon={<Schedule />}
+                                                        onClick={() => setScheduleModalRoute(routeNumber)}
+                                                    >
+                                                        Horarios
+                                                    </Button>
+                                                    {configuredScheduleCount > 0 && (
+                                                        <Chip
+                                                            label={`${configuredScheduleCount} configurado${configuredScheduleCount > 1 ? 's' : ''}`}
+                                                            size="small"
+                                                            color="info"
+                                                            sx={{ ml: 1 }}
+                                                        />
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
                                                     {(assignedBusId || routePilotAssignments[routeNumber] || routeMonitorAssignments[routeNumber]) ? (
                                                         <Chip 
                                                             label={isPreparationMode ? 'Preparado' : 'Asignado'}
@@ -774,10 +1087,26 @@ const SchoolBusesPage = () => {
                             <Typography variant="body2" color="textSecondary">
                                 • Los pilotos y monitoras deben pertenecer al mismo colegio y ciclo escolar
                             </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                • Los horarios definen cuándo se envía una alerta a Auxiliares si la ruta no cumple: en la mañana (AM), hora de inicio de primera parada y hora de llegada al colegio; en los horarios de regreso, hora máxima de salida del colegio y minutos de margen para la primera parada de regreso
+                            </Typography>
                         </Box>
                     )}
                 </CardContent>
             </Card>
+
+            <ScheduleThresholdsDialog
+                open={Boolean(scheduleModalRoute)}
+                routeNumber={scheduleModalRoute}
+                scheduleCodes={schoolScheduleCodes}
+                scheduleNames={schoolScheduleNames}
+                scheduleTimes={schoolScheduleTimes}
+                thresholds={routeThresholds[scheduleModalRoute] || {}}
+                onThresholdChange={(code, field, value) => handleThresholdChange(scheduleModalRoute, code, field, value)}
+                onClose={() => setScheduleModalRoute(null)}
+                onSave={handleSaveScheduleModal}
+                saving={savingSchedule}
+            />
 
             <Dialog
                 open={transferPreviewOpen}
