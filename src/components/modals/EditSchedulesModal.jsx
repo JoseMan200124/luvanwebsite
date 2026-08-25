@@ -1,5 +1,5 @@
 // src/components/modals/EditSchedulesModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -57,8 +57,10 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
     if (!open) return;
 
     const scheduleArray = Array.isArray(school?.schedules)
-      ? school.schedules.map(s => ({
+      ? school.schedules.map((s, i) => ({
+        _uid: `existing-${i}`,
         code: s?.code || '',
+        originalCode: s?.code || '',
         name: s?.name || '',
         times: Array.isArray(s?.times) ? s.times : ['N/A'],
         days: Array.isArray(s?.days) && s.days.length > 0 ? s.days : ALL_DAY_KEYS
@@ -83,6 +85,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
     setSchedules(prev => ([
       ...prev,
       {
+        _uid: `new-${Date.now()}-${prev.length}`,
         code: '',
         name: '',
         times: ['N/A'],
@@ -226,6 +229,10 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
           times: Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? [s.times[0]] : ['N/A'],
           days: s.days
         };
+
+        if (s.originalCode) {
+          entry.originalCode = s.originalCode.toUpperCase();
+        }
 
         return entry;
       });
@@ -377,6 +384,19 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
       ? schedules[pendingDeleteIndex]
       : null;
 
+  const timeToMinutes = (times) => {
+    const raw = Array.isArray(times) ? times[0] : null;
+    if (!raw || raw === 'N/A') return Infinity;
+    const [h, m] = raw.split(':').map(Number);
+    return (h * 60) + m;
+  };
+
+  const sortedScheduleEntries = useMemo(() => {
+    return schedules
+      .map((sch, scheduleIndex) => ({ sch, scheduleIndex }))
+      .sort((a, b) => timeToMinutes(a.sch.times) - timeToMinutes(b.sch.times));
+  }, [schedules]);
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>Editar Horarios de {school?.name || 'Colegio'}</DialogTitle>
@@ -385,12 +405,12 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
           Cambiar la hora base de un horario aquí NO actualiza automáticamente los horarios de alerta configurados por ruta (Asignación de Buses → Horarios). Si mueves una hora, revisa y ajusta esas alertas manualmente si corresponde.
         </Alert>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {schedules.map((sch, scheduleIndex) => {
+          {sortedScheduleEntries.map(({ sch, scheduleIndex }) => {
             const codeError = sch.code && (sch.code.length < 2 || !/^[A-Z]{2,4}$/.test(sch.code));
             const codeDuplicate = sch.code && schedules.filter((s, i) => i !== scheduleIndex && s.code === sch.code).length > 0;
 
             return (
-              <Paper key={scheduleIndex} sx={{ p: 2, border: (codeError || codeDuplicate) ? '1px solid #f44336' : '1px solid #e0e0e0' }}>
+              <Paper key={sch._uid ?? scheduleIndex} sx={{ p: 2, border: (codeError || codeDuplicate) ? '1px solid #f44336' : '1px solid #e0e0e0' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                     {sch.code ? `Horario ${sch.code}` : `Horario #${scheduleIndex + 1}`}
