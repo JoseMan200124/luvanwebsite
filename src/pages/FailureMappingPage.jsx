@@ -116,7 +116,7 @@ const FailureMappingPage = () => {
         total: 0,
         byTipoFalla: {},
         byTipo: {},
-        withImpact: 0,
+        withRouteAffected: 0,
         noOperacional: 0,
     });
     const [exportingPdf, setExportingPdf] = useState(false);
@@ -262,7 +262,7 @@ const FailureMappingPage = () => {
                 total: Number(data.total || data.totalRecords || incidentList.length),
                 byTipoFalla: data.countsByTipoFalla || {},
                 byTipo: data.countsByTipo || {},
-                withImpact: Number(data.withImpact || 0),
+                withRouteAffected: Number(data.withRouteAffected || 0),
                 noOperacional: Number(data.noOperacional || 0),
             });
         } catch (error) {
@@ -643,10 +643,10 @@ const FailureMappingPage = () => {
                         <Card>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
-                                    Con Impacto
+                                    Afectó Recorrido
                                 </Typography>
                                 <Typography variant="h4">
-                                    {statistics.withImpact}
+                                    {statistics.withRouteAffected}
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -918,11 +918,11 @@ const FailureMappingPage = () => {
                                             </TableCell>
                                             <TableCell align="center">
                                                 <TableSortLabel
-                                                    active={orderBy === 'impacto'}
-                                                    direction={orderBy === 'impacto' ? order : 'asc'}
-                                                    onClick={() => handleSort('impacto')}
+                                                    active={orderBy === 'routeAffected'}
+                                                    direction={orderBy === 'routeAffected' ? order : 'asc'}
+                                                    onClick={() => handleSort('routeAffected')}
                                                 >
-                                                    Hubo Impacto
+                                                    Afectó Recorrido
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell align="center">
@@ -993,9 +993,9 @@ const FailureMappingPage = () => {
                                                     )}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    {incident.impacto === null ? (
+                                                    {incident.routeAffected === null ? (
                                                         <Chip label="N/A" size="small" />
-                                                    ) : incident.impacto ? (
+                                                    ) : incident.routeAffected ? (
                                                         <Chip label="Sí" size="small" color="error" />
                                                     ) : (
                                                         <Chip label="No" size="small" color="success" />
@@ -1221,11 +1221,11 @@ const FailureMappingPage = () => {
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
                                     <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Hubo Impacto?
+                                        ¿Afectó el Recorrido?
                                     </Typography>
-                                    {selectedIncident.impacto === null ? (
+                                    {selectedIncident.routeAffected === null ? (
                                         <Chip label="N/A" size="small" sx={{ mt: 1 }} />
-                                    ) : selectedIncident.impacto ? (
+                                    ) : selectedIncident.routeAffected ? (
                                         <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
                                     ) : (
                                         <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />

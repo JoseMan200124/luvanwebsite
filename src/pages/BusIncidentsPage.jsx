@@ -239,14 +239,14 @@ const BusIncidentsPage = () => {
                     total: Number(data.totalIncidents || data.total || incidentList.length),
                     byTipoFalla: data.countsByTipoFalla || {},
                     byTipo: data.countsByTipo || {},
-                    withImpact: Number(data.withImpact || 0),
+                    withRouteAffected: Number(data.withRouteAffected || 0),
                 });
             } else {
                 // Fallback: calcular desde la página
                 if (incidentList.length > 0) {
                     const byTipoFalla = {};
                     const byTipo = {};
-                    let withImpact = 0;
+                    let withRouteAffected = 0;
 
                     incidentList.forEach(incident => {
                         const tipoFalla = incident.tipoFalla || 'sin_falla';
@@ -255,14 +255,14 @@ const BusIncidentsPage = () => {
                         byTipoFalla[tipoFalla] = (byTipoFalla[tipoFalla] || 0) + 1;
                         byTipo[tipo] = (byTipo[tipo] || 0) + 1;
 
-                        if (incident.impacto) withImpact++;
+                        if (incident.routeAffected) withRouteAffected++;
                     });
 
                     setStatistics({
                         total: data.total || incidentList.length,
                         byTipoFalla,
                         byTipo,
-                        withImpact,
+                        withRouteAffected,
                     });
                 } else {
                     setStatistics({
@@ -489,10 +489,10 @@ const BusIncidentsPage = () => {
                         <Card>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
-                                    Con Impacto
+                                    Afectó Recorrido
                                 </Typography>
                                 <Typography variant="h4">
-                                    {statistics.withImpact}
+                                    {statistics.withRouteAffected}
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -730,11 +730,11 @@ const BusIncidentsPage = () => {
                                             <TableCell>Piloto</TableCell>
                                             <TableCell align="center">
                                                 <TableSortLabel
-                                                    active={orderBy === 'impacto'}
-                                                    direction={orderBy === 'impacto' ? order : 'asc'}
-                                                    onClick={() => handleSort('impacto')}
+                                                    active={orderBy === 'routeAffected'}
+                                                    direction={orderBy === 'routeAffected' ? order : 'asc'}
+                                                    onClick={() => handleSort('routeAffected')}
                                                 >
-                                                    Impacto
+                                                    Afectó Recorrido
                                                 </TableSortLabel>
                                             </TableCell>
                                             <TableCell align="center">
@@ -794,7 +794,7 @@ const BusIncidentsPage = () => {
                                                     {incident.piloto?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    {incident.impacto ? (
+                                                    {incident.routeAffected ? (
                                                         <Chip label="Sí" size="small" color="error" />
                                                     ) : (
                                                         <Chip label="No" size="small" color="success" />
@@ -999,9 +999,9 @@ const BusIncidentsPage = () => {
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
                                     <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Hubo Impacto?
+                                        ¿Afectó el Recorrido?
                                     </Typography>
-                                    {selectedIncident.impacto ? (
+                                    {selectedIncident.routeAffected ? (
                                         <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
                                     ) : (
                                         <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />

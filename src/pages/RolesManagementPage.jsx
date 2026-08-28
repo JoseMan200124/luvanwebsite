@@ -42,7 +42,6 @@ import api from '../utils/axiosConfig';
 import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
-import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -226,7 +225,6 @@ const RolesManagementPage = () => {
     // Filtros
     const [roleFilter, setRoleFilter] = useState('');
     const [clientFilter, setClientFilter] = useState(null); // { type: 'Colegio'|'Corporación', id, name }
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
 
     // Roles allowed to be created from the "Añadir Usuario" dialog
     const allowedRolesForCreate = ['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado'];
@@ -267,7 +265,7 @@ const RolesManagementPage = () => {
 
     useEffect(() => {
         setPage(0);
-    }, [roleFilter, clientFilter, searchQuery, selectedCicloEscolar]);
+    }, [roleFilter, clientFilter, searchQuery]);
 
     const fetchAllPilots = async () => {
         try {
@@ -312,8 +310,7 @@ const RolesManagementPage = () => {
         try {
             const params = {
                 page,
-                limit: rowsPerPage,
-                ...getCicloEscolarFilterParams(selectedCicloEscolar)
+                limit: rowsPerPage
             };
             if (searchQuery) params.search = searchQuery;
             if (roleFilter) params.roleId = roleFilter;
@@ -335,13 +332,7 @@ const RolesManagementPage = () => {
     useEffect(() => {
         fetchUsers();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, roleFilter, clientFilter, searchQuery, selectedCicloEscolar]);
-
-    useEffect(() => {
-        fetchSchools();
-        fetchCorporations();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedCicloEscolar]);
+    }, [page, rowsPerPage, roleFilter, clientFilter, searchQuery]);
 
         // Register page-level refresh handler for global refresh control
         useRegisterPageRefresh(async () => {
@@ -350,8 +341,7 @@ const RolesManagementPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const cycleParams = getCicloEscolarFilterParams(selectedCicloEscolar);
-            const resp = await api.get('/schools', { params: { ...cycleParams, ...(cycleParams.allCycles ? { latestPerSchool: true } : {}) }, skipSchoolCycleContext: true });
+            const resp = await api.get('/schools', { params: { allCycles: true, latestPerSchool: true }, skipSchoolCycleContext: true });
             setSchools(resp.data.schools || []);
         } catch (err) {
             console.error('[fetchSchools] Error:', err);
@@ -404,7 +394,7 @@ const RolesManagementPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const resp = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar), skipSchoolCycleContext: true });
+            const resp = await api.get('/corporations', { params: { allCycles: true }, skipSchoolCycleContext: true });
             setCorporations(resp.data.corporations || []);
         } catch (err) {
             console.error('[fetchCorporations] Error:', err);
@@ -761,7 +751,7 @@ const RolesManagementPage = () => {
             let fetched = 0;
 
             // Decide params: when category is Colegio/Corporación ask backend to filter so attached supervisors/auxiliares are included
-            const baseParams = { page: 0, limit, ...getCicloEscolarFilterParams(selectedCicloEscolar) };
+            const baseParams = { page: 0, limit, allCycles: true };
             if (category === 'Colegios') {
                 const schoolId = clientObj ? clientObj.id : null;
                 if (!schoolId) {
@@ -913,9 +903,11 @@ const RolesManagementPage = () => {
     };
 
     const handleDownloadUserTemplate = () => {
-        // 1. Prepara listas de referencia
-        const colegios = schools.map(s => [s.id, s.name]);
-        const corporaciones = corporations.map(c => [c.id, c.name]);
+        // 1. Prepara listas de referencia. `assignableSchools` (no `schools`) porque no debe
+        // verse afectada por el filtro de Ciclo Escolar de la página: es una lista fija,
+        // un id canónico por colegio, cargada una sola vez al montar.
+        const colegios = [...assignableSchools].sort((a, b) => a.id - b.id).map(s => [s.id, s.name]);
+        const corporaciones = [...corporations].sort((a, b) => a.id - b.id).map(c => [c.id, c.name]);
         //const pilotos = allPilots.map(p => [p.id, p.name]);
         //const monitoras = allMonitoras.map(m => [m.id, m.name]);
 
@@ -1054,14 +1046,14 @@ const RolesManagementPage = () => {
             { wch: Math.max("Corporaciones (Nombre)".length + 2, 20) }
         ];
 
-        // 4. Generar el archivo
+        // 4. Generar el archivo (Listas primero, para que el usuario vea los IDs de referencia al abrir)
         const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, wsListas, "Listas");
         sheets.forEach(sheet => {
             const ws = XLSX.utils.aoa_to_sheet([sheet.headers, sheet.example]);
             ws['!cols'] = sheet.headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
             XLSX.utils.book_append_sheet(wb, ws, sheet.name);
         });
-        XLSX.utils.book_append_sheet(wb, wsListas, "Listas");
 
         const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
         const blob = new Blob([wbout], { type: "application/octet-stream" });
@@ -1103,18 +1095,6 @@ const RolesManagementPage = () => {
                     <Button variant="contained" size="small" onClick={() => handleApplySearch()}>Buscar</Button>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    
-
-                    <CicloEscolarFilter
-                        value={selectedCicloEscolar}
-                        onChange={(value) => {
-                            setSelectedCicloEscolar(value);
-                            setClientFilter(null);
-                            setPage(0);
-                        }}
-                        sx={{ width: 220 }}
-                    />
-
                     <FormControl size="small" sx={{ width: 150 }}>
                         <InputLabel>Rol</InputLabel>
                         <Select
