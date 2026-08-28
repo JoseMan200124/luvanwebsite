@@ -1,6 +1,7 @@
 // src/pages/FuelRecordsPage.jsx
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import PermissionGuard from '../components/PermissionGuard';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Typography,
@@ -38,11 +39,10 @@ import {
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import {
-    Refresh as RefreshIcon,
     Edit as EditIcon,
+    Delete as DeleteIcon,
     Visibility as VisibilityIcon,
     LocalGasStation as GasIcon,
-    WarningAmber as WarningAmberIcon,
     InfoOutlined as InfoOutlinedIcon,
     Download as DownloadIcon
 } from '@mui/icons-material';
@@ -54,6 +54,7 @@ import {
     getFuelRecordById,
     createFuelRecordWeb,
     updateFuelRecord,
+    deleteFuelRecord,
     exportFuelRecordsExcel,
     FUELING_REASONS,
     FUEL_TYPES
@@ -105,6 +106,11 @@ const FuelRecordsPage = () => {
     const [editOpen, setEditOpen] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [editSnackbar, setEditSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+    // Eliminar registro
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleteId, setDeleteId] = useState(null);
+    const [deleting, setDeleting] = useState(false);
     const [editSchools, setEditSchools] = useState([]);
     const [editCorporations, setEditCorporations] = useState([]);
     const [editBuses, setEditBuses] = useState([]);
@@ -754,6 +760,46 @@ const FuelRecordsPage = () => {
         }
     };
 
+    const handleOpenDelete = (id) => {
+        setDeleteId(id);
+        setDeleteOpen(true);
+    };
+
+    const handleCancelDelete = () => {
+        setDeleteId(null);
+        setDeleteOpen(false);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deleteId) return;
+        try {
+            setDeleting(true);
+            const response = await deleteFuelRecord(deleteId);
+            if (response?.success) {
+                setDeleteOpen(false);
+                setDeleteId(null);
+                handleCloseDetails();
+                await Promise.all([fetchFuelRecords(), fetchStatistics()]);
+                setEditSnackbar({ open: true, message: 'Registro eliminado exitosamente', severity: 'success' });
+            } else {
+                setEditSnackbar({
+                    open: true,
+                    message: response?.message || 'No se pudo eliminar el registro.',
+                    severity: 'error'
+                });
+            }
+        } catch (error) {
+            console.error('Error al eliminar registro:', error);
+            setEditSnackbar({
+                open: true,
+                message: 'Error al eliminar el registro. Revise la consola.',
+                severity: 'error'
+            });
+        } finally {
+            setDeleting(false);
+        }
+    };
+
     const getFuelingReasonColor = (reason) => {
         const colors = {
             'ruta': 'primary',
@@ -1356,6 +1402,17 @@ const FuelRecordsPage = () => {
                                                             </IconButton>
                                                         </Tooltip>
                                                     )}
+                                                    <PermissionGuard permission="combustible-eliminar">
+                                                        <Tooltip title="Eliminar registro">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={() => handleOpenDelete(record.id)}
+                                                                color="error"
+                                                            >
+                                                                <DeleteIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </PermissionGuard>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -1812,6 +1869,21 @@ const FuelRecordsPage = () => {
                         <Button onClick={handleCloseEdit} disabled={updating}>Cancelar</Button>
                         <Button onClick={handleEditSubmit} variant="contained" color="primary" disabled={updating}>
                             {updating ? 'Guardando...' : 'Guardar cambios'}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                <Dialog open={deleteOpen} onClose={handleCancelDelete} aria-labelledby="delete-fuel-record-dialog-title">
+                    <DialogTitle id="delete-fuel-record-dialog-title">Confirmar eliminación</DialogTitle>
+                    <DialogContent>
+                        <Typography>
+                            ¿Estás seguro que deseas eliminar este registro de combustible? Esta acción no se puede deshacer.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCancelDelete} disabled={deleting}>Cancelar</Button>
+                        <Button onClick={handleConfirmDelete} variant="contained" color="error" disabled={deleting}>
+                            {deleting ? 'Eliminando...' : 'Eliminar'}
                         </Button>
                     </DialogActions>
                 </Dialog>
