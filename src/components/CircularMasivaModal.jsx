@@ -41,6 +41,10 @@ const ROUTE_TYPE_OPTIONS = [
     { value: 'Media PM', label: 'Media PM' },
 ];
 
+// Pseudo-opción del selector de Rutas: padres sin ninguna ruta asignada.
+const NO_ROUTE_VALUE = '__no_route__';
+const NO_ROUTE_OPTION = { value: NO_ROUTE_VALUE, label: 'Sin ruta asignada' };
+
 const SERVICE_STATUS_OPTIONS = [
     { value: 'ACTIVE', label: 'Activo' },
     { value: 'PAUSED', label: 'Pausado' },
@@ -151,7 +155,7 @@ const DEFAULT_PREVIEW_COUNTS = {
     totalUnique: 0,
 };
 
-const EMPTY_PADRE_FILTERS = { routeTypes: [], serviceStatuses: [], paymentStatuses: [] };
+const EMPTY_PADRE_FILTERS = { routeTypes: [], serviceStatuses: [], paymentStatuses: [], includeNoRoute: false };
 
 const scheduleLabel = (code) => {
     if (!code) return 'Horario';
@@ -249,8 +253,15 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     }, [availableRoutes]);
 
     const routeOptions = useMemo(
-        () => availableRoutes.map(r => ({ value: r, label: `Ruta ${r}` })),
+        () => [NO_ROUTE_OPTION, ...availableRoutes.map(r => ({ value: r, label: `Ruta ${r}` }))],
         [availableRoutes]
+    );
+
+    // "Sin ruta" seleccionado y rutas reales (sin el centinela)
+    const noRouteSelected = selectedRoutes.includes(NO_ROUTE_VALUE);
+    const selectedRealRoutes = useMemo(
+        () => selectedRoutes.filter(r => r !== NO_ROUTE_VALUE),
+        [selectedRoutes]
     );
 
     const roleOptions = useMemo(
@@ -266,6 +277,16 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
 
     const padreSelected = selectedRoles.includes('parents');
+
+    // En "Todos los colegios" el "sin ruta" se controla con un checkbox en los
+    // filtros de padre; con un colegio concreto, con la opción del selector de Rutas.
+    const includeNoRoute = selectedSchool === 'all'
+        ? Boolean(padreFilters.includeNoRoute)
+        : noRouteSelected;
+    const outgoingPadreFilters = useMemo(
+        () => ({ ...padreFilters, includeNoRoute }),
+        [padreFilters, includeNoRoute]
+    );
 
     useEffect(() => {
         if (!padreSelected) {
@@ -340,7 +361,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
 
         if (!selectedRoutes.length) return;
 
-        const filtered = selectedRoutes.filter(r => availableRoutes.includes(String(r)));
+        const filtered = selectedRoutes.filter(r => r === NO_ROUTE_VALUE || availableRoutes.includes(String(r)));
         if (!arraysEqual(filtered, selectedRoutes)) {
             // SOLO si cambió realmente
             setSelectedRoutes(filtered);
@@ -356,10 +377,12 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             if (selectedSchool === 'all') return;
             if (!currentSchool) return;
 
-            if (selectedRoutes.length === 0) {
+            // Los counts por horario sólo aplican a rutas reales. Si sólo se eligió
+            // "Sin ruta", no hay horarios que calcular.
+            if (selectedRealRoutes.length === 0) {
                 setScheduleCounts(DEFAULT_COUNTS);
                 setSelectedSchedules([]);
-                setPreview(null);
+                if (!noRouteSelected) setPreview(null);
                 return;
             }
 
@@ -369,7 +392,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             try {
                 const resp = await api.post('/mail/send-circular/preview', {
                     schoolId: currentSchool.id,
-                    routeNumbers: selectedRoutes,
+                    routeNumbers: selectedRealRoutes,
                     // SIN scheduleCode => el backend devuelve scheduleCountsParents para habilitar botones
                 });
 
@@ -414,7 +437,8 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
         const loadPreview = async () => {
             if (selectedSchool !== 'all') {
                 if (!currentSchool) return;
-                if (selectedRoutes.length === 0) return;
+                // Se permite continuar sin rutas reales cuando se eligió "Sin ruta".
+                if (selectedRealRoutes.length === 0 && !noRouteSelected) return;
             }
 
             // Si no hay roles, NO pedimos preview al backend: en UI debe verse todo en 0.
@@ -423,13 +447,23 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                 return;
             }
 
-            // Si se seleccionó el rol padres, debe haber al menos un horario válido.
-            if (selectedSchool !== 'all' && selectedRoles.includes('parents') && selectedSchedules.length === 0) {
+            // Con rutas reales y rol padres, debe haber al menos un horario válido.
+            // Si sólo se eligió "Sin ruta", el horario no aplica.
+            if (
+                selectedSchool !== 'all' &&
+                selectedRealRoutes.length > 0 &&
+                selectedRoles.includes('parents') &&
+                selectedSchedules.length === 0
+            ) {
                 setPreview(null);
                 return;
             }
 
-            if (selectedSchool !== 'all' && selectedSchedules.some((code) => Number(scheduleCounts[code] || 0) <= 0)) {
+            if (
+                selectedSchool !== 'all' &&
+                selectedRealRoutes.length > 0 &&
+                selectedSchedules.some((code) => Number(scheduleCounts[code] || 0) <= 0)
+            ) {
                 setPreview(null);
                 return;
             }
@@ -441,10 +475,10 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                 const resp = await api.post('/mail/send-circular/preview', {
                     schoolId: selectedSchool,
                     schoolIds: selectedSchool === 'all' ? schoolIdsForAll : undefined,
-                    routeNumbers: selectedSchool === 'all' ? [] : selectedRoutes,
+                    routeNumbers: selectedSchool === 'all' ? [] : selectedRealRoutes,
                     scheduleCodes: selectedSchool === 'all' ? undefined : selectedSchedules,
                     recipientRoles: selectedRoles,
-                    padreFilters: padreSelected ? padreFilters : undefined,
+                    padreFilters: padreSelected ? outgoingPadreFilters : undefined,
                 });
 
                 if (reqId !== previewReqId.current) return;
@@ -484,9 +518,12 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
     };
 
     const scheduleDisabled = (code) => {
-        if (selectedRoutes.length === 0) return true;
+        if (selectedRealRoutes.length === 0) return true;
         return Number(scheduleCounts[code] || 0) <= 0;
     };
+
+    // Sólo se eligió "Sin ruta": el paso de horario no aplica.
+    const scheduleNotApplicable = noRouteSelected && selectedRealRoutes.length === 0;
 
     const handleSendCircular = async () => {
         if (!subject || !message) {
@@ -494,10 +531,10 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             return;
         }
 
-        // Ruta → Horario obligatorio
+        // Ruta → Horario obligatorio (sólo aplica a rutas reales)
         if (
             selectedSchool !== 'all' &&
-            selectedRoutes.length > 0 &&
+            selectedRealRoutes.length > 0 &&
             selectedRoles.includes('parents') &&
             selectedSchedules.length === 0
         ) {
@@ -522,8 +559,8 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             }
             formData.append('useSmtp', true);
 
-            if (selectedSchool !== 'all' && selectedRoutes.length > 0) {
-                formData.append('routeNumbers', JSON.stringify(selectedRoutes));
+            if (selectedSchool !== 'all' && selectedRealRoutes.length > 0) {
+                formData.append('routeNumbers', JSON.stringify(selectedRealRoutes));
                 formData.append('scheduleCodes', JSON.stringify(selectedSchedules));
             }
 
@@ -531,7 +568,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
             formData.append('recipientRoles', JSON.stringify(selectedRoles));
 
             if (padreSelected) {
-                formData.append('padreFilters', JSON.stringify(padreFilters));
+                formData.append('padreFilters', JSON.stringify(outgoingPadreFilters));
             }
 
             // Push SIEMPRE
@@ -752,7 +789,11 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                         ))}
                                     </ToggleButtonGroup>
 
-                                    {selectedRoutes.length === 0 && (
+                                    {scheduleNotApplicable ? (
+                                        <Alert severity="info" sx={{ mt: 1 }}>
+                                            No aplica para «Sin ruta asignada». Selecciona rutas reales si además quieres enviar por horario.
+                                        </Alert>
+                                    ) : selectedRealRoutes.length === 0 && (
                                         <Alert severity="info" sx={{ mt: 1 }}>
                                             Selecciona rutas para habilitar horarios.
                                         </Alert>
@@ -817,6 +858,25 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                                 </Typography>
                                             </AccordionSummary>
                                             <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                                                {selectedSchool === 'all' && (
+                                                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                                        <Checkbox
+                                                            size="small"
+                                                            sx={{ mt: -0.5 }}
+                                                            checked={Boolean(padreFilters.includeNoRoute)}
+                                                            onChange={(e) => setPadreFilters((prev) => ({
+                                                                ...prev,
+                                                                includeNoRoute: e.target.checked,
+                                                            }))}
+                                                        />
+                                                        <Box>
+                                                            <Typography variant="body2">Incluir padres sin ruta asignada</Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                Suma a los padres cuyo(s) hijo(s) no tienen ruta en el ciclo actual.
+                                                            </Typography>
+                                                        </Box>
+                                                    </Box>
+                                                )}
                                                 <MultiChipSelect
                                                     label="Tipo de Ruta"
                                                     options={ROUTE_TYPE_OPTIONS}
@@ -875,7 +935,7 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                 </AccordionSummary>
 
                                 <AccordionDetails sx={{ pt: 2 }}>
-                                    {selectedSchool !== 'all' && selectedRoles.includes('parents') && selectedSchedules.length === 0 ? (
+                                    {selectedSchool !== 'all' && selectedRealRoutes.length > 0 && selectedRoles.includes('parents') && selectedSchedules.length === 0 ? (
                                         <Alert severity="warning">Selecciona un horario para ver la vista previa.</Alert>
                                     ) : previewLoading ? (
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -897,7 +957,12 @@ const CircularMasivaModal = ({ open, onClose, schools, onSuccess }) => {
                                                     Totales (únicos) a enviar:
                                                 </Typography>
 
-                                                <Typography variant="body2">• Padres: <strong>{effectivePreview?.counts?.parents ?? 0}</strong></Typography>
+                                                <Typography variant="body2">
+                                                    • Padres: <strong>{effectivePreview?.counts?.parents ?? 0}</strong>
+                                                    {(effectivePreview?.counts?.parentsNoRoute ?? 0) > 0 && (
+                                                        <> (incluye <strong>{effectivePreview.counts.parentsNoRoute}</strong> sin ruta)</>
+                                                    )}
+                                                </Typography>
                                                 <Typography variant="body2">• Monitoras: <strong>{effectivePreview?.counts?.monitoras ?? 0}</strong></Typography>
                                                 <Typography variant="body2">• Pilotos: <strong>{effectivePreview?.counts?.pilots ?? 0}</strong></Typography>
                                                 <Typography variant="body2">• Supervisores: <strong>{effectivePreview?.counts?.supervisors ?? 0}</strong></Typography>
