@@ -13,6 +13,7 @@ import {
     FormControl,
     InputLabel,
     Select,
+    Menu,
     MenuItem,
     Grid,
     IconButton,
@@ -35,6 +36,7 @@ import {
     AccordionSummary,
     AccordionDetails,
     Chip,
+    Divider,
     Popover
 } from '@mui/material';
 import { 
@@ -65,6 +67,8 @@ import { DEFAULT_SCHEDULE_CODES, ensureSchedules } from '../utils/scheduleConfig
 import EditSchedulesModal from '../components/modals/EditSchedulesModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
+import SchoolLevelGradesEditor from '../components/school/SchoolLevelGradesEditor';
+import NivelesEducativosModal from '../components/school/NivelesEducativosModal';
 import { getCicloEscolarOptionLabel, getCiclosEscolares } from '../services/cicloEscolarService';
 import { clearStoredSchoolContext } from '../utils/schoolContext';
 
@@ -201,6 +205,8 @@ const CicloEscolarSelectionPage = () => {
     // Estados para edición de colegio
     const [schoolSchedules, setSchoolSchedules] = useState([]);
     const [schoolGrades, setSchoolGrades] = useState([]);
+    // Mapeo { "<educationLevelId>": ["1ero","2do"] } del colegio en edición.
+    const [schoolLevelGrades, setSchoolLevelGrades] = useState({});
     const [newGradeName, setNewGradeName] = useState('');
     const [schoolRouteNumbers, setSchoolRouteNumbers] = useState([]);
     const [schoolRouteSchedules, setSchoolRouteSchedules] = useState([]);
@@ -220,6 +226,8 @@ const CicloEscolarSelectionPage = () => {
     const [quickClearing, setQuickClearing] = useState(false);
     const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openSendNotifModal, setOpenSendNotifModal] = useState(false);
+    const [extraOptionsAnchorEl, setExtraOptionsAnchorEl] = useState(null);
+    const [openNivelesModal, setOpenNivelesModal] = useState(false);
     // Nombre legible del período actual (ej: Enero 2026)
     const monthNamesEs = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const currentMonthIndex = new Date().getMonth();
@@ -239,6 +247,13 @@ const CicloEscolarSelectionPage = () => {
     // Estados para el popover de grados
     const [anchorEl, setAnchorEl] = useState(null);
     const [popoverGrades, setPopoverGrades] = useState([]);
+
+    // schoolGrades convive como array de objetos { name } y de strings.
+    // El mapeo de niveles trabaja siempre con los nombres.
+    const normalizedSchoolGradeNames = (Array.isArray(schoolGrades) ? schoolGrades : [])
+        .map((grade) => (grade && typeof grade === 'object' ? String(grade.name || '') : String(grade ?? '')))
+        .map((grade) => grade.trim())
+        .filter(Boolean);
 
     const selectedCicloEscolar = ciclosEscolares.find((cicloEscolar) => String(cicloEscolar.id) === String(selectedCicloEscolarId));
     const defaultCicloEscolar = ciclosEscolares.find((cicloEscolar) => cicloEscolar.predeterminado && cicloEscolar.activo) || ciclosEscolares.find((cicloEscolar) => cicloEscolar.predeterminado) || null;
@@ -277,6 +292,21 @@ const CicloEscolarSelectionPage = () => {
             }
         }
         return [];
+    };
+
+    // Los campos JSON (p. ej. levelGrades) a veces llegan como objeto y a veces
+    // como string JSON según la capa que sirva el colegio.
+    const parseObjectField = (value) => {
+        if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+        if (typeof value === 'string' && value.trim()) {
+            try {
+                const parsed = JSON.parse(value);
+                return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+            } catch {
+                return {};
+            }
+        }
+        return {};
     };
 
     const buildEmptySchoolDraft = () => ({
@@ -367,6 +397,7 @@ const CicloEscolarSelectionPage = () => {
         } : buildEmptySchoolDraft());
         setSchoolSchedules(schedules);
         setSchoolGrades(parseArrayField(source.grades));
+        setSchoolLevelGrades(parseObjectField(source.levelGrades));
         setSchoolExtraFields(parseArrayField(source.extraEnrollmentFields));
         setSchoolRouteNumbers(routeNumbers);
         setSchoolRouteSchedules(sourceSchool ? normalizeRouteSchedulesFromSchool(source, routeNumbers) : []);
@@ -619,6 +650,7 @@ const CicloEscolarSelectionPage = () => {
             }
         }
         setSchoolGrades(parsedGrades);
+        setSchoolLevelGrades(parseObjectField(school.levelGrades));
 
         let parsedRouteNumbers = [];
         if (Array.isArray(school.routeNumbers)) {
@@ -818,6 +850,7 @@ const CicloEscolarSelectionPage = () => {
         setSelectedPrefillSchoolId('');
         setSchoolSchedules([]);
         setSchoolGrades([]);
+        setSchoolLevelGrades({});
         setSchoolExtraFields([]);
         setSchoolRouteNumbers([]);
         setSchoolRouteSchedules([]);
@@ -963,10 +996,32 @@ const CicloEscolarSelectionPage = () => {
         setSchoolGrades((prev) => [...prev, { name: '' }]);
     };
 
+    const pruneLevelGradesTo = (validNames) => {
+        const allowed = new Set(validNames);
+        setSchoolLevelGrades((prev) => {
+            let changed = false;
+            const next = {};
+            for (const [levelId, gradeList] of Object.entries(prev || {})) {
+                const kept = (gradeList || []).filter((name) => allowed.has(name));
+                if (kept.length !== (gradeList || []).length) changed = true;
+                if (kept.length > 0) next[levelId] = kept;
+                else if ((gradeList || []).length > 0) changed = true;
+            }
+            return changed ? next : prev;
+        });
+    };
+
     const handleRemoveGrade = (gradeIndex) => {
         setSchoolGrades((prev) => {
             const newArr = [...prev];
             newArr.splice(gradeIndex, 1);
+            // Quita de los niveles el grado que acaba de desaparecer.
+            pruneLevelGradesTo(
+                newArr
+                    .map((g) => (g && typeof g === 'object' ? String(g.name || '') : String(g ?? '')))
+                    .map((g) => g.trim())
+                    .filter(Boolean)
+            );
             return newArr;
         });
     };
@@ -1177,6 +1232,7 @@ const CicloEscolarSelectionPage = () => {
                 whatsappLink: selectedSchool.whatsappLink || null,
                 schedules: normalizedSchedules,
                 grades: schoolGrades,
+                levelGrades: schoolLevelGrades,
                 transportFeeComplete: Number(selectedSchool.transportFeeComplete) || 0.0,
                 transportFeeHalf: Number(selectedSchool.transportFeeHalf) || 0.0,
                 duePaymentDay: Number(selectedSchool.duePaymentDay) || 1,
@@ -1412,18 +1468,50 @@ const CicloEscolarSelectionPage = () => {
     return (
         <PageContainer>
             <HeaderCard>
-                <CardContent>
+                <CardContent sx={{ position: 'relative' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 } }}>
                         <CalendarToday sx={{ fontSize: { xs: 36, sm: 40 }, flexShrink: 0 }} />
                         <Box>
                             <Typography variant="h4" component="h1" gutterBottom sx={{ fontSize: { xs: '2rem', sm: '2.125rem' }, lineHeight: 1.2 }}>
-                                Gestión de Transportes Escolares
+                                Gestión de Colegios
                             </Typography>
                             <Typography variant="h6" sx={{ opacity: 0.9, fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
                                 Selecciona el ciclo escolar y colegio para gestionar
                             </Typography>
                         </Box>
                     </Box>
+                    <PermissionGuard permission="niveles-listar">
+                        <Box sx={{ position: 'absolute', right: 16, bottom: 12 }}>
+                            <Button
+                                size="small"
+                                variant="contained"
+                                onClick={(e) => setExtraOptionsAnchorEl(e.currentTarget)}
+                                sx={{
+                                    backgroundColor: 'rgba(255,255,255,0.18)',
+                                    color: 'white',
+                                    fontWeight: 700,
+                                    boxShadow: '0 1px 6px rgba(0,0,0,0.12)',
+                                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.28)', boxShadow: '0 3px 10px rgba(0,0,0,0.15)' },
+                                }}
+                            >
+                                Opciones Extra
+                            </Button>
+                            <Menu
+                                anchorEl={extraOptionsAnchorEl}
+                                open={Boolean(extraOptionsAnchorEl)}
+                                onClose={() => setExtraOptionsAnchorEl(null)}
+                            >
+                                <MenuItem
+                                    onClick={() => {
+                                        setOpenNivelesModal(true);
+                                        setExtraOptionsAnchorEl(null);
+                                    }}
+                                >
+                                    Niveles Educativos
+                                </MenuItem>
+                            </Menu>
+                        </Box>
+                    </PermissionGuard>
                 </CardContent>
             </HeaderCard>
 
@@ -2226,15 +2314,15 @@ const CicloEscolarSelectionPage = () => {
                         </AccordionDetails>
                     </StyledAccordion>
 
-                    {/* Sección: Grados */}
-                    <StyledAccordion 
-                        expanded={expandedPanels.grades} 
+                    {/* Sección: Grados y Niveles */}
+                    <StyledAccordion
+                        expanded={expandedPanels.grades}
                         onChange={handleAccordionChange('grades')}
                         TransitionProps={{ unmountOnExit: false }}
                     >
                         <StyledAccordionSummary expandIcon={<ExpandMore />}>
                             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                🎓 Grados del Colegio
+                                🎓 Grados y Niveles del Colegio
                             </Typography>
                         </StyledAccordionSummary>
                         <AccordionDetails>
@@ -2306,6 +2394,17 @@ const CicloEscolarSelectionPage = () => {
                                             <Typography variant="body2" color="text.secondary">No hay grados definidos.</Typography>
                                         )}
                                     </Box>
+                                </Box>
+
+                                <Divider sx={{ my: 1 }} />
+
+                                <Box>
+                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>Niveles educativos:</Typography>
+                                    <SchoolLevelGradesEditor
+                                        grades={normalizedSchoolGradeNames}
+                                        value={schoolLevelGrades}
+                                        onChange={setSchoolLevelGrades}
+                                    />
                                 </Box>
                             </Box>
                         </AccordionDetails>
@@ -2783,16 +2882,23 @@ const CicloEscolarSelectionPage = () => {
             <SendNotificationModal
                 open={openSendNotifModal}
                 onClose={() => setOpenSendNotifModal(false)}
-                schools={schools}
+                schools={Array.isArray(schools) ? schools : []}
+                cicloEscolarId={selectedCicloEscolarId || null}
             />
 
             <CircularMasivaModal
                 open={openCircularModal}
                 onClose={() => setOpenCircularModal(false)}
                 schools={Array.isArray(schools) ? schools : []}
+                cicloEscolarId={selectedCicloEscolarId || null}
                 onSuccess={() => {
                     setSnackbar({ open: true, message: 'Circular enviada exitosamente', severity: 'success' });
                 }}
+            />
+
+            <NivelesEducativosModal
+                open={openNivelesModal}
+                onClose={() => setOpenNivelesModal(false)}
             />
         </PageContainer>
     );
