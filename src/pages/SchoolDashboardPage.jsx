@@ -41,7 +41,8 @@ import {
     Payment as PaymentIcon,
     Policy as ProtocolIcon,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    PersonSearch
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
@@ -50,6 +51,7 @@ import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import RouteStudentsModal from '../components/modals/RouteStudentsModal';
+import SchoolStudentSearchModal from '../components/modals/SchoolStudentSearchModal';
 import { generateRouteOccupancyPDF } from '../utils/pdfExport';
 import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, getScheduleColor, getScheduleBgColor } from '../utils/scheduleConfig';
 import PermissionGuard from '../components/PermissionGuard';
@@ -115,6 +117,9 @@ const SchoolDashboardPage = () => {
     // Estado para el modal de estudiantes por ruta
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedRoute, setSelectedRoute] = useState({ routeNumber: '', scheduleCode: '' });
+
+    // Estado para el modal de búsqueda de estudiantes por parada
+    const [studentSearchOpen, setStudentSearchOpen] = useState(false);
     
     // Estado para el filtro de día (default Lunes)
     const [selectedDay, setSelectedDay] = useState('monday');
@@ -537,6 +542,16 @@ const SchoolDashboardPage = () => {
                                 >
                                     Exportar PDF (Todos los días)
                                 </Button>
+                                <PermissionGuard permission="rutas-ver-estudiantes">
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        startIcon={<PersonSearch />}
+                                        onClick={() => setStudentSearchOpen(true)}
+                                    >
+                                        Buscar por estudiante
+                                    </Button>
+                                </PermissionGuard>
                                 {selectedDay !== 'monday' && (
                                     <Chip 
                                         label={`Filtro: ${getDayLabel(selectedDay)}`}
@@ -1037,6 +1052,14 @@ const SchoolDashboardPage = () => {
                 schoolId={schoolId}
                 cicloEscolarId={currentCicloEscolarId}
                 selectedDay={selectedDay}
+            />
+
+            {/* Modal para buscar estudiantes por parada / nombre / apellido */}
+            <SchoolStudentSearchModal
+                open={studentSearchOpen}
+                onClose={() => setStudentSearchOpen(false)}
+                schoolId={schoolId}
+                cicloEscolarId={currentCicloEscolarId}
             />
 
             <Snackbar
