@@ -70,7 +70,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
         // Populate from initialData when dialog opens
         setSchoolId(initialData?.schoolId || '');
         setFamilyLastName(initialData?.familyLastName || '');
-        setServiceAddress(initialData?.serviceAddress || '');
+        setServiceAddress(initialData?.mainAddress || initialData?.serviceAddress || '');
         setZoneOrSector(initialData?.zoneOrSector || '');
         setRouteType(initialData?.routeType || 'Completa');
         setStudentsCount(initialData?.studentsCount || 1);
@@ -167,6 +167,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
 
         const payload = {
             familyLastName,
+            mainAddress: serviceAddress,
             serviceAddress,
             zoneOrSector,
             routeType,
