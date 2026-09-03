@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { Box, Typography, FormControl, InputLabel, Select, MenuItem, Button, IconButton, Chip, TextField, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import RotateRightIcon from '@mui/icons-material/RotateRight';
 import moment from 'moment';
 
 // ReceiptsPane: reusable Boletas UI used by Registrar Pago and ManagePaymentsModal
@@ -46,6 +47,7 @@ const ReceiptsPane = ({
     const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
     const [uploadPreviewFile, setUploadPreviewFile] = useState(null);
     const fileInputRef = useRef(null);
+    const [receiptRotation, setReceiptRotation] = useState(0);
 
     const openUploadDialog = () => {
         setUploadPreviewFile(null);
@@ -189,7 +191,7 @@ const ReceiptsPane = ({
                             {list.map(r => {
                                 const adminUploaded = isAdminUploadedReceipt(r);
                                 return (
-                                    <Box key={r.id} sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, gap: 1, p: 1, cursor: 'pointer', '&:hover': { boxShadow: 3 }, borderRadius: 1, background: selectedReceipt?.id === r.id ? '#eef2ff' : '#fafafa', flexDirection: { xs: 'column', sm: 'row' } }} onClick={async () => { setSelectedReceipt(r); setReceiptZoom(1); }}>
+                                    <Box key={r.id} sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, gap: 1, p: 1, cursor: 'pointer', '&:hover': { boxShadow: 3 }, borderRadius: 1, background: selectedReceipt?.id === r.id ? '#eef2ff' : '#fafafa', flexDirection: { xs: 'column', sm: 'row' } }} onClick={async () => { setSelectedReceipt(r); setReceiptZoom(1); setReceiptRotation(0); }}>
                                         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flexWrap: 'wrap' }}>
                                                 <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1 }}>{r.name || r.filename || 'Boleta'}</Typography>
@@ -201,7 +203,7 @@ const ReceiptsPane = ({
                                         </Box>
                                         <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
                                         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', justifyContent: { xs: 'flex-end', sm: 'center' }, flexWrap: 'wrap' }}>
-                                            {r.fileUrl && (<Button size="small" onClick={(e) => { e.stopPropagation(); setSelectedReceipt(r); setReceiptZoom(1); }}>Ver</Button>)}
+                                            {r.fileUrl && (<Button size="small" onClick={(e) => { e.stopPropagation(); setSelectedReceipt(r); setReceiptZoom(1); setReceiptRotation(0); }}>Ver</Button>)}
                                             {r.fileUrl && (<Button size="small" onClick={(e) => { e.stopPropagation(); openInNewTab(r.fileUrl); }}>Descargar</Button>)}
                                         </Box>
                                     </Box>
@@ -222,6 +224,17 @@ const ReceiptsPane = ({
                         <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0, flex: '1 1 180px', overflowWrap: 'anywhere' }}>{getReceiptDisplayDate(selectedReceipt) ? `Boleta - ${formatReceiptDate(getReceiptDisplayDate(selectedReceipt))}` : 'Boleta'}</Typography>
                         {isAdminUploadedReceipt(selectedReceipt) && <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ height: 20 }} />}
                         <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
+                        {selectedReceipt.fileUrl && (/\.(png|jpe?g|gif|webp|bmp)(\?|$)/i.test(selectedReceipt.fileUrl)) && (
+                            <IconButton
+                                size="small"
+                                onClick={() => setReceiptRotation(r => (r + 90) % 360)}
+                                aria-label="rotar boleta"
+                                color="primary"
+                            >
+                                <RotateRightIcon fontSize="small" />
+                            </IconButton>
+                        )}
+                        <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                             <Button size="small" onClick={() => setReceiptZoom(z => Math.max(0.25, Number((z - 0.25).toFixed(2))))}>-</Button>
                             <Typography variant="caption">{`${Math.round(receiptZoom * 100)}%`}</Typography>
@@ -232,7 +245,7 @@ const ReceiptsPane = ({
                     <Box sx={{ textAlign: 'center' }}>
                         {selectedReceipt.fileUrl && (/\.(png|jpe?g|gif|webp|bmp)(\?|$)/i.test(selectedReceipt.fileUrl)) && (
                             <Box sx={{ width: '100%', maxHeight: { xs: 'calc(100dvh - 260px)', sm: 450 }, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-                                <img src={selectedReceipt.fileUrl} alt="boleta" style={{ transform: `scale(${receiptZoom})`, transformOrigin: 'center top', display: 'block', maxWidth: '100%', height: 'auto' }} />
+                                <img src={selectedReceipt.fileUrl} alt="boleta" style={{ transform: `scale(${receiptZoom}) rotate(${receiptRotation}deg)`, transformOrigin: 'center center', display: 'block', maxWidth: '100%', height: 'auto' }} />
                             </Box>
                         )}
                         {selectedReceipt.fileUrl && (/\.pdf(\?|$)/i.test(selectedReceipt.fileUrl)) && (
