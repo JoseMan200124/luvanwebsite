@@ -7,10 +7,11 @@ import {
     Select
 } from '@mui/material';
 import { getCiclosEscolares, getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
+import { getSelectedCicloEscolarId } from '../utils/schoolContext';
 
 export const ALL_CYCLES_VALUE = 'all';
 
-export const getInitialCicloEscolarFilter = () => localStorage.getItem('selectedCicloEscolarId') || ALL_CYCLES_VALUE;
+export const getInitialCicloEscolarFilter = () => getSelectedCicloEscolarId() || ALL_CYCLES_VALUE;
 
 export const getCicloEscolarFilterParams = (value) => {
     if (!value || value === ALL_CYCLES_VALUE) {

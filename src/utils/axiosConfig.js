@@ -1,6 +1,7 @@
 // src/utils/axiosConfig.js
 /* global globalThis */
 import axios from 'axios';
+import { getSelectedCicloEscolarId, getSelectedSchoolId } from './schoolContext';
 
 const API_URL = 'https://api.transportesluvan.com/api';
 
@@ -42,13 +43,22 @@ const getRouteCicloEscolarId = () => {
     }
 };
 
+// Solo un id de ciclo entero positivo es válido para inyectar. Valores como
+// 'all' (filtro "todos los ciclos"), '' o 'undefined' harían que el backend
+// descarte el filtro de ciclo (normalizeInteger('all') === null) y lea/escriba
+// datos fuera del ciclo esperado.
+const normalizeCycleId = (raw) => {
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? String(parsed) : null;
+};
+
 const getCycleContext = () => {
     const token = localStorage.getItem('token');
     return {
         token,
         roleId: getTokenRoleId(token),
-        selectedCicloEscolarId: getRouteCicloEscolarId() || localStorage.getItem('selectedCicloEscolarId'),
-        selectedSchoolId: localStorage.getItem('selectedSchoolId')
+        selectedCicloEscolarId: getRouteCicloEscolarId() || normalizeCycleId(getSelectedCicloEscolarId()),
+        selectedSchoolId: getSelectedSchoolId()
     };
 };
 
