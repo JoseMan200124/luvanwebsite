@@ -31,6 +31,7 @@ import {
     updateCicloEscolar
 } from '../services/cicloEscolarService';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
+import { setSelectedCicloEscolarId } from '../utils/schoolContext';
 
 const emptyForm = {
     anio: ''
@@ -134,7 +135,7 @@ const CiclosEscolaresPage = () => {
         try {
             const data = await setDefaultCicloEscolar(cicloEscolar.id);
             const defaultCycle = data.cicloEscolar || cicloEscolar;
-            localStorage.setItem('selectedCicloEscolarId', String(defaultCycle.id));
+            setSelectedCicloEscolarId(defaultCycle.id);
             setSnackbar({ open: true, message: 'Ciclo escolar predeterminado actualizado', severity: 'success' });
             fetchCiclosEscolares();
         } catch (error) {

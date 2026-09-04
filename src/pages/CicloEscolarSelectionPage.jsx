@@ -70,7 +70,11 @@ import SendNotificationModal from '../components/SendNotificationModal';
 import SchoolLevelGradesEditor from '../components/school/SchoolLevelGradesEditor';
 import NivelesEducativosModal from '../components/school/NivelesEducativosModal';
 import { getCicloEscolarOptionLabel, getCiclosEscolares } from '../services/cicloEscolarService';
-import { clearStoredSchoolContext } from '../utils/schoolContext';
+import {
+    clearStoredSchoolContext,
+    getSelectedCicloEscolarId,
+    setSelectedCicloEscolarId as persistSelectedCicloEscolarId,
+} from '../utils/schoolContext';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -175,7 +179,7 @@ const CicloEscolarSelectionPage = () => {
 
     const [schools, setSchools] = useState([]);
     const [ciclosEscolares, setCiclosEscolares] = useState([]);
-    const [selectedCicloEscolarId, setSelectedCicloEscolarId] = useState(() => localStorage.getItem('selectedCicloEscolarId') || '');
+    const [selectedCicloEscolarId, setSelectedCicloEscolarId] = useState(() => getSelectedCicloEscolarId() || '');
     const [cyclesLoading, setCyclesLoading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -425,7 +429,7 @@ const CicloEscolarSelectionPage = () => {
 
             if (ciclos.length === 0) return;
 
-            const storedId = localStorage.getItem('selectedCicloEscolarId');
+            const storedId = getSelectedCicloEscolarId();
             const selectableCycles = ciclos.filter((cicloEscolar) => cicloEscolar.activo);
             const cycleOptions = selectableCycles.length > 0 ? selectableCycles : ciclos;
             const storedCycle = storedId ? cycleOptions.find((cicloEscolar) => String(cicloEscolar.id) === String(storedId)) : null;
@@ -434,7 +438,7 @@ const CicloEscolarSelectionPage = () => {
 
             if (nextCycle?.id) {
                 setSelectedCicloEscolarId(String(nextCycle.id));
-                localStorage.setItem('selectedCicloEscolarId', String(nextCycle.id));
+                persistSelectedCicloEscolarId(nextCycle.id);
             }
         } catch (error) {
             console.error('Error fetching ciclos escolares:', error);
@@ -556,7 +560,7 @@ const CicloEscolarSelectionPage = () => {
     const handleCycleChange = (event) => {
         const nextCicloEscolarId = event.target.value;
         setSelectedCicloEscolarId(nextCicloEscolarId);
-        localStorage.setItem('selectedCicloEscolarId', String(nextCicloEscolarId));
+        persistSelectedCicloEscolarId(nextCicloEscolarId);
         clearStoredSchoolContext({ preserveCycle: true });
     };
 

@@ -46,6 +46,7 @@ import tw from 'twin.macro';
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE } from '../components/CicloEscolarFilter';
 import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
+import { getSelectedCicloEscolarId, setSelectedCicloEscolarId } from '../utils/schoolContext';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -102,7 +103,7 @@ const CircularHistoryPage = () => {
   const [q, setQ] = useState('');
   const [schools, setSchools] = useState([]);
   const [selectedSchool, setSelectedSchool] = useState(ALL_CLIENTS_VALUE);
-  const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(() => localStorage.getItem('selectedCicloEscolarId') || ALL_CYCLES_VALUE);
+  const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(() => getSelectedCicloEscolarId() || ALL_CYCLES_VALUE);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [sortBy, setSortBy] = useState('sentAt');
@@ -232,7 +233,7 @@ const CircularHistoryPage = () => {
 
   const handleCycleChange = (value) => {
     setSelectedCicloEscolar(value);
-    localStorage.setItem('selectedCicloEscolarId', String(value || ALL_CYCLES_VALUE));
+    setSelectedCicloEscolarId(value || ALL_CYCLES_VALUE);
     setPage(0);
   };
 

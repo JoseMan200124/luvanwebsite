@@ -10,6 +10,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import CloseIcon from '@mui/icons-material/Close';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import RotateRightIcon from '@mui/icons-material/RotateRight';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import api from '../../utils/axiosConfig';
 
@@ -198,6 +199,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     const [receipts, setReceipts] = useState([]);
     const [receiptsLoading, setReceiptsLoading] = useState(false);
     const [selectedReceipt, setSelectedReceipt] = useState(null);
+    const [receiptRotation, setReceiptRotation] = useState(0);
 
     // Colegio
     const [schoolOpen, setSchoolOpen] = useState(false);
@@ -1363,7 +1365,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                         <TableCell>{r.amount ?? '—'}</TableCell>
                                         <TableCell sx={{ fontSize: 11, maxWidth: 200 }}>{r.notes || '—'}</TableCell>
                                         <TableCell>
-                                            <Button size="small" onClick={() => setSelectedReceipt(r)}>Ver</Button>
+                                            <Button size="small" onClick={() => { setSelectedReceipt(r); setReceiptRotation(0); }}>Ver</Button>
                                             {r.fileUrl && <Button size="small" href={r.fileUrl} target="_blank" rel="noopener noreferrer">Abrir</Button>}
                                         </TableCell>
                                     </TableRow>
@@ -1373,10 +1375,22 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                     )}
                     {selectedReceipt && (
                         <Box>
-                            <Button size="small" onClick={() => setSelectedReceipt(null)} sx={{ mb: 1 }}>← Volver al listado</Button>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                                <Button size="small" onClick={() => setSelectedReceipt(null)}>← Volver al listado</Button>
+                                {selectedReceipt.fileUrl && /\.(png|jpe?g|gif|webp)$/i.test(selectedReceipt.fileUrl) && (
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => setReceiptRotation(r => (r + 90) % 360)}
+                                        aria-label="rotar boleta"
+                                        color="primary"
+                                    >
+                                        <RotateRightIcon fontSize="small" />
+                                    </IconButton>
+                                )}
+                            </Box>
                             <Box sx={{ textAlign: 'center' }}>
                                 {selectedReceipt.fileUrl && /\.(png|jpe?g|gif|webp)$/i.test(selectedReceipt.fileUrl) ? (
-                                    <img src={selectedReceipt.fileUrl} alt={selectedReceipt.fileName || 'Boleta'} style={{ maxWidth: '100%', maxHeight: 600 }} />
+                                    <img src={selectedReceipt.fileUrl} alt={selectedReceipt.fileName || 'Boleta'} style={{ maxWidth: '100%', maxHeight: 600, transform: `rotate(${receiptRotation}deg)` }} />
                                 ) : selectedReceipt.fileUrl ? (
                                     <iframe title="boleta" src={selectedReceipt.fileUrl} style={{ width: '100%', height: 600, border: 0 }} />
                                 ) : (

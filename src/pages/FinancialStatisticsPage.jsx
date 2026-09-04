@@ -104,6 +104,7 @@ const METRIC_GROUPS = [
         columns: [
             { key: 'ingresoTarifa', label: 'Ingreso por Tarifa', type: 'money', basis: true },
             { key: 'ingresoPorMora', label: 'Ingreso por Mora', type: 'money', basis: true },
+            { key: 'ingresoInscripcion', label: 'Ingreso por Inscripción', type: 'money' },
             { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true },
             { key: 'tendencia', label: 'Tendencia', type: 'trend', basis: true }
         ]
@@ -113,6 +114,7 @@ const METRIC_GROUPS = [
         columns: [
             { key: 'totalPendiente', label: 'Tarifa Pendiente', type: 'money' },
             { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money' },
+            { key: 'inscripcionPendiente', label: 'Inscripción Pendiente', type: 'money' },
             { key: 'creditoAcumulado', label: 'Crédito a favor Acumulado', type: 'money' }
         ]
     },
@@ -183,8 +185,12 @@ const getMetricTooltip = (key) => {
             );
             break;
         case 'ingresoTotal':
-            primary = "Total cobrado en el rango seleccionado: tarifa más mora.";
-            secondary = "Suma de Ingreso por Tarifa e Ingreso por Mora en la base activa (Caja o Devengado). No incluye pagos extraordinarios.";
+            primary = "Total cobrado en el rango seleccionado: tarifa, mora e inscripción.";
+            secondary = "Suma de Ingreso por Tarifa e Ingreso por Mora en la base activa (Caja o Devengado), más el Ingreso por Inscripción. La inscripción no tiene mes de devengo, así que la misma cifra de caja se suma en ambas bases. No incluye pagos extraordinarios.";
+            break;
+        case 'ingresoInscripcion':
+            primary = "Total cobrado por cargos de inscripción del ciclo, con fecha de pago dentro del rango seleccionado.";
+            secondary = "La inscripción es un cargo único del ciclo escolar, no una cuota mensual: no tiene mes de devengo, así que esta cifra es siempre base Caja (fecha real del abono) y no cambia entre Caja y Devengado. No incluye exoneraciones: un descuento extraordinario baja el pendiente pero no es dinero que entró.";
             break;
         case 'ingresoPorMora':
             primary = "Total cobrado por concepto de mora en el período seleccionado.";
@@ -205,6 +211,10 @@ const getMetricTooltip = (key) => {
         case 'moraPendiente':
             primary = "Suma de todas las penalidades por mora sin pagar de las familias que tienen un período facturado en el mes seleccionado.";
             secondary = "Corresponde a la mora generada específicamente en este período, no incluye mora de meses anteriores.";
+            break;
+        case 'inscripcionPendiente':
+            primary = "Saldo de inscripción sin cobrar al cierre del rango seleccionado.";
+            secondary = "Se calcula como los cargos de inscripción existentes a esa fecha, menos lo abonado y lo exonerado hasta esa fecha. Igual que el Crédito a favor Acumulado, es un saldo cortado al último día del rango (o a hoy, lo que ocurra primero), no un movimiento del período.";
             break;
         case 'creditoAcumulado':
             primary = "Saldo a favor total de todas las familias del ciclo al cierre del período seleccionado.";
