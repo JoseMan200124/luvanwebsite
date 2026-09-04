@@ -1,6 +1,7 @@
 // src/utils/axiosConfig.js
 /* global globalThis */
 import axios from 'axios';
+import { getSelectedCicloEscolarId, getSelectedSchoolId } from './schoolContext';
 
 const API_URL = 'https://api.transportesluvan.com/api';
 
@@ -24,13 +25,40 @@ const getTokenRoleId = (token) => {
     }
 };
 
+// Cuando el usuario está en una página cuyo ciclo escolar viene fijado en la ruta
+// (/admin/escuelas/ciclo/:cicloEscolarId/*), ese ciclo es la fuente autoritativa
+// para todas sus llamadas: gana sobre el ciclo "activo" global del localStorage.
+// Evita que, p. ej. al abrir una boleta de un colegio de otro ciclo desde una
+// notificación, las peticiones queden filtradas por el ciclo que el admin tenía
+// seleccionado. Auto-revierte al salir de la ruta; un cicloEscolarId explícito en
+// params/body/url sigue ganando vía hasExplicitCycleOverride.
+const CICLO_ROUTE_RE = /\/escuelas\/ciclo\/(\d+)(?:\/|$)/;
+
+const getRouteCicloEscolarId = () => {
+    try {
+        const match = CICLO_ROUTE_RE.exec(globalThis.location?.pathname || '');
+        return match ? match[1] : null;
+    } catch {
+        return null;
+    }
+};
+
+// Solo un id de ciclo entero positivo es válido para inyectar. Valores como
+// 'all' (filtro "todos los ciclos"), '' o 'undefined' harían que el backend
+// descarte el filtro de ciclo (normalizeInteger('all') === null) y lea/escriba
+// datos fuera del ciclo esperado.
+const normalizeCycleId = (raw) => {
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? String(parsed) : null;
+};
+
 const getCycleContext = () => {
     const token = localStorage.getItem('token');
     return {
         token,
         roleId: getTokenRoleId(token),
-        selectedCicloEscolarId: localStorage.getItem('selectedCicloEscolarId'),
-        selectedSchoolId: localStorage.getItem('selectedSchoolId')
+        selectedCicloEscolarId: getRouteCicloEscolarId() || normalizeCycleId(getSelectedCicloEscolarId()),
+        selectedSchoolId: getSelectedSchoolId()
     };
 };
 

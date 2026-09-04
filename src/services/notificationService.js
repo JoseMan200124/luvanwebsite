@@ -3,7 +3,7 @@ import api from '../utils/axiosConfig';
 
 /**
  * Send a manual push notification to a targeted audience.
- * @param {{ title: string, message: string, targetingCriteria: object, sendPush?: boolean }} payload
+ * @param {{ title: string, message: string, audience: object, cicloEscolarId?: number }} payload
  */
 export const sendManualNotification = async (payload) => {
     const res = await api.post('/notifications', {

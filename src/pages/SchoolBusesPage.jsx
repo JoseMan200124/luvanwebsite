@@ -154,11 +154,22 @@ function ScheduleThresholdsDialog({
                                 )}
                             </Box>
                             {isAM ? (
-                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                                     <TextField
                                         type="time"
                                         size="small"
-                                        fullWidth
+                                        sx={{ flex: '1 1 45%' }}
+                                        label="Hora máxima para abordar la unidad"
+                                        helperText="Avisa si a esta hora la monitora aún no marca que abordó."
+                                        InputLabelProps={{ shrink: true }}
+                                        inputProps={{ step: 300 }}
+                                        value={entry.boardingTime || ''}
+                                        onChange={(e) => onThresholdChange(code, 'boardingTime', e.target.value)}
+                                    />
+                                    <TextField
+                                        type="time"
+                                        size="small"
+                                        sx={{ flex: '1 1 45%' }}
                                         label="Hora de inicio (primera parada)"
                                         helperText="Avisa si a esta hora aún no marcan la primera parada."
                                         InputLabelProps={{ shrink: true }}
@@ -169,7 +180,7 @@ function ScheduleThresholdsDialog({
                                     <TextField
                                         type="time"
                                         size="small"
-                                        fullWidth
+                                        sx={{ flex: '1 1 45%' }}
                                         label="Hora de llegada al colegio"
                                         helperText="Avisa si a esta hora aún no marcan la llegada."
                                         InputLabelProps={{ shrink: true }}
@@ -437,6 +448,7 @@ const SchoolBusesPage = () => {
                     const thresholdsForRoute = {};
                     (assignment.scheduleThresholds || []).forEach((threshold) => {
                         thresholdsForRoute[threshold.scheduleCode] = {
+                            boardingTime: threshold.boardingTime || '',
                             firstStopTime: threshold.firstStopTime || '',
                             schoolArrivalTime: threshold.schoolArrivalTime || '',
                             schoolDepartureMaxTime: threshold.schoolDepartureMaxTime || '',
@@ -581,12 +593,13 @@ const SchoolBusesPage = () => {
                 const entry = routeSchedules[code] || {};
                 const isAM = code === 'AM';
                 const hasValue = isAM
-                    ? Boolean(entry.firstStopTime || entry.schoolArrivalTime)
+                    ? Boolean(entry.boardingTime || entry.firstStopTime || entry.schoolArrivalTime)
                     : Boolean(entry.schoolDepartureMaxTime || entry.firstStopMarginMinutes);
                 if (!hasValue) return null;
 
                 return {
                     code,
+                    boardingTime: isAM ? (entry.boardingTime || null) : null,
                     firstStopTime: isAM ? (entry.firstStopTime || null) : null,
                     schoolArrivalTime: isAM ? (entry.schoolArrivalTime || null) : null,
                     schoolDepartureMaxTime: isAM ? null : (entry.schoolDepartureMaxTime || null),

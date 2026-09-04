@@ -22,6 +22,7 @@ import tw from 'twin.macro';
 import PropTypes from 'prop-types';
 import api from '../utils/axiosConfig';
 import { getSocket } from '../services/socketService';
+import { getSelectedCicloEscolarId } from '../utils/schoolContext';
 
 // Botón estilizado (twin.macro + styled-components)
 const NotificationIconButton = styled(IconButton)`
@@ -33,7 +34,7 @@ const NotificationIconButton = styled(IconButton)`
 
 const NotificationsMenu = ({ authToken }) => {
     const resolveNotificationCycle = (source = {}) => ({
-        cicloEscolarId: source?.payment?.cicloEscolarId || source?.receipt?.cicloEscolarId || source?.metadata?.client?.cicloEscolarId || source?.school?.cicloEscolarId || localStorage.getItem('selectedCicloEscolarId') || ''
+        cicloEscolarId: source?.payment?.cicloEscolarId || source?.receipt?.cicloEscolarId || source?.metadata?.client?.cicloEscolarId || source?.school?.cicloEscolarId || getSelectedCicloEscolarId() || ''
     });
 
     // Helper: ensure links to SchoolPaymentsPage use the cycle tied to the notification/payment.

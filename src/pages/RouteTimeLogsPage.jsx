@@ -374,6 +374,7 @@ const RouteTimeLogsPage = () => {
                 'Placa',
                 'Ruta',
                 'Salida Colegio',
+                'Abordaje',
                 'Primera Parada',
                 'Última Parada',
                 'Llegada Colegio',
@@ -406,6 +407,7 @@ const RouteTimeLogsPage = () => {
                     log.bus?.plate || '',
                     routeValue,
                     log.schoolDepartureTime ? moment(log.schoolDepartureTime).format('hh:mm A') : '',
+                    log.boardingTime ? moment(log.boardingTime).format('hh:mm A') : '',
                     log.firstStopTime ? moment(log.firstStopTime).format('hh:mm A') : '',
                     log.lastStopTime ? moment(log.lastStopTime).format('hh:mm A') : '',
                     log.schoolArrivalTime ? moment(log.schoolArrivalTime).format('hh:mm A') : '',
@@ -761,6 +763,15 @@ const RouteTimeLogsPage = () => {
                                                     Salida Colegio
                                                 </TableSortLabel>
                                             </TableCell>
+                                            <TableCell sortDirection={orderBy === 'boardingTime' ? order : false}>
+                                                <TableSortLabel
+                                                    active={orderBy === 'boardingTime'}
+                                                    direction={orderBy === 'boardingTime' ? order : 'asc'}
+                                                    onClick={() => handleSort('boardingTime')}
+                                                >
+                                                    Abordaje
+                                                </TableSortLabel>
+                                            </TableCell>
                                             <TableCell sortDirection={orderBy === 'firstStopTime' ? order : false}>
                                                 <TableSortLabel
                                                     active={orderBy === 'firstStopTime'}
@@ -838,6 +849,14 @@ const RouteTimeLogsPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div>
+                                                        <div>{formatTime(log.boardingTime)}</div>
+                                                        <Typography variant="caption" color="textSecondary">
+                                                            {formatDateOnly(log.boardingTime)}
+                                                        </Typography>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div>
                                                         <div>{formatTime(log.firstStopTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
                                                             {formatDateOnly(log.firstStopTime)}
@@ -884,7 +903,7 @@ const RouteTimeLogsPage = () => {
                                         ))}
                                         {timeLogs.length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={13} align="center">
+                                                <TableCell colSpan={14} align="center">
                                                     No se encontraron registros de tiempos de rutas
                                                 </TableCell>
                                             </TableRow>

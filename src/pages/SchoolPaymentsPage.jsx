@@ -3495,6 +3495,24 @@ const SchoolPaymentsPage = () => {
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Ingreso por Inscripción</strong></Typography>
+                                                        <Tooltip title={
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Total cobrado por cargos de inscripción del ciclo, con fecha de pago dentro del período seleccionado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"La inscripción es un cargo único del ciclo escolar, no una cuota mensual: no tiene mes de devengo, así que esta cifra es siempre base Caja (fecha real del abono) y no cambia entre Caja y Devengado. No incluye exoneraciones: un descuento extraordinario baja el pendiente pero no es dinero que entró."}
+                                                                </Box>
+                                                            </Box>
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#43a047', fontWeight: 600 }}>{formatMoneyOrNA(fin?.ingresoInscripcion)}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                                                         <Typography variant="body2" color="text.secondary"><strong>Tarifa Pendiente</strong></Typography>
                                                         <Tooltip title={
                                                             <Box>
@@ -3528,6 +3546,24 @@ const SchoolPaymentsPage = () => {
                                                         </Tooltip>
                                                     </Box>
                                                     <Typography variant="h6" sx={{ color: '#d32f2f', fontWeight: 600 }}>{formatMoneyOrNA(fin?.moraPendiente)}</Typography>
+                                                </Grid>
+                                                <Grid item xs={12} sm={6} md={3}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary"><strong>Inscripción Pendiente</strong></Typography>
+                                                        <Tooltip title={
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Saldo de inscripción sin cobrar al cierre del período seleccionado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Se calcula como los cargos de inscripción existentes a esa fecha, menos lo abonado y lo exonerado hasta esa fecha. Igual que el Crédito a favor Acumulado, es un saldo cortado al último día del período (o a hoy, lo que ocurra primero), no un movimiento del mes."}
+                                                                </Box>
+                                                            </Box>
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                    <Typography variant="h6" sx={{ color: '#e65100', fontWeight: 600 }}>{formatMoneyOrNA(fin?.inscripcionPendiente)}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
