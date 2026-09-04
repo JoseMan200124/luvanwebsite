@@ -126,6 +126,21 @@ ServiceStatusChip.propTypes = {
     isDeleted: PropTypes.bool,
 };
 
+
+export const EnrollmentStatusChip = ({ enrollmentStatus }) => {
+    if (enrollmentStatus === 'PAGADO') {
+        return <Chip label="Pagado" size="small" color="success" />;
+    }
+    if (enrollmentStatus === 'PENDIENTE' || enrollmentStatus === 'PARCIAL') {
+        return <Chip label="Pendiente" size="small" color="warning" />;
+    }
+    return <Chip label="Sin cargo" size="small" />;
+};
+
+EnrollmentStatusChip.propTypes = {
+    enrollmentStatus: PropTypes.string,
+};
+
 const PaymentActions = React.memo(({ payment, isDeleted, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick }) => (
     <Box sx={{ display: 'inline-flex', gap: 0.5, justifyContent: 'center' }}>
         <IconButton
@@ -166,7 +181,7 @@ PaymentActions.propTypes = {
     onManagePeriodsClick: PropTypes.func,
 };
 
-const PaymentRow = React.memo(({ payment, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick }) => {
+const PaymentRow = React.memo(({ payment, enrollmentStatus, showEnrollmentColumn, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick }) => {
     const view = getPaymentViewModel(payment);
 
     return (
@@ -190,6 +205,11 @@ const PaymentRow = React.memo(({ payment, onRegisterClick, onReceiptClick, onEma
             <TableCell align="center">
                 {view.requiresInvoice ? <CheckCircleIcon color="success" fontSize="small" /> : <CloseIcon color="error" fontSize="small" />}
             </TableCell>
+            {showEnrollmentColumn && (
+                <TableCell align="center">
+                    <EnrollmentStatusChip enrollmentStatus={enrollmentStatus} />
+                </TableCell>
+            )}
             <TableCell align="center">
                 <PaymentActions
                     payment={payment}
@@ -209,6 +229,8 @@ const PaymentRow = React.memo(({ payment, onRegisterClick, onReceiptClick, onEma
 
 PaymentRow.propTypes = {
     payment: paymentShape,
+    enrollmentStatus: PropTypes.string,
+    showEnrollmentColumn: PropTypes.bool,
     onRegisterClick: PropTypes.func,
     onReceiptClick: PropTypes.func,
     onEmailClick: PropTypes.func,
@@ -218,7 +240,7 @@ PaymentRow.propTypes = {
     onManagePeriodsClick: PropTypes.func,
 };
 
-const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick, order, orderBy, onRequestSort }) => {
+const PaymentTable = ({ payments, enrollmentStatusByUserId, showEnrollmentColumn = false, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick, order, orderBy, onRequestSort }) => {
     const paymentRows = Array.isArray(payments) ? payments : [];
 
     return (
@@ -298,6 +320,23 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
                                 Envío Factura
                             </TableSortLabel>
                         </TableCell>
+                        {showEnrollmentColumn && (
+                            <TableCell
+                                align="center"
+                                sx={{
+                                    '& .MuiTableSortLabel-root': { position: 'relative' },
+                                    '& .MuiTableSortLabel-icon': { position: 'absolute', left: '100%', ml: 0.5 }
+                                }}
+                            >
+                                <TableSortLabel
+                                    active={orderBy === 'enrollmentStatus'}
+                                    direction={orderBy === 'enrollmentStatus' ? order : 'asc'}
+                                    onClick={() => onRequestSort?.('enrollmentStatus')}
+                                >
+                                    Inscripción
+                                </TableSortLabel>
+                            </TableCell>
+                        )}
                         <TableCell align="center">Acciones</TableCell>
                     </TableRow>
                 </TableHead>
@@ -306,6 +345,8 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
                         <PaymentRow
                             key={payment.id}
                             payment={payment}
+                            enrollmentStatus={enrollmentStatusByUserId?.get(Number(payment.userId || payment.User?.id || 0))}
+                            showEnrollmentColumn={showEnrollmentColumn}
                             onRegisterClick={onRegisterClick}
                             onReceiptClick={onReceiptClick}
                             onEmailClick={onEmailClick}
@@ -323,6 +364,8 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
 
 PaymentTable.propTypes = {
     payments: PropTypes.array,
+    enrollmentStatusByUserId: PropTypes.instanceOf(Map),
+    showEnrollmentColumn: PropTypes.bool,
     onRegisterClick: PropTypes.func,
     onReceiptClick: PropTypes.func,
     onEmailClick: PropTypes.func,

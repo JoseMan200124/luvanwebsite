@@ -16,7 +16,8 @@ const PaymentFilters = ({
     showDeleted = false, 
     onShowDeletedChange = () => {},
     serviceStatus = '',
-    onServiceStatusChange = () => {}
+    onServiceStatusChange = () => {},
+    showEnrollmentOptions = false
 }) => {
     return (
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: { xs: 'stretch', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' }, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
@@ -30,6 +31,8 @@ const PaymentFilters = ({
                     <MenuItem value="PENDIENTE">Pendiente</MenuItem>
                     <MenuItem value="MORA">En Mora</MenuItem>
                     <MenuItem value="EN_PROCESO">En Proceso</MenuItem>
+                    {showEnrollmentOptions && <MenuItem value="INSCRIPCION_PENDIENTE">Inscripción pendiente</MenuItem>}
+                    {showEnrollmentOptions && <MenuItem value="INSCRIPCION_PAGADO">Inscripción pagada</MenuItem>}
                 </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 185 }, width: { xs: '100%', sm: 'auto' } }}>
@@ -82,6 +85,7 @@ PaymentFilters.propTypes = {
     onShowDeletedChange: PropTypes.func,
     serviceStatus: PropTypes.string,
     onServiceStatusChange: PropTypes.func,
+    showEnrollmentOptions: PropTypes.bool,
 };
 
 export default React.memo(PaymentFilters);

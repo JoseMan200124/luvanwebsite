@@ -123,6 +123,12 @@ const ENROLLMENT_STATUS_LABEL = {
     PAGADO: { label: 'Pagado', color: 'success' },
 };
 
+const isEnrollmentPaid = (status) => String(status || '').toUpperCase() === 'PAGADO';
+const enrollmentStatusToSheetText = (status) => {
+    if (!status) return 'NO APLICA';
+    return isEnrollmentPaid(status) ? 'PAGADO' : 'PENDIENTE';
+};
+
 const MONTH_LABELS = {
     '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio',
     '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
@@ -159,7 +165,9 @@ const SchoolPaymentsPage = () => {
     const [serviceStatusFilter, setServiceStatusFilter] = useState('');
     const [showInactive, setShowInactive] = useState(false);
     const [showDeleted, setShowDeleted] = useState(false);
-    const [countersView, setCountersView] = useState('payment'); // 'payment' o 'service'
+    const [countersView, setCountersView] = useState('payment'); // 'payment' | 'service' | 'enrollment'
+    const [enrollmentByUserId, setEnrollmentByUserId] = useState(() => new Map());
+    const [enrollmentAvailable, setEnrollmentAvailable] = useState(false);
     useEffect(() => {
         if (statusFilter) setShowDeleted(false);
     }, [statusFilter]);
@@ -230,6 +238,10 @@ const SchoolPaymentsPage = () => {
     const displayEnProceso = serverPaymentTotals?.EN_PROCESO ?? 0;
     const displayPendiente = serverPaymentTotals?.PENDIENTE ?? 0;
     const displayMora = serverPaymentTotals?.MORA ?? 0;
+    const enrollmentTotals = metricsData?.enrollment ?? null;
+    const displayInscripcionPagados = enrollmentTotals?.paidCount ?? null;
+    const displayInscripcionPendientes = enrollmentTotals?.pendingCount ?? null;
+    const formatCountOrNA = (value) => (value === null || value === undefined) ? 'N/A' : String(value);
 
     useEffect(() => {
         (async () => {
@@ -246,6 +258,8 @@ const SchoolPaymentsPage = () => {
             });
             // load all payments once (client-side pagination/filtering)
             await fetchAllPayments(statusFilter, search);
+            // Estado de inscripción del ciclo (columna, filtro, contadores y exports).
+            await fetchEnrollmentStatuses();
             // fetch analysis after payments loaded
             await fetchPaymentsAnalysis(schoolId);
             setLoading(false);
@@ -347,6 +361,28 @@ const SchoolPaymentsPage = () => {
 
     // Fetch all payments for the school in one request and store locally.
     // Tries a single large request first and falls back to iterative paging if backend enforces pagination.
+    // Cargos de inscripción del ciclo, en una sola llamada. El endpoint ya existía.
+    const fetchEnrollmentStatuses = useCallback(async () => {
+        if (!schoolId) return;
+        try {
+            const res = await api.get(`/enrollment-payments/schools/${schoolId}`, {
+                params: currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}
+            });
+            const list = res.data?.enrollmentPayments || [];
+            const map = new Map();
+            list.forEach((ep) => {
+                const uid = ep?.userId || ep?.user?.id;
+                if (uid) map.set(Number(uid), String(ep.status || '').toUpperCase());
+            });
+            setEnrollmentByUserId(map);
+            setEnrollmentAvailable(map.size > 0);
+        } catch (err) {
+            console.debug('[inscripcion] no se pudo cargar el estado de inscripción del colegio', err);
+            setEnrollmentByUserId(new Map());
+            setEnrollmentAvailable(false);
+        }
+    }, [schoolId, currentCicloEscolarId]);
+
     const fetchAllPayments = async (status = '', q = '') => {
         if (!schoolId) return;
         try {
@@ -563,6 +599,25 @@ const SchoolPaymentsPage = () => {
         setPage(0);
     }, [search, statusFilter, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter]);
 
+    // Estado de inscripción de la familia dueña de una fila de /payments.
+    const getEnrollmentStatusForPayment = useCallback((p) => {
+        const uid = Number(p?.userId || p?.User?.id || 0);
+        return uid ? enrollmentByUserId.get(uid) : undefined;
+    }, [enrollmentByUserId]);
+
+    // Si el filtro de inscripción quedó activo y la funcionalidad se apagó (cambio de colegio,
+    // permiso revocado), volver a "Todos" en vez de dejar la tabla vacía sin explicación.
+    useEffect(() => {
+        if (!enrollmentAvailable && String(statusFilter || '').startsWith('INSCRIPCION_')) {
+            setStatusFilter('');
+        }
+    }, [enrollmentAvailable, statusFilter]);
+
+    // Misma idea para la pestaña de contadores: si desaparece, no dejar el panel vacío.
+    useEffect(() => {
+        if (!enrollmentAvailable && countersView === 'enrollment') setCountersView('payment');
+    }, [enrollmentAvailable, countersView]);
+
     useEffect(() => {
         // Apply client-side filtering of the already-fetched dataset
         try {
@@ -583,7 +638,9 @@ const SchoolPaymentsPage = () => {
                 // o si el usuario filtró explícitamente por Estado del Servicio = INACTIVE.
                 if (isServiceInactive && !allowInactive) return false;
 
-                if (st) {
+                const isEnrollmentFilter = st === 'INSCRIPCION_PENDIENTE' || st === 'INSCRIPCION_PAGADO';
+
+                if (st && !isEnrollmentFilter) {
                     if (st === 'INACTIVO') {
                         // Filtrar solo familias con servicio inactivo
                         if (!isServiceInactive) return false;
@@ -613,6 +670,15 @@ const SchoolPaymentsPage = () => {
                     const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
                     if (!(defaultAllowed.includes(s) || (allowDeleted && s === 'ELIMINADO') || (allowInactive && isServiceInactive))) return false;
                 }
+
+                if (isEnrollmentFilter) {
+                    const enrollmentStatus = getEnrollmentStatusForPayment(p);
+                    if (!enrollmentStatus) return false;
+                    const paid = isEnrollmentPaid(enrollmentStatus);
+                    if (st === 'INSCRIPCION_PAGADO' && !paid) return false;
+                    if (st === 'INSCRIPCION_PENDIENTE' && paid) return false;
+                }
+
                 if (qq) {
                     const familyLast = (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toLowerCase();
                     if (!familyLast.includes(qq)) return false;
@@ -648,7 +714,7 @@ const SchoolPaymentsPage = () => {
             console.error('filtering error', e);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage]);
+    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage, getEnrollmentStatusForPayment]);
 
     const handleBack = () => {
         if (!currentCicloEscolarId) {
@@ -670,7 +736,7 @@ const SchoolPaymentsPage = () => {
 
     // Client-side pagination: slice the filtered array for the current page
     // Sorting helpers (parent-level)
-    const getValueForKey = (p, key) => {
+    const getValueForKey = useCallback((p, key) => {
         try {
             if (key === 'familyLastName') return (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toString().toLowerCase();
             if (key === 'students') return p.User?.FamilyDetail?.studentsCount || p.studentCount || 0;
@@ -689,12 +755,17 @@ const SchoolPaymentsPage = () => {
             if (key === 'invoice') return !!(p.User?.FamilyDetail?.requiresInvoice || p.requiresInvoice) ? 1 : 0;
             if (key === 'status') return (p.finalStatus || '').toString().toLowerCase();
             if (key === 'serviceStatus') return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
+            if (key === 'enrollmentStatus') {
+                const es = getEnrollmentStatusForPayment(p);
+                if (!es) return 'sin cargo';
+                return isEnrollmentPaid(es) ? 'pagado' : 'pendiente';
+            }
         } catch (e) {
             console.log('[SchoolPaymentsPage getValueKey]',e);
             return '';
         }
         return '';
-    };
+    }, [getEnrollmentStatusForPayment]);
 
     const stableSort = (array, comparator) => {
         const stabilized = array.map((el, index) => [el, index]);
@@ -716,7 +787,7 @@ const SchoolPaymentsPage = () => {
             return 0;
         };
         return stableSort(filtered.slice(), comparator);
-    }, [filtered, order, orderBy]);
+    }, [filtered, order, orderBy, getValueForKey]);
 
     // Keep pagination count tied to the current filtered dataset (toggles included)
     const paginationCount = Array.isArray(sortedFiltered) ? sortedFiltered.length : 0;
@@ -1554,6 +1625,9 @@ const SchoolPaymentsPage = () => {
                 ['Cuota mensual:', `Q${monthlyNet.toFixed(2)}`],
                 ['Estado de Pago:', String(paymentStatusLabel || '-')],
                 ['Estado del Servicio:', String(serviceStatusLabel || '-')],
+                ...(enrollmentPaymentForPdf
+                    ? [['Estado de Inscripción:', enrollmentStatusToSheetText(enrollmentPaymentForPdf.status)]]
+                    : []),
             ];
 
             let summaryTableFinalY = rightStartY;
@@ -2509,6 +2583,7 @@ const SchoolPaymentsPage = () => {
     const [exportFinalStatus, setExportFinalStatus] = useState('TODOS');
     // Service status selector for export (ACTIVE, PAUSED, SUSPENDED, INACTIVE, ALL)
     const [exportServiceStatus, setExportServiceStatus] = useState('TODOS');
+    const [exportEnrollmentStatus, setExportEnrollmentStatus] = useState('TODOS');
     // Año y mes seleccionables para exportación: se pueblan con los períodos (año-mes)
     // que realmente tienen registros de pago para este colegio/ciclo (un ciclo que
     // arranca a medio año deja pagos en dos años distintos, y no deben ofrecerse meses
@@ -2575,6 +2650,7 @@ const SchoolPaymentsPage = () => {
     const [openExportByStateDialog, setOpenExportByStateDialog] = useState(false);
     const [exportByStateValue, setExportByStateValue] = useState('TODOS');
     const [exportByStateServiceStatus, setExportByStateServiceStatus] = useState('TODOS');
+    const [exportByStateEnrollmentStatus, setExportByStateEnrollmentStatus] = useState('TODOS');
 
     // Download menu (unifies download actions to save space in the filters row)
     const [downloadMenuAnchorEl, setDownloadMenuAnchorEl] = useState(null);
@@ -2615,6 +2691,7 @@ const SchoolPaymentsPage = () => {
                 'Apellidos Familia',
                 'Estado de Pago',
                 'Estado del Servicio',
+                ...(enrollmentAvailable ? ['Estado de Inscripción'] : []),
                 'Fecha Pago',
                 'Crédito/Saldo',
                 'Tarifa',
@@ -2626,6 +2703,7 @@ const SchoolPaymentsPage = () => {
                 'Total pendiente de pago',
                 'Crédito/Saldo Disponible'
             ];
+            const firstNumericCol = headers.indexOf('Crédito/Saldo') + 1;
             sheet.addRow(headers);
 
             // historiesAll contains PaymentHistory rows for all matching payments.
@@ -2702,7 +2780,17 @@ const SchoolPaymentsPage = () => {
                 if (exportServiceStatus && exportServiceStatus !== 'TODOS') {
                     if (serviceStatus !== normalizeUpper(exportServiceStatus)) return;
                 }
-                
+
+                const enrollmentStatusRaw = historyUserId ? enrollmentByUserId.get(Number(historyUserId)) : undefined;
+                const enrollmentStatusText = enrollmentStatusToSheetText(enrollmentStatusRaw);
+
+                if (enrollmentAvailable && exportEnrollmentStatus && exportEnrollmentStatus !== 'TODOS') {
+                    if (!enrollmentStatusRaw) return;
+                    const paid = isEnrollmentPaid(enrollmentStatusRaw);
+                    if (normalizeUpper(exportEnrollmentStatus) === 'PAGADO' && !paid) return;
+                    if (normalizeUpper(exportEnrollmentStatus) === 'PENDIENTE' && paid) return;
+                }
+
                 const familyLast = h.familyLastName || h.familyLast || h.familyLastname || h.User?.FamilyDetail?.familyLastName || h.User?.familyLastName || '';
                 // Use only finalStatus (as required). Fallback to Payment.finalStatus if the snapshot doesn't include it.
                 const estado = h.finalStatus || (h.Payment && h.Payment.finalStatus) || '';
@@ -2772,8 +2860,13 @@ const SchoolPaymentsPage = () => {
                 const totalPendiente = Number(h.totalDueAfter ?? 0);
                 const creditoDisponible = Number(h.creditBalanceAfter ?? 0);
 
-                // Insert Estado de Pago y Estado del Servicio
-                sheet.addRow([familyLast, estadoPagoText, serviceStatusText, fecha, creditoSaldo, tarifa, descuentoFam, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible]);
+                sheet.addRow([
+                    familyLast,
+                    estadoPagoText,
+                    serviceStatusText,
+                    ...(enrollmentAvailable ? [enrollmentStatusText] : []),
+                    fecha, creditoSaldo, tarifa, descuentoFam, descExtra, mora, totalAPagar, monto, totalPendiente, creditoDisponible
+                ]);
             });
 
             if (sheet.rowCount <= 1) {
@@ -2798,8 +2891,7 @@ const SchoolPaymentsPage = () => {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
                     // center by default for text/date columns
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    // Numeric columns start at column 5 now (Crédito/Saldo). Right-align and format numbers for columns >= 5
-                    if (colNumber >= 5) {
+                    if (colNumber >= firstNumericCol) {
                         cell.numFmt = '0.00';
                         cell.alignment = { horizontal: 'right', vertical: 'middle' };
                     }
@@ -2868,7 +2960,7 @@ const SchoolPaymentsPage = () => {
             console.error('handleDownloadPaymentsByStatus', err);
             setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
         }
-    }, [schoolId, buildPaymentParams, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus]);
+    }, [schoolId, buildPaymentParams, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus, exportEnrollmentStatus, enrollmentAvailable, enrollmentByUserId]);
 
     // Export payments filtered by estado using client-side dataset (paymentsAll)
     const handleDownloadByState = useCallback(async (estado) => {
@@ -2879,6 +2971,9 @@ const SchoolPaymentsPage = () => {
             const estadoNorm = estado ? String(estado).toUpperCase().trim() : 'TODOS';
             const arr = Array.isArray(paymentsAll) ? paymentsAll : [];
             const serviceFilter = String(exportByStateServiceStatus || 'TODOS').toUpperCase().trim();
+            const enrollmentFilter = enrollmentAvailable
+                ? String(exportByStateEnrollmentStatus || 'TODOS').toUpperCase().trim()
+                : 'TODOS';
 
             const toServiceText = (stRaw) => {
                 const st = String(stRaw || '').toUpperCase().trim();
@@ -2907,6 +3002,15 @@ const SchoolPaymentsPage = () => {
                     if (paymentServiceStatus !== serviceFilter) return false;
                 }
 
+                // Estado de inscripción del ciclo: eje independiente, igual que el del servicio.
+                if (enrollmentFilter !== 'TODOS') {
+                    const enrollmentStatus = getEnrollmentStatusForPayment(p);
+                    if (!enrollmentStatus) return false;
+                    const paid = isEnrollmentPaid(enrollmentStatus);
+                    if (enrollmentFilter === 'PAGADO' && !paid) return false;
+                    if (enrollmentFilter === 'PENDIENTE' && paid) return false;
+                }
+
                 const s = (p.finalStatus || '').toString().toUpperCase();
 
                 if (!estadoNorm || estadoNorm === 'TODOS') return true;
@@ -2923,6 +3027,7 @@ const SchoolPaymentsPage = () => {
             const sheet = workbook.addWorksheet('Datos');
 
             const headers = ['Estado del Servicio','Estado de Pago','Apellidos Familia','Débito Automático','Cant. Estudiantes','Tipo Ruta','Fecha Último Pago','Descuento','Envío Factura'];
+            if (enrollmentAvailable) headers.push('Inscripción');
             sheet.addRow(headers);
 
             filteredRows.forEach(p => {
@@ -2941,7 +3046,9 @@ const SchoolPaymentsPage = () => {
                 const invoiceStr = invoiceSent ? 'Sí' : 'No';
 
                 // Add row: for Fecha Último Pago we add a Date object (or empty string if missing) so Excel recognizes it as date
-                sheet.addRow([serviceText, estadoVal, familyLast, autoStr, studentsInt, routeType, lastPaymentDate || '', discount, invoiceStr]);
+                const rowValues = [serviceText, estadoVal, familyLast, autoStr, studentsInt, routeType, lastPaymentDate || '', discount, invoiceStr];
+                if (enrollmentAvailable) rowValues.push(enrollmentStatusToSheetText(getEnrollmentStatusForPayment(p)));
+                sheet.addRow(rowValues);
             });
 
             // Styling header (match historial style)
@@ -3010,7 +3117,8 @@ const SchoolPaymentsPage = () => {
 
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const fileName = `Pagos_por_estado_${(estadoNorm || 'TODOS')}_servicio_${(serviceFilter || 'TODOS')}_${school?.name ? school.name.replace(/[^a-z0-9]/gi,'_') : schoolId}.xlsx`;
+            const enrollmentPart = enrollmentFilter !== 'TODOS' ? `_inscripcion_${enrollmentFilter}` : '';
+            const fileName = `Pagos_por_estado_${(estadoNorm || 'TODOS')}_servicio_${(serviceFilter || 'TODOS')}${enrollmentPart}_${school?.name ? school.name.replace(/[^a-z0-9]/gi,'_') : schoolId}.xlsx`;
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -3025,7 +3133,7 @@ const SchoolPaymentsPage = () => {
             console.error('handleDownloadByState', err);
             setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
         }
-    }, [paymentsAll, exportByStateServiceStatus, school, schoolId]);
+    }, [paymentsAll, exportByStateServiceStatus, exportByStateEnrollmentStatus, enrollmentAvailable, getEnrollmentStatusForPayment, school, schoolId]);
 
     // Legacy discount-save flow removed.
     // The new retroactive discount flow is applied via POST /payments/v2/:id/apply-family-discount.
@@ -3821,9 +3929,19 @@ const SchoolPaymentsPage = () => {
                         >
                             <ToggleButton value="payment">Estado de Pago</ToggleButton>
                             <ToggleButton value="service">Estado del Servicio</ToggleButton>
+                            {enrollmentAvailable && <ToggleButton value="enrollment">Estado de Inscripción</ToggleButton>}
                         </ToggleButtonGroup>
-                        
-                        {countersView === 'payment' ? (
+
+                        {countersView === 'enrollment' ? (
+                            <>
+                                <Tooltip title="Conteo de todo el ciclo escolar: no cambia con los filtros ni con el mes seleccionado. Una familia con abono parcial cuenta como pendiente.">
+                                    <Chip label={`Pagados: ${formatCountOrNA(displayInscripcionPagados)}`} color="success" />
+                                </Tooltip>
+                                <Tooltip title="Familias con saldo de inscripción mayor a cero, incluidas las que abonaron una parte.">
+                                    <Chip label={`Pendientes: ${formatCountOrNA(displayInscripcionPendientes)}`} color="warning" sx={{ ml: 1 }} />
+                                </Tooltip>
+                            </>
+                        ) : countersView === 'payment' ? (
                             <>
                                 <Chip label={`Pagados: ${displayPaid}`} color="success" />
                                 <Chip label={`Adelantado: ${displayAdelantado}`} sx={{ ml: 1, backgroundColor: '#1976D2', color: '#fff' }} />
@@ -3870,6 +3988,7 @@ const SchoolPaymentsPage = () => {
                                 onShowDeletedChange={setShowDeleted}
                                 serviceStatus={serviceStatusFilter}
                                 onServiceStatusChange={setServiceStatusFilter}
+                                showEnrollmentOptions={enrollmentAvailable}
                             />
                             <Button
                                 startIcon={<DownloadIcon />}
@@ -3912,6 +4031,8 @@ const SchoolPaymentsPage = () => {
 
                         <PaymentTable
                             payments={pageSlice}
+                            enrollmentStatusByUserId={enrollmentByUserId}
+                            showEnrollmentColumn={enrollmentAvailable}
                             onRegisterClick={handleOpenRegister}
                             onReceiptClick={handleOpenReceipt}
                             onEmailClick={handleOpenEmail}
@@ -4035,6 +4156,21 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
+                                    {enrollmentAvailable && (
+                                        <FormControl fullWidth size="small" disabled={exportHasNoHistory}>
+                                            <InputLabel id="export-enrollmentstatus-label">Estado de Inscripción</InputLabel>
+                                            <Select
+                                                labelId="export-enrollmentstatus-label"
+                                                label="Estado de Inscripción"
+                                                value={exportEnrollmentStatus}
+                                                onChange={(e) => setExportEnrollmentStatus(e.target.value)}
+                                            >
+                                                <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                                <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
+                                                <MenuItem value="PAGADO">PAGADO</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    )}
                                     <FormControl fullWidth size="small" disabled={exportHasNoHistory}>
                                         <InputLabel id="export-month-label">Mes</InputLabel>
                                         <Select
@@ -4113,7 +4249,9 @@ const SchoolPaymentsPage = () => {
                                         Exportar pagos
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                        Selecciona el estado de pago y el estado del servicio.
+                                        {enrollmentAvailable
+                                            ? 'Selecciona el estado de pago, el estado del servicio y el estado de inscripción.'
+                                            : 'Selecciona el estado de pago y el estado del servicio.'}
                                     </Typography>
                                 </Box>
                             </DialogTitle>
@@ -4151,6 +4289,22 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
+
+                                    {enrollmentAvailable && (
+                                        <FormControl fullWidth size="small">
+                                            <InputLabel id="export-by-state-enrollment-label">Estado de Inscripción</InputLabel>
+                                            <Select
+                                                labelId="export-by-state-enrollment-label"
+                                                label="Estado de Inscripción"
+                                                value={exportByStateEnrollmentStatus}
+                                                onChange={(e) => setExportByStateEnrollmentStatus(e.target.value)}
+                                            >
+                                                <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                                <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
+                                                <MenuItem value="PAGADO">PAGADO</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    )}
                                     </Box>
                                 </Box>
                             </DialogContent>
@@ -5267,6 +5421,9 @@ const SchoolPaymentsPage = () => {
                                                 setOpenRegisterDialog(false);
                                                 setPaymentTab(0);
                                                 await fetchAllPayments(statusFilter, search);
+                                                // Refrescar el chip de la fila y los contadores sin recargar la página.
+                                                await fetchEnrollmentStatuses();
+                                                await fetchMetrics(selectedPeriod);
                                             } catch (err) {
                                                 setSnackbar({
                                                     open: true,
