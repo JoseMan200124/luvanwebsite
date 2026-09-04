@@ -123,6 +123,11 @@ const ENROLLMENT_STATUS_LABEL = {
     PAGADO: { label: 'Pagado', color: 'success' },
 };
 
+const MONTH_LABELS = {
+    '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio',
+    '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
+};
+
 const SchoolPaymentsPage = () => {
     useContext(AuthContext); // keep context hook for future auth-based features
     const navigate = useNavigate();
@@ -2500,32 +2505,71 @@ const SchoolPaymentsPage = () => {
 
     // --- Export by status UI state ---
     const [openExportStatusDialog, setOpenExportStatusDialog] = useState(false);
-    // Export dialog additional filters: separate month and year selectors
-    const [exportMonth, setExportMonth] = useState('TODOS'); // 'TODOS' or '01'..'12'
     // Final status selector for export (MORA, PENDIENTE, PAGADO)
     const [exportFinalStatus, setExportFinalStatus] = useState('TODOS');
     // Service status selector for export (ACTIVE, PAUSED, SUSPENDED, INACTIVE, ALL)
-    const [exportServiceStatus, setExportServiceStatus] = useState('TODOS'); 
-    // Año seleccionable para exportación
-    const [exportYear, setExportYear] = useState(String(moment().year()));
-    const exportYearOptions = React.useMemo(() => {
-        const currentYear = moment().year();
-        const baseYear = Number(currentCycleYear);
-        const startYear = Number.isFinite(baseYear) ? baseYear : currentYear;
+    const [exportServiceStatus, setExportServiceStatus] = useState('TODOS');
+    // Año y mes seleccionables para exportación: se pueblan con los períodos (año-mes)
+    // que realmente tienen registros de pago para este colegio/ciclo (un ciclo que
+    // arranca a medio año deja pagos en dos años distintos, y no deben ofrecerse meses
+    // anteriores al inicio real del colegio, p.ej. enero 2026 si solo hay desde junio 2026).
+    const [exportPeriods, setExportPeriods] = useState([]); // ["YYYY-MM", ...]
+    const [exportYear, setExportYear] = useState(String(getCurrentDateSync().year()));
+    const [exportYearOptions, setExportYearOptions] = useState([]);
+    const [exportMonth, setExportMonth] = useState('TODOS'); // 'TODOS' or '01'..'12'
+    // null = aún no se sabe (fetch en curso o diálogo cerrado); true = confirmado que no hay historial
+    const [exportYearsLoading, setExportYearsLoading] = useState(false);
+    const [exportHasNoHistory, setExportHasNoHistory] = useState(false);
 
-        const years = [];
-        for (let y = startYear; y <= currentYear; y++) years.push(String(y));
-        // Mostrar descendente (más reciente primero)
-        return years.reverse();
-    }, [currentCycleYear]);
-
-    // Si cambia el año del ciclo y el exportYear ya no está en el rango, ajustarlo.
     useEffect(() => {
-        if (!exportYearOptions || exportYearOptions.length === 0) return;
-        if (!exportYearOptions.includes(exportYear)) {
-            setExportYear(exportYearOptions[0]);
-        }
-    }, [exportYearOptions]);
+        if (!openExportStatusDialog || !schoolId) return;
+        let cancelled = false;
+        setExportYearsLoading(true);
+        setExportHasNoHistory(false);
+        (async () => {
+            try {
+                const res = await api.get('/payments/available-years', { params: buildPaymentParams() });
+                const years = Array.isArray(res.data?.years) ? res.data.years.map(String) : [];
+                const periods = Array.isArray(res.data?.periods) ? res.data.periods : [];
+                if (cancelled) return;
+                setExportPeriods(periods);
+                const currentYear = String(getCurrentDateSync().year());
+                if (years.length === 0) {
+                    setExportYearOptions([currentYear]);
+                    setExportYear(currentYear);
+                    setExportHasNoHistory(true);
+                    return;
+                }
+                setExportYearOptions(years);
+                setExportYear(years.includes(currentYear) ? currentYear : years[0]);
+            } catch (err) {
+                console.error('[export] No se pudieron cargar los años/meses disponibles', err);
+            } finally {
+                if (!cancelled) setExportYearsLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [openExportStatusDialog, schoolId, buildPaymentParams]);
+
+    // Meses con registros reales para el año seleccionado (más "TODOS").
+    const exportMonthOptions = React.useMemo(() => {
+        const months = exportPeriods
+            .filter((p) => p.startsWith(`${exportYear}-`))
+            .map((p) => p.split('-')[1]);
+        return [...new Set(months)].sort();
+    }, [exportPeriods, exportYear]);
+
+    // Si el mes elegido no tiene registros en el año recién seleccionado, volver a "Todos los meses".
+    // Si solo hay un mes con registros, seleccionarlo directamente en vez de "Todos los meses"
+    // (con un solo mes ambas opciones son equivalentes, pero mostrar el nombre evita confusión).
+    useEffect(() => {
+        if (exportMonthOptions.length === 0) return;
+        setExportMonth((prev) => {
+            if (exportMonthOptions.length === 1) return exportMonthOptions[0];
+            if (prev !== 'TODOS' && !exportMonthOptions.includes(prev)) return 'TODOS';
+            return prev;
+        });
+    }, [exportMonthOptions]);
 
     // --- Export by estado (new) ---
     const [openExportByStateDialog, setOpenExportByStateDialog] = useState(false);
@@ -3956,7 +4000,12 @@ const SchoolPaymentsPage = () => {
                             <DialogContent sx={{ pt: 2.5, overflow: 'visible' }}>
                                 <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
                                     <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
-                                    <FormControl fullWidth size="small">
+                                    {exportHasNoHistory && !exportYearsLoading && (
+                                        <Alert severity="info">
+                                            Este colegio todavía no tiene pagos registrados. No hay historial para exportar.
+                                        </Alert>
+                                    )}
+                                    <FormControl fullWidth size="small" disabled={exportHasNoHistory}>
                                         <InputLabel id="export-finalstatus-label">Estado de Pago</InputLabel>
                                         <Select
                                             labelId="export-finalstatus-label"
@@ -3971,7 +4020,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="ELIMINADO">ELIMINADO</MenuItem>
                                         </Select>
                                     </FormControl>
-                                    <FormControl fullWidth size="small">
+                                    <FormControl fullWidth size="small" disabled={exportHasNoHistory}>
                                         <InputLabel id="export-servicestatus-label">Estado del Servicio</InputLabel>
                                         <Select
                                             labelId="export-servicestatus-label"
@@ -3986,7 +4035,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
-                                    <FormControl fullWidth size="small">
+                                    <FormControl fullWidth size="small" disabled={exportHasNoHistory}>
                                         <InputLabel id="export-month-label">Mes</InputLabel>
                                         <Select
                                             labelId="export-month-label"
@@ -4002,21 +4051,12 @@ const SchoolPaymentsPage = () => {
                                             }}
                                         >
                                             <MenuItem value="TODOS">Todos los meses</MenuItem>
-                                            <MenuItem value="01">Enero</MenuItem>
-                                            <MenuItem value="02">Febrero</MenuItem>
-                                            <MenuItem value="03">Marzo</MenuItem>
-                                            <MenuItem value="04">Abril</MenuItem>
-                                            <MenuItem value="05">Mayo</MenuItem>
-                                            <MenuItem value="06">Junio</MenuItem>
-                                            <MenuItem value="07">Julio</MenuItem>
-                                            <MenuItem value="08">Agosto</MenuItem>
-                                            <MenuItem value="09">Septiembre</MenuItem>
-                                            <MenuItem value="10">Octubre</MenuItem>
-                                            <MenuItem value="11">Noviembre</MenuItem>
-                                            <MenuItem value="12">Diciembre</MenuItem>
+                                            {exportMonthOptions.map((m) => (
+                                                <MenuItem key={m} value={m}>{MONTH_LABELS[m] || m}</MenuItem>
+                                            ))}
                                         </Select>
                                     </FormControl>
-                                    <FormControl fullWidth size="small">
+                                    <FormControl fullWidth size="small" disabled={exportHasNoHistory}>
                                         <InputLabel id="export-year-label">Año</InputLabel>
                                         <Select
                                             labelId="export-year-label"
@@ -4043,7 +4083,11 @@ const SchoolPaymentsPage = () => {
                                 <Button onClick={() => setOpenExportStatusDialog(false)}>
                                     Cancelar
                                 </Button>
-                                <Button variant="contained" onClick={() => handleDownloadPaymentsByStatus(exportMonth, exportYear)}>
+                                <Button
+                                    variant="contained"
+                                    disabled={exportHasNoHistory || exportYearsLoading}
+                                    onClick={() => handleDownloadPaymentsByStatus(exportMonth, exportYear)}
+                                >
                                     Descargar
                                 </Button>
                             </DialogActions>
