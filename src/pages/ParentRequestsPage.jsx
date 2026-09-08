@@ -19,7 +19,6 @@ import {
   Grid,
   IconButton,
   Paper,
-  RefreshControl,
   Stack,
   Typography,
   useMediaQuery,
