@@ -188,6 +188,17 @@ function ScheduleThresholdsDialog({
                                         value={entry.schoolArrivalTime || ''}
                                         onChange={(e) => onThresholdChange(code, 'schoolArrivalTime', e.target.value)}
                                     />
+                                    <TextField
+                                        type="time"
+                                        size="small"
+                                        sx={{ flex: '1 1 45%' }}
+                                        label="Hora límite para marcar asistencia"
+                                        helperText="Avisa si a esta hora la monitora aún no marca la asistencia de estudiantes."
+                                        InputLabelProps={{ shrink: true }}
+                                        inputProps={{ step: 300 }}
+                                        value={entry.attendanceMaxTime || ''}
+                                        onChange={(e) => onThresholdChange(code, 'attendanceMaxTime', e.target.value)}
+                                    />
                                 </Box>
                             ) : (
                                 <Box>
@@ -259,7 +270,7 @@ const SchoolBusesPage = () => {
     const [schoolScheduleTimes, setSchoolScheduleTimes] = useState({});
     // Nombre que el colegio le dio a cada horario (AM/MD/PM/EX), para mostrar en las pestañas del modal
     const [schoolScheduleNames, setSchoolScheduleNames] = useState({});
-    // Umbrales de horario por ruta: { [routeNumber]: { [scheduleCode]: { firstStopTime, schoolArrivalTime, schoolDepartureMaxTime, firstStopMarginMinutes } } }
+    // Umbrales de horario por ruta: { [routeNumber]: { [scheduleCode]: { boardingTime, firstStopTime, schoolArrivalTime, schoolDepartureMaxTime, attendanceMaxTime, firstStopMarginMinutes } } }
     const [routeThresholds, setRouteThresholds] = useState({});
     const [scheduleModalRoute, setScheduleModalRoute] = useState(null);
     const [savingSchedule, setSavingSchedule] = useState(false);
@@ -452,6 +463,7 @@ const SchoolBusesPage = () => {
                             firstStopTime: threshold.firstStopTime || '',
                             schoolArrivalTime: threshold.schoolArrivalTime || '',
                             schoolDepartureMaxTime: threshold.schoolDepartureMaxTime || '',
+                            attendanceMaxTime: threshold.attendanceMaxTime || '',
                             firstStopMarginMinutes: threshold.firstStopMarginMinutes != null ? String(threshold.firstStopMarginMinutes) : ''
                         };
                     });
@@ -593,7 +605,7 @@ const SchoolBusesPage = () => {
                 const entry = routeSchedules[code] || {};
                 const isAM = code === 'AM';
                 const hasValue = isAM
-                    ? Boolean(entry.boardingTime || entry.firstStopTime || entry.schoolArrivalTime)
+                    ? Boolean(entry.boardingTime || entry.firstStopTime || entry.schoolArrivalTime || entry.attendanceMaxTime)
                     : Boolean(entry.schoolDepartureMaxTime || entry.firstStopMarginMinutes);
                 if (!hasValue) return null;
 
@@ -603,6 +615,7 @@ const SchoolBusesPage = () => {
                     firstStopTime: isAM ? (entry.firstStopTime || null) : null,
                     schoolArrivalTime: isAM ? (entry.schoolArrivalTime || null) : null,
                     schoolDepartureMaxTime: isAM ? null : (entry.schoolDepartureMaxTime || null),
+                    attendanceMaxTime: isAM ? (entry.attendanceMaxTime || null) : null,
                     firstStopMarginMinutes: isAM ? null : (entry.firstStopMarginMinutes !== '' ? Number(entry.firstStopMarginMinutes) : null)
                 };
             })
