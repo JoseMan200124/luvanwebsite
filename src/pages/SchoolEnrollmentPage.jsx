@@ -733,11 +733,11 @@ const SchoolEnrollmentPage = () => {
                     <Typography variant="body2">
                         Desarrollado por{' '}
                         <a
-                            href="https://haricode.com"
+                            href="https://www.haricode.tech"
                             target="_blank"
                             rel="noopener noreferrer"
                         >
-                            haricode.com
+                            Haricode
                         </a>
                     </Typography>
                 </Box>
