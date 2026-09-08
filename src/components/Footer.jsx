@@ -39,7 +39,7 @@ const Footer = () => {
                 <Typography variant="body2" align="center" tw="mt-8">
                     Desarrollado por{' '}
                     <Link
-                        href="https://www.haricode.com"
+                        href="https://www.haricode.tech"
                         target="_blank"
                         rel="noopener noreferrer"
                         color="inherit"
