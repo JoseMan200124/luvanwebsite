@@ -1843,11 +1843,18 @@ const SchoolUsersPage = () => {
 
             const roleIdNum = Number(selectedUser.roleId);
 
-            // Validation: when creating a new Parent (roleId 3), require at least one student
-            const currentStudentsCount = currentStudentsNorm.length;
-            if (!selectedUser.id && roleIdNum === 3 && currentStudentsCount === 0) {
-                setSnackbar({ open: true, message: 'Debe agregar al menos un estudiante para crear una familia', severity: 'warning' });
-                return;
+            // Una familia (rol Padre) no puede quedar sin estudiantes: al crear,
+            // o al editar enviando la lista de alumnos, debe haber al menos uno
+            // con nombre y grado.
+            if (roleIdNum === 3) {
+                const validStudentsCount = currentStudentsNorm.filter(
+                    s => String(s.fullName || '').trim() !== '' && String(s.grade || '').trim() !== ''
+                ).length;
+                const sendingStudents = Object.hasOwn(familyDetailPayload, 'students');
+                if ((!selectedUser.id || sendingStudents) && validStudentsCount === 0) {
+                    setSnackbar({ open: true, message: 'La familia debe tener al menos un estudiante con nombre y grado.', severity: 'warning' });
+                    return;
+                }
             }
 
             // Arma el payload del usuario
@@ -3595,6 +3602,15 @@ const SchoolUsersPage = () => {
                                             Agregar
                                         </Button>
                                     </Grid>
+                                    {Number(selectedUser?.roleId) === 3 && !(Array.isArray(familyDetail.students) && familyDetail.students.some(
+                                        s => String(s?.fullName || '').trim() !== '' && String(s?.grade || '').trim() !== ''
+                                    )) && (
+                                        <Grid item xs={12}>
+                                            <Typography variant="body2" sx={{ color: '#c62828' }}>
+                                                La familia debe tener al menos un estudiante con nombre y grado.
+                                            </Typography>
+                                        </Grid>
+                                    )}
                                     {familyDetail.students.length > 0 && (
                                         <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -3728,11 +3744,17 @@ const SchoolUsersPage = () => {
                         setOpenRouteTypeModal(false);
                         setOpenEditDialog(false);
                     }}>Cancelar</Button>
-                    <Button 
-                        variant="contained" 
+                    <Button
+                        variant="contained"
                         color="primary"
                         onClick={handleSaveUser}
-                        disabled={!selectedUser?.id && Number(selectedUser?.roleId) === 3 && (!(Array.isArray(familyDetail.students)) || familyDetail.students.length === 0)}
+                        disabled={
+                            !selectedUser?.id &&
+                            Number(selectedUser?.roleId) === 3 &&
+                            !(Array.isArray(familyDetail.students) && familyDetail.students.some(
+                                s => String(s?.fullName || '').trim() !== '' && String(s?.grade || '').trim() !== ''
+                            ))
+                        }
                     >
                         {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
                     </Button>
