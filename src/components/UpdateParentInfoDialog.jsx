@@ -157,11 +157,20 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
         });
     };
 
+    const hasValidStudent = students.some(
+        (st) => String(st?.fullName || '').trim() !== '' && String(st?.grade || '').trim() !== ''
+    );
+
     const handleSubmit = async (e) => {
-        e && e.preventDefault && e.preventDefault();
+        e?.preventDefault?.();
 
         if (!familyLastName || !serviceAddress || !zoneOrSector) {
             setSnackbar({ open: true, message: 'Por favor, completa los campos requeridos.', severity: 'error' });
+            return;
+        }
+
+        if (!hasValidStudent) {
+            setSnackbar({ open: true, message: 'La familia debe tener al menos un estudiante con nombre y grado.', severity: 'error' });
             return;
         }
 
@@ -437,8 +446,8 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
                 )}
             </DialogContent>
             <DialogActions sx={{ p: 2 }}>
-                <Button onClick={() => onClose && onClose()}>Cerrar</Button>
-                <Button variant="contained" onClick={handleSubmit} color="primary">Actualizar Datos</Button>
+                <Button onClick={() => onClose?.()}>Cerrar</Button>
+                <Button variant="contained" onClick={handleSubmit} color="primary" disabled={!hasValidStudent}>Actualizar Datos</Button>
             </DialogActions>
 
             <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
