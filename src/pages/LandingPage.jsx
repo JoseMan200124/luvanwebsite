@@ -281,8 +281,8 @@ const LandingPage = () => {
             <section className="luvan-stats">
                 <div className="luvan-wrap luvan-stats-grid">
                     <div className="luvan-s luvan-reveal"><div className="luvan-v"><span className="luvan-num" data-to="10">0</span><span className="u">+</span></div><div className="luvan-l">Años de experiencia</div></div>
-                    <div className="luvan-s luvan-reveal"><div className="luvan-v"><span className="luvan-num" data-to="50">0</span><span className="u">+</span></div><div className="luvan-l">Colegios y empresas</div></div>
-                    <div className="luvan-s luvan-reveal"><div className="luvan-v"><span className="luvan-num" data-to="30">0</span><span className="u">+</span></div><div className="luvan-l">Unidades en flota</div></div>
+                    <div className="luvan-s luvan-reveal"><div className="luvan-v"><span className="luvan-num" data-to="2000">0</span><span className="u">+</span></div><div className="luvan-l">Usuarios</div></div>
+                    <div className="luvan-s luvan-reveal"><div className="luvan-v"><span className="luvan-num" data-to="200">0</span><span className="u">+</span></div><div className="luvan-l">Recorridos Diarios</div></div>
                     <div className="luvan-s luvan-reveal"><div className="luvan-v"><span className="luvan-num" data-to="100">0</span><span className="u">%</span></div><div className="luvan-l">Compromiso y seguridad</div></div>
                 </div>
             </section>

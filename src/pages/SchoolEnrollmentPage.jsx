@@ -121,12 +121,25 @@ const SchoolEnrollmentPage = () => {
         });
     };
 
+    const hasValidStudent = students.some(
+        (st) => String(st?.fullName || '').trim() !== '' && String(st?.grade || '').trim() !== ''
+    );
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (enrollmentBlockedMessage) {
             setSnackbar({
                 open: true,
                 message: enrollmentBlockedMessage,
+                severity: 'warning'
+            });
+            return;
+        }
+
+        if (!hasValidStudent) {
+            setSnackbar({
+                open: true,
+                message: 'Agrega al menos un alumno con nombre y grado.',
                 severity: 'warning'
             });
             return;
@@ -690,9 +703,16 @@ const SchoolEnrollmentPage = () => {
                         </>
                     )}
 
+                    {!hasValidStudent && (
+                        <Typography variant="body2" sx={{ mt: 2, color: '#c62828' }}>
+                            Debes ingresar al menos un alumno con nombre y grado.
+                        </Typography>
+                    )}
+
                     <Button
                         type="submit"
                         variant="contained"
+                        disabled={!hasValidStudent}
                         sx={{
                             backgroundColor: '#47A56B',
                             color: '#FFFFFF',
