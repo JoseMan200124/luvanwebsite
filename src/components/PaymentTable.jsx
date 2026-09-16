@@ -92,8 +92,8 @@ const PaymentStatusChip = ({ status }) => {
     if (status === 'PENDIENTE') {
         return <Chip label="Pendiente" size="small" color="warning" />;
     }
-    if (status === 'EN_PROCESO') {
-        return <Chip label="En Proceso" size="small" color="warning" />;
+    if (status === 'PARCIAL') {
+        return <Chip label="Pago Parcial" size="small" sx={{ backgroundColor: '#7c4dff', color: '#fff' }} />;
     }
     return <Chip label={status || '-'} size="small" />;
 };

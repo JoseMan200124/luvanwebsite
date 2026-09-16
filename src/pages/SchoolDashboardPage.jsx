@@ -895,7 +895,13 @@ const SchoolDashboardPage = () => {
 
                         {/* Compact: mostrar 2 tarjetas visibles y el resto en un contenedor scrollable */}
                         <Grid item xs={12}>
-                            <Box sx={{ maxHeight: 220, overflowY: 'auto', pr: 1 }}>
+                            <Box sx={{
+                                maxHeight: 220,
+                                overflowY: 'auto',
+                                pr: 1,
+                                '&::-webkit-scrollbar': { width: 18 },
+                                '&::-webkit-scrollbar-thumb': { backgroundColor: 'grey.400', borderRadius: 2 }
+                            }}>
                                 <Grid container spacing={2}>
                                     {/* Sub-sección 3: Botón de usuarios */}
                                     <PermissionGuard permission="colegios-familias">
