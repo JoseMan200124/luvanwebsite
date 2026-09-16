@@ -119,7 +119,14 @@ const getCycleLabel = (payment) => {
     return cycle?.label || cycle?.nombre || cycle?.anio || 'Ciclo actual';
 };
 
-const getStatusMeta = (status) => {
+const getStatusMeta = (status, hasPendingReceipt = false) => {
+    // Boleta subida y sin registrar por el admin: se muestra "En revisión"
+    // sobre cualquier estado real (mora, pago parcial, pendiente, etc.) sin
+    // afectarlo — es puramente informativo, ver PaymentReceipt.status.
+    if (hasPendingReceipt) {
+        return { label: 'En revisión', color: '#B45309', background: '#FEF3C7', icon: HourglassEmptyIcon };
+    }
+
     const normalized = String(status || 'PENDIENTE').toUpperCase();
     if (normalized === 'MORA') {
         return { label: 'Mora', color: '#D32F2F', background: '#FDEDEC', icon: ErrorOutlineIcon };
@@ -130,6 +137,11 @@ const getStatusMeta = (status) => {
     if (normalized === 'ADELANTADO') {
         return { label: 'Adelantado', color: '#2563EB', background: '#EAF1FF', icon: TrendingUpIcon };
     }
+    if (normalized === 'PARCIAL') {
+        return { label: 'Pago Parcial', color: '#6D28D9', background: '#EDE9FE', icon: HourglassEmptyIcon };
+    }
+    // 'EN_PROCESO' ya no se genera como finalStatus, pero se conserva el
+    // mapeo por si queda alguna referencia histórica.
     if (normalized === 'EN_PROCESO') {
         return { label: 'En revisión', color: '#B45309', background: '#FEF3C7', icon: HourglassEmptyIcon };
     }
@@ -227,8 +239,8 @@ const buildPaymentPeriods = (payment) => {
     return Array.from(byKey.values());
 };
 
-const StatusBadge = ({ status }) => {
-    const meta = getStatusMeta(status);
+const StatusBadge = ({ status, hasPendingReceipt = false }) => {
+    const meta = getStatusMeta(status, hasPendingReceipt);
     const Icon = meta.icon;
     return (
         <Box
@@ -638,6 +650,7 @@ const ReceiptViewerDialog = ({ receipt, onClose }) => {
 
 StatusBadge.propTypes = {
     status: PropTypes.string,
+    hasPendingReceipt: PropTypes.bool,
 };
 
 SectionCard.propTypes = {
@@ -815,6 +828,7 @@ const ParentPaymentPage = () => {
         .sort((firstPeriod, secondPeriod) => String(secondPeriod.period || '').localeCompare(String(firstPeriod.period || ''))), [payments]);
     const movements = useMemo(() => (paymentHistory?.movements || []).filter((movement) => !!movement?.transaction), [paymentHistory?.movements]);
     const currentStatus = primaryPayment?.finalStatus || (toNumber(paymentAccount?.totals?.penaltyDue) > 0 ? 'MORA' : 'PENDIENTE');
+    const hasPendingReceipt = receipts.some((r) => r?.status === 'PENDIENTE');
     const effectiveServiceStatus = serviceStatus || primaryPayment?.serviceStatus || null;
     const uploadDisabled = effectiveServiceStatus === 'SUSPENDED' && hasSignedContract !== true;
     const totalPending = toNumber(paymentAccount?.totals?.balanceDue) + toNumber(paymentAccount?.totals?.penaltyDue);
@@ -912,7 +926,7 @@ const ParentPaymentPage = () => {
                         </Typography>
                         <Typography sx={{ color: MUTED_COLOR, fontSize: 13, mt: 0.25 }}>{getCycleLabel(primaryPayment)}</Typography>
                     </Box>
-                    <StatusBadge status={currentStatus} />
+                    <StatusBadge status={currentStatus} hasPendingReceipt={hasPendingReceipt} />
                 </Box>
 
                 {/* La tarjeta de inscripción solo aparece si la familia tiene cargo de inscripción,
@@ -1042,7 +1056,7 @@ const ParentPaymentPage = () => {
                                 <Typography sx={{ color: 'rgba(255,255,255,0.86)', fontSize: 14, mt: 0.75 }}>Total pendiente entre tarifa y mora</Typography>
                             </Box>
                             <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                                <StatusBadge status={currentStatus} />
+                                <StatusBadge status={currentStatus} hasPendingReceipt={hasPendingReceipt} />
                                 <Tooltip title="Actualizar datos">
                                     <span>
                                         <Button

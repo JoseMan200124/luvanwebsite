@@ -294,8 +294,8 @@ function App() {
                     <Route
                         path="/parent/payment"
                         element={
-                            <ProtectedRoute 
-                                moduleKey={'padre-pagos-boletas'} 
+                            <ProtectedRoute
+                                moduleKey={'padres-subir-boleta'}
                                 redirectTo="/parent/dashboard"
                             >
                                 <ParentPaymentPage />

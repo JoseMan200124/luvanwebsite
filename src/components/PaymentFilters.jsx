@@ -29,7 +29,7 @@ const PaymentFilters = ({
                     <MenuItem value="ADELANTADO">Adelantado</MenuItem>
                     <MenuItem value="PENDIENTE">Pendiente</MenuItem>
                     <MenuItem value="MORA">En Mora</MenuItem>
-                    <MenuItem value="EN_PROCESO">En Proceso</MenuItem>
+                    <MenuItem value="PARCIAL">Pago Parcial</MenuItem>
                 </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 185 }, width: { xs: '100%', sm: 'auto' } }}>
