@@ -22,10 +22,11 @@ import {
     Autocomplete,
     Chip
 } from '@mui/material';
-import { DirectionsBus, Save, Clear, ArrowBack, Refresh } from '@mui/icons-material';
+import { DirectionsBus, Save, Clear, ArrowBack, Refresh, Schedule as ScheduleIcon } from '@mui/icons-material';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import ScheduleThresholdsDialog from '../components/ScheduleThresholdsDialog';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 
@@ -61,6 +62,14 @@ const CorporateBusesPage = () => {
     const [saving, setSaving] = useState(false);
     const [crewChangeIntent, setCrewChangeIntent] = useState({});
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    // Umbrales de horario por ruta: { [routeNumber]: { [scheduleCode]: { routeStartMaxTime, routeEndMarginMinutes } } }
+    const [routeThresholds, setRouteThresholds] = useState({});
+    const [scheduleModalRoute, setScheduleModalRoute] = useState(null);
+    const [savingSchedule, setSavingSchedule] = useState(false);
+    // Turnos reales de la corporación (Corporation.schedules[].name) — no hay AM/MD/PM/EX fijo
+    // como en colegio, cada corporación define sus propios nombres de turno.
+    const [corporationScheduleCodes, setCorporationScheduleCodes] = useState([]);
+    const [corporationScheduleNames, setCorporationScheduleNames] = useState({});
 
     const currentCorporation = stateCorporation;
     const currentFiscalYear = fiscalYear || stateFiscalYear;
@@ -74,7 +83,7 @@ const CorporateBusesPage = () => {
             const corporation = resp.data.corporation;
             if (corporation?.routeNumbers) {
                 let routeNumbers = corporation.routeNumbers;
-                
+
                 // Parse if it's a string
                 if (typeof routeNumbers === 'string' && routeNumbers.trim()) {
                     try {
@@ -84,15 +93,33 @@ const CorporateBusesPage = () => {
                         routeNumbers = [];
                     }
                 }
-                
+
                 setCorporationRouteNumbers(Array.isArray(routeNumbers) ? routeNumbers : []);
             } else {
                 setCorporationRouteNumbers([]);
             }
+
+            // Turnos reales de la corporación (Corporation.schedules: nombres libres definidos por
+            // el admin, ej. "Turno 1", "Fin de semana" — nada que ver con AM/MD/PM/EX de colegio).
+            let schedules = corporation?.schedules;
+            if (typeof schedules === 'string' && schedules.trim()) {
+                try {
+                    schedules = JSON.parse(schedules);
+                } catch (err) {
+                    console.error('Error parsing corporation schedules:', err);
+                    schedules = [];
+                }
+            }
+            if (!Array.isArray(schedules)) schedules = [];
+            const names = schedules.map((s) => String(s?.name || '').trim()).filter(Boolean);
+            setCorporationScheduleCodes(names);
+            setCorporationScheduleNames(Object.fromEntries(names.map((name) => [name, name])));
         } catch (err) {
             console.error('Error fetching corporation data:', err);
             setSnackbar({ open: true, message: 'Error al obtener datos de la corporación', severity: 'error' });
             setCorporationRouteNumbers([]);
+            setCorporationScheduleCodes([]);
+            setCorporationScheduleNames({});
         }
     }, [auth.token, corporationId]);
 
@@ -151,12 +178,23 @@ const CorporateBusesPage = () => {
             });
             const assignments = response.data.assignments || response.data || [];
             const routePilots = {};
+            const routeThresholdsMap = {};
             assignments.forEach(assignment => {
                 if (assignment.routeNumber) {
                     routePilots[assignment.routeNumber] = assignment.pilotId || null;
+
+                    const thresholdsForRoute = {};
+                    (assignment.scheduleThresholds || []).forEach((threshold) => {
+                        thresholdsForRoute[threshold.scheduleCode] = {
+                            routeStartMaxTime: threshold.routeStartMaxTime || '',
+                            routeEndMarginMinutes: threshold.routeEndMarginMinutes != null ? String(threshold.routeEndMarginMinutes) : ''
+                        };
+                    });
+                    routeThresholdsMap[assignment.routeNumber] = thresholdsForRoute;
                 }
             });
             setRoutePilotAssignments(prev => ({ ...prev, ...routePilots }));
+            setRouteThresholds(prev => ({ ...prev, ...routeThresholdsMap }));
         } catch (err) {
             console.error('Error fetching route assignments:', err);
         }
@@ -169,6 +207,59 @@ const CorporateBusesPage = () => {
                 .finally(() => setLoading(false));
         }
     }, [auth.token, corporationId, fetchCorporationData, fetchBuses, fetchPilots, fetchRouteAssignments]);
+
+    const handleThresholdChange = (routeNumber, scheduleCode, field, value) => {
+        setRouteThresholds(prev => ({
+            ...prev,
+            [routeNumber]: {
+                ...prev[routeNumber],
+                [scheduleCode]: {
+                    ...((prev[routeNumber] || {})[scheduleCode] || {}),
+                    [field]: value
+                }
+            }
+        }));
+    };
+
+    const buildScheduleThresholdsPayload = (routeNumber) => {
+        const routeSchedules = routeThresholds[routeNumber] || {};
+        return corporationScheduleCodes
+            .map((code) => {
+                const entry = routeSchedules[code] || {};
+                const hasValue = Boolean(entry.routeStartMaxTime || entry.routeEndMarginMinutes);
+                if (!hasValue) return null;
+
+                return {
+                    code,
+                    routeStartMaxTime: entry.routeStartMaxTime || null,
+                    routeEndMarginMinutes: entry.routeEndMarginMinutes !== '' && entry.routeEndMarginMinutes != null ? Number(entry.routeEndMarginMinutes) : null
+                };
+            })
+            .filter(Boolean);
+    };
+
+    const handleSaveScheduleModal = async () => {
+        if (!scheduleModalRoute) return;
+        setSavingSchedule(true);
+        try {
+            await api.post('/route-assignments/schedules', {
+                corporationId: Number.parseInt(corporationId, 10),
+                routeNumber: scheduleModalRoute,
+                schedules: buildScheduleThresholdsPayload(scheduleModalRoute)
+            }, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            });
+
+            setSnackbar({ open: true, message: `Horarios de la Ruta ${scheduleModalRoute} guardados`, severity: 'success' });
+            setScheduleModalRoute(null);
+            await fetchRouteAssignments();
+        } catch (err) {
+            console.error('Error saving corporation route schedules:', err);
+            setSnackbar({ open: true, message: err.response?.data?.message || 'Error al guardar horarios', severity: 'error' });
+        } finally {
+            setSavingSchedule(false);
+        }
+    };
 
     const handleAssignmentChange = (routeNumber, newBusId) => {
         setRouteBusAssignments(prev => ({
@@ -392,6 +483,7 @@ const CorporateBusesPage = () => {
                                         <TableCell><strong>Bus Asignado</strong></TableCell>
                                         <TableCell><strong>Piloto</strong></TableCell>
                                         <TableCell><strong>Monitora</strong></TableCell>
+                                        <TableCell><strong>Horarios</strong></TableCell>
                                         <TableCell><strong>Estado</strong></TableCell>
                                     </TableRow>
                                 </TableHead>
@@ -457,12 +549,30 @@ const CorporateBusesPage = () => {
                                                         InputProps={{
                                                             readOnly: true,
                                                         }}
-                                                        sx={{ 
+                                                        sx={{
                                                             '& .MuiInputBase-input.Mui-disabled': {
                                                                 WebkitTextFillColor: '#999',
                                                             }
                                                         }}
                                                     />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant="outlined"
+                                                        size="small"
+                                                        startIcon={<ScheduleIcon />}
+                                                        onClick={() => setScheduleModalRoute(routeNumber)}
+                                                    >
+                                                        Horarios
+                                                    </Button>
+                                                    {buildScheduleThresholdsPayload(routeNumber).length > 0 && (
+                                                        <Chip
+                                                            label={`${buildScheduleThresholdsPayload(routeNumber).length} configurado${buildScheduleThresholdsPayload(routeNumber).length > 1 ? 's' : ''}`}
+                                                            size="small"
+                                                            color="info"
+                                                            sx={{ ml: 1 }}
+                                                        />
+                                                    )}
                                                 </TableCell>
                                                 <TableCell>
                                                     {(assignedBusId || routePilotAssignments[routeNumber]) ? (
@@ -522,6 +632,20 @@ const CorporateBusesPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
+            <ScheduleThresholdsDialog
+                open={Boolean(scheduleModalRoute)}
+                routeNumber={scheduleModalRoute}
+                scheduleCodes={corporationScheduleCodes}
+                scheduleNames={corporationScheduleNames}
+                scheduleTimes={{}}
+                thresholds={routeThresholds[scheduleModalRoute] || {}}
+                onThresholdChange={(code, field, value) => handleThresholdChange(scheduleModalRoute, code, field, value)}
+                onClose={() => setScheduleModalRoute(null)}
+                onSave={handleSaveScheduleModal}
+                saving={savingSchedule}
+                roleTabsEnabled={false}
+            />
         </PageContainer>
     );
 };

@@ -1,6 +1,6 @@
 // src/pages/SchoolBusesPage.jsx
 
-import React, { useEffect, useState, useContext, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useContext, useCallback } from 'react';
 import {
     Typography,
     Box,
@@ -24,18 +24,16 @@ import {
     TextField,
     Autocomplete,
     Chip,
-    Tooltip,
-    Tabs,
-    Tab
+    Tooltip
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
 import { DirectionsBus, Save, Clear, ArrowBack, Refresh, ContentCopy, Schedule } from '@mui/icons-material';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import { getSchoolSchedules } from '../services/scheduleService';
-import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, getScheduleColor, getScheduleLabel } from '../utils/scheduleConfig';
+import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
+import ScheduleThresholdsDialog from '../components/ScheduleThresholdsDialog';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 
@@ -51,193 +49,6 @@ const HeaderCard = styled(Card)`
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
 `;
-
-// Formatea "HH:mm" (24h) a "h:mm AM/PM" para mostrar la hora de clase del colegio de forma legible.
-function formatTime12h(hhmm) {
-    if (!hhmm) return '';
-    const [hoursStr, minutesStr] = String(hhmm).split(':');
-    const hours = Number.parseInt(hoursStr, 10);
-    if (Number.isNaN(hours)) return hhmm;
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 === 0 ? 12 : hours % 12;
-    return `${hours12}:${minutesStr} ${period}`;
-}
-
-// Extraído para que cambiar de pestaña solo re-renderice este diálogo, no la tabla de rutas completa.
-function ScheduleThresholdsDialog({
-    open,
-    routeNumber,
-    scheduleCodes,
-    scheduleNames,
-    scheduleTimes,
-    thresholds,
-    onThresholdChange,
-    onClose,
-    onSave,
-    saving
-}) {
-    const [activeTab, setActiveTab] = useState(0);
-    const theme = useTheme();
-
-    useEffect(() => {
-        if (open) setActiveTab(0);
-    }, [open, routeNumber]);
-
-    const sortedCodes = useMemo(() => {
-        const timeToMinutes = (hhmm) => {
-            if (!hhmm) return Infinity;
-            const [h, m] = hhmm.split(':').map(Number);
-            return h * 60 + m;
-        };
-        return [...scheduleCodes].sort((a, b) => timeToMinutes(scheduleTimes[a]) - timeToMinutes(scheduleTimes[b]));
-    }, [scheduleCodes, scheduleTimes]);
-
-    const tabColors = useMemo(() => {
-        const map = {};
-        sortedCodes.forEach((code) => {
-            const colorKey = getScheduleColor(code);
-            map[code] = theme.palette[colorKey]?.main || theme.palette.text.primary;
-        });
-        return map;
-    }, [sortedCodes, theme]);
-
-    const activeTabColor = tabColors[sortedCodes[activeTab]] || theme.palette.text.primary;
-
-    return (
-        <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-            <DialogTitle>Horarios de la Ruta {routeNumber}</DialogTitle>
-            <DialogContent>
-                <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-                    Configura estas horas para que el sistema avise automáticamente a los Auxiliares cuando la ruta se atrasa. Deja un campo vacío si no aplica.
-                </Typography>
-                <Tabs
-                    value={activeTab}
-                    onChange={(e, newValue) => setActiveTab(newValue)}
-                    variant="scrollable"
-                    scrollButtons="auto"
-                    TabIndicatorProps={{
-                        sx: {
-                            transition: 'none',
-                            backgroundColor: activeTabColor
-                        }
-                    }}
-                    sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-                >
-                    {sortedCodes.map((code) => (
-                        <Tab
-                            key={code}
-                            label={code}
-                            disableRipple
-                            sx={{
-                                transition: 'none',
-                                '&.Mui-selected': {
-                                    color: tabColors[code]
-                                }
-                            }}
-                        />
-                    ))}
-                </Tabs>
-                {sortedCodes.map((code, index) => {
-                    if (index !== activeTab) return null;
-                    const entry = thresholds[code] || {};
-                    const isAM = code === 'AM';
-                    return (
-                        <Box key={code}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                                <Typography variant="subtitle1">{scheduleNames[code] || getScheduleLabel(code)}</Typography>
-                                {scheduleTimes[code] && (
-                                    <Chip
-                                        label={`Hora colegio: ${formatTime12h(scheduleTimes[code])}`}
-                                        size="small"
-                                        variant="outlined"
-                                    />
-                                )}
-                            </Box>
-                            {isAM ? (
-                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                    <TextField
-                                        type="time"
-                                        size="small"
-                                        sx={{ flex: '1 1 45%' }}
-                                        label="Hora máxima para abordar la unidad"
-                                        helperText="Avisa si a esta hora la monitora aún no marca que abordó."
-                                        InputLabelProps={{ shrink: true }}
-                                        inputProps={{ step: 300 }}
-                                        value={entry.boardingTime || ''}
-                                        onChange={(e) => onThresholdChange(code, 'boardingTime', e.target.value)}
-                                    />
-                                    <TextField
-                                        type="time"
-                                        size="small"
-                                        sx={{ flex: '1 1 45%' }}
-                                        label="Hora de inicio (primera parada)"
-                                        helperText="Avisa si a esta hora aún no marcan la primera parada."
-                                        InputLabelProps={{ shrink: true }}
-                                        inputProps={{ step: 300 }}
-                                        value={entry.firstStopTime || ''}
-                                        onChange={(e) => onThresholdChange(code, 'firstStopTime', e.target.value)}
-                                    />
-                                    <TextField
-                                        type="time"
-                                        size="small"
-                                        sx={{ flex: '1 1 45%' }}
-                                        label="Hora de llegada al colegio"
-                                        helperText="Avisa si a esta hora aún no marcan la llegada."
-                                        InputLabelProps={{ shrink: true }}
-                                        inputProps={{ step: 300 }}
-                                        value={entry.schoolArrivalTime || ''}
-                                        onChange={(e) => onThresholdChange(code, 'schoolArrivalTime', e.target.value)}
-                                    />
-                                </Box>
-                            ) : (
-                                <Box>
-                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-                                        <TextField
-                                            type="time"
-                                            size="small"
-                                            fullWidth
-                                            label="Hora máxima de salida del colegio"
-                                            helperText="Avisa si a esta hora aún no marcan la salida."
-                                            InputLabelProps={{ shrink: true }}
-                                            inputProps={{ step: 300 }}
-                                            value={entry.schoolDepartureMaxTime || ''}
-                                            onChange={(e) => onThresholdChange(code, 'schoolDepartureMaxTime', e.target.value)}
-                                        />
-                                        <TextField
-                                            type="number"
-                                            size="small"
-                                            fullWidth
-                                            label="Margen primera parada (min)"
-                                            helperText="No es hora fija: minutos de espera después de la salida real."
-                                            InputLabelProps={{ shrink: true }}
-                                            inputProps={{ min: 0 }}
-                                            value={entry.firstStopMarginMinutes || ''}
-                                            onChange={(e) => onThresholdChange(code, 'firstStopMarginMinutes', e.target.value)}
-                                        />
-                                    </Box>
-                                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 2.5 }}>
-                                        Ejemplo: si el margen es 60 min y el bus marca salida a las 12:00pm, la alerta se dispara si no marcan la primera parada del regreso antes de la 1:00pm.
-                                    </Typography>
-                                </Box>
-                            )}
-                        </Box>
-                    );
-                })}
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={saving}>Cancelar</Button>
-                <Button
-                    variant="contained"
-                    startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
-                    onClick={onSave}
-                    disabled={saving}
-                >
-                    {saving ? 'Guardando...' : 'Guardar Horarios'}
-                </Button>
-            </DialogActions>
-        </Dialog>
-    );
-}
 
 const SchoolBusesPage = () => {
     const { auth } = useContext(AuthContext);
@@ -259,7 +70,7 @@ const SchoolBusesPage = () => {
     const [schoolScheduleTimes, setSchoolScheduleTimes] = useState({});
     // Nombre que el colegio le dio a cada horario (AM/MD/PM/EX), para mostrar en las pestañas del modal
     const [schoolScheduleNames, setSchoolScheduleNames] = useState({});
-    // Umbrales de horario por ruta: { [routeNumber]: { [scheduleCode]: { firstStopTime, schoolArrivalTime, schoolDepartureMaxTime, firstStopMarginMinutes } } }
+    // Umbrales de horario por ruta: { [routeNumber]: { [scheduleCode]: { boardingTime, firstStopTime, schoolArrivalTime, schoolDepartureMaxTime, firstStopMarginMinutes, routeStartMaxTime, routeEndMarginMinutes } } }
     const [routeThresholds, setRouteThresholds] = useState({});
     const [scheduleModalRoute, setScheduleModalRoute] = useState(null);
     const [savingSchedule, setSavingSchedule] = useState(false);
@@ -452,7 +263,9 @@ const SchoolBusesPage = () => {
                             firstStopTime: threshold.firstStopTime || '',
                             schoolArrivalTime: threshold.schoolArrivalTime || '',
                             schoolDepartureMaxTime: threshold.schoolDepartureMaxTime || '',
-                            firstStopMarginMinutes: threshold.firstStopMarginMinutes != null ? String(threshold.firstStopMarginMinutes) : ''
+                            firstStopMarginMinutes: threshold.firstStopMarginMinutes != null ? String(threshold.firstStopMarginMinutes) : '',
+                            routeStartMaxTime: threshold.routeStartMaxTime || '',
+                            routeEndMarginMinutes: threshold.routeEndMarginMinutes != null ? String(threshold.routeEndMarginMinutes) : ''
                         };
                     });
                     routeThresholdsMap[assignment.routeNumber] = thresholdsForRoute;
@@ -592,9 +405,9 @@ const SchoolBusesPage = () => {
             .map((code) => {
                 const entry = routeSchedules[code] || {};
                 const isAM = code === 'AM';
-                const hasValue = isAM
+                const hasValue = Boolean(entry.routeStartMaxTime || entry.routeEndMarginMinutes) || (isAM
                     ? Boolean(entry.boardingTime || entry.firstStopTime || entry.schoolArrivalTime)
-                    : Boolean(entry.schoolDepartureMaxTime || entry.firstStopMarginMinutes);
+                    : Boolean(entry.schoolDepartureMaxTime || entry.firstStopMarginMinutes));
                 if (!hasValue) return null;
 
                 return {
@@ -603,7 +416,9 @@ const SchoolBusesPage = () => {
                     firstStopTime: isAM ? (entry.firstStopTime || null) : null,
                     schoolArrivalTime: isAM ? (entry.schoolArrivalTime || null) : null,
                     schoolDepartureMaxTime: isAM ? null : (entry.schoolDepartureMaxTime || null),
-                    firstStopMarginMinutes: isAM ? null : (entry.firstStopMarginMinutes !== '' ? Number(entry.firstStopMarginMinutes) : null)
+                    firstStopMarginMinutes: isAM ? null : (entry.firstStopMarginMinutes !== '' ? Number(entry.firstStopMarginMinutes) : null),
+                    routeStartMaxTime: entry.routeStartMaxTime || null,
+                    routeEndMarginMinutes: entry.routeEndMarginMinutes !== '' && entry.routeEndMarginMinutes != null ? Number(entry.routeEndMarginMinutes) : null
                 };
             })
             .filter(Boolean);
