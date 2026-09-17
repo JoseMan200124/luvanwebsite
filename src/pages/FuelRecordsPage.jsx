@@ -60,7 +60,8 @@ import {
     FUEL_TYPES
 } from '../services/fuelRecordService';
 import api from '../utils/axiosConfig';
-import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -244,11 +245,22 @@ const FuelRecordsPage = () => {
         }
     };
 
-    // Opciones de cliente (colegios + corporaciones) y placas
-    const clientOptions = [
-        ...schools.map(s => ({ label: `${s.name} (Colegio)`, value: `school-${s.id}`, type: 'school', id: s.id })),
-        ...corporations.map(c => ({ label: `${c.name} (Corporación)`, value: `corp-${c.id}`, type: 'corp', id: c.id })),
+    const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
+
+    const getSchoolCycleLabel = (school) =>
+        getCicloEscolarOptionLabel(school?.cicloEscolar) || (school?.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar');
+
+    // Opciones de cliente (colegios + corporaciones) y placas. groupLabel distingue colegios
+    // con el mismo nombre pero distinto ciclo escolar cuando el filtro de página está en
+    // "Todos los ciclos" — sin esto, dos filas "Colegio X" de años distintos se ven idénticas.
+    const clientOptionsRaw = [
+        ...schools.map(s => ({ label: `${s.name} (Colegio)`, value: `school-${s.id}`, type: 'school', id: s.id, groupLabel: getSchoolCycleLabel(s) })),
+        ...corporations.map(c => ({ label: `${c.name} (Corporación)`, value: `corp-${c.id}`, type: 'corp', id: c.id, groupLabel: 'Corporaciones' })),
     ];
+
+    const clientOptions = isSpecificCicloEscolarSelected
+        ? clientOptionsRaw
+        : [...clientOptionsRaw].sort((a, b) => a.groupLabel.localeCompare(b.groupLabel) || a.label.localeCompare(b.label));
 
     const getBusClientId = (bus, type) => {
         if (type === 'school') return bus.schoolId ?? bus.school?.id;
@@ -1077,6 +1089,7 @@ const FuelRecordsPage = () => {
                                     value={selectedClient}
                                     onChange={(e, newValue) => { setSelectedClient(newValue); setSelectedRoute(''); setSelectedPlate(''); }}
                                     getOptionLabel={(option) => option?.label || ''}
+                                    groupBy={isSpecificCicloEscolarSelected ? undefined : (option) => option.groupLabel}
                                     renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
                                     sx={{ width: 250 }}
                                     isOptionEqualToValue={(opt, val) => opt?.value === val?.value}
@@ -1458,6 +1471,7 @@ const FuelRecordsPage = () => {
                                     value={createForm.client}
                                     onChange={(e, newValue) => handleCreateChange('client', newValue)}
                                     getOptionLabel={(option) => option?.label || ''}
+                                    groupBy={isSpecificCicloEscolarSelected ? undefined : (option) => option.groupLabel}
                                     renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
                                     fullWidth
                                     isOptionEqualToValue={(opt, val) => opt?.value === val?.value}

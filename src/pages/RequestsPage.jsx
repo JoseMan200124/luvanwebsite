@@ -77,7 +77,8 @@ import {
     Lightbulb as LightbulbIcon,
     Create as CreateIcon,
 } from '@mui/icons-material';
-import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
@@ -219,11 +220,27 @@ const RequestsPage = () => {
         setDraftFilters(prev => ({ ...prev, [field]: event.target.value }));
     };
 
-    // Build client options for Autocomplete (grouped)
-    const clientOptions = [
-        ...((schools || []).map(s => ({ label: s.name, value: `school:${s.id}`, group: 'Colegios' }))),
+    const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
+
+    // Build client options for Autocomplete (grouped). Cuando el filtro de página está en
+    // "Todos los ciclos", el grupo también distingue por ciclo escolar, porque /schools puede
+    // traer varias filas con el mismo nombre (una por año) que serían indistinguibles si no.
+    const clientOptionsRaw = [
+        ...((schools || []).map(s => ({
+            label: s.name,
+            value: `school:${s.id}`,
+            group: isSpecificCicloEscolarSelected
+                ? 'Colegios'
+                : `Colegios · ${getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar')}`
+        }))),
         ...((corporations || []).map(c => ({ label: c.name, value: `corp:${c.id}`, group: 'Corporaciones' })))
     ];
+
+    // MUI Autocomplete requiere que las opciones ya vengan contiguas por grupo, si no
+    // el mismo header de grupo puede repetirse en distintos puntos de la lista.
+    const clientOptions = isSpecificCicloEscolarSelected
+        ? clientOptionsRaw
+        : [...clientOptionsRaw].sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
 
     const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => { setRowsPerPage(parseInt(event.target.value, 10)); setPage(0); };
