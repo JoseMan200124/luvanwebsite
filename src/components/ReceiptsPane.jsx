@@ -26,6 +26,14 @@ const isAdminUploadedReceipt = (receipt) => {
     return source === 'ADMIN' || source === 'ADMINISTRADOR' || receipt?.uploadedByAdmin === true;
 };
 
+const RECEIPT_STATUS_META = {
+    PENDIENTE: { label: 'Pendiente', color: '#2196f3' },
+    REGISTRADA: { label: 'Registrada', color: '#4caf50' },
+    RECHAZADA: { label: 'Rechazada', color: '#9e9e9e' },
+};
+
+const getReceiptStatusMeta = (receipt) => RECEIPT_STATUS_META[receipt?.status] || RECEIPT_STATUS_META.PENDIENTE;
+
 const ReceiptsPane = ({
     uploadedReceipts = [],
     uploadedReceiptsLoading = false,
@@ -40,7 +48,8 @@ const ReceiptsPane = ({
     canManageReceipts = false,
     uploadReceiptLoading = false,
     onUploadReceipt = null,
-    onReceiptError = null
+    onReceiptError = null,
+    onChangeReceiptStatus = null
 }) => {
     const list = filteredUploadedReceipts || uploadedReceipts || [];
     const [uploadDisplayDate, setUploadDisplayDate] = useState(() => moment().format('YYYY-MM-DDTHH:mm'));
@@ -48,6 +57,37 @@ const ReceiptsPane = ({
     const [uploadPreviewFile, setUploadPreviewFile] = useState(null);
     const fileInputRef = useRef(null);
     const [receiptRotation, setReceiptRotation] = useState(0);
+    const [rejectDialogReceipt, setRejectDialogReceipt] = useState(null);
+    const [rejectReason, setRejectReason] = useState('');
+    const [rejectLoading, setRejectLoading] = useState(false);
+
+    const closeRejectDialog = () => {
+        setRejectDialogReceipt(null);
+        setRejectReason('');
+    };
+
+    const confirmReject = async () => {
+        if (!rejectDialogReceipt || !onChangeReceiptStatus) return;
+        setRejectLoading(true);
+        try {
+            await onChangeReceiptStatus(rejectDialogReceipt.id, 'RECHAZADA', rejectReason);
+        } finally {
+            setRejectLoading(false);
+            closeRejectDialog();
+        }
+    };
+
+    // Cambiar el estado de una boleta a mano. RECHAZADA pide motivo (abre
+    // diálogo); PENDIENTE/REGISTRADA se aplican directo, sin confirmación.
+    const handleStatusSelect = (receipt, newStatus) => {
+        if (!onChangeReceiptStatus || newStatus === receipt.status) return;
+        if (newStatus === 'RECHAZADA') {
+            setRejectReason('');
+            setRejectDialogReceipt(receipt);
+            return;
+        }
+        onChangeReceiptStatus(receipt.id, newStatus);
+    };
 
     const openUploadDialog = () => {
         setUploadPreviewFile(null);
@@ -190,12 +230,28 @@ const ReceiptsPane = ({
                         <Box sx={{ mb: 1 }}>
                             {list.map(r => {
                                 const adminUploaded = isAdminUploadedReceipt(r);
+                                const statusMeta = getReceiptStatusMeta(r);
                                 return (
                                     <Box key={r.id} sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, gap: 1, p: 1, cursor: 'pointer', '&:hover': { boxShadow: 3 }, borderRadius: 1, background: selectedReceipt?.id === r.id ? '#eef2ff' : '#fafafa', flexDirection: { xs: 'column', sm: 'row' } }} onClick={async () => { setSelectedReceipt(r); setReceiptZoom(1); setReceiptRotation(0); }}>
                                         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flexWrap: 'wrap' }}>
                                                 <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1 }}>{r.name || r.filename || 'Boleta'}</Typography>
                                                 {adminUploaded && <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ height: 20 }} />}
+                                                {canManageReceipts && onChangeReceiptStatus ? (
+                                                    <Select
+                                                        size="small"
+                                                        value={r.status || 'PENDIENTE'}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        onChange={(e) => handleStatusSelect(r, e.target.value)}
+                                                        sx={{ height: 24, fontSize: '0.75rem', backgroundColor: statusMeta.color, color: '#fff', '& .MuiSelect-icon': { color: '#fff' } }}
+                                                    >
+                                                        <MenuItem value="PENDIENTE">Pendiente</MenuItem>
+                                                        <MenuItem value="REGISTRADA">Registrada</MenuItem>
+                                                        <MenuItem value="RECHAZADA">Rechazada</MenuItem>
+                                                    </Select>
+                                                ) : (
+                                                    <Chip size="small" label={statusMeta.label} sx={{ height: 20, backgroundColor: statusMeta.color, color: '#fff' }} />
+                                                )}
                                             </Box>
                                             {getReceiptDisplayDate(r) && (
                                                 <Typography variant="caption" color="text.secondary">{formatReceiptDate(getReceiptDisplayDate(r))}</Typography>
@@ -223,6 +279,23 @@ const ReceiptsPane = ({
                         </IconButton>
                         <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0, flex: '1 1 180px', overflowWrap: 'anywhere' }}>{getReceiptDisplayDate(selectedReceipt) ? `Boleta - ${formatReceiptDate(getReceiptDisplayDate(selectedReceipt))}` : 'Boleta'}</Typography>
                         {isAdminUploadedReceipt(selectedReceipt) && <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ height: 20 }} />}
+                        {canManageReceipts && onChangeReceiptStatus ? (
+                            <Select
+                                size="small"
+                                value={selectedReceipt.status || 'PENDIENTE'}
+                                onChange={(e) => handleStatusSelect(selectedReceipt, e.target.value)}
+                                sx={{ height: 24, fontSize: '0.75rem', backgroundColor: getReceiptStatusMeta(selectedReceipt).color, color: '#fff', '& .MuiSelect-icon': { color: '#fff' } }}
+                            >
+                                <MenuItem value="PENDIENTE">Pendiente</MenuItem>
+                                <MenuItem value="REGISTRADA">Registrada</MenuItem>
+                                <MenuItem value="RECHAZADA">Rechazada</MenuItem>
+                            </Select>
+                        ) : (
+                            <Chip size="small" label={getReceiptStatusMeta(selectedReceipt).label} sx={{ height: 20, backgroundColor: getReceiptStatusMeta(selectedReceipt).color, color: '#fff' }} />
+                        )}
+                        {selectedReceipt.status === 'RECHAZADA' && selectedReceipt.rejectionReason && (
+                            <Typography variant="caption" color="text.secondary">Motivo: {selectedReceipt.rejectionReason}</Typography>
+                        )}
                         <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
                         {selectedReceipt.fileUrl && (/\.(png|jpe?g|gif|webp|bmp)(\?|$)/i.test(selectedReceipt.fileUrl)) && (
                             <IconButton
@@ -260,6 +333,35 @@ const ReceiptsPane = ({
                     </Box>
                 </Box>
             )}
+
+            {/* Reject dialog */}
+            <Dialog open={!!rejectDialogReceipt} onClose={closeRejectDialog} maxWidth="xs" fullWidth>
+                <DialogTitle>Rechazar boleta</DialogTitle>
+                <DialogContent dividers>
+                    <TextField
+                        size="small"
+                        label="Motivo (opcional)"
+                        placeholder="Ej. foto borrosa, monto incorrecto"
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        fullWidth
+                        multiline
+                        minRows={2}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={closeRejectDialog} disabled={rejectLoading}>Cancelar</Button>
+                    <Button
+                        variant="contained"
+                        color="error"
+                        onClick={confirmReject}
+                        disabled={rejectLoading}
+                        startIcon={rejectLoading ? <CircularProgress size={16} /> : null}
+                    >
+                        Rechazar
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </>
     );
 };
@@ -279,6 +381,7 @@ ReceiptsPane.propTypes = {
     uploadReceiptLoading: PropTypes.bool,
     onUploadReceipt: PropTypes.func,
     onReceiptError: PropTypes.func,
+    onChangeReceiptStatus: PropTypes.func,
 };
 
 export default React.memo(ReceiptsPane);

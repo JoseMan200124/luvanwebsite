@@ -1,6 +1,6 @@
 // src/pages/StudentIncidentsPage.jsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Typography,
     Paper,
@@ -18,6 +18,7 @@ import {
     CardContent,
     Select,
     MenuItem,
+    ListSubheader,
     FormControl,
     InputLabel,
     Chip,
@@ -39,7 +40,8 @@ import tw from 'twin.macro';
 import { getAllStudentIncidents, getStudentIncidentById, INCIDENT_TYPES } from '../services/studentIncidentService';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, SCHEDULE_LABELS } from '../utils/scheduleConfig';
-import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -94,6 +96,20 @@ const StudentIncidentsPage = () => {
         fetchIncidents();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedIncidentType, selectedScheduleType, selectedCicloEscolar, startDate, endDate, selectedStudentName]);
+
+    const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
+
+    const groupedSchools = useMemo(() => {
+        if (isSpecificCicloEscolarSelected) return [];
+        const map = new Map();
+        schools.forEach((s) => {
+            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
+            const key = cycleLabel || 'Sin ciclo escolar';
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(s);
+        });
+        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
+    }, [schools, isSpecificCicloEscolarSelected]);
 
     const fetchSchools = async () => {
         try {
@@ -309,11 +325,18 @@ const StudentIncidentsPage = () => {
                                     }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
-                                    {schools.map((school) => (
-                                        <MenuItem key={school.id} value={school.id}>
-                                            {school.name}
-                                        </MenuItem>
-                                    ))}
+                                    {isSpecificCicloEscolarSelected || groupedSchools.length === 0
+                                        ? schools.map((school) => (
+                                            <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
+                                        ))
+                                        : groupedSchools.map((group) => [
+                                            <ListSubheader key={`header-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
+                                                {group.cycleLabel}
+                                            </ListSubheader>,
+                                            ...group.schools.map((school) => (
+                                                <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
+                                            ))
+                                        ])}
                                 </Select>
                             </FormControl>
                         </Grid>

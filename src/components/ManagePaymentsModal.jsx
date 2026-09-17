@@ -688,6 +688,18 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         }
     };
 
+    const handleChangeReceiptStatus = async (receiptId, status, reason) => {
+        try {
+            const res = await api.patch(`/parents/receipts/${receiptId}/status`, { status, reason });
+            const updated = res.data.receipt;
+            setUploadedReceipts(prev => prev.map(r => (r.id === receiptId ? updated : r)));
+            setSelectedReceipt(prev => (prev && prev.id === receiptId ? updated : prev));
+        } catch (err) {
+            console.error('Error changing receipt status', receiptId, err);
+            setSnackbar({ open: true, message: err.response?.data?.message || 'Error al cambiar el estado de la boleta', severity: 'error' });
+        }
+    };
+
     const handleAction = (name, payload = {}) => {
         // Prevent mutating actions for deleted families
         const mutating = new Set([
@@ -1145,6 +1157,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             receiptZoom={receiptZoom}
                             setReceiptZoom={setReceiptZoom}
                             downloadFile={downloadFile}
+                            canManageReceipts
+                            onChangeReceiptStatus={handleChangeReceiptStatus}
                         />
                     </DialogContent>
                     <DialogActions>
