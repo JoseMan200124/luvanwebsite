@@ -76,7 +76,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     useEffect(() => {
         const fetchSchools = async () => {
             try {
-                const res = await api.get('/schools');
+                const res = await api.get('/schools', { params: { includeArchived: true } });
                 setSchools(res.data.schools || []);
                 // If initialSchoolId provided, ensure it's set in formData
                 if (initialSchoolId) {

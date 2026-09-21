@@ -939,6 +939,7 @@ const SchoolUsersPage = () => {
     const fetchSchools = useCallback(async () => {
         try {
             const response = await api.get('/schools', {
+                params: { includeArchived: true },
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             // Usar la misma estructura que RolesManagementPage

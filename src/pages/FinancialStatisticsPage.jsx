@@ -291,7 +291,7 @@ const FinancialStatisticsPage = () => {
 
     const fetchSchools = useCallback(async () => {
         try {
-            const res = await api.get('/schools', { params: { allCycles: true } });
+            const res = await api.get('/schools', { params: { allCycles: true, includeArchived: true } });
             setSchools(res.data.schools || []);
         } catch (e) {
             console.error('fetchSchools error', e);
