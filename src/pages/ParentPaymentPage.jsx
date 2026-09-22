@@ -1073,14 +1073,6 @@ const ParentPaymentPage = () => {
                             </Stack>
                         </Box>
 
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 1.5, p: 1.5, mb: 2 }}>
-                            <InfoOutlinedIcon sx={{ color: '#92400E', fontSize: 18, mt: 0.1 }} />
-                            <Typography sx={{ color: '#78350F', fontSize: 13, lineHeight: 1.55 }}>
-                                <Box component="span" sx={{ fontWeight: 900, color: '#92400E' }}>Sección en desarrollo.</Box>{' '}
-                                Si notas algún dato incorrecto o experimentas algún problema, por favor comunícanoslo al correo <strong>facturacion@transportesluvansa.onmicrosoft.com</strong>
-                            </Typography>
-                        </Box>
-
                         <Box sx={{ overflowX: 'auto', mb: 2, pb: 0.25 }}>
                             <Stack direction="row" spacing={1} sx={{ minWidth: 'max-content' }}>
                                 {PAYMENT_TABS.map((tab) => {

@@ -14,7 +14,7 @@ const Filters = ({ filters, setFilters }) => {
     useEffect(() => {
         const fetchSchools = async () => {
             try {
-                const response = await api.get('/schools');
+                const response = await api.get('/schools', { params: { includeArchived: true } });
                 setSchools(response.data.schools || []);
             } catch (error) {
                 console.error('Error fetching schools:', error);
