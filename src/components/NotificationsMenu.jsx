@@ -1,7 +1,8 @@
 // src/components/NotificationsMenu.jsx
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../context/AuthProvider';
 import {
     IconButton,
     Badge,
@@ -77,6 +78,19 @@ const TOAST_KIND_STYLES = {
     info: { accent: '#6c5ce7', iconBg: 'rgba(108, 92, 231, 0.12)', icon: InfoOutlined },
 };
 
+// Qué roleId puede ver popup y para qué type de notificación (según notification.type
+// que devuelve el backend). Roles no listados aquí no ven popup.
+const TOAST_ALLOWED_TYPES_BY_ROLE = {
+    7: ['inscripcion'], // Auxiliar: solo nuevas inscripciones
+    2: ['boleta-pago'], // Administrador: solo notificaciones de pagos
+};
+
+const shouldShowToast = (roleId, notification) => {
+    const allowedTypes = TOAST_ALLOWED_TYPES_BY_ROLE[roleId];
+    if (!allowedTypes) return false;
+    return allowedTypes.includes(notification?.type);
+};
+
 const getToastKind = (notification) => {
     switch (notification?.title) {
         case 'Emergencia Reportada':
@@ -94,6 +108,9 @@ const getToastKind = (notification) => {
 };
 
 const NotificationsMenu = ({ authToken }) => {
+    const { auth } = useContext(AuthContext);
+    const currentRoleId = auth?.user?.roleId;
+
     const resolveNotificationCycle = (source = {}) => ({
         cicloEscolarId: source?.payment?.cicloEscolarId || source?.receipt?.cicloEscolarId || source?.metadata?.client?.cicloEscolarId || source?.school?.cicloEscolarId || getSelectedCicloEscolarId() || ''
     });
@@ -291,6 +308,25 @@ const NotificationsMenu = ({ authToken }) => {
     const handleToastClick = () => {
         if (currentToast) {
             handleNotificationClick(currentToast);
+            // 'boleta-pago' solo abre el preview (no es un redirect todavía); se
+            // marca como leída al presionar "Registrar Pago" dentro del preview.
+            if (currentToast.type !== 'boleta-pago') {
+                markNotificationAsRead(currentToast.id);
+            }
+        }
+        setCurrentToast(null);
+    };
+
+    // X: solo cierra, no marca como leída (leerla exige acción explícita: el
+    // botón "Marcar como leída" o redirigirse desde el popup).
+    const handleToastDismiss = () => {
+        setCurrentToast(null);
+    };
+
+    const handleMarkToastAsRead = (e) => {
+        e.stopPropagation();
+        if (currentToast) {
+            markNotificationAsRead(currentToast.id);
         }
         setCurrentToast(null);
     };
@@ -397,8 +433,10 @@ const NotificationsMenu = ({ authToken }) => {
                 }
                 // Actualizar contador
                 fetchUnreadCount();
-                // Encolar popup
-                setToastQueue((prev) => [...prev, copy]);
+                // Encolar popup solo si el rol actual está habilitado para este type
+                if (shouldShowToast(currentRoleId, copy)) {
+                    setToastQueue((prev) => [...prev, copy]);
+                }
             });
 
             socket.on('notification_deleted', (payload) => {
@@ -430,7 +468,7 @@ const NotificationsMenu = ({ authToken }) => {
                 socket.off('notification_deleted');
             }
         };
-    }, [authToken, fetchUnreadCount, menuOpen]);
+    }, [authToken, fetchUnreadCount, menuOpen, currentRoleId]);
 
     const getNotificationStyle = (notification) => {
         // Estilo base para todas las notificaciones
@@ -702,8 +740,11 @@ const NotificationsMenu = ({ authToken }) => {
                                 if (previewNotification.receipt.userId) u.searchParams.set('userId', previewNotification.receipt.userId);
                                 
                                 const state = previewNotification.paymentReceiptId;
-                                
+
                                 setPreviewOpen(false);
+                                if (previewNotification.id) {
+                                    markNotificationAsRead(previewNotification.id);
+                                }
                                 const finalPath = normalizeCycleInLink(u.pathname + u.search, previewNotification);
                                 navigate(finalPath, { state });
                             }
@@ -725,12 +766,22 @@ const NotificationsMenu = ({ authToken }) => {
                 {(() => {
                     const kind = TOAST_KIND_STYLES[getToastKind(currentToast)];
                     const ToastIcon = kind.icon;
+                    const toastClientName = currentToast?.targetingCriteria?.client?.name || null;
                     return (
                         <ToastCard $accent={kind.accent} onClick={handleToastClick}>
                             <ToastIconBadge $accent={kind.accent} $iconBg={kind.iconBg}>
                                 <ToastIcon fontSize="small" />
                             </ToastIconBadge>
                             <div style={{ flex: 1, minWidth: 0 }}>
+                                {toastClientName && (
+                                    <Chip
+                                        label={toastClientName}
+                                        size="small"
+                                        color="primary"
+                                        variant="filled"
+                                        style={{ marginBottom: 4 }}
+                                    />
+                                )}
                                 <Typography
                                     variant="subtitle2"
                                     style={{ fontWeight: 700, lineHeight: 1.3 }}
@@ -744,10 +795,17 @@ const NotificationsMenu = ({ authToken }) => {
                                 >
                                     {currentToast?.message}
                                 </Typography>
+                                <Button
+                                    size="small"
+                                    onClick={handleMarkToastAsRead}
+                                    style={{ marginTop: 6, marginLeft: -6, textTransform: 'none' }}
+                                >
+                                    Marcar como leída
+                                </Button>
                             </div>
                             <ToastCloseButton
                                 size="small"
-                                onClick={(e) => { e.stopPropagation(); setCurrentToast(null); }}
+                                onClick={(e) => { e.stopPropagation(); handleToastDismiss(); }}
                             >
                                 <Close fontSize="small" />
                             </ToastCloseButton>
