@@ -1,6 +1,6 @@
 // src/components/ReenrollmentBanner.jsx
 import React, { useContext, useEffect, useState } from 'react';
-import { Alert, AlertTitle, Button, Stack } from '@mui/material';
+import { Alert, Button, Stack, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { PermissionsContext } from '../context/PermissionsProvider';
 import { getReenrollmentOpportunities } from '../services/familyReenrollmentService';
@@ -28,10 +28,11 @@ const ReenrollmentBanner = () => {
                 <Alert
                     key={opportunity.schoolId}
                     severity="info"
+                    sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { flex: 1, py: 1.5 } }}
                     action={(
                         <Button
                             variant="contained"
-                            size="medium"
+                            size="small"
                             disableElevation
                             onClick={() => navigate(`/schools/enroll/${opportunity.schoolId}`)}
                             sx={{ backgroundColor: '#47A56B', fontWeight: 700, '&:hover': { backgroundColor: '#3a8a59' } }}
@@ -40,9 +41,13 @@ const ReenrollmentBanner = () => {
                         </Button>
                     )}
                 >
-                    <AlertTitle>Inscripciones abiertas</AlertTitle>
-                    {opportunity.schoolName}
-                    {opportunity.cycleLabel ? ` · ${opportunity.cycleLabel}` : ''}: inscribe a tu familia al nuevo ciclo con tu misma cuenta.
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        Inscripciones abiertas
+                        <Typography component="span" variant="body2">
+                            {` · ${opportunity.schoolName}`}
+                            {opportunity.cycleLabel ? ` · ${opportunity.cycleLabel}` : ''}
+                        </Typography>
+                    </Typography>
                 </Alert>
             ))}
         </Stack>
