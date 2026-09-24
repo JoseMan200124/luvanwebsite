@@ -56,6 +56,7 @@ import {
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
+import ReenrollmentBanner from '../components/ReenrollmentBanner';
 import UpdateParentInfoDialog from '../components/UpdateParentInfoDialog';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -869,6 +870,8 @@ const ParentDashboardPage = () => {
       <ParentNavbar />
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        <ReenrollmentBanner />
+
         {/* Acciones principales (mismo estilo que Colaborador) */}
         <MuiBox sx={{ mb: 3 }}>
           <Grid container spacing={2}>
