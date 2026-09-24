@@ -1,236 +1,66 @@
 // src/pages/SchoolEnrollmentPage.jsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
     Typography,
     TextField,
     Button,
-    MenuItem,
-    Select,
-    FormControl,
-    InputLabel,
     Alert,
     Snackbar,
     Box,
     Chip,
     Divider,
     CircularProgress,
-    Autocomplete
+    Stack
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
+import { AuthContext } from '../context/AuthProvider';
+import { PermissionsContext } from '../context/PermissionsProvider';
+import FamilyEnrollmentFields from '../components/enrollment/FamilyEnrollmentFields';
+import EnrollmentLoginStep from '../components/enrollment/EnrollmentLoginStep';
+import {
+    buildFamilyPayload,
+    emptyFamilyForm,
+    formFromPrefill,
+    hasValidStudent,
+    normalizeGrades,
+    parseArrayField
+} from '../utils/familyEnrollmentForm';
+import { getReenrollmentForm, submitReenrollment } from '../services/familyReenrollmentService';
+import { normalizeSchoolContext, setStoredSchoolContext } from '../utils/schoolContext';
 
-const parseArrayField = (value) => {
-    if (Array.isArray(value)) return value;
-    if (typeof value !== 'string' || !value.trim()) return [];
-
-    try {
-        const parsed = JSON.parse(value);
-        return Array.isArray(parsed) ? parsed : [];
-    } catch {
-        return [];
-    }
-};
-
-const normalizeGrades = (value) => (
-    parseArrayField(value)
-        .map((grade) => {
-            if (typeof grade === 'string') {
-                const name = grade.trim();
-                return name ? { name } : null;
-            }
-            if (grade && typeof grade === 'object') {
-                const name = String(grade.name || grade.label || grade.value || '').trim();
-                return name ? { ...grade, name } : null;
-            }
-            return null;
-        })
-        .filter(Boolean)
-);
-
-const getGradeName = (grade) => {
-    if (typeof grade === 'string') return grade;
-    return String(grade?.name || grade?.label || grade?.value || '').trim();
-};
+const REENROLL_VIEW_PERMISSION = 'padre-reinscripcion-ver';
+const STEPS = { CHOOSE: 'choose', LOGIN: 'login', PUBLIC: 'public', REENROLL: 'reenroll' };
+const EMPTY_ACCOUNT = { fullName: '', email: '', password: '' };
 
 const SchoolEnrollmentPage = () => {
     const { schoolId } = useParams();
-        
     const navigate = useNavigate();
-    
-    const [loading, setLoading] = useState(true);
+    const { logout } = useContext(AuthContext);
+    const { permissionsLoaded, hasPermission } = useContext(PermissionsContext);
+    const canReenroll = permissionsLoaded && hasPermission(REENROLL_VIEW_PERMISSION);
 
+    const [loading, setLoading] = useState(true);
+    const [schoolInfo, setSchoolInfo] = useState(null);
     const [grades, setGrades] = useState([]);
     const [extraFields, setExtraFields] = useState([]);
-    const [schoolInfo, setSchoolInfo] = useState(null);
     const [enrollmentBlockedMessage, setEnrollmentBlockedMessage] = useState('');
 
-    const [familyLastName, setFamilyLastName] = useState('');
-    const [serviceAddress, setServiceAddress] = useState('');
-    const [zoneOrSector, setZoneOrSector] = useState('');
-    const [routeType, setRouteType] = useState('Completa');
-    const [studentsCount, setStudentsCount] = useState(1);
-    const [students, setStudents] = useState([{ fullName: '', grade: '' }]);
+    const [step, setStep] = useState(STEPS.CHOOSE);
+    const [form, setForm] = useState(emptyFamilyForm);
+    const [account, setAccount] = useState(EMPTY_ACCOUNT);
+    const [loginEmail, setLoginEmail] = useState('');
+    const [emailConflict, setEmailConflict] = useState(false);
 
-    const [motherName, setMotherName] = useState('');
-    const [motherPhone, setMotherPhone] = useState('');
-    const [motherEmail, setMotherEmail] = useState('');
+    const [reenrollData, setReenrollData] = useState(null);
+    const [reenrollLoading, setReenrollLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const autoReenrollStartedRef = useRef(false);
 
-    const [fatherName, setFatherName] = useState('');
-    const [fatherPhone, setFatherPhone] = useState('');
-    const [fatherEmail, setFatherEmail] = useState('');
-
-    const [emergencyContact, setEmergencyContact] = useState('');
-    const [emergencyRelationship, setEmergencyRelationship] = useState('');
-    const [emergencyPhone, setEmergencyPhone] = useState('');
-
-    const [accountFullName, setAccountFullName] = useState('');
-    const [accountEmail, setAccountEmail] = useState('');
-    const [accountPassword, setAccountPassword] = useState('');
-
-    const [formExtraValues, setFormExtraValues] = useState({});
-
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
-
-    useEffect(() => {
-        const count = Number(studentsCount);
-        const newArray = [...students];
-
-        if (count > newArray.length) {
-            const diff = count - newArray.length;
-            for (let i = 0; i < diff; i++) {
-                newArray.push({ fullName: '', grade: '' });
-            }
-        } else if (count < newArray.length) {
-            newArray.splice(count);
-        }
-        setStudents(newArray);
-        // eslint-disable-next-line
-    }, [studentsCount]);
-
-    const handleChangeStudentField = (index, field, value) => {
-        setStudents((prev) => {
-            const clone = [...prev];
-            clone[index][field] = value;
-            return clone;
-        });
-    };
-
-    const hasValidStudent = students.some(
-        (st) => String(st?.fullName || '').trim() !== '' && String(st?.grade || '').trim() !== ''
-    );
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (enrollmentBlockedMessage) {
-            setSnackbar({
-                open: true,
-                message: enrollmentBlockedMessage,
-                severity: 'warning'
-            });
-            return;
-        }
-
-        if (!hasValidStudent) {
-            setSnackbar({
-                open: true,
-                message: 'Agrega al menos un alumno con nombre y grado.',
-                severity: 'warning'
-            });
-            return;
-        }
-
-        const finalStudentsCount = students.length;
-        const payload = {
-            schoolId,
-            familyLastName,
-            serviceAddress,
-            zoneOrSector,
-            routeType,
-            studentsCount: finalStudentsCount,
-            students: students.map((st) => ({
-                fullName: st.fullName,
-                grade: st.grade
-            })),
-            motherName,
-            motherPhone,
-            motherEmail,
-            fatherName,
-            fatherPhone,
-            fatherEmail,
-            emergencyContact,
-            emergencyRelationship,
-            emergencyPhone,
-            accountFullName,
-            accountEmail,
-            accountPassword,
-            specialFee: 0,
-            extraFields: formExtraValues
-        };
-
-        try {
-            const response = await api.post(`/public/schools/enroll/${schoolId}`, payload, {
-                skipAuth: true,
-                skipSchoolCycleContext: true
-            });
-            const existingUserIdentity = !!response?.data?.existingUserIdentity;
-            
-            // Redirigir a la página de agradecimiento
-            setTimeout(() => {
-                navigate('/thank-you', {
-                    state: {
-                        title: '¡Gracias por inscribirse!',
-                        body: existingUserIdentity
-                            ? 'Tu familia quedó inscrita en este ciclo. Ingresa con la contraseña que ya usabas para tu usuario.'
-                            : 'En breve le llegará un correo electrónico con su usuario.',
-                        footer: 'Transportes Luvan'
-                    }
-                });
-            }, 2000);
-            
-            setSnackbar({
-                open: true,
-                message: existingUserIdentity
-                    ? 'Registro enviado correctamente. Usa tu contraseña actual para ingresar.'
-                    : '¡Registro enviado correctamente!',
-                severity: 'success'
-            });
-
-            setFamilyLastName('');
-            setServiceAddress('');
-            setZoneOrSector('');
-            setRouteType('Completa');
-            setStudentsCount(1);
-            setStudents([{ fullName: '', grade: '' }]);
-            setMotherName('');
-            setMotherPhone('');
-            setMotherEmail('');
-            setFatherName('');
-            setFatherPhone('');
-            setFatherEmail('');
-            setEmergencyContact('');
-            setEmergencyRelationship('');
-            setEmergencyPhone('');
-            setAccountFullName('');
-            setAccountEmail('');
-            setAccountPassword('');
-            setFormExtraValues({});
-        } catch (error) {
-            console.error('Error al enviar formulario:', error);
-            
-            const messageToShow = 'Ocurrió un error al enviar tu registro. Intenta de nuevo.';
-            setSnackbar({
-                open: true,
-                message: error?.response?.data?.message || messageToShow,
-                severity: 'error'
-            });
-        }
-    };
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const showSnackbar = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
 
     useEffect(() => {
         const fetchSchoolData = async () => {
@@ -239,7 +69,7 @@ const SchoolEnrollmentPage = () => {
                     skipAuth: true,
                     skipSchoolCycleContext: true
                 });
-                
+
                 if (response.data?.school) {
                     const { school } = response.data;
                     const enrollmentStatus = String(school.enrollmentStatus || 'OPEN').toUpperCase();
@@ -248,23 +78,15 @@ const SchoolEnrollmentPage = () => {
                         ? (school.newUserCreationMessage || 'Este enlace pertenece a un ciclo anterior. Solicita el enlace del ciclo más reciente.')
                         : '');
                     setGrades(normalizeGrades(school.grades));
-
                     setExtraFields(parseArrayField(school.extraEnrollmentFields));
-
                 } else {
                     setSchoolInfo(null);
                     setEnrollmentBlockedMessage('No se pudo validar el colegio para inscripción.');
-                    setGrades([]);
-                    setExtraFields([]);
                 }
             } catch (error) {
                 console.error('Error al obtener info del colegio:', error);
                 setSchoolInfo(null);
-                setSnackbar({
-                    open: true,
-                    message: 'No se pudieron obtener los datos del colegio.',
-                    severity: 'error'
-                });
+                setSnackbar({ open: true, message: 'No se pudieron obtener los datos del colegio.', severity: 'error' });
             } finally {
                 setLoading(false);
             }
@@ -273,34 +95,349 @@ const SchoolEnrollmentPage = () => {
         fetchSchoolData();
     }, [schoolId]);
 
+    const loadReenrollment = useCallback(async () => {
+        // Evita que el auto-arranque vuelva a disparar al recargarse los permisos tras el login.
+        autoReenrollStartedRef.current = true;
+        setStep(STEPS.REENROLL);
+        setReenrollLoading(true);
+        try {
+            const data = await getReenrollmentForm(schoolId);
+            const defs = parseArrayField(data?.school?.extraEnrollmentFields);
+            setGrades(normalizeGrades(data?.school?.grades));
+            setExtraFields(defs);
+            setForm(formFromPrefill(data?.prefill, defs));
+            setReenrollData({ account: data?.account || null, eligibility: data?.eligibility || null });
+        } catch (error) {
+            console.error('Error al cargar la reinscripción:', error);
+            setReenrollData(null);
+            setSnackbar({
+                open: true,
+                message: error?.response?.status === 403
+                    ? 'Tu cuenta no tiene acceso a la reinscripción de familias.'
+                    : (error?.response?.data?.message || 'No se pudo cargar tu información para la reinscripción.'),
+                severity: 'error'
+            });
+            setStep(STEPS.CHOOSE);
+        } finally {
+            setReenrollLoading(false);
+        }
+    }, [schoolId]);
+
+    // Una sesión con permiso de reinscripción (p. ej. desde el banner del dashboard) entra directo.
+    useEffect(() => {
+        if (loading || enrollmentBlockedMessage || !canReenroll || autoReenrollStartedRef.current) return;
+        loadReenrollment();
+    }, [loading, enrollmentBlockedMessage, canReenroll, loadReenrollment]);
+
+    const handleSwitchAccount = () => {
+        // logout() navega a /login; volvemos enseguida a este mismo enlace.
+        logout();
+        navigate(`/schools/enroll/${schoolId}`, { replace: true });
+        setReenrollData(null);
+        setForm(emptyFamilyForm());
+        setStep(STEPS.LOGIN);
+    };
+
+    const goToLoginFromConflict = () => {
+        setEmailConflict(false);
+        setLoginEmail(account.email.trim());
+        setStep(STEPS.LOGIN);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handlePublicSubmit = async (event) => {
+        event.preventDefault();
+        if (!hasValidStudent(form.students)) {
+            showSnackbar('Agrega al menos un alumno con nombre y grado.', 'warning');
+            return;
+        }
+
+        setSubmitting(true);
+        setEmailConflict(false);
+        try {
+            await api.post(`/public/schools/enroll/${schoolId}`, {
+                ...buildFamilyPayload(form),
+                accountFullName: account.fullName,
+                accountEmail: account.email,
+                accountPassword: account.password
+            }, {
+                skipAuth: true,
+                skipSchoolCycleContext: true
+            });
+
+            showSnackbar('¡Registro enviado correctamente!');
+            setForm(emptyFamilyForm());
+            setAccount(EMPTY_ACCOUNT);
+            setTimeout(() => {
+                navigate('/thank-you', {
+                    state: {
+                        title: '¡Gracias por inscribirse!',
+                        body: 'En breve le llegará un correo electrónico con su usuario.',
+                        footer: 'Transportes Luvan'
+                    }
+                });
+            }, 2000);
+        } catch (error) {
+            console.error('Error al enviar formulario:', error);
+            if (error?.response?.data?.code === 'EMAIL_ALREADY_REGISTERED') {
+                setEmailConflict(true);
+                return;
+            }
+            showSnackbar(error?.response?.data?.message || 'Ocurrió un error al enviar tu registro. Intenta de nuevo.', 'error');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const selectNewSchoolContext = async (result) => {
+        try {
+            const response = await api.get('/auth/me/contexts', { skipSchoolCycleContext: true });
+            const contexts = Array.isArray(response.data?.contexts) ? response.data.contexts.map(normalizeSchoolContext) : [];
+            const match = contexts.find((context) => (
+                context.schoolId === String(result?.schoolId) && context.cicloEscolarId === String(result?.cicloEscolarId)
+            ));
+            if (match) setStoredSchoolContext(match);
+        } catch {
+            // Sin contexto guardado, el portal le pedirá elegirlo en /select-context.
+        }
+    };
+
+    const handleReenrollSubmit = async (event) => {
+        event.preventDefault();
+        if (!hasValidStudent(form.students)) {
+            showSnackbar('Agrega al menos un alumno con nombre y grado.', 'warning');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const result = await submitReenrollment(schoolId, buildFamilyPayload(form));
+            await selectNewSchoolContext(result);
+            navigate('/thank-you', {
+                state: {
+                    title: '¡Reinscripción recibida!',
+                    body: 'Tu familia quedó inscrita en el nuevo ciclo. Sigue usando tu mismo usuario y contraseña en la web y en la app.',
+                    footer: 'Transportes Luvan'
+                }
+            });
+        } catch (error) {
+            console.error('Error al enviar la reinscripción:', error);
+            showSnackbar(error?.response?.data?.message || 'No se pudo enviar la reinscripción. Intenta de nuevo.', 'error');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const renderChooseStep = () => (
+        <Box sx={{ textAlign: 'center', my: 2 }}>
+            <Typography variant="h6" sx={{ mb: 1 }}>
+                ¿Tu familia ya estuvo inscrita con Transportes Luvan en un ciclo anterior?
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 3, color: '#555' }}>
+                Si ya tienes usuario, inicia sesión para inscribirte al nuevo ciclo con tu misma cuenta.
+                Así no se crea una cuenta duplicada.
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
+                <Button variant="contained" onClick={() => setStep(STEPS.LOGIN)} sx={{ backgroundColor: '#0D3FE2' }}>
+                    Sí, ya tengo cuenta
+                </Button>
+                <Button variant="outlined" onClick={() => setStep(STEPS.PUBLIC)}>
+                    No, es mi primera inscripción
+                </Button>
+            </Stack>
+        </Box>
+    );
+
+    const renderReenrollStep = () => {
+        if (reenrollLoading || !reenrollData) {
+            return (
+                <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+                    <CircularProgress />
+                </Box>
+            );
+        }
+
+        const { account: sessionAccount, eligibility } = reenrollData;
+        const accountBox = (
+            <Alert severity="info" sx={{ mb: 3 }} action={(
+                <Button color="inherit" size="small" onClick={handleSwitchAccount}>
+                    No soy yo
+                </Button>
+            )}>
+                Inscribiendo con la cuenta de <strong>{sessionAccount?.name}</strong> ({sessionAccount?.email}).
+            </Alert>
+        );
+
+        if (eligibility?.alreadyEnrolled) {
+            return (
+                <>
+                    {accountBox}
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                        Tu familia ya está inscrita en este ciclo escolar.
+                    </Alert>
+                    <Button variant="contained" onClick={() => navigate('/parent/dashboard')}>
+                        Ir a mi portal
+                    </Button>
+                </>
+            );
+        }
+
+        if (eligibility && !eligibility.canEnroll) {
+            return (
+                <>
+                    {accountBox}
+                    <Alert severity="warning">
+                        {eligibility.blockedMessage || 'Este colegio no está recibiendo inscripciones.'}
+                    </Alert>
+                </>
+            );
+        }
+
+        return (
+            <form onSubmit={handleReenrollSubmit} style={{ flexGrow: 1 }}>
+                {accountBox}
+                <Typography variant="body2" sx={{ mb: 2, color: '#333' }}>
+                    Revisa y actualiza los datos de tu familia. Elige el grado de cada alumno para este nuevo ciclo.
+                </Typography>
+                <FamilyEnrollmentFields form={form} onChange={setForm} grades={grades} extraFieldDefs={extraFields} />
+                {!hasValidStudent(form.students) && (
+                    <Typography variant="body2" sx={{ mt: 2, color: '#c62828' }}>
+                        Debes ingresar al menos un alumno con nombre y grado.
+                    </Typography>
+                )}
+                <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={!hasValidStudent(form.students) || submitting}
+                    sx={{ backgroundColor: '#47A56B', color: '#FFFFFF', marginTop: '1.5rem', padding: '0.75rem', width: '100%', fontSize: '1rem' }}
+                >
+                    {submitting ? 'Enviando...' : 'Enviar reinscripción'}
+                </Button>
+            </form>
+        );
+    };
+
+    const renderPublicStep = () => (
+        <form onSubmit={handlePublicSubmit} style={{ flexGrow: 1 }}>
+            <Alert severity="info" sx={{ mb: 3 }} action={(
+                <Button color="inherit" size="small" onClick={() => setStep(STEPS.LOGIN)}>
+                    Iniciar sesión
+                </Button>
+            )}>
+                ¿Tu familia ya tiene cuenta Luvan? Inicia sesión para no crear una cuenta duplicada.
+            </Alert>
+
+            <FamilyEnrollmentFields form={form} onChange={setForm} grades={grades} extraFieldDefs={extraFields} />
+
+            <Divider sx={{ my: 3 }} />
+            <Typography
+                variant="h6"
+                sx={{ backgroundColor: '#47A56B', color: '#FFFFFF', padding: '0.5rem 1rem', borderRadius: '4px', mb: 2 }}
+            >
+                Campos para creación de usuario
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: '#333' }}>
+                Un usuario por familia. No se puede crear más de un usuario familiar,
+                por lo que se solicita ingresar el dato de quien estará a cargo del portal.
+            </Typography>
+            <TextField
+                label="Nombre completo de persona a cargo"
+                fullWidth
+                margin="normal"
+                value={account.fullName}
+                onChange={(event) => setAccount({ ...account, fullName: event.target.value })}
+                required
+            />
+            <TextField
+                label="Correo del usuario"
+                type="email"
+                fullWidth
+                margin="normal"
+                value={account.email}
+                onChange={(event) => {
+                    setEmailConflict(false);
+                    setAccount({ ...account, email: event.target.value });
+                }}
+                required
+            />
+            <TextField
+                label="Contraseña del usuario"
+                type="password"
+                fullWidth
+                margin="normal"
+                value={account.password}
+                onChange={(event) => setAccount({ ...account, password: event.target.value })}
+                required
+            />
+
+            {emailConflict && (
+                <Alert severity="warning" sx={{ mt: 2 }} action={(
+                    <Button color="inherit" size="small" onClick={goToLoginFromConflict}>
+                        Iniciar sesión y reinscribirme
+                    </Button>
+                )}>
+                    Este correo ya tiene una cuenta en Transportes Luvan. Inicia sesión con esa cuenta para inscribir a tu familia en el nuevo ciclo.
+                </Alert>
+            )}
+
+            {!hasValidStudent(form.students) && (
+                <Typography variant="body2" sx={{ mt: 2, color: '#c62828' }}>
+                    Debes ingresar al menos un alumno con nombre y grado.
+                </Typography>
+            )}
+
+            <Button
+                type="submit"
+                variant="contained"
+                disabled={!hasValidStudent(form.students) || submitting}
+                sx={{ backgroundColor: '#47A56B', color: '#FFFFFF', marginTop: '1.5rem', padding: '0.75rem', width: '100%', fontSize: '1rem' }}
+            >
+                {submitting ? 'Enviando...' : 'Enviar'}
+            </Button>
+
+            <Box sx={{ mt: 2, p: 1.5, backgroundColor: '#f0f7f4', border: '1px solid #c8e6c9', borderRadius: 1, textAlign: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#555' }}>
+                    📧 El correo de confirmación será enviado desde{' '}
+                    <strong>haricodeoficial@gmail.com</strong>. Si no lo encuentras en tu
+                    bandeja de entrada, revisa tu carpeta de <em>spam</em> o{' '}
+                    <em>correo no deseado</em>.
+                </Typography>
+            </Box>
+        </form>
+    );
+
+    const renderStep = () => {
+        if (enrollmentBlockedMessage) {
+            return <Alert severity="warning" sx={{ mb: 3 }}>{enrollmentBlockedMessage}</Alert>;
+        }
+        if (step === STEPS.LOGIN) {
+            return (
+                <EnrollmentLoginStep
+                    initialEmail={loginEmail}
+                    onSuccess={loadReenrollment}
+                    onBack={() => setStep(STEPS.CHOOSE)}
+                    onPasswordExpired={() => navigate('/force-password-change')}
+                />
+            );
+        }
+        if (step === STEPS.REENROLL) return renderReenrollStep();
+        if (step === STEPS.PUBLIC) return renderPublicStep();
+        return renderChooseStep();
+    };
+
     if (loading) {
         return (
-            <Box
-                sx={{
-                    backgroundColor: '#f7f7f7',
-                    minHeight: '100vh',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    padding: '20px'
-                }}
-            >
+            <Box sx={{ backgroundColor: '#f7f7f7', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
                 <CircularProgress />
             </Box>
         );
     }
 
+    const operationActive = String(schoolInfo?.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    const enrollmentOpen = String(schoolInfo?.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN';
+
     return (
-        <Box
-            sx={{
-                backgroundColor: '#f7f7f7',
-                minHeight: '100vh',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                padding: '20px'
-            }}
-        >
+        <Box sx={{ backgroundColor: '#f7f7f7', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
             <Box
                 sx={{
                     backgroundColor: '#FFFFFF',
@@ -313,452 +450,49 @@ const SchoolEnrollmentPage = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     minHeight: '80vh',
-                    '@media (max-width: 480px)': {
-                        padding: '20px',
-                        minHeight: 'auto',
-                    }
+                    '@media (max-width: 480px)': { padding: '20px', minHeight: 'auto' }
                 }}
             >
                 <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-                    <img
-                        src={logoLuvan}
-                        alt="Logo Transportes Luvan"
-                        style={{ maxWidth: '150px', height: 'auto' }}
-                    />
+                    <img src={logoLuvan} alt="Logo Transportes Luvan" style={{ maxWidth: '150px', height: 'auto' }} />
                 </Box>
 
                 <Typography
                     variant="h4"
                     gutterBottom
-                    sx={{
-                        backgroundColor: '#0D3FE2',
-                        color: '#FFFFFF',
-                        padding: '1rem',
-                        textAlign: 'center',
-                        borderRadius: '8px',
-                        mb: 3
-                    }}
+                    sx={{ backgroundColor: '#0D3FE2', color: '#FFFFFF', padding: '1rem', textAlign: 'center', borderRadius: '8px', mb: 3 }}
                 >
-                    Formulario de Inscripción
+                    {step === STEPS.REENROLL ? 'Reinscripción' : 'Formulario de Inscripción'}
                 </Typography>
 
                 {schoolInfo && (
                     <Box sx={{ mb: 3, textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                            {schoolInfo.name}
-                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 700 }}>{schoolInfo.cicloEscolar?.anio ? `${schoolInfo.name} ${schoolInfo.cicloEscolar.anio}` : schoolInfo.name}</Typography>
                         <Box sx={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 1, mt: 1 }}>
                             <Chip
-                                label={String(schoolInfo.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'Operando' : 'Sin operación'}
-                                color={String(schoolInfo.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'success' : 'default'}
+                                label={operationActive ? 'Operando' : 'Sin operación'}
+                                color={operationActive ? 'success' : 'default'}
                                 size="small"
-                                variant={String(schoolInfo.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'filled' : 'outlined'}
+                                variant={operationActive ? 'filled' : 'outlined'}
                             />
                             <Chip
-                                label={String(schoolInfo.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN' ? 'Inscripciones abiertas' : 'Inscripciones cerradas'}
-                                color={String(schoolInfo.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN' ? 'primary' : 'default'}
+                                label={enrollmentOpen ? 'Inscripciones abiertas' : 'Inscripciones cerradas'}
+                                color={enrollmentOpen ? 'primary' : 'default'}
                                 size="small"
-                                variant={String(schoolInfo.enrollmentStatus || 'OPEN').toUpperCase() === 'OPEN' ? 'filled' : 'outlined'}
+                                variant={enrollmentOpen ? 'filled' : 'outlined'}
                             />
                         </Box>
                     </Box>
                 )}
 
-                {enrollmentBlockedMessage ? (
-                    <Alert severity="warning" sx={{ mb: 3 }}>
-                        {enrollmentBlockedMessage}
-                    </Alert>
-                ) : (
-                <form onSubmit={handleSubmit} style={{ flexGrow: 1 }}>
-                    <Typography variant="h6" sx={{ mb: 2 }}>
-                        Información Familiar
-                    </Typography>
-                    <TextField
-                        label="Apellidos de familia (del alumno NO de los padres)"
-                        fullWidth
-                        margin="normal"
-                        value={familyLastName}
-                        onChange={(e) => setFamilyLastName(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Dirección de servicio"
-                        fullWidth
-                        margin="normal"
-                        value={serviceAddress}
-                        onChange={(e) => setServiceAddress(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Zona o sector"
-                        fullWidth
-                        margin="normal"
-                        value={zoneOrSector}
-                        onChange={(e) => setZoneOrSector(e.target.value)}
-                        required
-                    />
-                    <FormControl fullWidth margin="normal">
-                        <InputLabel>Tipo de ruta</InputLabel>
-                        <Select
-                            value={routeType}
-                            onChange={(e) => setRouteType(e.target.value)}
-                            label="Tipo de ruta"
-                            required
-                        >
-                            <MenuItem value="Completa">Completa</MenuItem>
-                            <MenuItem value="Media PM">Media PM</MenuItem>
-                            <MenuItem value="Media AM">Media AM</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <FormControl fullWidth margin="normal">
-                        <InputLabel>Cantidad de alumnos</InputLabel>
-                        <Select
-                            value={studentsCount}
-                            onChange={(e) => setStudentsCount(e.target.value)}
-                            label="Cantidad de alumnos"
-                            required
-                        >
-                            <MenuItem value={1}>1</MenuItem>
-                            <MenuItem value={2}>2</MenuItem>
-                            <MenuItem value={3}>3</MenuItem>
-                            <MenuItem value={4}>4</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    {students.map((st, index) => (
-                        <Box
-                            key={index}
-                            sx={{
-                                mt: 2,
-                                pl: 2,
-                                borderLeft: '4px solid #ccc',
-                                mb: 2
-                            }}
-                        >
-                            <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                                Alumno #{index + 1}
-                            </Typography>
-                            <TextField
-                                label={`Nombre del alumno #${index + 1}`}
-                                fullWidth
-                                margin="normal"
-                                value={st.fullName}
-                                onChange={(e) =>
-                                    handleChangeStudentField(index, 'fullName', e.target.value)
-                                }
-                                required
-                            />
-                            <Autocomplete
-                                options={[{ name: 'PENDIENTE' }, ...grades]}
-                                getOptionLabel={getGradeName}
-                                isOptionEqualToValue={(option, value) => getGradeName(option) === getGradeName(value)}
-                                value={
-                                    st.grade === 'PENDIENTE'
-                                        ? { name: 'PENDIENTE' }
-                                        : grades.find((g) => getGradeName(g) === st.grade) || null
-                                }
-                                onChange={(event, newValue) =>
-                                    handleChangeStudentField(
-                                        index,
-                                        'grade',
-                                        getGradeName(newValue)
-                                    )
-                                }
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        label={`Grado del alumno #${index + 1}`}
-                                        margin="normal"
-                                        required
-                                        helperText={st.grade === 'PENDIENTE'
-                                            ? 'Alumno sin grado: será asignado manualmente por un administrador.'
-                                            : ''}
-                                    />
-                                )}
-                            />
-                        </Box>
-                    ))}
-
-                    <Divider sx={{ my: 3 }} />
-
-                    <Typography variant="h6" sx={{ mb: 2 }}>
-                        Datos de la Madre
-                    </Typography>
-                    <TextField
-                        label="Nombre madre"
-                        fullWidth
-                        margin="normal"
-                        value={motherName}
-                        onChange={(e) => setMotherName(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Celular madre"
-                        fullWidth
-                        margin="normal"
-                        value={motherPhone}
-                        onChange={(e) => setMotherPhone(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Correo madre"
-                        type="email"
-                        fullWidth
-                        margin="normal"
-                        value={motherEmail}
-                        onChange={(e) => setMotherEmail(e.target.value)}
-                        required
-                    />
-
-                    <Divider sx={{ my: 3 }} />
-
-                    <Typography variant="h6" sx={{ mb: 2 }}>
-                        Datos del Padre
-                    </Typography>
-                    <TextField
-                        label="Nombre padre"
-                        fullWidth
-                        margin="normal"
-                        value={fatherName}
-                        onChange={(e) => setFatherName(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Celular padre"
-                        fullWidth
-                        margin="normal"
-                        value={fatherPhone}
-                        onChange={(e) => setFatherPhone(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Correo padre"
-                        type="email"
-                        fullWidth
-                        margin="normal"
-                        value={fatherEmail}
-                        onChange={(e) => setFatherEmail(e.target.value)}
-                        required
-                    />
-
-                    <Divider sx={{ my: 3 }} />
-
-                    <Typography variant="h6" sx={{ mb: 2 }}>
-                        Contacto de Emergencia
-                    </Typography>
-                    <TextField
-                        label="Contacto emergencia"
-                        fullWidth
-                        margin="normal"
-                        value={emergencyContact}
-                        onChange={(e) => setEmergencyContact(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Parentesco"
-                        fullWidth
-                        margin="normal"
-                        value={emergencyRelationship}
-                        onChange={(e) => setEmergencyRelationship(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Celular"
-                        fullWidth
-                        margin="normal"
-                        value={emergencyPhone}
-                        onChange={(e) => setEmergencyPhone(e.target.value)}
-                        required
-                    />
-
-                    <Divider sx={{ my: 3 }} />
-
-                    <Typography
-                        variant="h6"
-                        sx={{
-                            backgroundColor: '#47A56B',
-                            color: '#FFFFFF',
-                            padding: '0.5rem 1rem',
-                            borderRadius: '4px',
-                            mb: 2
-                        }}
-                    >
-                        Campos para creación de usuario
-                    </Typography>
-
-                    <Typography variant="body2" sx={{ mb: 2, color: '#333' }}>
-                        Un usuario por familia. No se puede crear más de un usuario familiar,
-                        por lo que se solicita ingresar el dato de quien estará a cargo del portal.
-                    </Typography>
-
-                    <TextField
-                        label="Nombre completo de persona a cargo"
-                        fullWidth
-                        margin="normal"
-                        value={accountFullName}
-                        onChange={(e) => setAccountFullName(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Correo del usuario"
-                        type="email"
-                        fullWidth
-                        margin="normal"
-                        value={accountEmail}
-                        onChange={(e) => setAccountEmail(e.target.value)}
-                        required
-                    />
-                    <TextField
-                        label="Contraseña del usuario"
-                        type="password"
-                        fullWidth
-                        margin="normal"
-                        value={accountPassword}
-                        onChange={(e) => setAccountPassword(e.target.value)}
-                        required
-                    />
-
-                    <Divider sx={{ my: 3 }} />
-
-                    {extraFields.length > 0 && (
-                        <>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                                Campos Adicionales
-                            </Typography>
-                            {extraFields.map((field, idx) => (
-                                <Box key={idx} sx={{ mb: 2 }}>
-                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                                        {field.fieldName}
-                                        {field.required && ' *'}
-                                    </Typography>
-
-                                    {field.type === 'text' && (
-                                        <TextField
-                                            placeholder={field.fieldName}
-                                            fullWidth
-                                            required={field.required}
-                                            value={formExtraValues[field.fieldName] || ''}
-                                            onChange={(e) =>
-                                                setFormExtraValues({
-                                                    ...formExtraValues,
-                                                    [field.fieldName]: e.target.value
-                                                })
-                                            }
-                                        />
-                                    )}
-
-                                    {field.type === 'number' && (
-                                        <TextField
-                                            type="number"
-                                            placeholder={field.fieldName}
-                                            fullWidth
-                                            required={field.required}
-                                            value={formExtraValues[field.fieldName] || ''}
-                                            onChange={(e) =>
-                                                setFormExtraValues({
-                                                    ...formExtraValues,
-                                                    [field.fieldName]: e.target.value
-                                                })
-                                            }
-                                        />
-                                    )}
-
-                                    {field.type === 'date' && (
-                                        <TextField
-                                            type="date"
-                                            fullWidth
-                                            required={field.required}
-                                            InputLabelProps={{ shrink: true }}
-                                            placeholder={field.fieldName}
-                                            value={formExtraValues[field.fieldName] || ''}
-                                            onChange={(e) =>
-                                                setFormExtraValues({
-                                                    ...formExtraValues,
-                                                    [field.fieldName]: e.target.value
-                                                })
-                                            }
-                                        />
-                                    )}
-
-                                    {field.type === 'select' && (
-                                        <FormControl fullWidth required={field.required}>
-                                            <InputLabel>{field.fieldName}</InputLabel>
-                                            <Select
-                                                value={formExtraValues[field.fieldName] || ''}
-                                                onChange={(e) =>
-                                                    setFormExtraValues({
-                                                        ...formExtraValues,
-                                                        [field.fieldName]: e.target.value
-                                                    })
-                                                }
-                                            >
-                                                <MenuItem value="">-- Seleccione --</MenuItem>
-                                                <MenuItem value="Opción1">Opción1</MenuItem>
-                                                <MenuItem value="Opción2">Opción2</MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                    )}
-                                </Box>
-                            ))}
-                        </>
-                    )}
-
-                    {!hasValidStudent && (
-                        <Typography variant="body2" sx={{ mt: 2, color: '#c62828' }}>
-                            Debes ingresar al menos un alumno con nombre y grado.
-                        </Typography>
-                    )}
-
-                    <Button
-                        type="submit"
-                        variant="contained"
-                        disabled={!hasValidStudent}
-                        sx={{
-                            backgroundColor: '#47A56B',
-                            color: '#FFFFFF',
-                            marginTop: '1.5rem',
-                            padding: '0.75rem',
-                            width: '100%',
-                            fontSize: '1rem'
-                        }}
-                    >
-                        Enviar
-                    </Button>
-
-                    <Box
-                        sx={{
-                            mt: 2,
-                            p: 1.5,
-                            backgroundColor: '#f0f7f4',
-                            border: '1px solid #c8e6c9',
-                            borderRadius: 1,
-                            textAlign: 'center'
-                        }}
-                    >
-                        <Typography variant="caption" sx={{ color: '#555' }}>
-                            📧 El correo de confirmación será enviado desde{' '}
-                            <strong>haricodeoficial@gmail.com</strong>. Si no lo encuentras en tu
-                            bandeja de entrada, revisa tu carpeta de <em>spam</em> o{' '}
-                            <em>correo no deseado</em>.
-                        </Typography>
-                    </Box>
-                </form>
-                )}
+                {renderStep()}
 
                 <Box sx={{ mt: 4, textAlign: 'center', color: '#777' }}>
                     <Divider sx={{ mb: 1 }} />
-                    <Typography variant="body2">
-                        Todos los derechos reservados a Transportes Luvan
-                    </Typography>
+                    <Typography variant="body2">Todos los derechos reservados a Transportes Luvan</Typography>
                     <Typography variant="body2">
                         Desarrollado por{' '}
-                        <a
-                            href="https://www.haricode.tech"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            Haricode
-                        </a>
+                        <a href="https://www.haricode.tech" target="_blank" rel="noopener noreferrer">Haricode</a>
                     </Typography>
                 </Box>
 
@@ -768,11 +502,7 @@ const SchoolEnrollmentPage = () => {
                     onClose={() => setSnackbar({ ...snackbar, open: false })}
                     anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
                 >
-                    <Alert
-                        onClose={() => setSnackbar({ ...snackbar, open: false })}
-                        severity={snackbar.severity}
-                        sx={{ width: '100%' }}
-                    >
+                    <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
                         {snackbar.message}
                     </Alert>
                 </Snackbar>

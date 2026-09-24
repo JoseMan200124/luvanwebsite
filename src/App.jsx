@@ -13,7 +13,6 @@ import AuthProvider from './context/AuthProvider';
 import PermissionsProvider from './context/PermissionsProvider';
 import MFAVerify from './components/MFAVerify';
 import PermissionsManagementPage from './pages/PermissionsManagementPage';
-import ContractsManagementPage from './pages/ContractsManagementPage';
 import ContractFillPage from './pages/ContractFillPage';
 import ContractViewer from './pages/ContractViewer';
 import FilledContractViewer from './pages/FilledContractViewer';
@@ -96,7 +95,6 @@ function App() {
                     />
 
                     {/* Contratos públicos */}
-                    <Route path="/contracts"             element={<ContractsManagementPage />} />
                     <Route path="/contracts/share/:uuid" element={<ContractFillPage />} />
 
                     {/* Contratos protegidos */}
@@ -294,8 +292,8 @@ function App() {
                     <Route
                         path="/parent/payment"
                         element={
-                            <ProtectedRoute 
-                                moduleKey={'padre-pagos-boletas'} 
+                            <ProtectedRoute
+                                moduleKey={'padres-subir-boleta'}
                                 redirectTo="/parent/dashboard"
                             >
                                 <ParentPaymentPage />

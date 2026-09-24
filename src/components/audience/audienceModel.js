@@ -28,7 +28,7 @@ export const PAYMENT_STATUS_OPTIONS = [
     { value: 'ADELANTADO', label: 'Adelantado' },
     { value: 'PENDIENTE',  label: 'Pendiente' },
     { value: 'MORA',       label: 'En Mora' },
-    { value: 'EN_PROCESO', label: 'En Proceso' },
+    { value: 'PARCIAL',    label: 'Pago Parcial' },
 ];
 
 export const EMPTY_PADRE_FILTERS = {

@@ -280,10 +280,8 @@ const CicloEscolarSelectionPage = () => {
         return ensureSchedules([], DEFAULT_SCHEDULE_CODES); // new school — seed defaults
     };
 
-    const getDefaultOperationStatusForNewSchool = () => {
-        if (!selectedCicloEscolarId || !defaultCicloEscolar?.id) return 'ACTIVE';
-        return String(selectedCicloEscolarId) === String(defaultCicloEscolar.id) ? 'ACTIVE' : 'INACTIVE';
-    };
+    // Todo colegio nuevo nace "Sin operación"; se activa manualmente al arrancar el ciclo.
+    const getDefaultOperationStatusForNewSchool = () => 'INACTIVE';
 
     const parseArrayField = (value) => {
         if (Array.isArray(value)) return value;
@@ -330,7 +328,7 @@ const CicloEscolarSelectionPage = () => {
         dailyPenalty: 0,
         penaltyPaused: false,
         operationStatus: getDefaultOperationStatusForNewSchool(),
-        enrollmentStatus: 'OPEN',
+        enrollmentStatus: 'CLOSED',
         enrollmentFeeAmount: 0
     });
 
@@ -396,7 +394,7 @@ const CicloEscolarSelectionPage = () => {
             dailyPenalty: source.dailyPenalty ?? 0,
             penaltyPaused: !!source.penaltyPaused,
             operationStatus: getDefaultOperationStatusForNewSchool(),
-            enrollmentStatus: source.enrollmentStatus || 'OPEN',
+            enrollmentStatus: 'CLOSED',
             enrollmentFeeAmount: source.enrollmentFeeAmount ?? 0
         } : buildEmptySchoolDraft());
         setSchoolSchedules(schedules);

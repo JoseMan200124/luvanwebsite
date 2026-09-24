@@ -56,6 +56,52 @@ const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
 const ALL_CLIENTS_VALUE = 'all';
 
+const MAX_VISIBLE_SCHOOL_NAMES = 2;
+
+// Celda "Audiencia": el backend resuelve `audience` desde el targeting de la
+// circular (todos / uno o varios colegios / familias concretas).
+const renderAudience = (row) => {
+  const audience = row?.audience;
+  const names = Array.isArray(audience?.schoolNames) ? audience.schoolNames : [];
+
+  const schoolsLabel = names.length > MAX_VISIBLE_SCHOOL_NAMES
+    ? `${names.slice(0, MAX_VISIBLE_SCHOOL_NAMES).join(', ')} +${names.length - MAX_VISIBLE_SCHOOL_NAMES}`
+    : names.join(', ');
+  const schoolsText = names.length > 0 ? (
+    <Tooltip title={names.join(', ')}>
+      <Typography variant="body2" component="span">{schoolsLabel}</Typography>
+    </Tooltip>
+  ) : null;
+
+  if (audience?.kind === 'families') {
+    const count = Number(audience.familiesCount) || 0;
+    return (
+      <Chip
+        label={`${count} ${count === 1 ? 'familia específica' : 'familias específicas'}`}
+        size="small"
+        variant="outlined"
+        color="secondary"
+        sx={{ fontWeight: 700 }}
+      />
+    );
+  }
+
+  if (audience?.kind === 'schools' && schoolsText) return schoolsText;
+
+  // Sin `audience` (respuesta antigua) solo se conoce el colegio único de la fila.
+  if (!audience && safeStr(row?.school?.name)) return safeStr(row.school.name);
+
+  return (
+    <Chip
+      label="Todos los colegios"
+      size="small"
+      variant="outlined"
+      color="primary"
+      sx={{ fontWeight: 700 }}
+    />
+  );
+};
+
 const withPdfViewerParams = (url) => {
   const u = safeStr(url);
   if (!u) return u;
@@ -508,15 +554,7 @@ const CircularHistoryPage = () => {
                     Asunto
                   </TableSortLabel>
                 </TableCell>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'school' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'school'}
-                    direction={sortBy === 'school' ? sortDirection : 'asc'}
-                    onClick={() => handleRequestSort('school')}
-                  >
-                    Colegio
-                  </TableSortLabel>
-                </TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>Audiencia</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="center">Archivo adjunto</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="right">Acciones</TableCell>
               </TableRow>
@@ -548,19 +586,7 @@ const CircularHistoryPage = () => {
                         {safeStr(r.subject) || 'Circular'}
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      {safeStr(r.school?.name) ? (
-                        safeStr(r.school?.name)
-                      ) : (
-                        <Chip
-                          label="Todos los colegios"
-                          size="small"
-                          variant="outlined"
-                          color="primary"
-                          sx={{ fontWeight: 700 }}
-                        />
-                      )}
-                    </TableCell>
+                    <TableCell>{renderAudience(r)}</TableCell>
                     <TableCell align="center">{r.hasAttachment ? 'Sí' : 'No'}</TableCell>
                     <TableCell align="right">
                       <Tooltip title="Ver detalle">

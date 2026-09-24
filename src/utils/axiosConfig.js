@@ -54,10 +54,15 @@ const normalizeCycleId = (raw) => {
 
 const getCycleContext = () => {
     const token = localStorage.getItem('token');
+    const routeCicloEscolarId = getRouteCicloEscolarId();
     return {
         token,
         roleId: getTokenRoleId(token),
-        selectedCicloEscolarId: getRouteCicloEscolarId() || normalizeCycleId(getSelectedCicloEscolarId()),
+        selectedCicloEscolarId: routeCicloEscolarId || normalizeCycleId(getSelectedCicloEscolarId()),
+        // True only when the cycle came from the /escuelas/ciclo/:id/* route (deliberate archived-
+        // cycle view), never for the tab's generic "last selected cycle". The backend uses this to
+        // decide whether an explicit cicloEscolarId is allowed to override the school's own cycle.
+        isRouteOverride: !!routeCicloEscolarId,
         selectedSchoolId: getSelectedSchoolId()
     };
 };
@@ -122,6 +127,9 @@ const hasExplicitSchoolOverride = (config) => {
 const injectCycleHeaders = (config, cycleContext) => {
     if (cycleContext.selectedCicloEscolarId) {
         config.headers['X-Ciclo-Escolar-Id'] = cycleContext.selectedCicloEscolarId;
+        if (cycleContext.isRouteOverride) {
+            config.headers['X-Ciclo-Escolar-Route-Override'] = '1';
+        }
     }
 };
 

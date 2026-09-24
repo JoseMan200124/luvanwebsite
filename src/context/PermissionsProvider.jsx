@@ -6,12 +6,19 @@ import api from '../utils/axiosConfig';
 export const PermissionsContext = createContext();
 
 const PermissionsProvider = ({ children }) => {
-    const { auth } = useContext(AuthContext);
+    const { auth, initialLoad } = useContext(AuthContext);
     const [permissions, setPermissions] = useState({});
     const [permissionsLoaded, setPermissionsLoaded] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // AuthProvider todavía está restaurando la sesión desde localStorage
+        // (async): si resolvemos aquí, el token real de un cold load todavía
+        // no llegó a auth.token y esto marca permissionsLoaded=true con {}
+        // antes de tiempo — ProtectedRoute lee ese vacío transitorio y
+        // redirige a /login aunque el usuario sí tenga sesión válida.
+        if (initialLoad) return;
+
         const loadPermissions = async () => {
             setLoading(true);
             setPermissionsLoaded(false);
@@ -41,7 +48,7 @@ const PermissionsProvider = ({ children }) => {
         };
 
         loadPermissions();
-    }, [auth?.token, auth?.user?.id]); // Solo recargar si cambia el token o el userId
+    }, [initialLoad, auth?.token, auth?.user?.id]); // Recargar cuando AuthProvider termine de resolver la sesión, o cambie el token/userId
 
     const hasPermission = (moduleKey) => {
         return !!permissions[moduleKey];

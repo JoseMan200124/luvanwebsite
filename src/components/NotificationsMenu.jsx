@@ -1,7 +1,8 @@
 // src/components/NotificationsMenu.jsx
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../context/AuthProvider';
 import {
     IconButton,
     Badge,
@@ -15,8 +16,17 @@ import {
     DialogActions,
     Button,
     Chip,
+    Snackbar,
 } from '@mui/material';
-import { Notifications, ClearAll, Close } from '@mui/icons-material';
+import {
+    Notifications,
+    ClearAll,
+    Close,
+    ErrorOutline,
+    WarningAmberOutlined,
+    CheckCircleOutline,
+    InfoOutlined,
+} from '@mui/icons-material';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import PropTypes from 'prop-types';
@@ -32,7 +42,75 @@ const NotificationIconButton = styled(IconButton)`
     }
 `;
 
+// Card del popup de notificación en tiempo real: look propio (pill + acento + icono
+// circular) para que se distinga a simple vista de los Snackbar/Alert genéricos del resto
+// del sitio.
+const ToastCard = styled.div`
+    ${tw`flex items-start gap-3 bg-white rounded-2xl p-4`}
+    width: 380px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 12px 32px -8px rgba(17, 24, 39, 0.25), 0 0 0 1px rgba(17, 24, 39, 0.04);
+    border: 2px solid ${(props) => props.$accent};
+    cursor: pointer;
+`;
+
+const ToastIconBadge = styled.div`
+    ${tw`flex items-center justify-center rounded-full flex-shrink-0`}
+    width: 38px;
+    height: 38px;
+    background: ${(props) => props.$iconBg};
+    color: ${(props) => props.$accent};
+`;
+
+const ToastCloseButton = styled(IconButton)`
+    ${tw`text-gray-400`}
+    padding: 2px !important;
+    margin: -4px -4px 0 0 !important;
+    &:hover {
+        ${tw`text-gray-700`}
+    }
+`;
+
+const TOAST_KIND_STYLES = {
+    error: { accent: '#e53935', iconBg: 'rgba(229, 57, 53, 0.12)', icon: ErrorOutline },
+    warning: { accent: '#fb8c00', iconBg: 'rgba(251, 140, 0, 0.12)', icon: WarningAmberOutlined },
+    success: { accent: '#00a854', iconBg: 'rgba(0, 168, 84, 0.12)', icon: CheckCircleOutline },
+    info: { accent: '#6c5ce7', iconBg: 'rgba(108, 92, 231, 0.12)', icon: InfoOutlined },
+};
+
+// Qué roleId puede ver popup y para qué type de notificación (según notification.type
+// que devuelve el backend). Roles no listados aquí no ven popup.
+const TOAST_ALLOWED_TYPES_BY_ROLE = {
+    7: ['inscripcion'], // Auxiliar: solo nuevas inscripciones
+    2: ['boleta-pago'], // Administrador: solo notificaciones de pagos
+};
+
+const shouldShowToast = (roleId, notification) => {
+    const allowedTypes = TOAST_ALLOWED_TYPES_BY_ROLE[roleId];
+    if (!allowedTypes) return false;
+    return allowedTypes.includes(notification?.type);
+};
+
+const getToastKind = (notification) => {
+    switch (notification?.title) {
+        case 'Emergencia Reportada':
+            return 'error';
+        case 'Incidente Reportado':
+        case 'Bus en Taller':
+            return 'warning';
+        case 'Pago Confirmado':
+        case 'Registro de Asistencia':
+        case 'Ruta Finalizada':
+            return 'success';
+        default:
+            return 'info';
+    }
+};
+
 const NotificationsMenu = ({ authToken }) => {
+    const { auth } = useContext(AuthContext);
+    const currentRoleId = auth?.user?.roleId;
+
     const resolveNotificationCycle = (source = {}) => ({
         cicloEscolarId: source?.payment?.cicloEscolarId || source?.receipt?.cicloEscolarId || source?.metadata?.client?.cicloEscolarId || source?.school?.cicloEscolarId || getSelectedCicloEscolarId() || ''
     });
@@ -218,6 +296,49 @@ const NotificationsMenu = ({ authToken }) => {
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewNotification, setPreviewNotification] = useState(null); // { notification, receipt }
 
+    // Toast (popup) state: cola de notificaciones nuevas por socket, se muestran de a una
+    const [toastQueue, setToastQueue] = useState([]);
+    const [currentToast, setCurrentToast] = useState(null);
+
+    const handleToastClose = (event, reason) => {
+        if (reason === 'clickaway') return;
+        setCurrentToast(null);
+    };
+
+    const handleToastClick = () => {
+        if (currentToast) {
+            handleNotificationClick(currentToast);
+            // 'boleta-pago' solo abre el preview (no es un redirect todavía); se
+            // marca como leída al presionar "Registrar Pago" dentro del preview.
+            if (currentToast.type !== 'boleta-pago') {
+                markNotificationAsRead(currentToast.id);
+            }
+        }
+        setCurrentToast(null);
+    };
+
+    // X: solo cierra, no marca como leída (leerla exige acción explícita: el
+    // botón "Marcar como leída" o redirigirse desde el popup).
+    const handleToastDismiss = () => {
+        setCurrentToast(null);
+    };
+
+    const handleMarkToastAsRead = (e) => {
+        e.stopPropagation();
+        if (currentToast) {
+            markNotificationAsRead(currentToast.id);
+        }
+        setCurrentToast(null);
+    };
+
+    // Sacar el siguiente toast de la cola cuando no hay uno visible
+    useEffect(() => {
+        if (!currentToast && toastQueue.length > 0) {
+            setCurrentToast(toastQueue[0]);
+            setToastQueue((prev) => prev.slice(1));
+        }
+    }, [toastQueue, currentToast]);
+
     // ==============================
     // 4) Scroll infinito - cargar más notificaciones
     // ==============================
@@ -312,6 +433,10 @@ const NotificationsMenu = ({ authToken }) => {
                 }
                 // Actualizar contador
                 fetchUnreadCount();
+                // Encolar popup solo si el rol actual está habilitado para este type
+                if (shouldShowToast(currentRoleId, copy)) {
+                    setToastQueue((prev) => [...prev, copy]);
+                }
             });
 
             socket.on('notification_deleted', (payload) => {
@@ -343,7 +468,7 @@ const NotificationsMenu = ({ authToken }) => {
                 socket.off('notification_deleted');
             }
         };
-    }, [authToken, fetchUnreadCount, menuOpen]);
+    }, [authToken, fetchUnreadCount, menuOpen, currentRoleId]);
 
     const getNotificationStyle = (notification) => {
         // Estilo base para todas las notificaciones
@@ -615,8 +740,11 @@ const NotificationsMenu = ({ authToken }) => {
                                 if (previewNotification.receipt.userId) u.searchParams.set('userId', previewNotification.receipt.userId);
                                 
                                 const state = previewNotification.paymentReceiptId;
-                                
+
                                 setPreviewOpen(false);
+                                if (previewNotification.id) {
+                                    markNotificationAsRead(previewNotification.id);
+                                }
                                 const finalPath = normalizeCycleInLink(u.pathname + u.search, previewNotification);
                                 navigate(finalPath, { state });
                             }
@@ -626,6 +754,65 @@ const NotificationsMenu = ({ authToken }) => {
                     }}>Registrar Pago</Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Popup de notificación nueva (socket): diseño propio para distinguirlo
+                de los Snackbar/Alert genéricos de feedback que usa el resto del sitio. */}
+            <Snackbar
+                open={!!currentToast}
+                autoHideDuration={8000}
+                onClose={handleToastClose}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            >
+                {(() => {
+                    const kind = TOAST_KIND_STYLES[getToastKind(currentToast)];
+                    const ToastIcon = kind.icon;
+                    const toastClientName = currentToast?.targetingCriteria?.client?.name || null;
+                    return (
+                        <ToastCard $accent={kind.accent} onClick={handleToastClick}>
+                            <ToastIconBadge $accent={kind.accent} $iconBg={kind.iconBg}>
+                                <ToastIcon fontSize="small" />
+                            </ToastIconBadge>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                {toastClientName && (
+                                    <Chip
+                                        label={toastClientName}
+                                        size="small"
+                                        color="primary"
+                                        variant="filled"
+                                        style={{ marginBottom: 4 }}
+                                    />
+                                )}
+                                <Typography
+                                    variant="subtitle2"
+                                    style={{ fontWeight: 700, lineHeight: 1.3 }}
+                                >
+                                    {currentToast?.title}
+                                </Typography>
+                                <Typography
+                                    variant="body2"
+                                    color="textSecondary"
+                                    style={{ lineHeight: 1.35, marginTop: 2 }}
+                                >
+                                    {currentToast?.message}
+                                </Typography>
+                                <Button
+                                    size="small"
+                                    onClick={handleMarkToastAsRead}
+                                    style={{ marginTop: 6, marginLeft: -6, textTransform: 'none' }}
+                                >
+                                    Marcar como leída
+                                </Button>
+                            </div>
+                            <ToastCloseButton
+                                size="small"
+                                onClick={(e) => { e.stopPropagation(); handleToastDismiss(); }}
+                            >
+                                <Close fontSize="small" />
+                            </ToastCloseButton>
+                        </ToastCard>
+                    );
+                })()}
+            </Snackbar>
         </>
     );
 };

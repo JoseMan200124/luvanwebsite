@@ -31,7 +31,9 @@ import {
     Switch,
     Tooltip,
     ToggleButton,
-    ToggleButtonGroup
+    ToggleButtonGroup,
+    Checkbox,
+    FormControlLabel
 } from '@mui/material';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
@@ -191,7 +193,7 @@ const SchoolPaymentsPage = () => {
 
     // Indicators derived from analysisData/combinedEarnings
     // IMPORTANTE: Solo contar usuarios activos (state !== 0)
-    // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA
+    // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, PARCIAL, MORA
     // El estado INACTIVO es exclusivo del serviceStatus (estado del servicio), no del pago
     // Usar exclusivamente los totales globales que provee el backend.
     // Si el backend no provee estos totales, mostrar 0 (no caer a conteos locales).
@@ -222,7 +224,7 @@ const SchoolPaymentsPage = () => {
 
     const displayPaid = serverPaymentTotals?.PAGADO ?? serverPaymentTotals?.CONFIRMADO ?? 0;
     const displayAdelantado = serverPaymentTotals?.ADELANTADO ?? 0;
-    const displayEnProceso = serverPaymentTotals?.EN_PROCESO ?? 0;
+    const displayParcial = serverPaymentTotals?.PARCIAL ?? 0;
     const displayPendiente = serverPaymentTotals?.PENDIENTE ?? 0;
     const displayMora = serverPaymentTotals?.MORA ?? 0;
 
@@ -352,7 +354,7 @@ const SchoolPaymentsPage = () => {
             // MORA y PENDIENTE son valores de finalStatus → filtrar en el servidor.
             // PAGADO (== CONFIRMADO) e INACTIVO (= serviceStatus INACTIVE)
             // se manejan solo en cliente cuando corresponde.
-            const SERVER_FINAL_STATUS = new Set(['MORA', 'PENDIENTE', 'EN_PROCESO', 'CONFIRMADO', 'ADELANTADO', 'ELIMINADO']);
+            const SERVER_FINAL_STATUS = new Set(['MORA', 'PENDIENTE', 'PARCIAL', 'CONFIRMADO', 'ADELANTADO', 'ELIMINADO']);
             if (st && SERVER_FINAL_STATUS.has(st)) params.finalStatus = st;
             // PAGADO e INACTIVO: no enviar filtro al servidor, el cliente filtra
             if (qq) params.search = qq;
@@ -436,19 +438,22 @@ const SchoolPaymentsPage = () => {
                 const activePayments = (paymentsAll || []).filter(p => !isServiceInactive(p));
                 const inactivePayments = (paymentsAll || []).filter(isServiceInactive);
                 
-                // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, EN_PROCESO, MORA
+                // V2: Estados de pago son CONFIRMADO, ADELANTADO, PENDIENTE, PARCIAL, MORA
+                // EN_PROCESO ya no es un finalStatus (ahora es "boleta pendiente de
+                // registro"); en este fallback offline no hay datos de boletas
+                // disponibles, así que no se puede derivar y se omite del cálculo local.
                 const confirmado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'CONFIRMADO').length;
                 const adelantado = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'ADELANTADO').length;
                 const mora = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'MORA').length;
-                const enProceso = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'EN_PROCESO').length;
+                const parcial = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'PARCIAL').length;
                 const pend = activePayments.filter(p => (p.finalStatus||'').toUpperCase() === 'PENDIENTE').length;
                 const inactivo = inactivePayments.length;
-                
+
                 const derived = { statusDistribution: [
                     { finalStatus: 'CONFIRMADO', count: confirmado },
                     { finalStatus: 'ADELANTADO', count: adelantado },
                     { finalStatus: 'MORA', count: mora },
-                    { finalStatus: 'EN_PROCESO', count: enProceso },
+                    { finalStatus: 'PARCIAL', count: parcial },
                     { finalStatus: 'PENDIENTE', count: pend },
                     { finalStatus: 'INACTIVO', count: inactivo }
                 ] };
@@ -605,7 +610,7 @@ const SchoolPaymentsPage = () => {
                     if (isDeleted && !allowDeleted) return false;
 
                     const s = (p.finalStatus || '').toUpperCase();
-                    const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'EN_PROCESO'];
+                    const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'PARCIAL'];
                     if (!(defaultAllowed.includes(s) || (allowDeleted && s === 'ELIMINADO') || (allowInactive && isServiceInactive))) return false;
                 }
                 if (qq) {
@@ -781,6 +786,13 @@ const SchoolPaymentsPage = () => {
     const [uploadedReceiptsLoading, setUploadedReceiptsLoading] = useState(false);
     const [receiptUploadLoading, setReceiptUploadLoading] = useState(false);
     const [selectedReceipt, setSelectedReceipt] = useState(null);
+    // "Marcar boleta abierta como registrada" al confirmar un pago. Desmarcado
+    // por defecto: el admin decide explícitamente si la boleta que tiene
+    // abierta corresponde al pago que está registrando.
+    const [markReceiptAsRegistered, setMarkReceiptAsRegistered] = useState(false);
+    useEffect(() => {
+        setMarkReceiptAsRegistered(false);
+    }, [selectedReceipt?.id]);
     const [receiptZoom, setReceiptZoom] = useState(1);
     // Month filter for boletas (format: YYYY-MM)
     const [boletaMonth, setBoletaMonth] = useState('');
@@ -864,6 +876,18 @@ const SchoolPaymentsPage = () => {
             setReceiptUploadLoading(false);
         }
     }, [getRegisterReceiptUserId, registerPaymentTarget]);
+
+    const handleChangeReceiptStatus = useCallback(async (receiptId, status, reason) => {
+        try {
+            const res = await api.patch(`/parents/receipts/${receiptId}/status`, { status, reason });
+            const updated = res.data.receipt;
+            setUploadedReceipts(prev => (prev || []).map(r => (r.id === receiptId ? updated : r)));
+            setSelectedReceipt(prev => (prev && prev.id === receiptId ? updated : prev));
+        } catch (err) {
+            console.error('Error changing receipt status', receiptId, err);
+            setSnackbar({ open: true, message: err.response?.data?.message || 'Error al cambiar el estado de la boleta', severity: 'error' });
+        }
+    }, []);
 
     const [openReceiptDialog, setOpenReceiptDialog] = useState(false);
     const [receiptTarget, setReceiptTarget] = useState(null);
@@ -1159,9 +1183,13 @@ const SchoolPaymentsPage = () => {
                 receiptNumber: registerPaymentExtra.numeroBoleta,
                 bankAccount: registerPaymentExtra.bankAccountNumber,
                 extraordinaryDiscount: registerPaymentExtra.extraordinaryDiscount || 0,
-                notes: registerPaymentExtra.extraordinaryDiscount > 0 
-                    ? `Descuento extraordinario: Q${registerPaymentExtra.extraordinaryDiscount}` 
-                    : undefined
+                notes: registerPaymentExtra.extraordinaryDiscount > 0
+                    ? `Descuento extraordinario: Q${registerPaymentExtra.extraordinaryDiscount}`
+                    : undefined,
+                ...(selectedReceipt?.status === 'PENDIENTE' ? {
+                    receiptId: selectedReceipt.id,
+                    markReceiptRegistered: markReceiptAsRegistered
+                } : {})
             });
             
             setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
@@ -3782,10 +3810,10 @@ const SchoolPaymentsPage = () => {
                         {countersView === 'payment' ? (
                             <>
                                 <Chip label={`Pagados: ${displayPaid}`} color="success" />
-                                <Chip label={`Adelantado: ${displayAdelantado}`} sx={{ ml: 1, backgroundColor: '#1976D2', color: '#fff' }} />
-                                <Chip label={`En Proceso: ${displayEnProceso}`} sx={{ ml: 1, backgroundColor: '#2196f3', color: '#fff' }} />
                                 <Chip label={`Pendientes: ${displayPendiente}`} color="warning" />
                                 <Chip label={`En Mora: ${displayMora}`} color="error" />
+                                <Chip label={`Adelantado: ${displayAdelantado}`} sx={{ ml: 1, backgroundColor: '#1976D2', color: '#fff' }} />
+                                <Chip label={`Pago Parcial: ${displayParcial}`} sx={{ ml: 1, backgroundColor: '#7c4dff', color: '#fff' }} />
                             </>
                         ) : (
                             <>
@@ -4144,6 +4172,7 @@ const SchoolPaymentsPage = () => {
                                                 uploadReceiptLoading={receiptUploadLoading}
                                                 onUploadReceipt={handleUploadRegisterReceipt}
                                                 onReceiptError={(message) => setSnackbar({ open: true, message, severity: 'warning' })}
+                                                onChangeReceiptStatus={handleChangeReceiptStatus}
                                                 downloadFile={(url, name) => {
                                                     const a = document.createElement('a');
                                                     a.href = url;
@@ -5076,9 +5105,22 @@ const SchoolPaymentsPage = () => {
                                 )}
                                 </Box>
                             </DialogContent>
-                            <DialogActions>
+                            <DialogActions sx={{ flexWrap: 'wrap' }}>
+                                {(paymentTab === 0 || paymentTab === 1) && selectedReceipt?.status === 'PENDIENTE' && (
+                                    <FormControlLabel
+                                        sx={{ mr: 'auto' }}
+                                        control={
+                                            <Checkbox
+                                                size="small"
+                                                checked={markReceiptAsRegistered}
+                                                onChange={(e) => setMarkReceiptAsRegistered(e.target.checked)}
+                                            />
+                                        }
+                                        label="Marcar boleta abierta como registrada"
+                                    />
+                                )}
                                 <Button onClick={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); setPaymentTab(0); }} disabled={uploadedReceiptsLoading || regHistLoading}>Cancelar</Button>
-                                
+
                                 {/* Botón para Pago de Tarifa */}
                                 {paymentTab === 0 && (
                                     <Button variant="contained" onClick={async () => {
@@ -5125,11 +5167,16 @@ const SchoolPaymentsPage = () => {
                                         }
 
                                         try {
+                                            const receiptLinkFields = selectedReceipt?.status === 'PENDIENTE' ? {
+                                                receiptId: selectedReceipt.id,
+                                                markReceiptRegistered: markReceiptAsRegistered
+                                            } : {};
                                             if (payPenaltyUseCredit) {
                                                 await api.post('/payments/v2/use-credit', {
                                                     paymentId: registerPaymentTarget.id,
                                                     amount: creditAmt,
-                                                    targetType: 'PENALTY'
+                                                    targetType: 'PENALTY',
+                                                    ...receiptLinkFields
                                                 });
                                                 if (boletaAmt > 0) {
                                                     await api.post('/payments/pay-penalty', {
@@ -5138,7 +5185,8 @@ const SchoolPaymentsPage = () => {
                                                         realPaymentDate: payPenaltyDate,
                                                         receiptNumber: payPenaltyBoleta,
                                                         bankAccount: payPenaltyAccount,
-                                                        source: 'manual'
+                                                        source: 'manual',
+                                                        ...receiptLinkFields
                                                     });
                                                     setSnackbar({ open: true, message: `Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${boletaAmt.toFixed(2)}) aplicados a mora`, severity: 'success' });
                                                 } else {
@@ -5153,7 +5201,8 @@ const SchoolPaymentsPage = () => {
                                                     receiptNumber: payPenaltyBoleta,
                                                     bankAccount: payPenaltyAccount,
                                                     notes: discount > 0 ? `Descuento/Exoneración de mora: Q${discount.toFixed(2)}` : null,
-                                                    source: 'manual'
+                                                    source: 'manual',
+                                                    ...receiptLinkFields
                                                 };
                                                 await api.post('/payments/pay-penalty', payloadData);
                                                 setSnackbar({ open: true, message: isExonerating ? `Mora exonerada: Q${discount.toFixed(2)}` : 'Pago de mora registrado exitosamente', severity: 'success' });
