@@ -22,6 +22,7 @@ const parseMetadata = (metadata) => {
             const parsed = JSON.parse(metadata);
             return parsed && typeof parsed === 'object' ? parsed : {};
         } catch (e) {
+            // metadata corrupta: se trata como vacía, sin popup de alerta.
             return {};
         }
     }
@@ -37,7 +38,6 @@ const TOAST_RULES_BY_ROLE = {
         inscripcion: true,
         'boleta-pago': true,
         'reporte-mecanico': true,
-        'solicitud-mecanica': true,
         emergencia: true,
         incidente: true,
         'route-compliance-alert': alertaDeCumplimiento(ALERTAS_PILOTO),
@@ -49,7 +49,6 @@ const TOAST_RULES_BY_ROLE = {
         emergencia: true,
         incidente: true,
         'reporte-mecanico': true,
-        'solicitud-mecanica': true,
         'route-compliance-alert': alertaDeCumplimiento(ALERTAS_PILOTO_SUPERVISOR),
     },
     7: { // Auxiliar
@@ -63,7 +62,7 @@ const TOAST_RULES_BY_ROLE = {
 export const shouldShowToast = (roleId, notification) => {
     const reglas = TOAST_RULES_BY_ROLE[Number(roleId)];
     const type = notification?.type;
-    if (!reglas || !type || !Object.prototype.hasOwnProperty.call(reglas, type)) return false;
+    if (!reglas || !type || !Object.hasOwn(reglas, type)) return false;
     const regla = reglas[type];
     return typeof regla === 'function' ? regla(notification) : regla === true;
 };
