@@ -302,18 +302,14 @@ const NotificationsMenu = ({ authToken }) => {
 
     const handleToastClick = () => {
         if (currentToast) {
+            // Solo navega/abre preview: marcar como leída exige el botón "Marcar como leída".
             handleNotificationClick(currentToast);
-            // 'boleta-pago' solo abre el preview (no es un redirect todavía); se
-            // marca como leída al presionar "Registrar Pago" dentro del preview.
-            if (currentToast.type !== 'boleta-pago') {
-                markNotificationAsRead(currentToast.id);
-            }
         }
         setCurrentToast(null);
     };
 
     // X: solo cierra, no marca como leída (leerla exige acción explícita: el
-    // botón "Marcar como leída" o redirigirse desde el popup).
+    // botón "Marcar como leída").
     const handleToastDismiss = () => {
         setCurrentToast(null);
     };
