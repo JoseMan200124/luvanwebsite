@@ -33,6 +33,7 @@ import PropTypes from 'prop-types';
 import api from '../utils/axiosConfig';
 import { getSocket } from '../services/socketService';
 import { getSelectedCicloEscolarId } from '../utils/schoolContext';
+import { shouldShowToast } from './notificationToastRules';
 
 // Botón estilizado (twin.macro + styled-components)
 const NotificationIconButton = styled(IconButton)`
@@ -78,25 +79,19 @@ const TOAST_KIND_STYLES = {
     info: { accent: '#6c5ce7', iconBg: 'rgba(108, 92, 231, 0.12)', icon: InfoOutlined },
 };
 
-// Qué roleId puede ver popup y para qué type de notificación (según notification.type
-// que devuelve el backend). Roles no listados aquí no ven popup.
-const TOAST_ALLOWED_TYPES_BY_ROLE = {
-    7: ['inscripcion'], // Auxiliar: solo nuevas inscripciones
-    2: ['boleta-pago'], // Administrador: solo notificaciones de pagos
-};
-
-const shouldShowToast = (roleId, notification) => {
-    const allowedTypes = TOAST_ALLOWED_TYPES_BY_ROLE[roleId];
-    if (!allowedTypes) return false;
-    return allowedTypes.includes(notification?.type);
-};
-
 const getToastKind = (notification) => {
     switch (notification?.title) {
         case 'Emergencia Reportada':
+        case '⚠️ Reporte Mecánico Urgente':
             return 'error';
         case 'Incidente Reportado':
         case 'Bus en Taller':
+        case '🔧 Nuevo Reporte Mecánico':
+        case 'Ruta con retraso':
+        case 'Asistencia sin marcar':
+        case 'Recorrido sin iniciar':
+        case 'Recorrido iniciado tarde':
+        case 'Recorrido sin finalizar':
             return 'warning';
         case 'Pago Confirmado':
         case 'Registro de Asistencia':

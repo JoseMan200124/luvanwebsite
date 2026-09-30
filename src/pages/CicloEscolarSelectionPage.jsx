@@ -453,12 +453,12 @@ const CicloEscolarSelectionPage = () => {
                 cicloEscolarId: selectedCicloEscolarId,
                 includeArchived: true
             };
-            // If the current user is not role 1 (Gestor) or 2 (Administrador),
+            // If the current user is not Gestor (1), Administrador (2) or Mecanica (10),
             // request only assigned schools. Backend also enforces this rule,
             // but sending the hint keeps intent explicit.
             try {
                 const roleId = Number(auth.user?.roleId || 0);
-                if (roleId && ![1, 2].includes(roleId)) {
+                if (roleId && ![1, 2, 10].includes(roleId)) {
                     params.assignedOnly = true;
                 }
             } catch (e) { /* ignore */ }

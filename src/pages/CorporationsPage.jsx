@@ -201,7 +201,7 @@ const CorporationsPage = () => {
             const params = { fiscalYear: selectedFiscalYear };
             try {
                 const roleId = Number(auth.user?.roleId || 0);
-                if (roleId && ![1, 2].includes(roleId)) params.assignedOnly = true;
+                if (roleId && ![1, 2, 10].includes(roleId)) params.assignedOnly = true; // 10 = Mecanica (ve todos los clientes)
             } catch (e) { /* ignore */ }
 
             const response = await api.get('/corporations', {

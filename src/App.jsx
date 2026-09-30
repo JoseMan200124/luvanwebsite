@@ -138,7 +138,7 @@ function App() {
                         <Route
                             path="roles-permisos"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute roles={['Gestor']}>
                                     <PermissionsManagementPage />
                                 </ProtectedRoute>
                             }

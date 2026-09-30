@@ -114,15 +114,11 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     const invitedClientAllowedSubmodules = isInvitadoCorporacion ? ['corporaciones'] : ['colegios'];
     const canAccessDashboard = !!permissions['dashboard'] && !isInvitado;
 
-    // Admin / Gestor
-    const isAdminOrGestor = user.role === 'Administrador' || user.role === 'Gestor';
-
     /**
-     * Visibilidad de "Roles y Permisos":
-     * - Siempre se muestra para Admin / Gestor,
-     *   sin importar qué valor venga en permissions['roles-permisos'].
+     * Visibilidad de "Roles y Permisos": solo el Gestor administra permisos
+     * (manual de roles). El backend además exige las llaves permisos-*.
      */
-    const canSeeRolesPermisos = isAdminOrGestor;
+    const canSeeRolesPermisos = user.role === 'Gestor';
 
     // Calcula la posición vertical del pop-up
     const getPopoutPosition = (element) => {
