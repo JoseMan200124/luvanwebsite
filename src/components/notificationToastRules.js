@@ -51,6 +51,11 @@ const TOAST_RULES_BY_ROLE = {
         'reporte-mecanico': true,
         'route-compliance-alert': alertaDeCumplimiento(ALERTAS_PILOTO_SUPERVISOR),
     },
+    10: { // Mecanica
+        'reporte-mecanico': true,
+        emergencia: true,
+        incidente: true,
+    },
     7: { // Auxiliar
         inscripcion: true,
         'boleta-pago': true,

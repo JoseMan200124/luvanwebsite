@@ -227,15 +227,16 @@ const RolesManagementPage = () => {
     const [clientFilter, setClientFilter] = useState(null); // { type: 'Colegio'|'Corporación', id, name }
 
     // Roles allowed to be created from the "Añadir Usuario" dialog
-    const allowedRolesForCreate = ['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado'];
+    const allowedRolesForCreate = new Set(['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado', 'mecanica']);
     // Roles that should NOT be assigned a school or corporation
-    const rolesWithoutSchoolOrCorp = ['administrador', 'supervisor', 'auxiliar'];
+    // (Mecanica ve todos los clientes: no se le asigna uno)
+    const rolesWithoutSchoolOrCorp = new Set(['administrador', 'supervisor', 'auxiliar', 'mecanica']);
 
     const roleDisablesSchoolOrCorp = (roleId) => {
         if (!roleId) return false;
         const r = roleOptions.find(ro => Number(ro.id) === Number(roleId));
-        if (!r || !r.name) return false;
-        return rolesWithoutSchoolOrCorp.includes(String(r.name).toLowerCase());
+        if (!r?.name) return false;
+        return rolesWithoutSchoolOrCorp.has(String(r.name).toLowerCase());
     };
 
     // Orden
@@ -1464,7 +1465,7 @@ const RolesManagementPage = () => {
                                     </MenuItem>
                                     {(selectedUser?.id
                                         ? roleOptions
-                                        : roleOptions.filter(r => allowedRolesForCreate.includes(String(r.name).toLowerCase()))
+                                        : roleOptions.filter(r => allowedRolesForCreate.has(String(r.name).toLowerCase()))
                                     ).map((r) => (
                                         <MenuItem key={r.id} value={r.id}>
                                             {r.name}
