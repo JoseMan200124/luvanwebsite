@@ -295,7 +295,12 @@ const CorporationsPage = () => {
     }, [fetchCorporations]);
 
     const handleCorporationSelect = (corporation) => {
-        navigate(`/admin/corporaciones/${selectedFiscalYear}/${corporation.id}`, {
+        // Mecanica (10) solo accede a la asignación de buses: salta el dashboard de la corporación.
+        const isMecanica = Number(auth.user?.roleId || 0) === 10;
+        const destino = isMecanica
+            ? `/admin/corporaciones/${selectedFiscalYear}/${corporation.id}/buses-gestion`
+            : `/admin/corporaciones/${selectedFiscalYear}/${corporation.id}`;
+        navigate(destino, {
             state: {
                 fiscalYear: selectedFiscalYear,
                 corporation: corporation
@@ -1173,28 +1178,33 @@ const CorporationsPage = () => {
                                                 borderTop: '1px solid #e0e0e0',
                                                 pt: 1.5
                                             }}>
-                                                <Tooltip title="Copiar enlace de inscripción">
-                                                    <IconButton 
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleCopyEnrollLink(corporation.id);
-                                                        }}
-                                                    >
-                                                        <ContentCopy fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <Tooltip title="Editar corporación">
-                                                    <IconButton 
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleOpenEditDialog(corporation);
-                                                        }}
-                                                    >
-                                                        <Edit fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
+                                                <PermissionGuard permission="corporaciones-editar">
+                                                    <Tooltip title="Copiar enlace de inscripción">
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleCopyEnrollLink(corporation.id);
+                                                            }}
+                                                        >
+                                                            <ContentCopy fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </PermissionGuard>
+                                                <PermissionGuard permission="corporaciones-editar">
+                                                    <Tooltip title="Editar corporación">
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenEditDialog(corporation);
+                                                            }}
+                                                        >
+                                                            <Edit fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </PermissionGuard>
+
                                                 <PermissionGuard permission="corporaciones-eliminar">
                                                     <Tooltip title="Eliminar corporación">
                                                         <IconButton 
