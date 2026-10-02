@@ -40,3 +40,22 @@ export const sendDirectUserNotification = async (payload) => {
     });
     return res.data;
 };
+
+/**
+ * Lista paginada del historial de notificaciones manuales enviadas (admin).
+ * @param {{ page?: number, pageSize?: number, q?: string, startDate?: string, endDate?: string,
+ *           cicloEscolarId?: number|string, allCycles?: boolean, sortBy?: string, sortDirection?: string }} params
+ */
+export const listNotificationHistory = async (params) => {
+    const res = await api.get('/notifications/admin', { params });
+    return res.data;
+};
+
+/**
+ * Detalle de una notificación enviada: mensaje, audiencia y destinatarios.
+ * @param {string} uuid
+ */
+export const getNotificationHistoryDetail = async (uuid) => {
+    const res = await api.get(`/notifications/admin/${encodeURIComponent(uuid)}`);
+    return res.data;
+};

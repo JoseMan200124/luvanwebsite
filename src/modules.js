@@ -18,6 +18,7 @@ import AuxiliaresManagementPage from './pages/AuxiliaresManagementPage';
 import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import CircularHistoryPage from './pages/CircularHistoryPage';
+import NotificationHistoryPage from './pages/NotificationHistoryPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import RouteHistoryPage from './pages/RouteHistoryPage';
 // ✅ REMOVIDO: import ActivityLogPage from './pages/ActivityLogPage';
@@ -104,6 +105,12 @@ export const modules = [
                 name: 'Historial de Circulares',
                 path: 'circulares',
                 component: CircularHistoryPage,
+            },
+            {
+                key: 'notificaciones-admin-listar',
+                name: 'Historial de Notificaciones',
+                path: 'notificaciones',
+                component: NotificationHistoryPage,
             },
             {
                 key: 'solicitudes-usuarios',

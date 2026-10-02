@@ -453,12 +453,12 @@ const CicloEscolarSelectionPage = () => {
                 cicloEscolarId: selectedCicloEscolarId,
                 includeArchived: true
             };
-            // If the current user is not role 1 (Gestor) or 2 (Administrador),
+            // If the current user is not Gestor (1), Administrador (2) or Mecanica (10),
             // request only assigned schools. Backend also enforces this rule,
             // but sending the hint keeps intent explicit.
             try {
                 const roleId = Number(auth.user?.roleId || 0);
-                if (roleId && ![1, 2].includes(roleId)) {
+                if (roleId && ![1, 2, 10].includes(roleId)) {
                     params.assignedOnly = true;
                 }
             } catch (e) { /* ignore */ }
@@ -570,7 +570,12 @@ const CicloEscolarSelectionPage = () => {
             cicloEscolarId,
             ...(cicloEscolar ? { cicloEscolar } : {})
         };
-        navigate(`/admin/escuelas/ciclo/${cicloEscolarId}/${school.id}`, {
+        // Mecanica (10) solo accede a la asignación de buses: salta el dashboard del colegio.
+        const isMecanica = Number(auth.user?.roleId || 0) === 10;
+        const destino = isMecanica
+            ? `/admin/escuelas/ciclo/${cicloEscolarId}/${school.id}/buses-gestion`
+            : `/admin/escuelas/ciclo/${cicloEscolarId}/${school.id}`;
+        navigate(destino, {
             state: {
                 cicloEscolarId,
                 cicloEscolar,
@@ -1875,42 +1880,48 @@ const CicloEscolarSelectionPage = () => {
                                                 borderTop: '1px solid #e0e0e0',
                                                 pt: 1.5
                                             }}>
-                                                <Tooltip title={school.canCreateNewUsers === false ? (school.newUserCreationMessage || 'Inscripciones cerradas para este colegio') : 'Copiar enlace de inscripción'}>
-                                                    <span>
-                                                        <IconButton 
+                                                <PermissionGuard permission="colegios-editar">
+                                                    <Tooltip title={school.canCreateNewUsers === false ? (school.newUserCreationMessage || 'Inscripciones cerradas para este colegio') : 'Copiar enlace de inscripción'}>
+                                                        <span>
+                                                            <IconButton
+                                                                size="small"
+                                                                disabled={school.canCreateNewUsers === false}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleCopyLink(school.id);
+                                                                }}
+                                                            >
+                                                                <ContentCopy fontSize="small" />
+                                                            </IconButton>
+                                                        </span>
+                                                    </Tooltip>
+                                                </PermissionGuard>
+                                                <PermissionGuard permission="colegios-editar">
+                                                    <Tooltip title="Editar colegio">
+                                                        <IconButton
                                                             size="small"
-                                                            disabled={school.canCreateNewUsers === false}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleCopyLink(school.id);
+                                                                handleEditClick(school);
                                                             }}
                                                         >
-                                                            <ContentCopy fontSize="small" />
+                                                            <Edit fontSize="small" />
                                                         </IconButton>
-                                                    </span>
-                                                </Tooltip>
-                                                <Tooltip title="Editar colegio">
-                                                    <IconButton 
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleEditClick(school);
-                                                        }}
-                                                    >
-                                                        <Edit fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <Tooltip title="Ver formularios de inscripción">
-                                                    <IconButton 
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleViewSubmissions(school);
-                                                        }}
-                                                    >
-                                                        <Visibility fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
+                                                    </Tooltip>
+                                                </PermissionGuard>
+                                                <PermissionGuard permission="colegios-ver-inscripciones">
+                                                    <Tooltip title="Ver formularios de inscripción">
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleViewSubmissions(school);
+                                                            }}
+                                                        >
+                                                            <Visibility fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </PermissionGuard>
                                                 <PermissionGuard permission="colegios-eliminar">
                                                     <Tooltip title="Eliminar colegio">
                                                         <IconButton 
