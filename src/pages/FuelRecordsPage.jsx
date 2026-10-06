@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Typography,
@@ -73,6 +74,7 @@ const SHOW_NEW_FUEL_METRIC = false;
 const cardMd = SHOW_NEW_FUEL_METRIC ? 2.4 : 3;
 
 const FuelRecordsPage = () => {
+    const { hasPermission } = usePermissions();
     const [fuelRecords, setFuelRecords] = useState([]);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
@@ -180,6 +182,10 @@ const FuelRecordsPage = () => {
     }, [selectedCicloEscolar]);
 
     const fetchPilots = async () => {
+        if (!hasPermission('usuarios-listar-pilotos')) {
+            setPilots([]);
+            return;
+        }
         try {
             const response = await api.get('/users/pilots');
             const pilotsData = Array.isArray(response.data?.users) ? response.data.users : (response.data || []);
@@ -1209,9 +1215,11 @@ const FuelRecordsPage = () => {
                                         Limpiar
                                     </Button>
                                 </Tooltip>
-                                <Button onClick={() => setCreateOpen(true)} variant="contained" color="primary" sx={{ mr: 1 }}>
-                                    Nuevo Registro
-                                </Button>
+                                <PermissionGuard permission="combustible-crear-registro">
+                                    <Button onClick={() => setCreateOpen(true)} variant="contained" color="primary" sx={{ mr: 1 }}>
+                                        Nuevo Registro
+                                    </Button>
+                                </PermissionGuard>
                                 <Button
                                     onClick={handleDownloadExcel}
                                     variant="outlined"
@@ -1404,7 +1412,7 @@ const FuelRecordsPage = () => {
                                                             <VisibilityIcon />
                                                         </IconButton>
                                                     </Tooltip>
-                                                    {record.canEdit && (
+                                                    {record.canEdit && hasPermission('combustible-editar') && (
                                                         <Tooltip title="Editar registro">
                                                             <IconButton
                                                                 size="small"
@@ -1602,9 +1610,11 @@ const FuelRecordsPage = () => {
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={handleCloseCreate} disabled={creating}>Cancelar</Button>
-                        <Button onClick={handleCreateSubmit} variant="contained" color="primary" disabled={creating}>
-                            {creating ? 'Creando...' : 'Crear'}
-                        </Button>
+                        <PermissionGuard permission="combustible-crear-registro">
+                            <Button onClick={handleCreateSubmit} variant="contained" color="primary" disabled={creating}>
+                                {creating ? 'Creando...' : 'Crear'}
+                            </Button>
+                        </PermissionGuard>
                     </DialogActions>
                 </Dialog>
 
@@ -1881,9 +1891,12 @@ const FuelRecordsPage = () => {
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={handleCloseEdit} disabled={updating}>Cancelar</Button>
-                        <Button onClick={handleEditSubmit} variant="contained" color="primary" disabled={updating}>
-                            {updating ? 'Guardando...' : 'Guardar cambios'}
-                        </Button>
+                        {/* La regla de mismo día (canEdit) la sigue imponiendo el registro. */}
+                        {selectedRecord?.canEdit && hasPermission('combustible-editar') && (
+                            <Button onClick={handleEditSubmit} variant="contained" color="primary" disabled={updating}>
+                                {updating ? 'Guardando...' : 'Guardar cambios'}
+                            </Button>
+                        )}
                     </DialogActions>
                 </Dialog>
 

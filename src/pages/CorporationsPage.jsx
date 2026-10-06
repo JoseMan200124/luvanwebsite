@@ -47,6 +47,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -143,6 +144,7 @@ const formatTime12Hour = (time24) => {
 const CorporationsPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
+    const { hasPermission } = usePermissions();
 
     const [corporations, setCorporations] = useState([]);
     const [selectedFiscalYear, setSelectedFiscalYear] = useState(new Date().getFullYear().toString());
@@ -1034,13 +1036,15 @@ const CorporationsPage = () => {
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                <Button 
-                    onClick={isEdit ? handleUpdateCorporation : handleCreateCorporation}
-                    variant="contained"
-                    disabled={!formData.name.trim()}
-                >
-                    {isEdit ? 'Guardar Cambios' : 'Crear Corporación'}
-                </Button>
+                {hasPermission(isEdit ? 'corporaciones-editar' : 'corporaciones-crear') && (
+                    <Button
+                        onClick={isEdit ? handleUpdateCorporation : handleCreateCorporation}
+                        variant="contained"
+                        disabled={!formData.name.trim()}
+                    >
+                        {isEdit ? 'Guardar Cambios' : 'Crear Corporación'}
+                    </Button>
+                )}
             </DialogActions>
         </Dialog>
     );
@@ -1205,7 +1209,8 @@ const CorporationsPage = () => {
                                                     </Tooltip>
                                                 </PermissionGuard>
 
-                                                <PermissionGuard permission="corporaciones-eliminar">
+                                                
+                                                <PermissionGuard permission="corporaciones-desactivar">
                                                     <Tooltip title="Eliminar corporación">
                                                         <IconButton 
                                                             size="small"

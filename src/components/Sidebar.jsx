@@ -112,13 +112,13 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     const isInvitado = user.role === 'Invitado';
     const isInvitadoCorporacion = isInvitado && Boolean(auth.user?.corporationId);
     const invitedClientAllowedSubmodules = isInvitadoCorporacion ? ['corporaciones'] : ['colegios'];
-    const canAccessDashboard = !!permissions['dashboard'] && !isInvitado;
+    const canAccessDashboard = !!permissions['dashboard-ver'];
 
     /**
-     * Visibilidad de "Roles y Permisos": solo el Gestor administra permisos
-     * (manual de roles). El backend además exige las llaves permisos-*.
+     * Visibilidad de "Roles y Permisos": la misma llave que exige el backend en
+     * GET /permissions/role/:roleId, en vez del nombre del rol.
      */
-    const canSeeRolesPermisos = user.role === 'Gestor';
+    const canSeeRolesPermisos = !!permissions['permisos-ver-por-rol'];
 
     // Calcula la posición vertical del pop-up
     const getPopoutPosition = (element) => {
@@ -202,7 +202,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
                                 canAccessModule = visibleSubmodules.length > 0;
                             } else {
-                                canAccessModule = permissions[module.key] && !isInvitado;
+                                canAccessModule = !!permissions[module.key];
                             }
 
                             if (!canAccessModule) return null;

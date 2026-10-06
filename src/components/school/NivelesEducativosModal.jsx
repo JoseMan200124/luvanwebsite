@@ -9,6 +9,8 @@ import {
     listEducationLevels, createEducationLevel, updateEducationLevel,
     deleteEducationLevel, getEducationLevelUsage,
 } from '../../services/educationLevelsService';
+import PermissionGuard from '../PermissionGuard';
+import usePermissions from '../../hooks/usePermissions';
 
 /**
  * Gestión del catálogo de niveles educativos del sistema. Se abre desde el
@@ -18,6 +20,9 @@ import {
  * El orden se cambia arrastrando cada fila (drag & drop nativo, sin librería).
  */
 const NivelesEducativosModal = ({ open, onClose }) => {
+    const { hasPermission } = usePermissions();
+    // Reordenar arrastrando hace PUT /education-levels/:id, igual que editar.
+    const puedeEditarNiveles = hasPermission('niveles-editar');
     const [levels, setLevels] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(null);   // null | { id?, name }
@@ -148,7 +153,7 @@ const NivelesEducativosModal = ({ open, onClose }) => {
                         <Paper
                             key={level.id}
                             variant="outlined"
-                            draggable={!reordering}
+                            draggable={!reordering && puedeEditarNiveles}
                             onDragStart={(e) => {
                                 dragFromRef.current = index;
                                 setDragIndex(index);
@@ -163,7 +168,7 @@ const NivelesEducativosModal = ({ open, onClose }) => {
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 1,
-                                cursor: reordering ? 'default' : 'grab',
+                                cursor: (reordering || !puedeEditarNiveles) ? 'default' : 'grab',
                                 opacity: dragIndex === index ? 0.4 : 1,
                                 borderTop: isOver ? '2px solid' : '1px solid',
                                 borderTopColor: isOver ? 'primary.main' : 'divider',
@@ -177,15 +182,19 @@ const NivelesEducativosModal = ({ open, onClose }) => {
                             <Typography variant="body2" sx={{ flexGrow: 1 }}>
                                 {level.name}
                             </Typography>
-                            <IconButton
-                                size="small"
-                                onClick={() => setEditing({ id: level.id, name: level.name })}
-                            >
-                                <Edit fontSize="small" />
-                            </IconButton>
-                            <IconButton size="small" color="error" onClick={() => openDelete(level)}>
-                                <Delete fontSize="small" />
-                            </IconButton>
+                            <PermissionGuard permission="niveles-editar">
+                                <IconButton
+                                    size="small"
+                                    onClick={() => setEditing({ id: level.id, name: level.name })}
+                                >
+                                    <Edit fontSize="small" />
+                                </IconButton>
+                            </PermissionGuard>
+                            <PermissionGuard permission="niveles-eliminar">
+                                <IconButton size="small" color="error" onClick={() => openDelete(level)}>
+                                    <Delete fontSize="small" />
+                                </IconButton>
+                            </PermissionGuard>
                         </Paper>
                     );
                 })}
@@ -202,14 +211,16 @@ const NivelesEducativosModal = ({ open, onClose }) => {
                         <Typography variant="body2" color="text.secondary">
                             Catálogo del sistema. Arrastra cada fila para cambiar el orden. Los grados de cada nivel se definen en cada colegio, en "Editar Colegio".
                         </Typography>
-                        <Button
-                            variant="contained"
-                            size="small"
-                            startIcon={<Add />}
-                            onClick={() => setEditing({ name: '' })}
-                        >
-                            Nuevo nivel
-                        </Button>
+                        <PermissionGuard permission="niveles-crear">
+                            <Button
+                                variant="contained"
+                                size="small"
+                                startIcon={<Add />}
+                                onClick={() => setEditing({ name: '' })}
+                            >
+                                Nuevo nivel
+                            </Button>
+                        </PermissionGuard>
                     </Box>
 
                     {levelsList}
@@ -232,7 +243,9 @@ const NivelesEducativosModal = ({ open, onClose }) => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setEditing(null)}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleSaveLevel}>Guardar</Button>
+                    {hasPermission(editing?.id ? 'niveles-editar' : 'niveles-crear') && (
+                        <Button variant="contained" onClick={handleSaveLevel}>Guardar</Button>
+                    )}
                 </DialogActions>
             </Dialog>
 
@@ -251,7 +264,9 @@ const NivelesEducativosModal = ({ open, onClose }) => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleting(null)}>Cancelar</Button>
-                    <Button color="error" variant="contained" onClick={handleDelete}>Eliminar</Button>
+                    <PermissionGuard permission="niveles-eliminar">
+                        <Button color="error" variant="contained" onClick={handleDelete}>Eliminar</Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 

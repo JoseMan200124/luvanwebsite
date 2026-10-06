@@ -86,7 +86,7 @@ const SX_FILA_BASE = {
  * render y desmontara el árbol completo con cada clic. Solo recibe primitivos,
  * así que al marcar una casilla se vuelve a renderizar únicamente esa fila.
  */
-const FilaPermiso = memo(function FilaPermiso({ permiso, activo, cambiado, onToggle }) {
+const FilaPermiso = memo(function FilaPermiso({ permiso, activo, cambiado, onToggle, soloLectura }) {
     const nivel = NIVELES[permiso.level] || NIVELES.ver;
 
     return (
@@ -98,7 +98,7 @@ const FilaPermiso = memo(function FilaPermiso({ permiso, activo, cambiado, onTog
                 '&:hover': { bgcolor: activo ? '#dcedc8' : '#f5f5f5' },
             }}
         >
-            <Checkbox size="small" checked={activo} onChange={() => onToggle(permiso.key)} />
+            <Checkbox size="small" checked={activo} onChange={() => onToggle(permiso.key)} disabled={soloLectura} />
             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                 <Typography variant="body2" sx={{ lineHeight: 1.4 }}>
                     {permiso.description}
@@ -137,6 +137,7 @@ const TarjetaGrupo = memo(function TarjetaGrupo({
     onToggle,
     onAplicar,
     onPedirConfirmacion,
+    soloLectura,
 }) {
     const activos = useMemo(
         () => grupo.permissions.reduce((n, p) => n + (permissions[p.key] ? 1 : 0), 0),
@@ -163,6 +164,7 @@ const TarjetaGrupo = memo(function TarjetaGrupo({
                     <Checkbox
                         checked={todos}
                         indeterminate={algunos}
+                        disabled={soloLectura}
                         onClick={(e) => {
                             e.stopPropagation();
                             if (todos) onAplicar(grupo, 'ninguno');
@@ -195,7 +197,7 @@ const TarjetaGrupo = memo(function TarjetaGrupo({
             </AccordionSummary>
             <AccordionDetails sx={{ pt: 0 }}>
                 <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
-                    <ButtonGroup size="small" variant="outlined">
+                    <ButtonGroup size="small" variant="outlined" disabled={soloLectura}>
                         <Button onClick={() => onAplicar(grupo, 'lectura')}>Solo lectura</Button>
                         <Button onClick={() => onPedirConfirmacion(grupo)}>Acceso completo</Button>
                         <Button onClick={() => onAplicar(grupo, 'ninguno')}>Sin acceso</Button>
@@ -209,6 +211,7 @@ const TarjetaGrupo = memo(function TarjetaGrupo({
                         activo={!!permissions[permiso.key]}
                         cambiado={!!permissions[permiso.key] !== !!originalPermissions[permiso.key]}
                         onToggle={onToggle}
+                        soloLectura={soloLectura}
                     />
                 ))}
             </AccordionDetails>
@@ -220,6 +223,7 @@ const PermissionsManagementPage = () => {
     const { auth } = useContext(AuthContext);
     const { hasPermission } = usePermissions();
     const puedeOrganizar = hasPermission('permisos-gestionar-catalogo');
+    const puedeGuardar = hasPermission('permisos-actualizar-por-rol');
 
     const [pestana, setPestana] = useState('asignar');
     const [roles, setRoles] = useState([]);
@@ -635,6 +639,7 @@ const PermissionsManagementPage = () => {
                                         onToggle={alternarPermiso}
                                         onAplicar={aplicarAGrupo}
                                         onPedirConfirmacion={pedirConfirmacion}
+                                        soloLectura={!puedeGuardar}
                                     />
                                 ))}
 
@@ -667,6 +672,7 @@ const PermissionsManagementPage = () => {
                                             onToggle={alternarPermiso}
                                             onAplicar={aplicarAGrupo}
                                             onPedirConfirmacion={pedirConfirmacion}
+                                            soloLectura={!puedeGuardar}
                                         />
                                     </>
                                 )}
@@ -677,7 +683,7 @@ const PermissionsManagementPage = () => {
             </Box>
 
             {/* Barra fija de guardado: solo aparece cuando hay algo que guardar. */}
-            {hayCambios && pestana === 'asignar' && (
+            {hayCambios && pestana === 'asignar' && puedeGuardar && (
                 <Box
                     sx={{
                         position: 'fixed',

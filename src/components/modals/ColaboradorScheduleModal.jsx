@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import api from '../../utils/axiosConfig';
+import usePermissions from '../../hooks/usePermissions';
 
 // Función para convertir tiempo de 24h a 12h con AM/PM
 const formatTime12Hour = (time24) => {
@@ -14,6 +15,8 @@ const formatTime12Hour = (time24) => {
 
 // Modal de horarios para colaboradores - similar a StudentScheduleModal
 export default function ColaboradorScheduleModal({ colaborador, corporation, open, onClose, onScheduleUpdated }) {
+    const { hasAllPermissions } = usePermissions();
+    const puedeGuardarHorario = hasAllPermissions(['horarios-crear', 'horarios-editar', 'horarios-eliminar']);
     const getIsMobileViewport = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 600px)').matches;
     const [isMobileViewport, setIsMobileViewport] = useState(getIsMobileViewport);
     const [scheduleSlots, setScheduleSlots] = useState([]);
@@ -949,8 +952,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                 >
                                     Cancelar
                                 </button>
-                                <button 
-                                    type="button" 
+                                {puedeGuardarHorario && (
+                                <button
+                                    type="button"
                                     onClick={saveAssignedSchedule}
                                     style={{ 
                                         padding: '8px 12px', 
@@ -963,6 +967,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                 >
                                     Guardar
                                 </button>
+                                )}
                             </div>
                         </div>
                     </div>

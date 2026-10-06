@@ -53,6 +53,8 @@ import { getCiclosEscolares, getCicloEscolarOptionLabel } from '../services/cicl
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import * as XLSX from 'xlsx';
+import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 
 const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
@@ -178,6 +180,7 @@ function getAssignmentText(bus) {
 const BusesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const { hasPermission } = usePermissions();
 
     const { auth } = useContext(AuthContext);
 
@@ -781,23 +784,27 @@ const BusesManagementPage = () => {
                 </Box>
                 <div>
                     {/* Historial de rutas eliminado: botón removido */}
-                    <Button
-                        variant="contained"
-                        color="info"
-                        startIcon={<FileUpload />}
-                        sx={{ mr: 2 }}
-                        onClick={handleOpenBulkDialog}
-                    >
-                        Carga Masiva
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<Add />}
-                        onClick={handleAddBus}
-                    >
-                        Añadir Bus
-                    </Button>
+                    <PermissionGuard permission="buses-carga-masiva">
+                        <Button
+                            variant="contained"
+                            color="info"
+                            startIcon={<FileUpload />}
+                            sx={{ mr: 2 }}
+                            onClick={handleOpenBulkDialog}
+                        >
+                            Carga Masiva
+                        </Button>
+                    </PermissionGuard>
+                    <PermissionGuard permission="buses-crear">
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<Add />}
+                            onClick={handleAddBus}
+                        >
+                            Añadir Bus
+                        </Button>
+                    </PermissionGuard>
                 </div>
             </Box>
 
@@ -891,16 +898,20 @@ const BusesManagementPage = () => {
                                                 marginTop: 1
                                             }}
                                         >
-                                            <Tooltip title="Editar">
-                                                <IconButton onClick={() => handleEditClick(bus)}>
-                                                    <Edit />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Eliminar">
-                                                <IconButton onClick={() => handleDeleteClick(bus.id)}>
-                                                    <Delete />
-                                                </IconButton>
-                                            </Tooltip>
+                                            <PermissionGuard permission="buses-editar">
+                                                <Tooltip title="Editar">
+                                                    <IconButton onClick={() => handleEditClick(bus)}>
+                                                        <Edit />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </PermissionGuard>
+                                            <PermissionGuard permission="buses-eliminar">
+                                                <Tooltip title="Eliminar">
+                                                    <IconButton onClick={() => handleDeleteClick(bus.id)}>
+                                                        <Delete />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </PermissionGuard>
                                         </Box>
                                     </MobileCard>
                                 ))}
@@ -1056,16 +1067,20 @@ const BusesManagementPage = () => {
                                                         </List>
                                                     </ResponsiveTableCell>
                                                     <ResponsiveTableCell data-label="Acciones" align="center">
-                                                        <Tooltip title="Editar">
-                                                            <IconButton onClick={() => handleEditClick(bus)}>
-                                                                <Edit />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                        <Tooltip title="Eliminar">
-                                                            <IconButton onClick={() => handleDeleteClick(bus.id)}>
-                                                                <Delete />
-                                                            </IconButton>
-                                                        </Tooltip>
+                                                        <PermissionGuard permission="buses-editar">
+                                                            <Tooltip title="Editar">
+                                                                <IconButton onClick={() => handleEditClick(bus)}>
+                                                                    <Edit />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </PermissionGuard>
+                                                        <PermissionGuard permission="buses-eliminar">
+                                                            <Tooltip title="Eliminar">
+                                                                <IconButton onClick={() => handleDeleteClick(bus.id)}>
+                                                                    <Delete />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </PermissionGuard>
                                                     </ResponsiveTableCell>
                                                 </TableRow>
                                             ))}
@@ -1217,9 +1232,14 @@ const BusesManagementPage = () => {
                                             )}
                                         </Box>
                                         <Box>
-                                            <IconButton size="small" onClick={() => handleRemoveFile(file, index)} aria-label="Eliminar archivo">
-                                                <Delete fontSize="small" />
-                                            </IconButton>
+                                            {/* Un archivo sin id todavía no está en el servidor: quitarlo es
+                                                local y no exige permiso. Borrar uno guardado hace
+                                                DELETE /buses/:id/files/:id. */}
+                                            {(!file?.id || hasPermission('buses-eliminar-archivo')) && (
+                                                <IconButton size="small" onClick={() => handleRemoveFile(file, index)} aria-label="Eliminar archivo">
+                                                    <Delete fontSize="small" />
+                                                </IconButton>
+                                            )}
                                         </Box>
                                     </ListItem>
                                 );
@@ -1231,9 +1251,11 @@ const BusesManagementPage = () => {
                     <Button onClick={handleDialogClose} color="primary">
                         Cancelar
                     </Button>
-                    <Button onClick={handleSave} color="primary" variant="contained">
-                        {selectedBus && selectedBus.id ? 'Guardar Cambios' : 'Crear Bus'}
-                    </Button>
+                    {hasPermission(selectedBus && selectedBus.id ? 'buses-editar' : 'buses-crear') && (
+                        <Button onClick={handleSave} color="primary" variant="contained">
+                            {selectedBus && selectedBus.id ? 'Guardar Cambios' : 'Crear Bus'}
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 
@@ -1305,14 +1327,16 @@ const BusesManagementPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
-                    <Button
-                        onClick={handleUploadBulk}
-                        variant="contained"
-                        color="primary"
-                        disabled={!bulkFile || bulkLoading}
-                    >
-                        Subir
-                    </Button>
+                    <PermissionGuard permission="buses-carga-masiva">
+                        <Button
+                            onClick={handleUploadBulk}
+                            variant="contained"
+                            color="primary"
+                            disabled={!bulkFile || bulkLoading}
+                        >
+                            Subir
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 
@@ -1333,9 +1357,11 @@ const BusesManagementPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenDeleteDialog(false)} disabled={deleteLoading}>Cancelar</Button>
-                    <Button onClick={confirmRemoveFile} variant="contained" color="error" disabled={deleteLoading}>
-                        {deleteLoading ? 'Eliminando...' : 'Eliminar'}
-                    </Button>
+                    {(!deleteTarget?.id || hasPermission('buses-eliminar-archivo')) && (
+                        <Button onClick={confirmRemoveFile} variant="contained" color="error" disabled={deleteLoading}>
+                            {deleteLoading ? 'Eliminando...' : 'Eliminar'}
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 

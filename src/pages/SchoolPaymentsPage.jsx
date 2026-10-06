@@ -68,6 +68,7 @@ import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
 import CreateSchoolPeriodModal from '../components/modals/CreateSchoolPeriodModal';
 import CreditRefundModal from '../components/modals/CreditRefundModal';
 import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
@@ -126,6 +127,8 @@ const ENROLLMENT_STATUS_LABEL = {
 };
 
 const SchoolPaymentsPage = () => {
+    const { hasPermission, hasAnyPermission } = usePermissions();
+    const puedeRecalcular = hasPermission('pagos-recalcular');
     useContext(AuthContext); // keep context hook for future auth-based features
     const navigate = useNavigate();
     const location = useLocation();
@@ -237,10 +240,13 @@ const SchoolPaymentsPage = () => {
             if (!school || String(school.id) !== String(schoolId)) await fetchSchool();
             // Avoid school-wide mora recalculation on page load. Opening the register modal
             // refreshes only the selected family's payment with /payments/:id/recalc.
-            // Trigger auto-debits for this school as a fire-and-forget operation
-            api.post('/payments/process-auto-debits', { schoolId, cicloEscolarId: currentCicloEscolarId || '' }).catch(err => {
-                console.error('Background auto-debits failed to start', err);
-            });
+            // Trigger auto-debits for this school as a fire-and-forget operation.
+            // Exige pagos-procesar-debitos-automaticos: sin la llave no se dispara, porque antes daba un 403 silencioso en cada visita a la pantalla.
+            if (hasPermission('pagos-procesar-debitos-automaticos')) {
+                api.post('/payments/process-auto-debits', { schoolId, cicloEscolarId: currentCicloEscolarId || '' }).catch(err => {
+                    console.error('Background auto-debits failed to start', err);
+                });
+            }
             // load all payments once (client-side pagination/filtering)
             await fetchAllPayments(statusFilter, search);
             // fetch analysis after payments loaded
@@ -409,7 +415,7 @@ const SchoolPaymentsPage = () => {
 
     // Small analysis fetch: tries backend endpoint /payments/analysis or derives simple metrics
     const fetchPaymentsAnalysis = async (schId) => {
-        if (!schId) return;
+        if (!schId || !hasPermission('pagos-ver-analisis')) return;
         try {
             // Pedir al backend los totales respetando los toggles de la UI.
             // Si `showInactive` o `showDeleted` están activos, incluimos esas familias;
@@ -478,6 +484,7 @@ const SchoolPaymentsPage = () => {
     }, [analysisData]);
 
     const fetchExtraordinaryEarnings = async () => {
+        if (!hasPermission('pagos-ver-analisis-extraordinarios')) return [];
         try {
             const res = await api.get('/payments/extraordinary/analysis', { params: buildPaymentParams() });
             return res.data.monthlyEarnings || [];
@@ -1020,9 +1027,11 @@ const SchoolPaymentsPage = () => {
                 let updatedPayment = payment;
                 if (payment?.id) {
                     try {
-                        console.log('[handleOpenRegister] Recalculating payment before opening dialog...');
-                        const recalcResponse = await api.post(`/payments/${payment.id}/recalc`);
-                        console.log('[handleOpenRegister] Recalc response:', recalcResponse.data);
+                        if (puedeRecalcular) {
+                            console.log('[handleOpenRegister] Recalculating payment before opening dialog...');
+                            const recalcResponse = await api.post(`/payments/${payment.id}/recalc`);
+                            console.log('[handleOpenRegister] Recalc response:', recalcResponse.data);
+                        }
                         
                         // Obtener el payment actualizado desde el backend
                         const paymentResponse = await api.get(`/payments/${payment.id}`);
@@ -1081,7 +1090,7 @@ const SchoolPaymentsPage = () => {
                 openRegisterInProgressRef.current = false;
             }
         })();
-    }, [allSchools, fetchAllSchools, regHistPage, regHistLimit, school]);
+    }, [allSchools, fetchAllSchools, regHistPage, regHistLimit, school, puedeRecalcular]);
 
     // Handle query params after handleOpenRegister is defined
     useEffect(() => {
@@ -3292,6 +3301,7 @@ const SchoolPaymentsPage = () => {
                             </Box>
                         </Box>
                     </Box>
+                    {hasAnyPermission(['pagos-v2-crear-periodo-colegio', 'pagos-v2-reintegrar-credito']) && (
                     <Box sx={{ position: 'absolute', right: 16, bottom: 12 }}>
                         <Button
                             size="small"
@@ -3308,9 +3318,11 @@ const SchoolPaymentsPage = () => {
                             Opciones Extra
                         </Button>
                         <Menu anchorEl={openExtraAnchorEl} open={openExtraMenu} onClose={() => setOpenExtraAnchorEl(null)}>
-                            <MenuItem onClick={() => { setOpenCreateSchoolPeriodModal(true); setOpenExtraAnchorEl(null); }}>
-                                Crear período extracurricular
-                            </MenuItem>
+                            <PermissionGuard permission="pagos-v2-crear-periodo-colegio">
+                                <MenuItem onClick={() => { setOpenCreateSchoolPeriodModal(true); setOpenExtraAnchorEl(null); }}>
+                                    Crear período extracurricular
+                                </MenuItem>
+                            </PermissionGuard>
                             <PermissionGuard permission="pagos-v2-reintegrar-credito">
                                 <MenuItem onClick={() => { setOpenCreditRefundModal(true); setOpenExtraAnchorEl(null); }}>
                                     Reintegrar crédito a favor
@@ -3318,6 +3330,7 @@ const SchoolPaymentsPage = () => {
                             </PermissionGuard>
                         </Menu>
                     </Box>
+                    )}
                 </CardContent>
             </HeaderCard>
 
@@ -3755,7 +3768,9 @@ const SchoolPaymentsPage = () => {
                         </CardContent>
                     </SectionCard>
                 </Grid>
-                {/* Sección de Pagos Extraordinarios: reutilizamos el componente compartido */}
+                {/* Sección de Pagos Extraordinarios: reutilizamos el componente compartido.
+                    Su listado exige GET /payments/extraordinary (pagos-listar-extraordinarios). */}
+                {hasPermission('pagos-listar-extraordinarios') && (
                 <Grid item xs={12}>
                     <SectionCard sx={{ mb: 2 }}>
                         <CardContent>
@@ -3792,6 +3807,7 @@ const SchoolPaymentsPage = () => {
                         </CardContent>
                     </SectionCard>
                 </Grid>
+                )}
                 <Grid item xs={12}>
                     <ChipsRow>
                         <ToggleButtonGroup
@@ -3896,13 +3912,11 @@ const SchoolPaymentsPage = () => {
 
                         <PaymentTable
                             payments={pageSlice}
-                            onRegisterClick={handleOpenRegister}
-                            onReceiptClick={handleOpenReceipt}
-                            onEmailClick={handleOpenEmail}
-                            onManageClick={handleManagePayments}
-                            onManagePeriodsClick={handleManagePeriods}
-                            onNotesClick={handleOpenNotes}
-                            onDownloadHistory={handleDownloadHistory}
+                            onRegisterClick={hasPermission('pagos-pagar-tarifa') ? handleOpenRegister : undefined}
+                            onManageClick={hasPermission('pagos-ver-detalle') ? handleManagePayments : undefined}
+                            onManagePeriodsClick={hasPermission('pagos-ver-detalle') ? handleManagePeriods : undefined}
+                            onNotesClick={hasPermission('pagos-ver-detalle') ? handleOpenNotes : undefined}
+                            onDownloadHistory={hasPermission('pagos-ver-detalle') ? handleDownloadHistory : undefined}
                             order={order}
                             orderBy={orderBy}
                             onRequestSort={handleRequestSort}
@@ -4168,7 +4182,7 @@ const SchoolPaymentsPage = () => {
                                                 setSelectedReceipt={setSelectedReceipt}
                                                 receiptZoom={receiptZoom}
                                                 setReceiptZoom={setReceiptZoom}
-                                                canManageReceipts
+                                                canManageReceipts={hasPermission('admin-subir-boletas')}
                                                 uploadReceiptLoading={receiptUploadLoading}
                                                 onUploadReceipt={handleUploadRegisterReceipt}
                                                 onReceiptError={(message) => setSnackbar({ open: true, message, severity: 'warning' })}
@@ -4716,7 +4730,7 @@ const SchoolPaymentsPage = () => {
                                     </Box>
 
                                     {/* Toggle: Usar crédito disponible */}
-                                    {effectivePenaltyDue > 0 && dialogCredito > 0 && !isExonerating && (
+                                    {effectivePenaltyDue > 0 && dialogCredito > 0 && !isExonerating && hasPermission('pagos-v2-usar-credito') && (
                                         <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
                                             <Button
                                                 size="small"
@@ -5122,7 +5136,7 @@ const SchoolPaymentsPage = () => {
                                 <Button onClick={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); setPaymentTab(0); }} disabled={uploadedReceiptsLoading || regHistLoading}>Cancelar</Button>
 
                                 {/* Botón para Pago de Tarifa */}
-                                {paymentTab === 0 && (
+                                {paymentTab === 0 && hasPermission('pagos-pagar-tarifa') && (
                                     <Button variant="contained" onClick={async () => {
                                         await handleConfirmRegister();
                                         // ensure receipt view reset after confirming
@@ -5133,8 +5147,11 @@ const SchoolPaymentsPage = () => {
                                     </Button>
                                 )}
                                 
-                                {/* Botón para Pago de Mora */}
-                                {paymentTab === 1 && (
+                                {/* Botón para Pago de Mora. Con crédito puro solo llama
+                                    /payments/v2/use-credit; con boleta llama /payments/pay-penalty. */}
+                                {paymentTab === 1 && (payPenaltyUseCredit && Number(payPenaltyBoletaAmount || 0) === 0
+                                    ? hasPermission('pagos-v2-usar-credito')
+                                    : hasPermission('pagos-pagar-mora')) && (
                                     <Button variant="contained" color={isExonerating ? 'success' : payPenaltyUseCredit ? 'success' : 'warning'} onClick={async () => {
                                         const creditAmt = payPenaltyUseCredit ? Number(payPenaltyAmount || 0) : 0;
                                         const boletaAmt = payPenaltyUseCredit ? Number(payPenaltyBoletaAmount || 0) : 0;
@@ -5248,7 +5265,7 @@ const SchoolPaymentsPage = () => {
                                 )}
 
                                 {/* Botón para Inscripción */}
-                                {paymentTab === 2 && (
+                                {paymentTab === 2 && hasPermission('pagos-v2-pagar-inscripcion') && (
                                     <Button
                                         variant="contained"
                                         onClick={async () => {
@@ -5329,7 +5346,9 @@ const SchoolPaymentsPage = () => {
                             </DialogContent>
                             <DialogActions>
                                 <Button onClick={handleCloseNotes}>Cancelar</Button>
-                                <Button variant="contained" onClick={handleSaveNotes}>Guardar</Button>
+                                {hasPermission('pagos-v2-actualizar-notas') && (
+                                    <Button variant="contained" onClick={handleSaveNotes}>Guardar</Button>
+                                )}
                             </DialogActions>
                         </Dialog>
 

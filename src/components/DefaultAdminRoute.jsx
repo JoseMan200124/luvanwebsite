@@ -24,8 +24,8 @@ const DefaultAdminRoute = () => {
         return <Navigate to="/login" replace />;
     }
 
-    // Revisa si el usuario tiene acceso a 'dashboard'
-    if (permissions?.dashboard) {
+    // Revisa si el usuario tiene acceso al Dashboard: misma llave que exigen sus datos en el backend (GET /dashboard, /reports/*).
+    if (permissions?.['dashboard-ver']) {
         return <Navigate to="/admin/dashboard" replace />;
     }
 

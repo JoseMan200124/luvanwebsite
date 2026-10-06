@@ -47,6 +47,8 @@ import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
+import usePermissions from '../hooks/usePermissions';
+import PermissionGuard from './PermissionGuard';
 import dateService from '../services/dateService';
 import ReceiptsPane from './ReceiptsPane';
 import RetroactiveApplyModal from './modals/RetroactiveApplyModal';
@@ -408,7 +410,7 @@ const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes, onOpenExp
 
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
                     <FormControlLabel
-                        control={<Checkbox checked={invoiceReq} onChange={() => onToggleInvoiceRow(history)} />}
+                        control={<Checkbox checked={invoiceReq} onChange={() => onToggleInvoiceRow?.(history)} disabled={!onToggleInvoiceRow} />}
                         label="Factura"
                         sx={{ m: 0 }}
                     />
@@ -422,6 +424,8 @@ const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes, onOpenExp
 };
 
 const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {}, onToggleInvoiceSent = () => {} }) => {
+    const { hasPermission } = usePermissions();
+    const puedeVerHistorial = hasPermission('pagos-ver-historial');
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const [localPayment, setLocalPayment] = useState(payment);
@@ -574,7 +578,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     // Load payment histories from paymenthistory (ledger) via API
     useEffect(() => {
         const loadHistories = async () => {
-            if (!open || !payment?.id) {
+            if (!open || !payment?.id || !puedeVerHistorial) {
                 setHistories([]);
                 return;
             }
@@ -667,12 +671,12 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             }
         };
         loadHistories();
-    }, [open, payment, histPage, histLimit]);
+    }, [open, payment, histPage, histLimit, puedeVerHistorial]);
 
     // Excel export removed; function deleted per request
 
     const fetchReceiptsForUser = async (userId) => {
-        if (!userId) return [];
+        if (!userId || !hasPermission('padres-ver-boletas')) return [];
         setUploadedReceiptsLoading(true);
         try {
             const res = await api.get(`/parents/${userId}/receipts`);
@@ -1030,30 +1034,37 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </Grid>
                     <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', gap: 1, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: { xs: 'flex-start', sm: 'flex-end' }, flexDirection: { xs: 'column', sm: 'row' } }}>
-                            <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); if (!isDeleted) onAction('toggleAutoDebit', { payment, value: e.target.checked }); }} disabled={isDeleted} />} label="Débito Automático" />
-                            <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); if (!isDeleted) onAction('toggleRequiresInvoice', { payment, value: e.target.checked }); }} disabled={isDeleted} />} label="Factura" />
+                            {/* Muestran el estado de la familia: sin la llave se ven pero no se pueden cambiar */}
+                            <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); if (!isDeleted) onAction('toggleAutoDebit', { payment, value: e.target.checked }); }} disabled={isDeleted || !hasPermission('activar-debito-automatico')} />} label="Débito Automático" />
+                            <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); if (!isDeleted) onAction('toggleRequiresInvoice', { payment, value: e.target.checked }); }} disabled={isDeleted || !hasPermission('pagos-toggle-factura')} />} label="Factura" />
                         </Box>
                         {/* Download button removed per request */}
                     </Grid>
                 </Grid>
 
                 <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
-                    <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) handleAction('receipts'); }} disabled={isDeleted}>Boletas</Button>
-                    <Button 
-                        variant="outlined" 
-                        color={isGlobalPenaltyFrozen ? "success" : "primary"}
-                        startIcon={isGlobalPenaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
-                        onClick={() => {
-                            if (isDeleted) return;
-                            handleOpenGlobalFreezeDialog(isGlobalPenaltyFrozen ? 'unfreeze' : 'freeze');
-                        }}
-                        disabled={isDeleted}
-                    >
-                        {isGlobalPenaltyFrozen ? 'Descongelar mora global' : 'Congelar mora global'}
-                    </Button>
+                    <PermissionGuard permission="padres-ver-boletas">
+                        <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) handleAction('receipts'); }} disabled={isDeleted}>Boletas</Button>
+                    </PermissionGuard>
+                    {hasPermission(isGlobalPenaltyFrozen ? 'mora-descongelar' : 'mora-congelar') && (
+                        <Button
+                            variant="outlined"
+                            color={isGlobalPenaltyFrozen ? "success" : "primary"}
+                            startIcon={isGlobalPenaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
+                            onClick={() => {
+                                if (isDeleted) return;
+                                handleOpenGlobalFreezeDialog(isGlobalPenaltyFrozen ? 'unfreeze' : 'freeze');
+                            }}
+                            disabled={isDeleted}
+                        >
+                            {isGlobalPenaltyFrozen ? 'Descongelar mora global' : 'Congelar mora global'}
+                        </Button>
+                    )}
                     {/* State changes handled elsewhere; action buttons removed */}
                     {/* Delete/Revert payment */}
-                    <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) setOpenDeleteDialog(true); }} disabled={isDeleted}>Revertir pago</Button>
+                    <PermissionGuard permission="pagos-revertir-ultimo">
+                        <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) setOpenDeleteDialog(true); }} disabled={isDeleted}>Revertir pago</Button>
+                    </PermissionGuard>
                 </Box>
 
                 <Dialog open={!!globalFreezeDialogMode} onClose={handleCloseGlobalFreezeDialog} maxWidth="xs" fullWidth fullScreen={isMobile}>
@@ -1133,11 +1144,13 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => setOpenDeleteDialog(false)}>Cancelar</Button>
-                        <Button variant="contained" color="error" onClick={() => {
-                            // call parent action to delete the payment
-                            handleAction('deletePayment');
-                            setOpenDeleteDialog(false);
-                        }}>Revertir pago</Button>
+                        <PermissionGuard permission="pagos-revertir-ultimo">
+                            <Button variant="contained" color="error" onClick={() => {
+                                // call parent action to delete the payment
+                                handleAction('deletePayment');
+                                setOpenDeleteDialog(false);
+                            }}>Revertir pago</Button>
+                        </PermissionGuard>
                     </DialogActions>
                 </Dialog>
 
@@ -1157,7 +1170,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             receiptZoom={receiptZoom}
                             setReceiptZoom={setReceiptZoom}
                             downloadFile={downloadFile}
-                            canManageReceipts
+                            canManageReceipts={hasPermission('admin-subir-boletas')}
                             onChangeReceiptStatus={handleChangeReceiptStatus}
                         />
                     </DialogContent>
@@ -1256,7 +1269,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             <HistoryMobileCard
                                 key={h.id || `${h.lastPaymentDate || ''}-${Number(h.amountPaid || 0)}`}
                                 history={h}
-                                onToggleInvoiceRow={handleToggleInvoiceRow}
+                                onToggleInvoiceRow={hasPermission('pagos-v2-toggle-factura') ? handleToggleInvoiceRow : undefined}
                                 onOpenNotes={(notes) => { setTxNotes(notes || ''); setOpenTxNotes(true); }}
                                 onOpenExplanation={handleOpenExplanation}
                             />
@@ -1363,7 +1376,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         </Typography>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Checkbox checked={invoiceReq} onChange={() => handleToggleInvoiceRow(h)} />
+                                        <Checkbox checked={invoiceReq} onChange={() => handleToggleInvoiceRow(h)} disabled={!hasPermission('pagos-v2-toggle-factura')} />
                                     </TableCell>
                                     <TableCell align="left">
                                         <MuiIconButton size="small" onClick={() => { setTxNotes(h.notes || ''); setOpenTxNotes(true); }} title={notesVal ? 'Ver notas' : 'Agregar nota'}>

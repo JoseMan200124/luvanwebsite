@@ -126,33 +126,48 @@ ServiceStatusChip.propTypes = {
     isDeleted: PropTypes.bool,
 };
 
-const PaymentActions = React.memo(({ payment, isDeleted, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick }) => (
-    <Box sx={{ display: 'inline-flex', gap: 0.5, justifyContent: 'center' }}>
-        <IconButton
-            title={isDeleted ? 'Acción no disponible (familia eliminada)' : 'Registrar Pago'}
-            onClick={() => { if (!isDeleted && onRegisterClick) onRegisterClick(payment); }}
-            disabled={isDeleted}
-        >
-            <PaymentIcon />
-        </IconButton>
-        <IconButton
-            title={isDeleted ? 'Acción no disponible (familia eliminada)' : 'Notas'}
-            onClick={() => { if (!isDeleted) { if (onNotesClick) onNotesClick(payment); else if (onReceiptClick) onReceiptClick(payment); } }}
-            disabled={isDeleted}
-        >
-            <NoteAltIcon />
-        </IconButton>
-        <IconButton title="Descargar Reporte PDF" onClick={() => { if (onDownloadHistory) onDownloadHistory(payment); else onEmailClick?.(payment); }}>
-            <DownloadIcon />
-        </IconButton>
-        <IconButton title="Gestionar Pagos" onClick={() => onManageClick?.(payment)}>
-            <ManageAccountsIcon />
-        </IconButton>
-        <IconButton title="Gestionar Períodos" onClick={() => onManagePeriodsClick?.(payment)}>
-            <CalendarMonthIcon />
-        </IconButton>
-    </Box>
-));
+// Cada botón se dibuja solo si recibe su callback: la página decide qué acciones ofrece según los permisos del usuario.
+const PaymentActions = React.memo(({ payment, isDeleted, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick }) => {
+    const onNotas = onNotesClick || onReceiptClick;
+    const onDescarga = onDownloadHistory || onEmailClick;
+    return (
+        <Box sx={{ display: 'inline-flex', gap: 0.5, justifyContent: 'center' }}>
+            {onRegisterClick && (
+                <IconButton
+                    title={isDeleted ? 'Acción no disponible (familia eliminada)' : 'Registrar Pago'}
+                    onClick={() => { if (!isDeleted) onRegisterClick(payment); }}
+                    disabled={isDeleted}
+                >
+                    <PaymentIcon />
+                </IconButton>
+            )}
+            {onNotas && (
+                <IconButton
+                    title={isDeleted ? 'Acción no disponible (familia eliminada)' : 'Notas'}
+                    onClick={() => { if (!isDeleted) onNotas(payment); }}
+                    disabled={isDeleted}
+                >
+                    <NoteAltIcon />
+                </IconButton>
+            )}
+            {onDescarga && (
+                <IconButton title="Descargar Reporte PDF" onClick={() => onDescarga(payment)}>
+                    <DownloadIcon />
+                </IconButton>
+            )}
+            {onManageClick && (
+                <IconButton title="Gestionar Pagos" onClick={() => onManageClick(payment)}>
+                    <ManageAccountsIcon />
+                </IconButton>
+            )}
+            {onManagePeriodsClick && (
+                <IconButton title="Gestionar Períodos" onClick={() => onManagePeriodsClick(payment)}>
+                    <CalendarMonthIcon />
+                </IconButton>
+            )}
+        </Box>
+    );
+});
 
 PaymentActions.propTypes = {
     payment: paymentShape,

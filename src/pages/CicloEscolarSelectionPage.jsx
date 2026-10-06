@@ -2314,14 +2314,16 @@ const CicloEscolarSelectionPage = () => {
                                     <Typography variant="body2" color="text.secondary">
                                         Horarios configurados actualmente: {Array.isArray(schoolSchedules) ? schoolSchedules.length : 0}
                                     </Typography>
-                                    <Button
-                                        variant="contained"
-                                        startIcon={<Edit />}
-                                        onClick={handleOpenEditSchedulesModal}
-                                        disabled={!selectedSchool}
-                                    >
-                                        Editar Horarios del Colegio
-                                    </Button>
+                                    <PermissionGuard permission="colegios-editar">
+                                        <Button
+                                            variant="contained"
+                                            startIcon={<Edit />}
+                                            onClick={handleOpenEditSchedulesModal}
+                                            disabled={!selectedSchool}
+                                        >
+                                            Editar Horarios del Colegio
+                                        </Button>
+                                    </PermissionGuard>
                                 </Box>
                             </Box>
                         </AccordionDetails>
@@ -2569,9 +2571,11 @@ const CicloEscolarSelectionPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseEditDialog}>Cancelar</Button>
-                    <Button onClick={() => handleSave()} variant="contained" color="primary" disabled={savingSchool}>
-                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : (selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio')}
-                    </Button>
+                    <PermissionGuard permission={selectedSchool?.id ? 'colegios-editar' : 'colegios-crear'}>
+                        <Button onClick={() => handleSave()} variant="contained" color="primary" disabled={savingSchool}>
+                            {savingSchool ? <CircularProgress size={20} color="inherit" /> : (selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio')}
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 
