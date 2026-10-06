@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
+import usePermissions from '../hooks/usePermissions';
 
 const DISCOUNT_TYPE_OPTIONS = [
     { value: 'FREE', label: 'Gratis' },
@@ -32,6 +33,8 @@ const emptyTierRow = () => ({ untilDate: '', discountType: 'PERCENT', discountVa
  */
 export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraftTiersChange }) {
     const isDraft = !schoolId;
+    const { hasPermission } = usePermissions();
+    const puedeEditar = isDraft || hasPermission('colegios-editar');
     const [tiers, setTiers] = useState(() => (isDraft && Array.isArray(draftTiers) ? draftTiers : []));
     const [loading, setLoading] = useState(false);
     const [loadFailed, setLoadFailed] = useState(false);
@@ -174,9 +177,11 @@ export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraft
                                     />
                                 </TableCell>
                                 <TableCell align="right">
-                                    <IconButton size="small" onClick={() => handleRemoveRow(index)}>
-                                        <Delete fontSize="small" />
-                                    </IconButton>
+                                    {puedeEditar && (
+                                        <IconButton size="small" onClick={() => handleRemoveRow(index)}>
+                                            <Delete fontSize="small" />
+                                        </IconButton>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -185,8 +190,10 @@ export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraft
             )}
 
             <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button size="small" startIcon={<Add />} onClick={handleAddRow}>Agregar tramo</Button>
-                {!isDraft && (
+                {puedeEditar && (
+                    <Button size="small" startIcon={<Add />} onClick={handleAddRow}>Agregar tramo</Button>
+                )}
+                {!isDraft && puedeEditar && (
                     <Button size="small" variant="contained" onClick={handleSaveTiers} disabled={saving || loadFailed}>
                         {saving ? 'Guardando...' : 'Guardar tramos'}
                     </Button>

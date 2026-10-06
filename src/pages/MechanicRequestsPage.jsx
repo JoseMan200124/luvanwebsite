@@ -865,15 +865,17 @@ const MechanicRequestsPage = () => {
                                                         <VisibilityIcon fontSize="small" />
                                                     </IconButton>
                                                 </Tooltip>
-                                                <Tooltip title="Cambiar Estado">
-                                                    <IconButton
-                                                        size="small"
-                                                        color="primary"
-                                                        onClick={() => handleOpenStatusModal(request)}
-                                                    >
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
+                                                <PermissionGuard permission="mecanica-actualizar-estado">
+                                                    <Tooltip title="Cambiar Estado">
+                                                        <IconButton
+                                                            size="small"
+                                                            color="primary"
+                                                            onClick={() => handleOpenStatusModal(request)}
+                                                        >
+                                                            <EditIcon fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </PermissionGuard>
                                                 <PermissionGuard permission="mecanica-eliminar-solicitud">
                                                     <Tooltip title="Eliminar">
                                                         <IconButton
@@ -1229,13 +1231,15 @@ const MechanicRequestsPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setStatusModalOpen(false)}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleConfirmStatusChange}
-                    >
-                        Guardar
-                    </Button>
+                    <PermissionGuard permission="mecanica-actualizar-estado">
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleConfirmStatusChange}
+                        >
+                            Guardar
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 

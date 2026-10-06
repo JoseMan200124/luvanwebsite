@@ -30,6 +30,8 @@ import { DirectionsBus, Save, Clear, ArrowBack, Refresh, ContentCopy, Schedule }
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import { getSchoolSchedules } from '../services/scheduleService';
 import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
@@ -51,6 +53,7 @@ const HeaderCard = styled(Card)`
 `;
 
 const SchoolBusesPage = () => {
+    const { hasPermission } = usePermissions();
     const { auth } = useContext(AuthContext);
     const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
     const location = useLocation();
@@ -702,15 +705,17 @@ const SchoolBusesPage = () => {
                     severity="info"
                     sx={{ mb: 2 }}
                     action={(
-                        <Button
-                            color="inherit"
-                            size="small"
-                            startIcon={previousCycleTransfer.transferring ? <CircularProgress size={16} color="inherit" /> : <ContentCopy />}
-                            onClick={() => setTransferPreviewOpen(true)}
-                            disabled={previousCycleTransfer.transferring || saving}
-                        >
-                            {previousCycleTransfer.transferring ? 'Transfiriendo...' : 'Revisar'}
-                        </Button>
+                        <PermissionGuard permission="buses-editar">
+                            <Button
+                                color="inherit"
+                                size="small"
+                                startIcon={previousCycleTransfer.transferring ? <CircularProgress size={16} color="inherit" /> : <ContentCopy />}
+                                onClick={() => setTransferPreviewOpen(true)}
+                                disabled={previousCycleTransfer.transferring || saving}
+                            >
+                                {previousCycleTransfer.transferring ? 'Transfiriendo...' : 'Revisar'}
+                            </Button>
+                        </PermissionGuard>
                     )}
                 >
                     El ciclo {previousCycleLabel} tiene {previousCycleTransferCount} placas asignadas a rutas que pueden transferirse a este ciclo.
@@ -738,14 +743,16 @@ const SchoolBusesPage = () => {
                             >
                                 Refrescar
                             </Button>
-                            <Button 
-                                variant="contained" 
-                                startIcon={<Save />} 
-                                onClick={handleSaveAssignments}
-                                disabled={saving}
-                            >
-                                {saving ? 'Guardando...' : 'Guardar Asignaciones'}
-                            </Button>
+                            <PermissionGuard permission="routes-assign-staff">
+                                <Button
+                                    variant="contained"
+                                    startIcon={<Save />}
+                                    onClick={handleSaveAssignments}
+                                    disabled={saving}
+                                >
+                                    {saving ? 'Guardando...' : 'Guardar Asignaciones'}
+                                </Button>
+                            </PermissionGuard>
                         </Box>
                     </Box>
 
@@ -932,7 +939,7 @@ const SchoolBusesPage = () => {
                 thresholds={routeThresholds[scheduleModalRoute] || {}}
                 onThresholdChange={(code, field, value) => handleThresholdChange(scheduleModalRoute, code, field, value)}
                 onClose={() => setScheduleModalRoute(null)}
-                onSave={handleSaveScheduleModal}
+                onSave={hasPermission('routes-assign-staff') ? handleSaveScheduleModal : undefined}
                 saving={savingSchedule}
             />
 
@@ -983,14 +990,16 @@ const SchoolBusesPage = () => {
                     <Button onClick={() => setTransferPreviewOpen(false)} disabled={previousCycleTransfer.transferring}>
                         Cancelar
                     </Button>
-                    <Button
-                        variant="contained"
-                        startIcon={previousCycleTransfer.transferring ? <CircularProgress size={16} color="inherit" /> : <ContentCopy />}
-                        onClick={handleTransferPreviousCycleAssignments}
-                        disabled={previousCycleTransfer.transferring || previousCycleTransferCount === 0}
-                    >
-                        {previousCycleTransfer.transferring ? 'Transfiriendo...' : 'Aceptar y transferir'}
-                    </Button>
+                    <PermissionGuard permission="buses-editar">
+                        <Button
+                            variant="contained"
+                            startIcon={previousCycleTransfer.transferring ? <CircularProgress size={16} color="inherit" /> : <ContentCopy />}
+                            onClick={handleTransferPreviousCycleAssignments}
+                            disabled={previousCycleTransfer.transferring || previousCycleTransferCount === 0}
+                        >
+                            {previousCycleTransfer.transferring ? 'Transfiriendo...' : 'Aceptar y transferir'}
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 

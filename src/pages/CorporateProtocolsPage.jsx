@@ -48,6 +48,8 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 
 import api from '../utils/axiosConfig';
+import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 // Styled components
@@ -83,6 +85,7 @@ const MobileProtocolCard = styled(Card)`
 `;
 
 const CorporateProtocolsPage = () => {
+    const { hasPermission } = usePermissions();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const navigate = useNavigate();
@@ -432,12 +435,16 @@ const CorporateProtocolsPage = () => {
                 >
                     Descargar
                 </Button>
-                <IconButton size="small" onClick={() => handleEdit(protocol)}>
-                    <EditIcon />
-                </IconButton>
-                <IconButton size="small" onClick={() => handleOpenDeleteDialog(protocol)}>
-                    <DeleteIcon />
-                </IconButton>
+                <PermissionGuard permission="protocolos-editar">
+                    <IconButton size="small" onClick={() => handleEdit(protocol)}>
+                        <EditIcon />
+                    </IconButton>
+                </PermissionGuard>
+                <PermissionGuard permission="protocolos-eliminar">
+                    <IconButton size="small" onClick={() => handleOpenDeleteDialog(protocol)}>
+                        <DeleteIcon />
+                    </IconButton>
+                </PermissionGuard>
             </CardActions>
         </MobileProtocolCard>
     );
@@ -490,12 +497,16 @@ const CorporateProtocolsPage = () => {
                 >
                     Descargar
                 </Button>
-                <IconButton onClick={() => handleEdit(protocol)}>
-                    <EditIcon />
-                </IconButton>
-                <IconButton onClick={() => handleOpenDeleteDialog(protocol)}>
-                    <DeleteIcon />
-                </IconButton>
+                <PermissionGuard permission="protocolos-editar">
+                    <IconButton onClick={() => handleEdit(protocol)}>
+                        <EditIcon />
+                    </IconButton>
+                </PermissionGuard>
+                <PermissionGuard permission="protocolos-eliminar">
+                    <IconButton onClick={() => handleOpenDeleteDialog(protocol)}>
+                        <DeleteIcon />
+                    </IconButton>
+                </PermissionGuard>
             </Box>
         </ListItem>
     );
@@ -539,15 +550,17 @@ const CorporateProtocolsPage = () => {
 
             <Container>
                 {/* Botón para crear nuevo protocolo */}
-                <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={handleCreate}
-                    startIcon={<AddIcon />}
-                    style={{ marginBottom: '20px' }}
-                >
-                    Crear Nuevo Protocolo/Reglamento
-                </Button>
+                <PermissionGuard permission="protocolos-crear">
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleCreate}
+                        startIcon={<AddIcon />}
+                        style={{ marginBottom: '20px' }}
+                    >
+                        Crear Nuevo Protocolo/Reglamento
+                    </Button>
+                </PermissionGuard>
 
                 {/* Filtros */}
                 <Card style={{ marginBottom: '20px' }}>
@@ -707,9 +720,11 @@ const CorporateProtocolsPage = () => {
                         <Button onClick={() => setOpenDialog(false)}>
                             Cancelar
                         </Button>
-                        <Button onClick={handleSave} variant="contained">
-                            {currentProtocol ? 'Actualizar' : 'Crear'}
-                        </Button>
+                        {hasPermission(currentProtocol ? 'protocolos-editar' : 'protocolos-crear') && (
+                            <Button onClick={handleSave} variant="contained">
+                                {currentProtocol ? 'Actualizar' : 'Crear'}
+                            </Button>
+                        )}
                     </DialogActions>
                 </Dialog>
 
@@ -729,9 +744,11 @@ const CorporateProtocolsPage = () => {
                         <Button onClick={() => setOpenDeleteDialog(false)}>
                             Cancelar
                         </Button>
-                        <Button onClick={handleDelete} color="error" variant="contained">
-                            Eliminar
-                        </Button>
+                        <PermissionGuard permission="protocolos-eliminar">
+                            <Button onClick={handleDelete} color="error" variant="contained">
+                                Eliminar
+                            </Button>
+                        </PermissionGuard>
                     </DialogActions>
                 </Dialog>
 

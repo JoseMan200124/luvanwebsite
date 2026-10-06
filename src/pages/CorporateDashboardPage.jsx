@@ -47,6 +47,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
+import usePermissions from '../hooks/usePermissions';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import RouteColaboradoresModal from '../components/modals/RouteColaboradoresModal';
@@ -85,6 +86,9 @@ const CAROUSEL_STATUSES = [
 ];
 
 const CorporateDashboardPage = () => {
+    const { hasPermission } = usePermissions();
+    const puedeVerOcupacion = hasPermission('rutas-ver-ocupacion-corporacion');
+    const puedeVerColaboradores = hasPermission('corporaciones-listar-colaboradores');
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
@@ -194,6 +198,7 @@ const CorporateDashboardPage = () => {
 
     const fetchRouteOccupancy = useCallback(async () => {
         if (!corporationId) return;
+        if (!puedeVerOcupacion) return;
         
         try {
             const response = await api.get(`/routes/occupancy-corporate/${corporationId}`, {
@@ -210,10 +215,11 @@ const CorporateDashboardPage = () => {
             console.error('Error fetching route occupancy:', err);
             setRouteOccupancy([]);
         }
-    }, [auth.token, corporationId, fiscalYear, selectedDay]);
+    }, [auth.token, corporationId, fiscalYear, selectedDay, puedeVerOcupacion]);
 
     const fetchColaboradorSummary = useCallback(async () => {
         if (!corporationId) return;
+        if (!puedeVerColaboradores) return;
         
         try {
             const response = await api.get(`/corporations/${corporationId}/colaboradores`, {
@@ -255,10 +261,11 @@ const CorporateDashboardPage = () => {
                 byDepartment: []
             });
         }
-    }, [auth.token, corporationId, fiscalYear]);
+    }, [auth.token, corporationId, fiscalYear, puedeVerColaboradores]);
 
     const fetchColaboradorStatusSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!corporationId) return;
+        if (!puedeVerColaboradores) return;
         try {
             const response = await api.get(`/corporations/${corporationId}/colaboradores/status-summary`, {
                 headers: { Authorization: `Bearer ${auth.token}` },
@@ -270,7 +277,7 @@ const CorporateDashboardPage = () => {
             console.error('Error fetching colaborador status summary:', err);
             setColaboradorStatusSummary({ total: 0 });
         }
-    }, [auth.token, corporationId, fiscalYear]);
+    }, [auth.token, corporationId, fiscalYear, puedeVerColaboradores]);
 
     // Obtiene contadores globales: cuántos colaboradores usan vs no usan el servicio
     const fetchColaboradorUsageSummary = useCallback(async () => {
@@ -518,6 +525,7 @@ const CorporateDashboardPage = () => {
 
             <Grid container spacing={3}>
                 {/* Sección A: Resumen de ocupación por ruta */}
+                {puedeVerOcupacion && (
                 <Grid item xs={12} lg={8}>
                     <SummaryCard>
                         <CardContent>
@@ -737,6 +745,7 @@ const CorporateDashboardPage = () => {
                         </CardContent>
                     </SummaryCard>
                 </Grid>
+                )}
 
                 {/* Sección B: Right column with summary and actions */}
                 <Grid item xs={12} lg={4}>
@@ -813,6 +822,7 @@ const CorporateDashboardPage = () => {
                         </Grid>
 
                         {/* Colaboradores - carrusel por estado del servicio */}
+                        {puedeVerColaboradores && (
                         <Grid item xs={12}>
                             <SummaryCard>
                                 <CardContent>
@@ -881,6 +891,7 @@ const CorporateDashboardPage = () => {
                                 </CardContent>
                             </SummaryCard>
                         </Grid>
+                        )}
 
                         {/* Action cards */}
                         <Grid item xs={12}>

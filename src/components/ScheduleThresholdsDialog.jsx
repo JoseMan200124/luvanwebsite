@@ -249,14 +249,17 @@ export default function ScheduleThresholdsDialog({
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose} disabled={saving}>Cancelar</Button>
-                <Button
-                    variant="contained"
-                    startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
-                    onClick={onSave}
-                    disabled={saving}
-                >
-                    {saving ? 'Guardando...' : 'Guardar Horarios'}
-                </Button>
+                {/* Sin onSave el diálogo queda de solo lectura: la página decide siofrece guardar según el permiso del usuario. */}
+                {onSave && (
+                    <Button
+                        variant="contained"
+                        startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
+                        onClick={onSave}
+                        disabled={saving}
+                    >
+                        {saving ? 'Guardando...' : 'Guardar Horarios'}
+                    </Button>
+                )}
             </DialogActions>
         </Dialog>
     );

@@ -48,6 +48,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
+import usePermissions from '../hooks/usePermissions';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import RouteStudentsModal from '../components/modals/RouteStudentsModal';
@@ -91,6 +92,10 @@ const CAROUSEL_STATUSES = [
 ];
 
 const SchoolDashboardPage = () => {
+    const { hasPermission } = usePermissions();
+    const puedeVerOcupacion = hasPermission('rutas-ver-ocupacion-colegio');
+    const puedeVerFamilias = hasPermission('padres-ver-resumen-colegio');
+    const puedeVerEstudiantes = hasPermission('estudiantes-ver-resumen');
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
@@ -176,6 +181,7 @@ const SchoolDashboardPage = () => {
 
     const fetchRouteOccupancy = useCallback(async () => {
         if (!schoolId) return;
+        if (!puedeVerOcupacion) return;
         
         try {
             const response = await api.get(`/routes/occupancy/${schoolId}`, {
@@ -189,10 +195,11 @@ const SchoolDashboardPage = () => {
             console.error('Error fetching route occupancy:', err);
             setRouteOccupancy([]);
         }
-    }, [auth.token, schoolId, selectedDay, buildSchoolCycleParams]);
+    }, [auth.token, schoolId, selectedDay, buildSchoolCycleParams, puedeVerOcupacion]);
 
     const fetchUserSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!schoolId) return;
+        if (!puedeVerFamilias) return;
         
         try {
             const response = await api.get(`/parents/summary/${schoolId}`, {
@@ -215,10 +222,11 @@ const SchoolDashboardPage = () => {
             console.error('Error fetching user summary:', err);
             setUserSummary({ completa: 0, mediaAM: 0, mediaPM: 0, total: 0 });
         }
-    }, [auth.token, schoolId, buildSchoolCycleParams]);
+    }, [auth.token, schoolId, buildSchoolCycleParams, puedeVerFamilias]);
 
     const fetchStudentSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
         if (!schoolId) return;
+        if (!puedeVerEstudiantes) return;
         
         try {
             const response = await api.get(`/students/summary/${schoolId}`, {
@@ -246,7 +254,7 @@ const SchoolDashboardPage = () => {
             console.error('Error fetching student summary:', err);
             setStudentSummary({ completa: 0, mediaAM: 0, mediaPM: 0, inactive: 0, total: 0 });
         }
-    }, [auth.token, schoolId, buildSchoolCycleParams]);
+    }, [auth.token, schoolId, buildSchoolCycleParams, puedeVerEstudiantes]);
 
     // Obtiene contadores globales: cuántas familias/estudiantes usan vs no usan el servicio
     const fetchServiceUsageSummary = useCallback(async () => {
@@ -506,6 +514,7 @@ const SchoolDashboardPage = () => {
 
             <Grid container spacing={3}>
                 {/* Sección A: Resumen de ocupación por ruta */}
+                {puedeVerOcupacion && (
                 <Grid item xs={12} lg={8}>
                     <SummaryCard>
                         <CardContent>
@@ -669,6 +678,7 @@ const SchoolDashboardPage = () => {
                         </CardContent>
                     </SummaryCard>
                 </Grid>
+                )}
 
                 {/* Sección B: Resumen de usuarios y acciones */}
                 <Grid item xs={12} lg={4}>
@@ -766,6 +776,7 @@ const SchoolDashboardPage = () => {
                         <Grid item xs={12}>
                             <Grid container spacing={2}>
                                 {/* Familias - carrusel por estado del servicio */}
+                                {puedeVerFamilias && (
                                 <Grid item xs={12} md={6}>
                                     <SummaryCard>
                                         <CardContent>
@@ -831,8 +842,10 @@ const SchoolDashboardPage = () => {
                                         </CardContent>
                                     </SummaryCard>
                                 </Grid>
+                                )}
 
                                 {/* Estudiantes - carrusel por estado del servicio (sincronizado con Familias) */}
+                                {puedeVerEstudiantes && (
                                 <Grid item xs={12} md={6}>
                                     <SummaryCard>
                                         <CardContent>
@@ -890,6 +903,7 @@ const SchoolDashboardPage = () => {
                                         </CardContent>
                                     </SummaryCard>
                                 </Grid>
+                                )}
                             </Grid>
                         </Grid>
 

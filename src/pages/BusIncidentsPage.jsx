@@ -901,11 +901,13 @@ const BusIncidentsPage = () => {
                                             Fecha y Hora
                                         </Typography>
                                         {!editingFecha && (
-                                            <Tooltip title="Editar fecha y hora">
-                                                <IconButton size="small" onClick={handleStartEditFecha}>
-                                                    <EditIcon fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
+                                            <PermissionGuard permission="incidentes-buses-editar">
+                                                <Tooltip title="Editar fecha y hora">
+                                                    <IconButton size="small" onClick={handleStartEditFecha}>
+                                                        <EditIcon fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </PermissionGuard>
                                         )}
                                     </Box>
                                     {editingFecha ? (
@@ -920,15 +922,17 @@ const BusIncidentsPage = () => {
                                                 />
                                             </LocalizationProvider>
                                             <Box display="flex" gap={1} mt={1}>
-                                                <Button
-                                                    variant="contained"
-                                                    size="small"
-                                                    startIcon={savingFecha ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                                                    onClick={handleSaveFecha}
-                                                    disabled={savingFecha || !fechaValue}
-                                                >
-                                                    Guardar
-                                                </Button>
+                                                <PermissionGuard permission="incidentes-buses-editar">
+                                                    <Button
+                                                        variant="contained"
+                                                        size="small"
+                                                        startIcon={savingFecha ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                                                        onClick={handleSaveFecha}
+                                                        disabled={savingFecha || !fechaValue}
+                                                    >
+                                                        Guardar
+                                                    </Button>
+                                                </PermissionGuard>
                                                 <Button
                                                     variant="outlined"
                                                     size="small"
@@ -1065,11 +1069,13 @@ const BusIncidentsPage = () => {
                                             Descripción del Incidente
                                         </Typography>
                                         {!editingDescription && (
-                                            <Tooltip title="Editar descripción">
-                                                <IconButton size="small" onClick={handleStartEditDescription}>
-                                                    <EditIcon fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
+                                            <PermissionGuard permission="incidentes-buses-editar">
+                                                <Tooltip title="Editar descripción">
+                                                    <IconButton size="small" onClick={handleStartEditDescription}>
+                                                        <EditIcon fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </PermissionGuard>
                                         )}
                                     </Box>
                                     {editingDescription ? (
@@ -1085,15 +1091,17 @@ const BusIncidentsPage = () => {
                                                 disabled={savingDescription}
                                             />
                                             <Box display="flex" gap={1} mt={1}>
-                                                <Button
-                                                    variant="contained"
-                                                    size="small"
-                                                    startIcon={savingDescription ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                                                    onClick={handleSaveDescription}
-                                                    disabled={savingDescription}
-                                                >
-                                                    Guardar
-                                                </Button>
+                                                <PermissionGuard permission="incidentes-buses-editar">
+                                                    <Button
+                                                        variant="contained"
+                                                        size="small"
+                                                        startIcon={savingDescription ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                                                        onClick={handleSaveDescription}
+                                                        disabled={savingDescription}
+                                                    >
+                                                        Guardar
+                                                    </Button>
+                                                </PermissionGuard>
                                                 <Button
                                                     variant="outlined"
                                                     size="small"

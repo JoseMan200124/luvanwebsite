@@ -26,6 +26,8 @@ import { DirectionsBus, Save, Clear, ArrowBack, Refresh, Schedule as ScheduleIco
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 import ScheduleThresholdsDialog from '../components/ScheduleThresholdsDialog';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -44,6 +46,7 @@ const HeaderCard = styled(Card)`
 `;
 
 const CorporateBusesPage = () => {
+    const { hasPermission } = usePermissions();
     const { auth } = useContext(AuthContext);
     const { fiscalYear, corporationId } = useParams();
     const location = useLocation();
@@ -449,14 +452,16 @@ const CorporateBusesPage = () => {
                             >
                                 Refrescar
                             </Button>
-                            <Button 
-                                variant="contained" 
-                                startIcon={<Save />} 
-                                onClick={handleSaveAssignments}
-                                disabled={saving}
-                            >
-                                {saving ? 'Guardando...' : 'Guardar Asignaciones'}
-                            </Button>
+                            <PermissionGuard permission="routes-assign-staff">
+                                <Button
+                                    variant="contained"
+                                    startIcon={<Save />}
+                                    onClick={handleSaveAssignments}
+                                    disabled={saving}
+                                >
+                                    {saving ? 'Guardando...' : 'Guardar Asignaciones'}
+                                </Button>
+                            </PermissionGuard>
                         </Box>
                     </Box>
 
@@ -642,7 +647,7 @@ const CorporateBusesPage = () => {
                 thresholds={routeThresholds[scheduleModalRoute] || {}}
                 onThresholdChange={(code, field, value) => handleThresholdChange(scheduleModalRoute, code, field, value)}
                 onClose={() => setScheduleModalRoute(null)}
-                onSave={handleSaveScheduleModal}
+                onSave={hasPermission('routes-assign-staff') ? handleSaveScheduleModal : undefined}
                 saving={savingSchedule}
                 roleTabsEnabled={false}
             />

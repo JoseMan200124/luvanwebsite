@@ -842,13 +842,15 @@ const RequestsPage = () => {
                                         <TableCell>{getStatusChip(r.status)}</TableCell>
                                     <TableCell align="right">
                                         <Tooltip title="Ver detalle"><IconButton size="small" onClick={() => handleViewDetail(r)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
-                                        <Tooltip title={isFinalStatus(r.status) || r.status === 'cancelled' ? 'Solicitud ya resuelta' : 'Cambiar estado'}>
-                                            <span>
-                                                <IconButton size="small" color="primary" onClick={() => handleOpenStatusModal(r)} disabled={isFinalStatus(r.status) || r.status === 'cancelled'}>
-                                                    <EditIcon fontSize="small" />
-                                                </IconButton>
-                                            </span>
-                                        </Tooltip>
+                                        <PermissionGuard permission="solicitudes-actualizar-estado">
+                                            <Tooltip title={isFinalStatus(r.status) || r.status === 'cancelled' ? 'Solicitud ya resuelta' : 'Cambiar estado'}>
+                                                <span>
+                                                    <IconButton size="small" color="primary" onClick={() => handleOpenStatusModal(r)} disabled={isFinalStatus(r.status) || r.status === 'cancelled'}>
+                                                        <EditIcon fontSize="small" />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+                                        </PermissionGuard>
                                          <PermissionGuard permission="solicitudes-eliminar">
                                             <Tooltip title={'Eliminar'}>
                                                 <IconButton size="small" color="error" onClick={() => handleOpenDeleteModal(r)}>
@@ -1250,9 +1252,11 @@ const RequestsPage = () => {
                     <Button onClick={() => setStatusModalOpen(false)} variant="outlined">
                         Cancelar
                     </Button>
-                    <Button variant="contained" onClick={handleConfirmStatusChange} disabled={!newStatus}>
-                        Cambiar
-                    </Button>
+                    <PermissionGuard permission="solicitudes-actualizar-estado">
+                        <Button variant="contained" onClick={handleConfirmStatusChange} disabled={!newStatus}>
+                            Cambiar
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 

@@ -66,6 +66,8 @@ import moment from 'moment-timezone';
 import { normalizeKey } from '../utils/stringHelpers';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
+import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -141,6 +143,17 @@ const translateServiceStatus = (status) => {
 
 const ColaboradoresPage = () => {
     const { auth } = useContext(AuthContext);
+    const { hasPermission, hasAnyPermission } = usePermissions();
+    // El modal de horarios crea, edita y elimina slots en la misma operación.
+    const puedeGestionarHorarios = hasAnyPermission(['horarios-crear', 'horarios-editar', 'horarios-eliminar']);
+    // El modal de estado de servicio ofrece un estado por llave; si no tiene
+    // ninguna, no hay nada que pueda cambiar.
+    const puedeGestionarEstadoServicio = hasAnyPermission([
+        'usuarios-activar-servicio',
+        'usuarios-pausar-servicio',
+        'usuarios-suspender-servicio',
+        'usuarios-desactivar-servicio',
+    ]);
     const navigate = useNavigate();
     const location = useLocation();
     const { fiscalYear, corporationId } = useParams();
@@ -1941,13 +1954,15 @@ const ColaboradoresPage = () => {
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                <Button 
-                    onClick={isEdit ? handleUpdateColaborador : handleCreateColaborador}
-                    variant="contained"
-                    disabled={!colaboradorForm.username || !colaboradorForm.email || (!isEdit && !colaboradorForm.password)}
-                >
-                    {isEdit ? 'Actualizar' : 'Crear'}
-                </Button>
+                {hasPermission(isEdit ? 'corporaciones-editar-colaborador' : 'corporaciones-crear-colaborador') && (
+                    <Button
+                        onClick={isEdit ? handleUpdateColaborador : handleCreateColaborador}
+                        variant="contained"
+                        disabled={!colaboradorForm.username || !colaboradorForm.email || (!isEdit && !colaboradorForm.password)}
+                    >
+                        {isEdit ? 'Actualizar' : 'Crear'}
+                    </Button>
+                )}
             </DialogActions>
         </Dialog>
     );
@@ -2074,51 +2089,59 @@ const ColaboradoresPage = () => {
             <Card sx={{ mb: 3 }}>
                 <CardContent>
                     <Grid container spacing={2}>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<FileUpload />}
-                                fullWidth
-                                onClick={() => setOpenBulkDialog(true)}
-                            >
-                                Carga Masiva
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<FileUpload />}
-                                fullWidth
-                                onClick={() => setOpenBulkScheduleDialog(true)}
-                            >
-                                Cargar Horarios
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<Add />}
-                                fullWidth
-                                onClick={handleOpenCreateDialog}
-                                sx={{ fontSize: '0.811rem' }}
-                            >
-                                Añadir Colaborador
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="secondary"
-                                startIcon={<Mail />}
-                                fullWidth
-                                onClick={() => setOpenCircularDialog(true)}
-                            >
-                                Enviar Circular
-                            </Button>
-                        </Grid>
+                        <PermissionGuard permission="corporaciones-carga-masiva-colaboradores">
+                            <Grid item xs={12} md={2}>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<FileUpload />}
+                                    fullWidth
+                                    onClick={() => setOpenBulkDialog(true)}
+                                >
+                                    Carga Masiva
+                                </Button>
+                            </Grid>
+                        </PermissionGuard>
+                        <PermissionGuard permission="corporaciones-carga-masiva-horarios">
+                            <Grid item xs={12} md={2}>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<FileUpload />}
+                                    fullWidth
+                                    onClick={() => setOpenBulkScheduleDialog(true)}
+                                >
+                                    Cargar Horarios
+                                </Button>
+                            </Grid>
+                        </PermissionGuard>
+                        <PermissionGuard permission="corporaciones-crear-colaborador">
+                            <Grid item xs={12} md={2}>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<Add />}
+                                    fullWidth
+                                    onClick={handleOpenCreateDialog}
+                                    sx={{ fontSize: '0.811rem' }}
+                                >
+                                    Añadir Colaborador
+                                </Button>
+                            </Grid>
+                        </PermissionGuard>
+                        <PermissionGuard permission="mail-enviar-circular-colaboradores">
+                            <Grid item xs={12} md={2}>
+                                <Button
+                                    variant="contained"
+                                    color="secondary"
+                                    startIcon={<Mail />}
+                                    fullWidth
+                                    onClick={() => setOpenCircularDialog(true)}
+                                >
+                                    Enviar Circular
+                                </Button>
+                            </Grid>
+                        </PermissionGuard>
                         <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
@@ -2326,10 +2349,12 @@ const ColaboradoresPage = () => {
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                                                        <IconButton size="small" onClick={() => handleOpenEditDialog(colaborador)} title="Editar">
-                                                            <Edit fontSize="small" />
-                                                        </IconButton>
-                                                        {(() => {
+                                                        <PermissionGuard permission="corporaciones-editar-colaborador">
+                                                            <IconButton size="small" onClick={() => handleOpenEditDialog(colaborador)} title="Editar">
+                                                                <Edit fontSize="small" />
+                                                            </IconButton>
+                                                        </PermissionGuard>
+                                                        {puedeGestionarHorarios && (() => {
                                                             const s = getCollaboratorAssignStatus(colaborador);
                                                             const title = s === 'all' ? 'Tiene asignaciones' : 'Sin asignaciones';
                                                             if (s === 'none') {
@@ -2356,17 +2381,21 @@ const ColaboradoresPage = () => {
                                                             );
                                                         })()}
                                                         
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleServiceStatusClick(colaborador)}
-                                                            title="Gestionar estado del servicio"
-                                                            color="primary"
-                                                        >
-                                                            {Number(colaborador.state) === 1 ? <ToggleOn fontSize="small" /> : <ToggleOff fontSize="small" />}
-                                                        </IconButton>
-                                                        <IconButton size="small" onClick={() => handleOpenDeleteDialog(colaborador)} title="Eliminar" color="error">
-                                                            <Delete fontSize="small" />
-                                                        </IconButton>
+                                                        {puedeGestionarEstadoServicio && (
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={() => handleServiceStatusClick(colaborador)}
+                                                                title="Gestionar estado del servicio"
+                                                                color="primary"
+                                                            >
+                                                                {Number(colaborador.state) === 1 ? <ToggleOn fontSize="small" /> : <ToggleOff fontSize="small" />}
+                                                            </IconButton>
+                                                        )}
+                                                        <PermissionGuard permission="usuarios-eliminar">
+                                                            <IconButton size="small" onClick={() => handleOpenDeleteDialog(colaborador)} title="Eliminar" color="error">
+                                                                <Delete fontSize="small" />
+                                                            </IconButton>
+                                                        </PermissionGuard>
                                                     </Box>
                                                 </TableCell>
                                             </TableRow>
@@ -2417,9 +2446,11 @@ const ColaboradoresPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <Button onClick={handleDeleteColaborador} color="error" variant="contained">
-                        Eliminar
-                    </Button>
+                    <PermissionGuard permission="usuarios-eliminar">
+                        <Button onClick={handleDeleteColaborador} color="error" variant="contained">
+                            Eliminar
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 
@@ -2438,13 +2469,15 @@ const ColaboradoresPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <Button 
-                        onClick={handleToggleState} 
-                        color={selectedColaborador && Number(selectedColaborador.state) === 1 ? 'warning' : 'success'}
-                        variant="contained"
-                    >
-                        {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'Desactivar' : 'Activar'}
-                    </Button>
+                    <PermissionGuard permission="usuarios-toggle-estado">
+                        <Button
+                            onClick={handleToggleState}
+                            color={selectedColaborador && Number(selectedColaborador.state) === 1 ? 'warning' : 'success'}
+                            variant="contained"
+                        >
+                            {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'Desactivar' : 'Activar'}
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 
@@ -2518,13 +2551,15 @@ const ColaboradoresPage = () => {
                     }}>
                         Cancelar
                     </Button>
-                    <Button 
-                        onClick={handleBulkUpload} 
-                        variant="contained"
-                        disabled={!bulkFile || bulkLoading}
-                    >
-                        {bulkLoading ? <CircularProgress size={24} /> : 'Cargar'}
-                    </Button>
+                    <PermissionGuard permission="corporaciones-carga-masiva-colaboradores">
+                        <Button
+                            onClick={handleBulkUpload}
+                            variant="contained"
+                            disabled={!bulkFile || bulkLoading}
+                        >
+                            {bulkLoading ? <CircularProgress size={24} /> : 'Cargar'}
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 
@@ -2568,14 +2603,16 @@ const ColaboradoresPage = () => {
                     }}>
                         Cancelar
                     </Button>
-                    <Button 
-                        onClick={handleSendCircular} 
-                        variant="contained"
-                        color="secondary"
-                        disabled={!circularSubject || !circularMessage || circularLoading}
-                    >
-                        {circularLoading ? <CircularProgress size={24} /> : 'Enviar'}
-                    </Button>
+                    <PermissionGuard permission="mail-enviar-circular-colaboradores">
+                        <Button
+                            onClick={handleSendCircular}
+                            variant="contained"
+                            color="secondary"
+                            disabled={!circularSubject || !circularMessage || circularLoading}
+                        >
+                            {circularLoading ? <CircularProgress size={24} /> : 'Enviar'}
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 

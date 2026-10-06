@@ -26,9 +26,11 @@ import {
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import api from '../utils/axiosConfig';
+import usePermissions from '../hooks/usePermissions';
 import moment from 'moment';
 
 const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', hideSchoolSelect = false, noWrapper = false }) => {
+    const { hasPermission } = usePermissions();
     // Estado del formulario de registro
     const [formData, setFormData] = useState({
     schoolId: initialSchoolId || '',
@@ -225,6 +227,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
 
     const content = (
         <>
+            {hasPermission('pagos-crear-extraordinario') && (
             <Grid container spacing={2}>
                 {/* Formulario de registro */}
                 <Grid item xs={12}>
@@ -470,6 +473,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                     </Button>
                 </Grid>
             </Grid>
+            )}
 
             {/* Sección de listado de pagos extraordinarios */}
             <Box mt={4}>

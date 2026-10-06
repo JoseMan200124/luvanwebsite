@@ -31,6 +31,15 @@ import {
     Info
 } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
+import usePermissions from '../hooks/usePermissions';
+
+// Cada estado del servicio lo aplica su propia ruta de /service-status.
+const LLAVE_POR_ESTADO = {
+    ACTIVE: 'usuarios-activar-servicio',
+    PAUSED: 'usuarios-pausar-servicio',
+    SUSPENDED: 'usuarios-suspender-servicio',
+    INACTIVE: 'usuarios-desactivar-servicio',
+};
 
 // Definición de estados con sus propiedades
 const SERVICE_STATES = {
@@ -140,6 +149,8 @@ const buildRequestBody = ({
 };
 
 const UserServiceStatusModal = ({ open, onClose, user, schoolId, cicloEscolarId = null, onSuccess, userType = 'FAMILY', corporationId = null, fiscalYear = null }) => {
+    const { hasPermission } = usePermissions();
+    const puedeEditarPolitica = hasPermission('usuarios-activar-servicio');
     const [loading, setLoading] = useState(false);
     const [currentStatus, setCurrentStatus] = useState(null);
     const [currentStatusRecord, setCurrentStatusRecord] = useState(null);
@@ -217,12 +228,12 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, cicloEscolarId 
     // Obtener estados permitidos según el estado actual
     const getAllowedStates = () => {
         if (!currentStatus) return [];
-        const transitions = VALID_TRANSITIONS[currentStatus] || [];
+        let transitions = VALID_TRANSITIONS[currentStatus] || [];
         // SUSPENDED no aplica para colaboradores
         if (userType === 'COLABORADOR') {
-            return transitions.filter(s => s !== 'SUSPENDED');
+            transitions = transitions.filter(s => s !== 'SUSPENDED');
         }
-        return transitions;
+        return transitions.filter(s => hasPermission(LLAVE_POR_ESTADO[s]));
     };
 
     const handleSubmit = async () => {
@@ -378,7 +389,7 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, cicloEscolarId 
 
                 <Divider sx={{ my: 3 }} />
 
-                {userType === 'FAMILY' && (
+                {userType === 'FAMILY' && puedeEditarPolitica && (
                     <Box sx={{ mb: 3 }}>
                         <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                             Política manual para cambios automáticos a estado Suspendido

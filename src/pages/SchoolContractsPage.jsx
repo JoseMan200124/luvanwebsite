@@ -42,6 +42,8 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 
 import SimpleEditor from './SimpleEditor';
 import api from '../utils/axiosConfig';
+import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import mammoth from 'mammoth';
@@ -100,6 +102,8 @@ const MobileFilledContractCard = styled(Box)`
 `;
 
 const SchoolContractsPage = () => {
+    const { hasPermission } = usePermissions();
+    const puedeVerLlenados = hasPermission('contratos-ver-llenados');
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const navigate = useNavigate();
@@ -279,6 +283,11 @@ const SchoolContractsPage = () => {
     // ---------------------------
     useEffect(() => {
         const fetchItems = async () => {
+            if (!puedeVerLlenados) {
+                setFilledContracts([]);
+                setUnfilledFamilies([]);
+                return;
+            }
             // Si está activo el switch, consumir endpoint de familias no firmadas
             if (onlyUnfilled) {
                 const start = Date.now();
@@ -358,7 +367,7 @@ const SchoolContractsPage = () => {
             }
         };
         fetchItems();
-    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid, showInactive]);
+    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid, showInactive, puedeVerLlenados]);
 
     // ---------------------------
     // Función para subir archivo Word y convertirlo a HTML (igual que ContractsManagementPage)
@@ -832,9 +841,11 @@ const SchoolContractsPage = () => {
                             >
                                 Descargar PDF
                             </Button>
-                            <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
-                                <DeleteIcon />
-                            </IconButton>
+                            <PermissionGuard permission="contratos-eliminar-llenado">
+                                <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
+                                    <DeleteIcon />
+                                </IconButton>
+                            </PermissionGuard>
                         </Box>
                     </MobileFilledContractCard>
                 );
@@ -887,9 +898,11 @@ const SchoolContractsPage = () => {
                 >
                     Descargar PDF
                 </Button>
-                <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
-                    <DeleteIcon />
-                </IconButton>
+                <PermissionGuard permission="contratos-eliminar-llenado">
+                    <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
+                        <DeleteIcon />
+                    </IconButton>
+                </PermissionGuard>
             </ListItem>
         );
     };
@@ -930,15 +943,17 @@ const SchoolContractsPage = () => {
 
             <Container>
                 {/* Botón para crear contrato */}
-                <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={() => setOpenEditor(true)}
-                    startIcon={<AddIcon />}
-                    style={{ marginBottom: '20px' }}
-                >
-                    Crear Nuevo Contrato
-                </Button>
+                <PermissionGuard permission="contratos-crear">
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => setOpenEditor(true)}
+                        startIcon={<AddIcon />}
+                        style={{ marginBottom: '20px' }}
+                    >
+                        Crear Nuevo Contrato
+                    </Button>
+                </PermissionGuard>
 
                 {/* Lista de contratos */}
                 {isMobile ? (
@@ -951,12 +966,16 @@ const SchoolContractsPage = () => {
                                     Link para compartir: {contract.url}
                                 </Typography>
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                                    <IconButton onClick={() => handleEdit(contract)}>
-                                        <EditIcon />
-                                    </IconButton>
-                                    <IconButton onClick={() => handleDelete(contract.uuid)}>
-                                        <DeleteIcon />
-                                    </IconButton>
+                                    <PermissionGuard permission="contratos-editar">
+                                        <IconButton onClick={() => handleEdit(contract)}>
+                                            <EditIcon />
+                                        </IconButton>
+                                    </PermissionGuard>
+                                    <PermissionGuard permission="contratos-eliminar">
+                                        <IconButton onClick={() => handleDelete(contract.uuid)}>
+                                            <DeleteIcon />
+                                        </IconButton>
+                                    </PermissionGuard>
                                     <Button
                                         variant="outlined"
                                         color="secondary"
@@ -989,12 +1008,16 @@ const SchoolContractsPage = () => {
                                         </>
                                     }
                                 />
-                                <IconButton edge="end" onClick={() => handleEdit(contract)}>
-                                    <EditIcon />
-                                </IconButton>
-                                <IconButton edge="end" onClick={() => handleDelete(contract.uuid)}>
-                                    <DeleteIcon />
-                                </IconButton>
+                                <PermissionGuard permission="contratos-editar">
+                                    <IconButton edge="end" onClick={() => handleEdit(contract)}>
+                                        <EditIcon />
+                                    </IconButton>
+                                </PermissionGuard>
+                                <PermissionGuard permission="contratos-eliminar">
+                                    <IconButton edge="end" onClick={() => handleDelete(contract.uuid)}>
+                                        <DeleteIcon />
+                                    </IconButton>
+                                </PermissionGuard>
                                 <Button
                                     variant="outlined"
                                     color="secondary"
@@ -1275,9 +1298,11 @@ const SchoolContractsPage = () => {
                             </Grid>
                         </Grid>
                         <div style={{ marginTop: '20px', textAlign: 'right' }}>
-                            <Button variant="contained" color="primary" onClick={handleSaveOrUpdate}>
-                                {currentContract ? 'Actualizar Contrato' : 'Guardar Contrato'}
-                            </Button>
+                            {hasPermission(currentContract ? 'contratos-editar' : 'contratos-crear') && (
+                                <Button variant="contained" color="primary" onClick={handleSaveOrUpdate}>
+                                    {currentContract ? 'Actualizar Contrato' : 'Guardar Contrato'}
+                                </Button>
+                            )}
                             <Button variant="contained" style={{ marginLeft: '10px' }} onClick={handleCloseEditor}>
                                 Cancelar
                             </Button>
@@ -1305,9 +1330,11 @@ const SchoolContractsPage = () => {
                         <Button onClick={handleCloseDeleteDialog} color="primary">
                             Cancelar
                         </Button>
-                        <Button onClick={confirmDeleteFilledContract} color="secondary">
-                            Eliminar
-                        </Button>
+                        <PermissionGuard permission="contratos-eliminar-llenado">
+                            <Button onClick={confirmDeleteFilledContract} color="secondary">
+                                Eliminar
+                            </Button>
+                        </PermissionGuard>
                     </DialogActions>
                 </Dialog>
 
