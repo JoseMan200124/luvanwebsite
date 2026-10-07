@@ -12,7 +12,7 @@ import { getCurrentDateSync } from '../../hooks/useCurrentDate';
 import { getFuelFinancialStatistics, getFuelClients } from '../../services/fuelStatisticsService';
 import {
     ALL_OPTION, FUEL_TYPES, FUELING_REASONS, GRANULARITIES, DATE_PRESETS, computePresetRange, monthRangeToDates,
-    buildClientsParam, buildListParam, formatMoney, formatGallons, formatChange, typesWithData
+    buildClientsParam, buildListParam, formatMoney, formatGallons, typesWithData
 } from './fuelStatsUtils';
 import FuelCharts from './FuelCharts';
 import FuelBreakdownTables from './FuelBreakdownTables';
@@ -25,24 +25,13 @@ const reasonItemLabel = (k) => FUELING_REASONS.find((r) => r.key === k)?.label |
 const isAllSelected = (selected) => selected.length === 0 || selected.includes(ALL_OPTION);
 const cardSx = { bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' };
 
-const changeColor = (value, { higherIsBad = true } = {}) => {
-    if (value === null || value === undefined || Number(value) === 0) return 'text.secondary';
-    const up = Number(value) > 0;
-    return (up === higherIsBad) ? '#DC2626' : '#2e7d32';
-};
-
-const KpiCard = ({ label, value, sub, change, color = '#111827' }) => (
+const KpiCard = ({ label, value, sub, color = '#111827' }) => (
     <Box sx={cardSx}>
         <Typography sx={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600, mb: 0.75 }}>
             {label}
         </Typography>
         <Typography sx={{ fontWeight: 700, fontSize: 26, color }}>{value}</Typography>
         {sub ? <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{sub}</Typography> : null}
-        {change !== undefined ? (
-            <Typography variant="caption" sx={{ color: changeColor(change), fontWeight: 600 }}>
-                {formatChange(change)} vs período anterior
-            </Typography>
-        ) : null}
     </Box>
 );
 
@@ -139,7 +128,7 @@ const FuelStatisticsTab = () => {
     }, [selectedClients, selectedFuelTypes, selectedReasons, clientName]);
 
     const rangeLabel = result
-        ? `${moment(result.from).format('DD/MM/YYYY')} — ${moment(result.to).format('DD/MM/YYYY')} · comparado con ${moment(result.previousRange.from).format('DD/MM/YYYY')} — ${moment(result.previousRange.to).format('DD/MM/YYYY')}`
+        ? `${moment(result.from).format('DD/MM/YYYY')} — ${moment(result.to).format('DD/MM/YYYY')}`
         : '';
 
     // Mismo comportamiento que el selector de colegios de Ingresos: elegir "Todos" limpia lo demás.
@@ -301,15 +290,9 @@ const FuelStatisticsTab = () => {
 
                     {/* Tarjetas de resumen */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 2, mb: 2 }}>
-                        <KpiCard label="Gasto total" value={formatMoney(result.totals.amount)} change={result.changes.amount} color="#E65100" />
-                        <KpiCard label="Galones" value={formatGallons(result.totals.gallons)} change={result.changes.gallons} color="#1976D2" />
-                        <KpiCard label="Registros" value={String(result.totals.records)} change={result.changes.records} />
-                        <KpiCard
-                            label="Cargas administrativas"
-                            value={formatMoney(result.totals.admin.amount)}
-                            sub={`${formatGallons(result.totals.admin.gallons)} · ${result.totals.admin.records} registro${result.totals.admin.records === 1 ? '' : 's'}`}
-                            color="#7b1fa2"
-                        />
+                        <KpiCard label="Gasto total" value={formatMoney(result.totals.amount)} color="#E65100" />
+                        <KpiCard label="Galones" value={formatGallons(result.totals.gallons)} color="#1976D2" />
+                        <KpiCard label="Registros" value={String(result.totals.records)} />
                     </Box>
 
                     {/* Precio ponderado por tipo de combustible */}
@@ -322,7 +305,6 @@ const FuelStatisticsTab = () => {
                                 label={`Precio/galón · ${t.label}`}
                                 value={formatMoney(result.totals.byType[t.key].price)}
                                 sub={`${formatGallons(result.totals.byType[t.key].gallons)}`}
-                                change={result.changes.priceByType[t.key]}
                                 color={t.color}
                             />
                         ))}

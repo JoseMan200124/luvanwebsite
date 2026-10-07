@@ -6,18 +6,17 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import moment from 'moment-timezone';
 import {
-    ADMIN_REASON, GRANULARITIES, clientTagLabel, formatChange, formatGallons, formatMoney, formatPercent, reasonLabel
+    FUELING_REASONS, GRANULARITIES, clientTagLabel, formatGallons, formatMoney, formatPercent, reasonLabel
 } from './fuelStatsUtils';
 
 const MARGIN_X = 12;
-const TITLE = 'Reporte de Estadísticas de Combustible';
+const TITLE = 'Reporte de Estadísticas Financieras de Combustible';
 const HEAD_STYLES = { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold', fontSize: 7 };
 const BASE_STYLES = { fontSize: 7, cellPadding: 1.6, textColor: [30, 30, 30] };
 const TOTAL_FILL = [227, 242, 253];
-const ADMIN_FILL = [243, 229, 245];
 
 const hexToRgb = (hex) => {
-    const n = parseInt(hex.replace('#', ''), 16);
+    const n = Number.parseInt(hex.replace('#', ''), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 
@@ -55,11 +54,11 @@ const drawKpiRow = (pdf, kpis, y, pageWidth) => {
 export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, rangeLabel }) => {
     if (!result) return;
     const now = moment();
-    const pdf = new jsPDF('l', 'mm', 'a4');
+    const pdf = new jsPDF('l', 'mm', 'a3');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const granularityLabel = (GRANULARITIES.find((g) => g.key === result.granularity)?.label || result.granularity).toLowerCase();
-    const { totals, changes } = result;
+    const { totals } = result;
 
     // --- Encabezado ---
     pdf.setFont(undefined, 'bold');
@@ -78,24 +77,17 @@ export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, range
     pdf.line(MARGIN_X, 31, pageWidth - MARGIN_X, 31);
 
     // --- Tarjetas: resumen general y precio por tipo ---
-    const vsPrev = (pct) => `${formatChange(pct)} vs período anterior`;
     let cursorY = drawKpiRow(pdf, [
-        { label: 'Gasto total', value: formatMoney(totals.amount), sub: vsPrev(changes.amount), color: '#E65100' },
-        { label: 'Galones', value: formatGallons(totals.gallons), sub: vsPrev(changes.gallons), color: '#1976D2' },
-        { label: 'Registros', value: String(totals.records), sub: vsPrev(changes.records), color: '#111827' },
-        {
-            label: 'Cargas administrativas',
-            value: formatMoney(totals.admin.amount),
-            sub: `${formatGallons(totals.admin.gallons)} · ${totals.admin.records} registro${totals.admin.records === 1 ? '' : 's'}`,
-            color: '#7b1fa2'
-        }
+        { label: 'Gasto total', value: formatMoney(totals.amount), color: '#E65100' },
+        { label: 'Galones', value: formatGallons(totals.gallons), color: '#1976D2' },
+        { label: 'Registros', value: String(totals.records), color: '#111827' }
     ], 35, pageWidth) + 4;
 
     if (visibleTypes.length > 0) {
         cursorY = drawKpiRow(pdf, visibleTypes.map((t) => ({
             label: `Precio/galón · ${t.label}`,
             value: formatMoney(totals.byType[t.key].price),
-            sub: `${formatGallons(totals.byType[t.key].gallons)} · ${vsPrev(changes.priceByType[t.key])}`,
+            sub: formatGallons(totals.byType[t.key].gallons),
             color: t.color
         })), cursorY, pageWidth) + 4;
     }
@@ -148,22 +140,24 @@ export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, range
         cursorY = pdf.lastAutoTable.finalY;
     };
 
-    const periodBody = result.series.map((s) => [s.label, String(s.records), formatGallons(s.gallons), formatMoney(s.amount), ...priceRow(s.byType)]);
-    periodBody.push(['TOTAL', String(totals.records), formatGallons(totals.gallons), formatMoney(totals.amount), ...priceRow(totals.byType)]);
-    section('Por período', ['Período', 'Registros', 'Galones', 'Gasto', ...priceHead], periodBody, {
-        highlightRow: (i) => (i === periodBody.length - 1 ? { fontStyle: 'bold', fillColor: TOTAL_FILL } : null)
-    });
+    const reasonHead = FUELING_REASONS.map((r) => `Gasto ${r.label}`);
+    const reasonRow = (byReason) => FUELING_REASONS.map((r) => (Number(byReason?.[r.key]) > 0 ? formatMoney(byReason[r.key]) : '—'));
+    const metricsRow = (d, withReasons) => [
+        String(d.records), formatGallons(d.gallons), formatMoney(d.amount), formatPercent(d.shareOfAmount),
+        ...(withReasons ? reasonRow(d.byReason) : []), ...priceRow(d.byType)
+    ];
+    const metricsHead = (first, withReasons) => [first, 'Registros', 'Galones', 'Gasto', '% del gasto', ...(withReasons ? reasonHead : []), ...priceHead];
+    const totalRow = (withReasons) => ['TOTAL', ...metricsRow(totals, withReasons)];
+    const totalStyle = (rows) => ({ highlightRow: (i) => (i === rows.length - 1 ? { fontStyle: 'bold', fillColor: TOTAL_FILL } : null) });
 
-    section('Por cliente', ['Cliente', 'Ciclo / Tipo', 'Registros', 'Galones', 'Gasto', '% del gasto', 'Administrativo', ...priceHead],
-        result.byClient.map((c) => [
-            c.name, clientTagLabel(c), String(c.records), formatGallons(c.gallons), formatMoney(c.amount),
-            formatPercent(c.shareOfAmount), c.adminAmount > 0 ? `${formatMoney(c.adminAmount)} (${c.adminRecords})` : '—', ...priceRow(c.byType)
-        ]));
+    const periodBody = [...result.series.map((s) => [s.label, ...metricsRow(s, true)]), totalRow(true)];
+    section('Por período', metricsHead('Período', true), periodBody, totalStyle(periodBody));
 
-    const adminIndex = result.byReason.findIndex((r) => r.reason === ADMIN_REASON);
-    section('Por razón de carga', ['Razón', 'Registros', 'Galones', 'Gasto', '% del gasto'],
-        result.byReason.map((r) => [reasonLabel(r.reason), String(r.records), formatGallons(r.gallons), formatMoney(r.amount), formatPercent(r.shareOfAmount)]),
-        { highlightRow: (i) => (i === adminIndex ? { fontStyle: 'bold', fillColor: ADMIN_FILL, textColor: [123, 31, 162] } : null) });
+    const clientBody = [...result.byClient.map((c) => [`${c.name} (${clientTagLabel(c)})`, ...metricsRow(c, true)]), totalRow(true)];
+    section('Por cliente', metricsHead('Cliente', true), clientBody, totalStyle(clientBody));
+
+    const reasonBody = [...result.byReason.map((r) => [reasonLabel(r.reason), ...metricsRow(r, false)]), totalRow(false)];
+    section('Por razón de carga', metricsHead('Razón', false), reasonBody, totalStyle(reasonBody));
 
     // --- Pie de página ---
     const pageCount = pdf.internal.getNumberOfPages();

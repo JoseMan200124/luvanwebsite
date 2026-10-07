@@ -19,8 +19,6 @@ export const FUELING_REASONS = [
     { key: 'suplente', label: 'Suplente' }
 ];
 
-export const ADMIN_REASON = 'admin';
-
 export const GRANULARITIES = [
     { key: 'day', label: 'Día' },
     { key: 'week', label: 'Semana' },
@@ -79,11 +77,6 @@ const formatNumber = (v) => Number(v).toLocaleString('es-GT', { minimumFractionD
 export const formatMoney = (v) => (v === null || v === undefined ? 'N/A' : `Q ${formatNumber(v)}`);
 export const formatGallons = (v) => (v === null || v === undefined ? 'N/A' : `${formatNumber(v)} gal`);
 export const formatPercent = (v) => (v === null || v === undefined ? 'N/A' : `${Number(v).toFixed(1)}%`);
-export const formatChange = (v) => {
-    if (v === null || v === undefined) return '—';
-    const n = Number(v);
-    return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-};
 
 export const typesWithData = (byType) => FUEL_TYPES.filter((t) => Number(byType?.[t.key]?.gallons) > 0);
 
