@@ -2908,8 +2908,8 @@ const CicloEscolarSelectionPage = () => {
                 onClose={() => setOpenCircularModal(false)}
                 schools={Array.isArray(schools) ? schools : []}
                 cicloEscolarId={selectedCicloEscolarId || null}
-                onSuccess={() => {
-                    setSnackbar({ open: true, message: 'Circular enviada exitosamente', severity: 'success' });
+                onSuccess={(message) => {
+                    setSnackbar({ open: true, message: message || 'Circular enviada exitosamente', severity: 'success' });
                 }}
             />
 
