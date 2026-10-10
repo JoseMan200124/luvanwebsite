@@ -131,14 +131,21 @@ function App() {
                         }
                     >
                         <Route index             element={<DefaultAdminRoute />} />
-                        <Route path="dashboard"  element={<Dashboard />} />
+                        <Route
+                            path="dashboard"
+                            element={
+                                <ProtectedRoute moduleKey="dashboard-ver" redirectTo="/admin">
+                                    <Dashboard />
+                                </ProtectedRoute>
+                            }
+                        />
 
                         {renderDynamicRoutes()}
 
                         <Route
                             path="roles-permisos"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']}>
+                                <ProtectedRoute moduleKey="permisos-ver-por-rol">
                                     <PermissionsManagementPage />
                                 </ProtectedRoute>
                             }
@@ -239,7 +246,7 @@ function App() {
                         <Route
                             path="corporaciones/:fiscalYear/:corporationId/pagos"
                             element={
-                                <ProtectedRoute roles={['Gestor','Administrador']} requireSchoolContext={false}>
+                                <ProtectedRoute moduleKey="pagos-listar" requireSchoolContext={false}>
                                     <SchoolPaymentsPage />
                                 </ProtectedRoute>
                             }

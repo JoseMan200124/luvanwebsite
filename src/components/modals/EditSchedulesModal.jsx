@@ -27,6 +27,7 @@ import {
   downloadScheduleDeletionZip,
   getScheduleDeletionImpact
 } from '../../services/scheduleService';
+import PermissionGuard from '../PermissionGuard';
 
 const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   const notify = (message, severity = 'info') => {
@@ -415,15 +416,17 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
                   <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                     {sch.code ? `Horario ${sch.code}` : `Horario #${scheduleIndex + 1}`}
                   </Typography>
-                  <Tooltip title="Eliminar horario">
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => requestRemoveSchedule(scheduleIndex)}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  <PermissionGuard permission="colegios-editar">
+                    <Tooltip title="Eliminar horario">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => requestRemoveSchedule(scheduleIndex)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </PermissionGuard>
                 </Box>
 
                 <Grid container spacing={2}>
@@ -526,13 +529,15 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
         <Button onClick={onClose} disabled={loading}>
           Cancelar
         </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={loading || schedules.length === 0}
-        >
-          {loading ? <CircularProgress size={24} /> : 'Guardar Cambios'}
-        </Button>
+        <PermissionGuard permission="colegios-editar">
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            disabled={loading || schedules.length === 0}
+          >
+            {loading ? <CircularProgress size={24} /> : 'Guardar Cambios'}
+          </Button>
+        </PermissionGuard>
       </DialogActions>
 
       <Dialog open={confirmDeleteOpen} onClose={cancelRemoveSchedule} maxWidth="xs" fullWidth>

@@ -42,6 +42,8 @@ import api from '../utils/axiosConfig';
 import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
+import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -167,6 +169,7 @@ const RolesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     useContext(AuthContext);
+    const { hasPermission } = usePermissions();
 
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
@@ -227,15 +230,16 @@ const RolesManagementPage = () => {
     const [clientFilter, setClientFilter] = useState(null); // { type: 'Colegio'|'Corporación', id, name }
 
     // Roles allowed to be created from the "Añadir Usuario" dialog
-    const allowedRolesForCreate = ['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado'];
+    const allowedRolesForCreate = new Set(['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado', 'mecanica']);
     // Roles that should NOT be assigned a school or corporation
-    const rolesWithoutSchoolOrCorp = ['administrador', 'supervisor', 'auxiliar'];
+    // (Mecanica ve todos los clientes: no se le asigna uno)
+    const rolesWithoutSchoolOrCorp = new Set(['administrador', 'supervisor', 'auxiliar', 'mecanica']);
 
     const roleDisablesSchoolOrCorp = (roleId) => {
         if (!roleId) return false;
         const r = roleOptions.find(ro => Number(ro.id) === Number(roleId));
-        if (!r || !r.name) return false;
-        return rolesWithoutSchoolOrCorp.includes(String(r.name).toLowerCase());
+        if (!r?.name) return false;
+        return rolesWithoutSchoolOrCorp.has(String(r.name).toLowerCase());
     };
 
     // Orden
@@ -268,6 +272,10 @@ const RolesManagementPage = () => {
     }, [roleFilter, clientFilter, searchQuery]);
 
     const fetchAllPilots = async () => {
+        if (!hasPermission('usuarios-listar-pilotos')) {
+            setAllPilots([]);
+            return;
+        }
         try {
             const resp = await api.get('/users/pilots', { skipSchoolCycleContext: true });
             setAllPilots(resp.data.users || []);
@@ -278,6 +286,10 @@ const RolesManagementPage = () => {
     };
 
     const fetchAllMonitoras = async () => {
+        if (!hasPermission('usuarios-listar-monitoras')) {
+            setAllMonitoras([]);
+            return;
+        }
         try {
             const resp = await api.get('/users/monitors', { skipSchoolCycleContext: true });
             setAllMonitoras(resp.data.users || []);
@@ -1136,22 +1148,26 @@ const RolesManagementPage = () => {
                         renderInput={(params) => <TextField {...params} label="Cliente (Todos/Colegios/Corporaciones)" />}
                         clearOnEscape
                     />
-                    <Button
-                        variant="contained"
-                        color="info"
-                        startIcon={<FileUpload />}
-                        onClick={handleOpenBulkDialog}
-                    >
-                        Carga Masiva
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<Add />}
-                        onClick={handleAddUser}
-                    >
-                        Añadir Usuario
-                    </Button>
+                    <PermissionGuard permission="usuarios-carga-masiva">
+                        <Button
+                            variant="contained"
+                            color="info"
+                            startIcon={<FileUpload />}
+                            onClick={handleOpenBulkDialog}
+                        >
+                            Carga Masiva
+                        </Button>
+                    </PermissionGuard>
+                    <PermissionGuard permission="usuarios-crear">
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<Add />}
+                            onClick={handleAddUser}
+                        >
+                            Añadir Usuario
+                        </Button>
+                    </PermissionGuard>
                     
                     <Button
                         variant="outlined"
@@ -1213,16 +1229,20 @@ const RolesManagementPage = () => {
                                             </MobileField>
                                         </Grid>
                                         <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 1 }}>
-                                            <Tooltip title="Editar">
-                                                <IconButton onClick={() => handleEditClick(user)}>
-                                                    <Edit />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Eliminar">
-                                                <IconButton onClick={() => handleDeleteClick(user.id)}>
-                                                    <Delete />
-                                                </IconButton>
-                                            </Tooltip>
+                                            <PermissionGuard permission="usuarios-editar">
+                                                <Tooltip title="Editar">
+                                                    <IconButton onClick={() => handleEditClick(user)}>
+                                                        <Edit />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </PermissionGuard>
+                                            <PermissionGuard permission="usuarios-eliminar">
+                                                <Tooltip title="Eliminar">
+                                                    <IconButton onClick={() => handleDeleteClick(user.id)}>
+                                                        <Delete />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </PermissionGuard>
                                         </Grid>
                                     </Grid>
                                 </MobileCard>
@@ -1348,16 +1368,20 @@ const RolesManagementPage = () => {
                                                         : '—'}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Acciones" align="center">
-                                                    <Tooltip title="Editar">
-                                                        <IconButton onClick={() => handleEditClick(user)}>
-                                                            <Edit />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Eliminar">
-                                                        <IconButton onClick={() => handleDeleteClick(user.id)}>
-                                                            <Delete />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    <PermissionGuard permission="usuarios-editar">
+                                                        <Tooltip title="Editar">
+                                                            <IconButton onClick={() => handleEditClick(user)}>
+                                                                <Edit />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </PermissionGuard>
+                                                    <PermissionGuard permission="usuarios-eliminar">
+                                                        <Tooltip title="Eliminar">
+                                                            <IconButton onClick={() => handleDeleteClick(user.id)}>
+                                                                <Delete />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </PermissionGuard>
                                                 </ResponsiveTableCell>
                                             </TableRow>
                                         ))}
@@ -1464,7 +1488,7 @@ const RolesManagementPage = () => {
                                     </MenuItem>
                                     {(selectedUser?.id
                                         ? roleOptions
-                                        : roleOptions.filter(r => allowedRolesForCreate.includes(String(r.name).toLowerCase()))
+                                        : roleOptions.filter(r => allowedRolesForCreate.has(String(r.name).toLowerCase()))
                                     ).map((r) => (
                                         <MenuItem key={r.id} value={r.id}>
                                             {r.name}
@@ -1730,9 +1754,11 @@ const RolesManagementPage = () => {
                     <Button onClick={handleDialogClose} color="primary">
                         Cancelar
                     </Button>
-                    <Button onClick={handleSaveUser} color="primary" variant="contained">
-                        {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
-                    </Button>
+                    {hasPermission(selectedUser?.id ? 'usuarios-editar' : 'usuarios-crear') && (
+                        <Button onClick={handleSaveUser} color="primary" variant="contained">
+                            {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 
@@ -1798,9 +1824,11 @@ const RolesManagementPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
-                    <Button onClick={handleUploadBulk} variant="contained" color="primary" disabled={!bulkFile || bulkLoading}>
-                        Subir
-                    </Button>
+                    <PermissionGuard permission="usuarios-carga-masiva">
+                        <Button onClick={handleUploadBulk} variant="contained" color="primary" disabled={!bulkFile || bulkLoading}>
+                            Subir
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 

@@ -70,7 +70,8 @@ export const getDefaultPathForRole = (roleId) => {
     if (parsedRoleId === 3) return '/parent/dashboard';
     if (parsedRoleId === 8) return '/colaborador/dashboard';
     if (parsedRoleId === 9) return '/admin/colegios';
-    return '/admin/dashboard';
+    // DefaultAdminRoute manda al dashboard si hay permiso; si no, a la primera página permitida.
+    return '/admin';
 };
 
 export const normalizeSchoolContext = (context = {}) => {

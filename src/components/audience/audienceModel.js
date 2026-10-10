@@ -90,6 +90,47 @@ export const setPadreFilter = (audience, field, value) => ({
 export const setUserIds = (audience, userIds) => ({ ...audience, userIds });
 
 /**
+ * Deriva las elecciones explícitas del panel (Todos/Específicos) a partir de una
+ * audiencia ya guardada. En una audiencia guardada, lista vacía significa "todos":
+ * el panel no puede distinguirlo de "sin elegir" por sí solo.
+ */
+export const deriveAudienceModes = (audience) => {
+    const scope = audience?.scope || [];
+    const byFamilies = (audience?.userIds || []).length > 0;
+
+    const schoolModes = {};
+    scope.forEach((entry) => {
+        const routes = entry.routeNumbers || [];
+        const levels = entry.levelIds || [];
+        const grades = entry.grades || [];
+        let academic = 'all';
+        if (levels.length > 0) academic = 'level';
+        else if (grades.length > 0) academic = 'grade';
+        let schedule = null;
+        if (routes.length > 0) schedule = (entry.scheduleCodes || []).length > 0 ? 'some' : 'all';
+        schoolModes[entry.schoolId] = {
+            route: routes.length > 0 ? 'some' : 'all',
+            schedule,
+            academic,
+        };
+    });
+
+    let schoolsChoice = 'all';
+    if (byFamilies) schoolsChoice = null;
+    else if (scope.length > 0) schoolsChoice = 'some';
+
+    return {
+        scopeMode: byFamilies ? 'families' : 'filters',
+        schoolsChoice,
+        schoolModes,
+        globalModes: {
+            schedule: (audience?.scheduleCodes || []).length > 0 ? 'some' : 'all',
+            academic: (audience?.levelIds || []).length > 0 ? 'level' : 'all',
+        },
+    };
+};
+
+/**
  * Mismas reglas que valida el backend en validateAudience().
  */
 export const validateAudience = (audience) => {

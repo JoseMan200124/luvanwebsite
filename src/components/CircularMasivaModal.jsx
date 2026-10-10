@@ -1,29 +1,51 @@
 // src/components/CircularMasivaModal.jsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Snackbar,
     Alert, Box, Checkbox, FormControl, FormHelperText, Typography, Stack, Divider,
     CircularProgress,
 } from '@mui/material';
-import { FileUpload, Notifications as NotificationsIcon } from '@mui/icons-material';
+import { FileUpload, Notifications as NotificationsIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import AudienceTargetingPanel from './audience/AudienceTargetingPanel';
 import { EMPTY_AUDIENCE, validateAudience } from './audience/audienceModel';
+import ScheduleSection from './scheduling/ScheduleSection';
+import {
+    EMPTY_SCHEDULE, buildSchedulePayload, describeSchedule, scheduleFromPayload, validateSchedule,
+} from './scheduling/scheduleModel';
+import { createScheduledCircular, updateScheduledSend } from '../services/scheduledSendService';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = null, onSuccess }) => {
+const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = null, onSuccess, editing = null }) => {
     const [audience, setAudience] = useState(EMPTY_AUDIENCE);
     const [preview, setPreview] = useState(null);
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
     const [file, setFile] = useState(null);
+    const [removeAttachment, setRemoveAttachment] = useState(false);
     const [sendEmail, setSendEmail] = useState(false);
+    const [schedule, setSchedule] = useState(EMPTY_SCHEDULE);
     const [sending, setSending] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
+    // Modo edición: precargar con el envío programado.
+    useEffect(() => {
+        if (!open || !editing) return;
+        setAudience(editing.audience || EMPTY_AUDIENCE);
+        setSubject(editing.content?.subject || '');
+        setMessage(editing.content?.body || '');
+        setSendEmail(!!editing.content?.sendEmail);
+        setSchedule(scheduleFromPayload(editing.schedule, editing.nextRunAt));
+        setFile(null);
+        setRemoveAttachment(false);
+    }, [open, editing]);
+
     const totalUnique = preview?.counts?.totalUnique ?? 0;
     const audienceValidation = validateAudience(audience);
+    const scheduleValidation = validateSchedule(schedule);
+    const isScheduled = schedule.mode === 'scheduled';
+    const currentAttachment = editing?.attachment && !removeAttachment ? editing.attachment : null;
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
@@ -42,17 +64,23 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
         setSubject('');
         setMessage('');
         setFile(null);
+        setRemoveAttachment(false);
         setSendEmail(false);
+        setSchedule(EMPTY_SCHEDULE);
         onClose();
     };
 
-    const handleSendCircular = async () => {
+    const handleSubmit = async () => {
         if (!subject || !message) {
             setSnackbar({ open: true, message: 'Asunto y mensaje son requeridos.', severity: 'error' });
             return;
         }
         if (!audienceValidation.valid) {
             setSnackbar({ open: true, message: audienceValidation.message, severity: 'error' });
+            return;
+        }
+        if (!scheduleValidation.valid) {
+            setSnackbar({ open: true, message: scheduleValidation.message, severity: 'error' });
             return;
         }
 
@@ -62,34 +90,53 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
             formData.append('subject', subject);
             formData.append('body', message);
             formData.append('audience', JSON.stringify(audience));
-            if (cicloEscolarId) formData.append('cicloEscolarId', String(cicloEscolarId));
-            formData.append('useSmtp', true);
-            // Push SIEMPRE; el correo es opcional.
-            formData.append('sendPush', 'true');
             formData.append('sendEmail', sendEmail ? 'true' : 'false');
             if (file) formData.append('file', file);
 
-            await api.post('/mail/send-circular', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            let successMessage;
+            if (editing) {
+                formData.append('schedule', JSON.stringify(buildSchedulePayload(schedule)));
+                if (removeAttachment && !file) formData.append('removeAttachment', 'true');
+                await updateScheduledSend(editing.uuid, formData);
+                successMessage = 'Envío programado actualizado.';
+            } else if (isScheduled) {
+                if (cicloEscolarId) formData.append('cicloEscolarId', String(cicloEscolarId));
+                formData.append('schedule', JSON.stringify(buildSchedulePayload(schedule)));
+                await createScheduledCircular(formData);
+                successMessage = `Circular programada: ${describeSchedule(buildSchedulePayload(schedule))}.`;
+            } else {
+                if (cicloEscolarId) formData.append('cicloEscolarId', String(cicloEscolarId));
+                formData.append('useSmtp', true);
+                // Push SIEMPRE; el correo es opcional.
+                formData.append('sendPush', 'true');
+                await api.post('/mail/send-circular', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+                successMessage = 'Circular enviada correctamente.';
+            }
 
-            setSnackbar({ open: true, message: 'Circular enviada correctamente.', severity: 'success' });
-            if (onSuccess) onSuccess();
+            setSnackbar({ open: true, message: successMessage, severity: 'success' });
+            if (onSuccess) onSuccess(successMessage);
             resetAndClose();
         } catch (error) {
             console.error('Error al enviar circular:', error);
-            setSnackbar({ open: true, message: 'Error al enviar la circular.', severity: 'error' });
+            const fallback = isScheduled || editing ? 'Error al programar la circular.' : 'Error al enviar la circular.';
+            setSnackbar({ open: true, message: error?.response?.data?.message || fallback, severity: 'error' });
         } finally {
             setSending(false);
         }
     };
 
+    let submitLabel = 'Enviar Circular';
+    if (editing) submitLabel = 'Guardar cambios';
+    else if (isScheduled) submitLabel = 'Programar Circular';
+
     return (
         <>
-            <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+            <Dialog open={open} onClose={sending ? undefined : resetAndClose} maxWidth="sm" fullWidth>
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <NotificationsIcon color="primary" />
-                    Enviar Circular Masiva
+                    {editing ? <ScheduleIcon color="primary" /> : <NotificationsIcon color="primary" />}
+                    {editing ? 'Editar Circular Programada' : 'Enviar Circular Masiva'}
                 </DialogTitle>
 
                 <DialogContent dividers>
@@ -102,6 +149,7 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
                         <AudienceTargetingPanel
                             schools={schools}
                             value={audience}
+                            loadedAudience={editing?.audience || null}
                             onChange={setAudience}
                             cicloEscolarId={cicloEscolarId}
                             onPreviewChange={setPreview}
@@ -133,10 +181,18 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
 
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                             <Button variant="outlined" component="label" startIcon={<FileUpload />} size="small">
-                                Seleccionar Archivo
+                                {currentAttachment ? 'Reemplazar Archivo' : 'Seleccionar Archivo'}
                                 <input type="file" hidden accept="application/pdf,image/*" onChange={handleFileChange} />
                             </Button>
                             {file && <Typography variant="body2">{file.name}</Typography>}
+                            {!file && currentAttachment && (
+                                <>
+                                    <Typography variant="body2">Adjunto actual: {currentAttachment.name}</Typography>
+                                    <Button size="small" color="error" onClick={() => setRemoveAttachment(true)}>
+                                        Quitar adjunto
+                                    </Button>
+                                </>
+                            )}
                         </Box>
 
                         <FormControl component="fieldset" variant="standard">
@@ -148,18 +204,22 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
                                 Enviar correo es opcional, al marcar esta opción se enviará correo electrónico a los destinatarios.
                             </FormHelperText>
                         </FormControl>
+
+                        <Divider />
+
+                        <ScheduleSection value={schedule} onChange={setSchedule} allowSendNow={!editing} />
                     </Box>
                 </DialogContent>
 
                 <DialogActions sx={{ px: 3, py: 2 }}>
-                    <Button onClick={onClose} disabled={sending}>Cancelar</Button>
+                    <Button onClick={resetAndClose} disabled={sending}>Cancelar</Button>
                     <Button
-                        onClick={handleSendCircular}
+                        onClick={handleSubmit}
                         variant="contained"
-                        disabled={sending || !audienceValidation.valid || totalUnique === 0 || !subject || !message}
-                        startIcon={sending ? <CircularProgress size={16} /> : <NotificationsIcon />}
+                        disabled={sending || !audienceValidation.valid || !scheduleValidation.valid || totalUnique === 0 || !subject || !message}
+                        startIcon={sending ? <CircularProgress size={16} /> : (isScheduled ? <ScheduleIcon /> : <NotificationsIcon />)}
                     >
-                        {sending ? 'Enviando...' : 'Enviar Circular'}
+                        {sending ? 'Guardando...' : submitLabel}
                     </Button>
                 </DialogActions>
             </Dialog>

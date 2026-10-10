@@ -24,19 +24,19 @@ const DefaultAdminRoute = () => {
         return <Navigate to="/login" replace />;
     }
 
-    // Revisa si el usuario tiene acceso a 'dashboard'
-    if (permissions?.dashboard) {
+    // Revisa si el usuario tiene acceso al Dashboard: misma llave que exigen sus datos en el backend (GET /dashboard, /reports/*).
+    if (permissions?.['dashboard-ver']) {
         return <Navigate to="/admin/dashboard" replace />;
     }
 
-    // Buscar el primer submódulo permitido en 'modules'
+    // Buscar el primer submódulo permitido en 'modules'. Mismo criterio que el
+    // Sidebar: basta el permiso de la página; la llave del módulo padre no
+    // siempre existe en el catálogo (p. ej. `gestion-buses`).
     for (const mod of modules) {
-        if (permissions?.[mod.key]) {
-            for (const sub of mod.submodules) {
-                if (permissions[sub.key]) {
-                    // Redirige al primer path que tenga acceso
-                    return <Navigate to={`/admin/${sub.path}`} replace />;
-                }
+        for (const sub of mod.submodules || []) {
+            if (permissions?.[sub.key]) {
+                // Redirige al primer path que tenga acceso
+                return <Navigate to={`/admin/${sub.path}`} replace />;
             }
         }
     }

@@ -31,6 +31,7 @@ import { Delete as DeleteIcon, Add as AddIcon, Pause as PauseIcon, PlayArrow as 
 import moment from 'moment';
 import 'moment/locale/es';
 import api from '../../utils/axiosConfig';
+import usePermissions from '../../hooks/usePermissions';
 
 const PERIOD_RE = /^\d{4}-\d{2}$/;
 
@@ -42,6 +43,7 @@ const normalizePeriod = (val) => {
 };
 
 const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
+    const { hasPermission } = usePermissions();
     const paymentId = payment?.id;
 
     const autoFilledCurrentRef = useRef(false);
@@ -502,15 +504,17 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                         </Box>
 
                         <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
-                            <Button
-                                variant="contained"
-                                startIcon={<AddIcon />}
-                                onClick={() => handleAdd(primaryAddAction.period)}
-                                disabled={!paymentId || loading || !primaryAddValidation.ok}
-                                sx={{ whiteSpace: 'nowrap' }}
-                            >
-                                {primaryAddAction.label}
-                            </Button>
+                            {hasPermission('pagos-v2-agregar-periodo') && (
+                                <Button
+                                    variant="contained"
+                                    startIcon={<AddIcon />}
+                                    onClick={() => handleAdd(primaryAddAction.period)}
+                                    disabled={!paymentId || loading || !primaryAddValidation.ok}
+                                    sx={{ whiteSpace: 'nowrap' }}
+                                >
+                                    {primaryAddAction.label}
+                                </Button>
+                            )}
                         </Box>
 
                         {periodToAdd && !addValidation.ok && addValidation.message && (
@@ -616,6 +620,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                     sx={{ py: 1.25, px: 2, borderBottom: '1px dashed rgba(0,0,0,0.08)' }}
                                     secondaryAction={
                                         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+                                            {hasPermission(penaltyFrozen ? 'mora-descongelar' : 'mora-congelar') && (
                                             <Tooltip title={penaltyFrozen ? 'Descongelar mora del período' : 'Congelar mora del período'}>
                                                 <span>
                                                     <IconButton
@@ -634,6 +639,8 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                     </IconButton>
                                                 </span>
                                             </Tooltip>
+                                            )}
+                                            {hasPermission('pagos-v2-eliminar-periodo') && (
                                             <Tooltip title={deletable(p) ? 'Eliminar período' : 'No se puede eliminar (tiene pagos)'}>
                                                 <span>
                                                     <IconButton
@@ -652,6 +659,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                     </IconButton>
                                                 </span>
                                             </Tooltip>
+                                            )}
                                         </Box>
                                     }
                                 >
@@ -766,14 +774,16 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteConfirmText(''); } }} disabled={deleteBusy}>Cancelar</Button>
-                        <Button
-                            variant="contained"
-                            color="error"
-                            onClick={handleConfirmDelete}
-                            disabled={deleteBusy || !deleteConfirmed}
-                        >
-                            Eliminar
-                        </Button>
+                        {hasPermission('pagos-v2-eliminar-periodo') && (
+                            <Button
+                                variant="contained"
+                                color="error"
+                                onClick={handleConfirmDelete}
+                                disabled={deleteBusy || !deleteConfirmed}
+                            >
+                                Eliminar
+                            </Button>
+                        )}
                     </DialogActions>
                 </Dialog>
             </DialogContent>

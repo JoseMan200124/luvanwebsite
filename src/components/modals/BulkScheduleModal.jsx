@@ -3,6 +3,7 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typogra
 import ExcelJS from 'exceljs';
 import api from '../../utils/axiosConfig';
 import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../../utils/scheduleConfig';
+import PermissionGuard from '../PermissionGuard';
 
 // Small inline Excel-like icon for buttons (color via currentColor)
 function ExcelIcon(props) {
@@ -509,7 +510,9 @@ export default function BulkScheduleModal({ open, onClose, schoolId, cicloEscola
             <input hidden type="file" accept=".xlsx,.xls" onChange={(e)=>setUploadFile(e.target.files[0])} />
           </Button>
           <TextField size="small" value={uploadFile ? uploadFile.name : ''} sx={{ flex: 1 }} placeholder="Archivo seleccionado" />
-          <Button variant="contained" color="primary" onClick={handleUpload} disabled={!uploadFile || uploading}>{uploading ? 'Subiendo...' : 'Procesar archivo'}</Button>
+          <PermissionGuard permission="horarios-carga-masiva">
+            <Button variant="contained" color="primary" onClick={handleUpload} disabled={!uploadFile || uploading}>{uploading ? 'Subiendo...' : 'Procesar archivo'}</Button>
+          </PermissionGuard>
         </Box>
 
         {multiStopInfo && (

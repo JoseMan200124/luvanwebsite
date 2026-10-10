@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Typography,
     Paper,
@@ -64,7 +64,7 @@ import {
 
 import tw, { styled } from 'twin.macro';
 import api from '../utils/axiosConfig';
-import { AuthContext } from '../context/AuthProvider';
+import usePermissions from '../hooks/usePermissions';
 import moment from 'moment-timezone';
 
 moment.tz.setDefault('America/Guatemala');
@@ -255,11 +255,15 @@ function getFieldValue(item, field, type) {
 // =================== Fin código para ordenamiento ===================
 
 const ActivityLogPage = () => {
-    const { auth } = useContext(AuthContext);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    const isSupervisor = auth?.user?.roleId === 6;
+    const { hasPermission } = usePermissions();
+    const puedeVerPagos = hasPermission('pagos-listar');
+    const puedeVerAnalisisPagos = hasPermission('pagos-ver-analisis');
+    const puedeVerBoletas = hasPermission('padres-ver-boletas');
+    const puedeMarcarTaller = hasPermission('buses-marcar-taller');
+    const puedeCrearIncidente = hasPermission('actividad-crear-incidente');
     const [loading, setLoading] = useState(false);
 
     const [buses, setBuses] = useState([]);
@@ -362,7 +366,7 @@ const ActivityLogPage = () => {
 
     useEffect(() => {
         fetchAllData();
-        if (!isSupervisor) fetchPaymentsAnalysis();
+        if (puedeVerAnalisisPagos) fetchPaymentsAnalysis();
         // eslint-disable-next-line
     }, []);
 
@@ -377,7 +381,7 @@ const ActivityLogPage = () => {
             setIncidents(incResp.data.incidents || []);
             setEmergencies(emeResp.data.emergencies || []);
 
-            if (!isSupervisor) {
+            if (puedeVerPagos) {
                 const payResp = await api.get('/payments');
                 setPayments(payResp.data.payments || []);
             }
@@ -417,7 +421,7 @@ const ActivityLogPage = () => {
 
     // Llama a fetchPayments cuando cambian filtros, orden o paginación
     useEffect(() => {
-        if (!isSupervisor) fetchPayments();
+        if (puedeVerPagos) fetchPayments();
         // eslint-disable-next-line
     }, [payPage, payRowsPerPage, payOrder, payOrderBy, payDateFrom, payDateTo, payBalanceMin, payBalanceMax]);
 
@@ -943,7 +947,7 @@ const ActivityLogPage = () => {
                                                 </MobileField>
 
                                                 <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                                                    {bus.inWorkshop ? (
+                                                    {puedeMarcarTaller && (bus.inWorkshop ? (
                                                         <Tooltip title="Marcar como Disponible">
                                                             <IconButton
                                                                 color="primary"
@@ -965,15 +969,17 @@ const ActivityLogPage = () => {
                                                                 <BuildIcon />
                                                             </IconButton>
                                                         </Tooltip>
+                                                    ))}
+                                                    {puedeCrearIncidente && (
+                                                        <Tooltip title="Reportar Incidencia">
+                                                            <IconButton
+                                                                color="warning"
+                                                                onClick={() => handleOpenIncidentDialog(bus)}
+                                                            >
+                                                                <ReportIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
                                                     )}
-                                                    <Tooltip title="Reportar Incidencia">
-                                                        <IconButton
-                                                            color="warning"
-                                                            onClick={() => handleOpenIncidentDialog(bus)}
-                                                        >
-                                                            <ReportIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
                                                 </Box>
                                             </MobileCard>
                                         ))}
@@ -1099,7 +1105,7 @@ const ActivityLogPage = () => {
                                                     <Typography variant="caption" color="textSecondary" sx={{ mr: 2 }}>
                                                         ID Bus: {bus.id}
                                                     </Typography>
-                                                    {bus.inWorkshop ? (
+                                                    {puedeMarcarTaller && (bus.inWorkshop ? (
                                                         <Tooltip title="Marcar como Disponible">
                                                             <IconButton
                                                                 color="primary"
@@ -1117,15 +1123,17 @@ const ActivityLogPage = () => {
                                                                 <BuildIcon />
                                                             </IconButton>
                                                         </Tooltip>
+                                                    ))}
+                                                    {puedeCrearIncidente && (
+                                                        <Tooltip title="Reportar Incidencia">
+                                                            <IconButton
+                                                                color="warning"
+                                                                onClick={() => handleOpenIncidentDialog(bus)}
+                                                            >
+                                                                <ReportIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
                                                     )}
-                                                    <Tooltip title="Reportar Incidencia">
-                                                        <IconButton
-                                                            color="warning"
-                                                            onClick={() => handleOpenIncidentDialog(bus)}
-                                                        >
-                                                            <ReportIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
                                                 </AccordionActions>
                                             </AccordionStyled>
                                         ))}
@@ -1531,8 +1539,7 @@ const ActivityLogPage = () => {
                         </Grid2>
                     </SectionPaper>
 
-                    {/* Sección Pagos (no supervisor) */}
-                    {!isSupervisor && (
+                    {puedeVerPagos && (
                         <SectionPaper>
                             <SectionTitle variant="h6" gutterBottom>
                                 Gestión de pagos
@@ -1830,8 +1837,8 @@ const ActivityLogPage = () => {
                 </div>
             )}
 
-            {/* Dialog Boletas */}
-            {!isSupervisor && (
+            {/* Dialog Boletas: requiere la llave de GET /parents/:id/receipts */}
+            {puedeVerBoletas && (
                 <Dialog
                     open={openBoletasDialog}
                     onClose={handleCloseBoletasDialog}
@@ -2045,14 +2052,16 @@ const ActivityLogPage = () => {
                     <Button variant="outlined" onClick={handleCloseIncidentDialog}>
                         Cancelar
                     </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleSubmitIncident}
-                        disabled={loading}
-                    >
-                        Reportar
-                    </Button>
+                    {puedeCrearIncidente && (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleSubmitIncident}
+                            disabled={loading}
+                        >
+                            Reportar
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 

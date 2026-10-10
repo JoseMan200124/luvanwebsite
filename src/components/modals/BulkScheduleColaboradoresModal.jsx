@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Checkbox, CircularProgress, TextField } from '@mui/material';
 import ExcelJS from 'exceljs';
 import api from '../../utils/axiosConfig';
+import PermissionGuard from '../PermissionGuard';
 
 export default function BulkScheduleColaboradoresModal({ open, onClose, corporationId }) {
   const [colaboradores, setColaboradores] = useState([]);
@@ -218,7 +219,9 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
           <Button variant="outlined" onClick={generateTemplate} disabled={generating || selected.size===0}>{generating ? 'Generando...' : 'Generar plantilla'}</Button>
           <Button variant="outlined" component="label">Seleccionar archivo<input hidden type="file" accept=".xlsx,.xls" onChange={(e)=>setUploadFile(e.target.files[0])} /></Button>
           <TextField size="small" value={uploadFile ? uploadFile.name : ''} sx={{ flex: 1 }} placeholder="Archivo seleccionado" />
-          <Button variant="contained" color="primary" onClick={handleUpload} disabled={!uploadFile || uploading}>{uploading ? 'Subiendo...' : 'Procesar archivo'}</Button>
+          <PermissionGuard permission="corporaciones-carga-masiva-horarios">
+            <Button variant="contained" color="primary" onClick={handleUpload} disabled={!uploadFile || uploading}>{uploading ? 'Subiendo...' : 'Procesar archivo'}</Button>
+          </PermissionGuard>
         </Box>
 
         {results && (

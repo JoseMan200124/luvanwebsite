@@ -59,6 +59,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
+import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 import styled from 'styled-components';
 import { normalizeKey } from '../utils/stringHelpers';
 import DuplicateEmailAlert from '../components/DuplicateEmailAlert';
@@ -108,6 +110,11 @@ const HeaderCard = styled(Card)`
 `;
 
 const SchoolUsersPage = () => {
+    const { hasPermission, hasAnyPermission } = usePermissions();
+    // El mensaje a familia manda correo y/o notificación: basta una de las dos
+    // llaves para abrir el diálogo, y cada canal se decide adentro.
+    const puedeEnviarMensajeFamilia = hasAnyPermission(['mail-enviar-familia', 'notificaciones-crear']);
+    const puedeListarContratos = hasPermission('contratos-listar');
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
@@ -649,6 +656,7 @@ const SchoolUsersPage = () => {
     // (Status computed by backend in download endpoints)
 
     const fetchAllPilots = async () => {
+        if (!hasPermission('usuarios-listar-pilotos')) { setAllPilots([]); return; }
         try {
             const resp = await api.get('/users/pilots');
             setAllPilots(resp.data.users || []);
@@ -659,6 +667,7 @@ const SchoolUsersPage = () => {
     };
 
     const fetchAllMonitoras = async () => {
+        if (!hasPermission('usuarios-listar-monitoras')) { setAllMonitoras([]); return; }
         try {
             const resp = await api.get('/users/monitors');
             setAllMonitoras(resp.data.users || []);
@@ -925,6 +934,7 @@ const SchoolUsersPage = () => {
 
     // Cargar datos adicionales
     const fetchContracts = useCallback(async () => {
+        if (!puedeListarContratos) { setContracts([]); return; }
         try {
             const response = await api.get('/contracts', {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -934,7 +944,7 @@ const SchoolUsersPage = () => {
             console.error('Error fetching contracts:', err);
             setContracts([]); // Asegurar que siempre sea un array
         }
-    }, [auth.token]);
+    }, [auth.token, puedeListarContratos]);
 
     const fetchSchools = useCallback(async () => {
         try {
@@ -2072,18 +2082,21 @@ const SchoolUsersPage = () => {
                         </Alert>
                     )}
                     <Grid container spacing={2}>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<FileUpload />}
-                                fullWidth
-                                onClick={() => setOpenBulkDialog(true)}
-                                disabled={!canCreateUsersInManagedSchool}
-                            >
-                                Carga Masiva
-                            </Button>
-                        </Grid>
+                        <PermissionGuard permission="padres-carga-masiva">
+                            <Grid item xs={12} md={2}>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<FileUpload />}
+                                    fullWidth
+                                    onClick={() => setOpenBulkDialog(true)}
+                                    disabled={!canCreateUsersInManagedSchool}
+                                >
+                                    Carga Masiva
+                                </Button>
+                            </Grid>
+                        </PermissionGuard>
+                        <PermissionGuard permission="horarios-carga-masiva">
                         <Grid item xs={12} md={2}>
                             <Button
                                 variant="outlined"
@@ -2095,18 +2108,21 @@ const SchoolUsersPage = () => {
                                 Carga Horarios
                             </Button>
                         </Grid>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<Add />}
-                                fullWidth
-                                onClick={handleAddUser}
-                                disabled={!canCreateUsersInManagedSchool}
-                            >
-                                Añadir Familia
-                            </Button>
-                        </Grid>
+                        </PermissionGuard>
+                        <PermissionGuard permission="usuarios-crear">
+                            <Grid item xs={12} md={2}>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<Add />}
+                                    fullWidth
+                                    onClick={handleAddUser}
+                                    disabled={!canCreateUsersInManagedSchool}
+                                >
+                                    Añadir Familia
+                                </Button>
+                            </Grid>
+                        </PermissionGuard>
                         <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
@@ -2362,9 +2378,11 @@ const SchoolUsersPage = () => {
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                                                        <IconButton size="small" onClick={() => handleEditClick(user)}>
-                                                            <Edit fontSize="small" />
-                                                        </IconButton>
+                                                        <PermissionGuard permission="usuarios-editar">
+                                                            <IconButton size="small" onClick={() => handleEditClick(user)}>
+                                                                <Edit fontSize="small" />
+                                                            </IconButton>
+                                                        </PermissionGuard>
 
                                                         {Number(user.roleId) === 3 && (
                                                             <>
@@ -2403,28 +2421,36 @@ const SchoolUsersPage = () => {
                                                                         </IconButton>
                                                                     );
                                                                 })()}
-                                                                <IconButton size="small" onClick={() => handleSendCommunication(user)} title="Enviar comunicación">
-                                                                    <Mail fontSize="small" />
-                                                                </IconButton>
+                                                                {puedeEnviarMensajeFamilia && (
+                                                                    <IconButton size="small" onClick={() => handleSendCommunication(user)} title="Enviar comunicación">
+                                                                        <Mail fontSize="small" />
+                                                                    </IconButton>
+                                                                )}
                                                             </>
                                                         )}
 
                                                         {(() => {
                                                             const isInactive = serviceStatus === 'INACTIVE';
-                                                            return isInactive ? (
-                                                                <IconButton size="small" title="Activar familia" onClick={() => handleActivateClick(user)} color="success">
-                                                                    <ToggleOff fontSize="small" />
-                                                                </IconButton>
-                                                            ) : (
+                                                            // Activar y suspender son rutas distintas de /service-status.
+                                                            if (isInactive) {
+                                                                return hasPermission('usuarios-activar-servicio') ? (
+                                                                    <IconButton size="small" title="Activar familia" onClick={() => handleActivateClick(user)} color="success">
+                                                                        <ToggleOff fontSize="small" />
+                                                                    </IconButton>
+                                                                ) : null;
+                                                            }
+                                                            return hasPermission('usuarios-suspender-servicio') ? (
                                                                 <IconButton size="small" title="Suspender familia" onClick={() => handleSuspendClick(user)} color="warning">
                                                                     <ToggleOn fontSize="small" />
                                                                 </IconButton>
-                                                            );
+                                                            ) : null;
                                                         })()}
 
-                                                        <IconButton size="small" onClick={() => handleDeleteClick(user)} color="error">
-                                                            <Delete fontSize="small" />
-                                                        </IconButton>
+                                                        <PermissionGuard permission="usuarios-eliminar">
+                                                            <IconButton size="small" onClick={() => handleDeleteClick(user)} color="error">
+                                                                <Delete fontSize="small" />
+                                                            </IconButton>
+                                                        </PermissionGuard>
                                                     </Box>
                                                 </TableCell>
                                             </TableRow>
@@ -2564,7 +2590,7 @@ const SchoolUsersPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenBulkDialog(false)}>Cancelar</Button>
-                    {bulkGradeIssues.length > 0 ? (
+                    {hasPermission('padres-carga-masiva') && (bulkGradeIssues.length > 0 ? (
                         <Button
                             variant="contained"
                             color="primary"
@@ -2582,7 +2608,7 @@ const SchoolUsersPage = () => {
                         >
                             Subir
                         </Button>
-                    )}
+                    ))}
                 </DialogActions>
             </Dialog>
 
@@ -2604,9 +2630,11 @@ const SchoolUsersPage = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCancelDelete}>Cancelar</Button>
-                    <Button variant="contained" color="error" onClick={handleConfirmDelete} disabled={bulkLoading}>
-                        {bulkLoading ? 'Eliminando...' : 'Eliminar'}
-                    </Button>
+                    <PermissionGuard permission="usuarios-eliminar">
+                        <Button variant="contained" color="error" onClick={handleConfirmDelete} disabled={bulkLoading}>
+                            {bulkLoading ? 'Eliminando...' : 'Eliminar'}
+                        </Button>
+                    </PermissionGuard>
                 </DialogActions>
             </Dialog>
 
@@ -2667,6 +2695,7 @@ const SchoolUsersPage = () => {
                                 Tipo de envío
                             </Typography>
                             <Grid container spacing={1.5}>
+                                <PermissionGuard permission="mail-enviar-familia">
                                 <Grid item xs={12} md={6}>
                                     <Button
                                         fullWidth
@@ -2687,6 +2716,8 @@ const SchoolUsersPage = () => {
                                         Correo electrónico
                                     </Button>
                                 </Grid>
+                                </PermissionGuard>
+                                <PermissionGuard permission="notificaciones-crear">
                                 <Grid item xs={12} md={6}>
                                     <Button
                                         fullWidth
@@ -2708,6 +2739,7 @@ const SchoolUsersPage = () => {
                                         Notificación
                                     </Button>
                                 </Grid>
+                                </PermissionGuard>
                             </Grid>
                         </Box>
                     ) : (
@@ -3325,6 +3357,7 @@ const SchoolUsersPage = () => {
                         setOpenRouteTypeModal(false);
                         setOpenEditDialog(false);
                     }}>Cancelar</Button>
+                    {hasPermission(selectedUser?.id ? 'usuarios-editar' : 'usuarios-crear') && (
                     <Button
                         variant="contained"
                         color="primary"
@@ -3339,6 +3372,7 @@ const SchoolUsersPage = () => {
                     >
                         {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
                     </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 
