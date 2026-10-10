@@ -1,27 +1,43 @@
 // src/components/SendNotificationModal.jsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
     Typography, Box, Alert, CircularProgress, Divider,
 } from '@mui/material';
-import { Notifications as NotificationsIcon } from '@mui/icons-material';
+import { Notifications as NotificationsIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
 import AudienceTargetingPanel from './audience/AudienceTargetingPanel';
 import { EMPTY_AUDIENCE, validateAudience } from './audience/audienceModel';
+import ScheduleSection from './scheduling/ScheduleSection';
+import {
+    EMPTY_SCHEDULE, buildSchedulePayload, describeSchedule, scheduleFromPayload, validateSchedule,
+} from './scheduling/scheduleModel';
 import { sendManualNotification } from '../services/notificationService';
+import { createScheduledNotification, updateScheduledSend } from '../services/scheduledSendService';
 
 const MAX_MESSAGE_LENGTH = 255;
 
-const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = null }) => {
+const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = null, onSuccess, editing = null }) => {
     const [audience, setAudience] = useState(EMPTY_AUDIENCE);
     const [preview, setPreview] = useState(null);
     const [title, setTitle] = useState('');
     const [message, setMessage] = useState('');
+    const [schedule, setSchedule] = useState(EMPTY_SCHEDULE);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+
+    useEffect(() => {
+        if (!open || !editing) return;
+        setAudience(editing.audience || EMPTY_AUDIENCE);
+        setTitle(editing.content?.title || '');
+        setMessage(editing.content?.message || '');
+        setSchedule(scheduleFromPayload(editing.schedule, editing.nextRunAt));
+    }, [open, editing]);
 
     const totalUnique = preview?.counts?.totalUnique ?? 0;
     const audienceValidation = validateAudience(audience);
+    const scheduleValidation = validateSchedule(schedule);
+    const isScheduled = schedule.mode === 'scheduled';
     const remaining = MAX_MESSAGE_LENGTH - message.length;
 
     const handleClose = () => {
@@ -30,12 +46,13 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
         setPreview(null);
         setTitle('');
         setMessage('');
+        setSchedule(EMPTY_SCHEDULE);
         setError('');
-        setSuccess(false);
+        setSuccessMessage('');
         onClose();
     };
 
-    const handleSend = async () => {
+    const handleSubmit = async () => {
         setError('');
 
         if (!title.trim()) { setError('El título es requerido.'); return; }
@@ -45,41 +62,59 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
             return;
         }
         if (!audienceValidation.valid) { setError(audienceValidation.message); return; }
+        if (!scheduleValidation.valid) { setError(scheduleValidation.message); return; }
 
         setLoading(true);
         try {
-            await sendManualNotification({
-                title: title.trim(),
-                message: message.trim(),
-                audience,
-                ...(cicloEscolarId ? { cicloEscolarId: Number(cicloEscolarId) } : {}),
-            });
-            setSuccess(true);
+            const base = { title: title.trim(), message: message.trim(), audience };
+            let text;
+            if (editing) {
+                await updateScheduledSend(editing.uuid, { ...base, schedule: buildSchedulePayload(schedule) });
+                text = 'Envío programado actualizado.';
+            } else if (isScheduled) {
+                await createScheduledNotification({
+                    ...base,
+                    schedule: buildSchedulePayload(schedule),
+                    ...(cicloEscolarId ? { cicloEscolarId: Number(cicloEscolarId) } : {}),
+                });
+                text = `Notificación programada: ${describeSchedule(buildSchedulePayload(schedule))}.`;
+            } else {
+                await sendManualNotification({
+                    ...base,
+                    ...(cicloEscolarId ? { cicloEscolarId: Number(cicloEscolarId) } : {}),
+                });
+                text = '¡Notificación enviada correctamente!';
+            }
+            setSuccessMessage(text);
+            if (onSuccess) onSuccess(text);
             setTimeout(handleClose, 1500);
         } catch (err) {
-            setError(err?.response?.data?.message || 'Error al enviar la notificación.');
+            setError(err?.response?.data?.message || 'Error al guardar la notificación.');
         } finally {
             setLoading(false);
         }
     };
 
+    let submitLabel = 'Enviar Notificación';
+    if (editing) submitLabel = 'Guardar cambios';
+    else if (isScheduled) submitLabel = 'Programar Notificación';
+
     return (
         <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <NotificationsIcon color="primary" />
-                Enviar Notificación Push
+                {editing ? <ScheduleIcon color="primary" /> : <NotificationsIcon color="primary" />}
+                {editing ? 'Editar Notificación Programada' : 'Enviar Notificación Push'}
             </DialogTitle>
 
             <DialogContent dividers>
-                {success ? (
-                    <Alert severity="success" sx={{ mt: 1 }}>
-                        ¡Notificación enviada correctamente!
-                    </Alert>
+                {successMessage ? (
+                    <Alert severity="success" sx={{ mt: 1 }}>{successMessage}</Alert>
                 ) : (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 0.5 }}>
                         <AudienceTargetingPanel
                             schools={schools}
                             value={audience}
+                            loadedAudience={editing?.audience || null}
                             onChange={setAudience}
                             cicloEscolarId={cicloEscolarId}
                             onPreviewChange={setPreview}
@@ -123,6 +158,10 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
                             }
                         />
 
+                        <Divider />
+
+                        <ScheduleSection value={schedule} onChange={setSchedule} allowSendNow={!editing} />
+
                         {error && <Alert severity="error">{error}</Alert>}
                     </Box>
                 )}
@@ -130,14 +169,14 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
 
             <DialogActions sx={{ px: 3, py: 2 }}>
                 <Button onClick={handleClose} disabled={loading}>Cancelar</Button>
-                {!success && (
+                {!successMessage && (
                     <Button
-                        onClick={handleSend}
+                        onClick={handleSubmit}
                         variant="contained"
-                        disabled={loading || !audienceValidation.valid || totalUnique === 0 || !title.trim() || !message.trim()}
-                        startIcon={loading ? <CircularProgress size={16} /> : <NotificationsIcon />}
+                        disabled={loading || !audienceValidation.valid || !scheduleValidation.valid || totalUnique === 0 || !title.trim() || !message.trim()}
+                        startIcon={loading ? <CircularProgress size={16} /> : (isScheduled ? <ScheduleIcon /> : <NotificationsIcon />)}
                     >
-                        {loading ? 'Enviando...' : 'Enviar Notificación'}
+                        {loading ? 'Guardando...' : submitLabel}
                     </Button>
                 )}
             </DialogActions>

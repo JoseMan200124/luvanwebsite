@@ -6,9 +6,10 @@ import {
     MenuItem, OutlinedInput, Select, Stack, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material';
 import { ExpandMore } from '@mui/icons-material';
+import ScopeRules from './ScopeRules';
 import {
     ROLE_OPTIONS, ROUTE_TYPE_OPTIONS, SERVICE_STATUS_OPTIONS, PAYMENT_STATUS_OPTIONS,
-    getSchoolEntry, setSchoolIds, setSchoolField, setPadreFilter, setUserIds,
+    getSchoolEntry, setSchoolIds, setSchoolField, setPadreFilter, setUserIds, deriveAudienceModes,
 } from './audienceModel';
 import FamilyPicker from './FamilyPicker';
 import { previewAudience, fetchScheduleCounts } from '../../services/audienceService';
@@ -367,7 +368,11 @@ const SchoolScopeCard = ({
     );
 };
 
-const AudienceTargetingPanel = ({ schools = [], value, onChange, cicloEscolarId = null, onPreviewChange }) => {
+// `loadedAudience`: audiencia ya guardada (edición). El panel marca como elegidas
+// las opciones Todos/Específicos que ya implica, en vez de pedirlas de nuevo.
+const AudienceTargetingPanel = ({
+    schools = [], value, onChange, cicloEscolarId = null, onPreviewChange, loadedAudience = null,
+}) => {
     const [preview, setPreview] = useState(null);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState('');
@@ -389,6 +394,15 @@ const AudienceTargetingPanel = ({ schools = [], value, onChange, cicloEscolarId 
     const [schoolModes, setSchoolModes] = useState({});
     // Modo explícito global (cuando es Todos los colegios).
     const [globalModes, setGlobalModes] = useState({ schedule: null, academic: null });
+
+    useEffect(() => {
+        if (!loadedAudience) return;
+        const derived = deriveAudienceModes(loadedAudience);
+        setScopeMode(derived.scopeMode);
+        setSchoolsChoice(derived.schoolsChoice);
+        setSchoolModes(derived.schoolModes);
+        setGlobalModes(derived.globalModes);
+    }, [loadedAudience]);
 
     const setSchoolMode = useCallback((schoolId, field, val) => {
         setSchoolModes((prev) => ({
@@ -576,6 +590,10 @@ const AudienceTargetingPanel = ({ schools = [], value, onChange, cicloEscolarId 
 
     const counts = preview?.counts || EMPTY_COUNTS;
 
+    let scopeRulesMode = 'schools';
+    if (byFamilies) scopeRulesMode = 'families';
+    else if (schoolsChoice === 'all') scopeRulesMode = 'all';
+
     let scopeHeadline;
     if (byFamilies) {
         scopeHeadline = `${value.userIds.length} familia(s)`;
@@ -679,15 +697,18 @@ const AudienceTargetingPanel = ({ schools = [], value, onChange, cicloEscolarId 
                         <ToggleButton value="families">Familias concretas</ToggleButton>
                     </ToggleButtonGroup>
 
+                    <ScopeRules
+                        mode={scopeRulesMode}
+                        schools={schools}
+                        cicloEscolarId={cicloEscolarId}
+                        cycleLocked={Boolean(loadedAudience)}
+                    />
+
                     {byFamilies ? (
                         <>
-                            <Alert severity="info">
-                                Al elegir familias concretas se ignoran los demás filtros y los roles.
-                            </Alert>
                             <FamilyPicker
                                 value={value.userIds || []}
                                 onChange={handleFamilyIdsChange}
-                                cicloEscolarId={cicloEscolarId}
                             />
                         </>
                     ) : (
@@ -710,12 +731,6 @@ const AudienceTargetingPanel = ({ schools = [], value, onChange, cicloEscolarId 
                                     onChange={(ids) => onChange(setSchoolIds(value, ids))}
                                     required
                                 />
-                            )}
-                            {schoolsChoice === 'all' && (
-                                <Alert severity="info">
-                                    El envío alcanza a todos los colegios del ciclo. Horario y nivel se eligen
-                                    de forma global en «Opciones». El grado no aplica (varía por colegio).
-                                </Alert>
                             )}
                         </>
                     )}

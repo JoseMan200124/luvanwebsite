@@ -19,6 +19,7 @@ import ReportsUsagePage from './pages/ReportsUsagePage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import CircularHistoryPage from './pages/CircularHistoryPage';
 import NotificationHistoryPage from './pages/NotificationHistoryPage';
+import ScheduledSendsPage from './pages/ScheduledSendsPage';
 import BusesManagementPage from './pages/BusesManagementPage';
 import RouteHistoryPage from './pages/RouteHistoryPage';
 // ✅ REMOVIDO: import ActivityLogPage from './pages/ActivityLogPage';
@@ -111,6 +112,12 @@ export const modules = [
                 name: 'Historial de Notificaciones',
                 path: 'notificaciones',
                 component: NotificationHistoryPage,
+            },
+            {
+                key: 'envios-programados-listar',
+                name: 'Envíos Programados',
+                path: 'envios-programados',
+                component: ScheduledSendsPage,
             },
             {
                 key: 'solicitudes-usuarios',
