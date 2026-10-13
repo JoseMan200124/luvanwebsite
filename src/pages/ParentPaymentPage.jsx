@@ -1023,6 +1023,36 @@ const ParentPaymentPage = () => {
         return renderSummaryTab();
     };
 
+    // Colegio excluido del flujo de pagos: no hay cuotas, mora ni inscripciones que
+    // mostrar. Se llega acá sólo por URL directa, porque el dashboard oculta el acceso.
+    if (!pageLoading && routeInfo && routeInfo.paymentsEnabled === false) {
+        return (
+            <Box sx={{ minHeight: '100vh', backgroundColor: BACKGROUND_COLOR }}>
+                <ParentNavbar />
+                <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 3, md: 4 }, px: { xs: 1.5, sm: 3 } }}>
+                    <Card
+                        elevation={0}
+                        sx={{
+                            backgroundColor: CARD_COLOR,
+                            border: `1px solid ${BORDER_COLOR}`,
+                            borderRadius: 2,
+                            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
+                        }}
+                    >
+                        <CardContent sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
+                            <Typography sx={{ fontSize: 18, fontWeight: 600, mb: 1 }}>
+                                Tu colegio no utiliza el sistema de pagos en línea
+                            </Typography>
+                            <Typography sx={{ color: MUTED_COLOR, fontSize: 14, lineHeight: 1.5 }}>
+                                Si tienes dudas sobre el pago del transporte, comunícate directamente con tu colegio.
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Container>
+            </Box>
+        );
+    }
+
     return (
         <Box sx={{ minHeight: '100vh', backgroundColor: BACKGROUND_COLOR }}>
             <ParentNavbar />

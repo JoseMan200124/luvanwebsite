@@ -3253,10 +3253,35 @@ const SchoolPaymentsPage = () => {
     const cargosStudents = hasSinglePendingPeriod ? effectiveStudents : studentCount;
     
     // Total a pagar en pestaña de Tarifa: NO incluye mora (se paga por separado)
-    const dialogTotalToPay = Math.max(0, 
+    const dialogTotalToPay = Math.max(0,
         dialogLeftover - dialogCredito - dialogExtraDiscount
     );
 
+    if (school && school.paymentsEnabled === false) {
+        return (
+            <PageContainer>
+                <HeaderCard>
+                    <CardContent>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Button startIcon={<ArrowBack />} onClick={handleBack}>
+                                Volver
+                            </Button>
+                            <Typography variant="h6">{school.name || 'Colegio'}</Typography>
+                        </Box>
+                    </CardContent>
+                </HeaderCard>
+                <Box sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography variant="h6" gutterBottom>
+                        Este colegio no utiliza el flujo de pagos
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        No se generan cuotas, mora, inscripciones ni débitos automáticos, y el colegio
+                        no aparece en las estadísticas financieras.
+                    </Typography>
+                </Box>
+            </PageContainer>
+        );
+    }
 
     return (
         <PageContainer>

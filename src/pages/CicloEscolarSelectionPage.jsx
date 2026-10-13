@@ -327,6 +327,7 @@ const CicloEscolarSelectionPage = () => {
         bankAccount: '',
         dailyPenalty: 0,
         penaltyPaused: false,
+        paymentsEnabled: true,
         operationStatus: getDefaultOperationStatusForNewSchool(),
         enrollmentStatus: 'CLOSED',
         enrollmentFeeAmount: 0
@@ -393,6 +394,7 @@ const CicloEscolarSelectionPage = () => {
             bankAccount: source.bankAccount || '',
             dailyPenalty: source.dailyPenalty ?? 0,
             penaltyPaused: !!source.penaltyPaused,
+            paymentsEnabled: source.paymentsEnabled !== false,
             operationStatus: getDefaultOperationStatusForNewSchool(),
             enrollmentStatus: 'CLOSED',
             enrollmentFeeAmount: source.enrollmentFeeAmount ?? 0
@@ -490,6 +492,8 @@ const CicloEscolarSelectionPage = () => {
                     // Penalty fields defaults
                     dailyPenalty: Number(school.dailyPenalty) || 0,
                     penaltyPaused: !!school.penaltyPaused,
+                    paymentsEnabled: school.paymentsEnabled !== false,
+                    paymentsToggleLocked: !!school.paymentsToggleLocked,
                     isTrainingSchool: !!school.isTrainingSchool,
                     operationStatus: school.operationStatus || 'ACTIVE',
                     enrollmentStatus: school.enrollmentStatus || 'OPEN'
@@ -625,6 +629,8 @@ const CicloEscolarSelectionPage = () => {
             bankAccount: bankAccountValue,
             dailyPenalty: dailyPenaltyValue,
             penaltyPaused: penaltyPausedValue,
+            paymentsEnabled: school.paymentsEnabled !== false,
+            paymentsToggleLocked: !!school.paymentsToggleLocked,
             operationStatus: school.operationStatus || 'ACTIVE',
             enrollmentStatus: school.enrollmentStatus || 'OPEN'
         });
@@ -1251,6 +1257,7 @@ const CicloEscolarSelectionPage = () => {
                 // Penalty settings
                 dailyPenalty: Number(selectedSchool.dailyPenalty) || 0,
                 penaltyPaused: !!selectedSchool.penaltyPaused,
+                paymentsEnabled: selectedSchool.paymentsEnabled !== false,
                 enrollmentFeeAmount: Number(selectedSchool.enrollmentFeeAmount) || 0,
                 // Tramos de descuento por fecha, solo aplican al crear (en edición se guardan aparte vía EnrollmentFeeTiersEditor)
                 ...(selectedSchool.id ? {} : {
@@ -1304,6 +1311,14 @@ const CicloEscolarSelectionPage = () => {
                 setSnackbar({
                     open: true,
                     message: responseData.message || 'Ya existe un ciclo de este colegio en operación.',
+                    severity: 'warning'
+                });
+                return;
+            }
+            if (err.response?.status === 409 && responseData?.code === 'SCHOOL_HAS_PAYMENT_MOVEMENTS') {
+                setSnackbar({
+                    open: true,
+                    message: responseData.message || 'Este colegio ya tiene movimientos de pago registrados. Contacta a soporte.',
                     severity: 'warning'
                 });
                 return;
@@ -2225,6 +2240,27 @@ const CicloEscolarSelectionPage = () => {
                                         }
                                         label="Mora pausada"
                                     />
+                                    {/* El <span> es necesario: MUI no muestra el Tooltip sobre un control deshabilitado. */}
+                                    <Tooltip
+                                        title={
+                                            selectedSchool?.paymentsToggleLocked
+                                                ? 'Este colegio ya tiene movimientos de pago registrados. Contacta a soporte para excluirlo del flujo de pagos.'
+                                                : 'El colegio no genera cuotas, mora, inscripción ni débitos, y no aparece en estadísticas financieras.'
+                                        }
+                                    >
+                                        <span>
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={selectedSchool ? selectedSchool.paymentsEnabled === false : false}
+                                                        disabled={!selectedSchool || !!selectedSchool.paymentsToggleLocked}
+                                                        onChange={(e) => setSelectedSchool(prev => ({ ...prev, paymentsEnabled: !e.target.checked }))}
+                                                    />
+                                                }
+                                                label="Excluir del flujo de pagos"
+                                            />
+                                        </span>
+                                    </Tooltip>
                                     <Button
                                         variant="contained"
                                         color="warning"

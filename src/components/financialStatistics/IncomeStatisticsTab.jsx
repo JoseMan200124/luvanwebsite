@@ -286,7 +286,7 @@ const IncomeStatisticsTab = () => {
     const fetchSchools = useCallback(async () => {
         try {
             const res = await api.get('/schools', { params: { allCycles: true, includeArchived: true } });
-            setSchools(res.data.schools || []);
+            setSchools((res.data.schools || []).filter((s) => s.paymentsEnabled !== false));
         } catch (e) {
             console.error('fetchSchools error', e);
         }
