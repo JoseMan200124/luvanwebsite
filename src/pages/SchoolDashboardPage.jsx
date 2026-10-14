@@ -945,7 +945,7 @@ const SchoolDashboardPage = () => {
                                         </Grid>
                                     </PermissionGuard>
 
-                                    {currentSchool?.paymentsEnabled !== false && (
+                                    {currentSchool && currentSchool.paymentsEnabled !== false && (
                                     <PermissionGuard permission="colegios-pagos">
                                         <Grid item xs={12}>
                                             <SummaryCard>

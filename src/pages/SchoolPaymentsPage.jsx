@@ -3256,6 +3256,16 @@ const SchoolPaymentsPage = () => {
     const dialogTotalToPay = Math.max(0,
         dialogLeftover - dialogCredito - dialogExtraDiscount
     );
+    if (!school && loading) {
+        return (
+            <PageContainer>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', minHeight: '60vh' }}>
+                    <CircularProgress />
+                    <Typography sx={{ mt: 2 }}>Cargando datos...</Typography>
+                </Box>
+            </PageContainer>
+        );
+    }
 
     if (school && school.paymentsEnabled === false) {
         return (
