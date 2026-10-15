@@ -1758,6 +1758,7 @@ const ColaboradoresPage = () => {
                                         fullWidth
                                         label={isEdit ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
                                         type="password"
+                                        autoComplete="new-password"
                                         value={colaboradorForm.password}
                                         onChange={(e) => handleFormChange('password', e.target.value)}
                                         required={!isEdit}

@@ -17,6 +17,8 @@ const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutos
 const CHECK_INTERVAL_MS = 30 * 1000;
 const SILENT_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos
 
+const getMustChangePassword = (data) => Boolean(data?.mustChangePassword ?? data?.passwordExpired);
+
 const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -166,7 +168,8 @@ const AuthProvider = ({ children }) => {
     const loginUpdateParentsInfo = async (email, password) => {
         try {
             const response = await loginUser({ email, password });
-            const { token, passwordExpired, refreshToken } = response.data;
+            const { token, refreshToken } = response.data;
+            const mustChangePassword = getMustChangePassword(response.data);
             const decoded = jwtDecode(token);
             const restrictedRoles = [3, 8]; // allow Padres (3) and Colaboradores (8) to use this dialog
             if (!restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la página principal.`);
@@ -178,14 +181,15 @@ const AuthProvider = ({ children }) => {
             } else {
                 setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
             }
-            return { passwordExpired, roleId: decoded.roleId };
+            return { mustChangePassword, roleId: decoded.roleId };
         } catch (error) { throw error; }
     };
 
     const login = async (email, password) => {
         try {
             const response = await loginUser({ email, password });
-            const { token, passwordExpired, refreshToken } = response.data;
+            const { token, refreshToken } = response.data;
+            const mustChangePassword = getMustChangePassword(response.data);
             const decoded = jwtDecode(token);
             const restrictedRoles = [4,5]; if (restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la app móvil.`);
             clearStoredSchoolContext();
@@ -196,7 +200,7 @@ const AuthProvider = ({ children }) => {
             } else {
                 setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
             }
-            return { passwordExpired, roleId: decoded.roleId };
+            return { mustChangePassword, roleId: decoded.roleId };
         } catch (error) { throw error; }
     };
 

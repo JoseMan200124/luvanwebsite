@@ -60,6 +60,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     const [accountEmail, setAccountEmail] = useState('');
     const [accountUsername, setAccountUsername] = useState('');
     const [accountPassword, setAccountPassword] = useState('');
+    const [currentPassword, setCurrentPassword] = useState('');
     const [changePassword, setChangePassword] = useState(false);
     const [employeeNumber, setEmployeeNumber] = useState('');
 
@@ -195,9 +196,12 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
             emergencyPhone,
             accountFullName,
             accountEmail,
-            accountPassword,
             extraFields: formExtraValues
         };
+        if (changePassword && accountPassword) {
+            payload.accountPassword = accountPassword;
+            payload.currentPassword = currentPassword;
+        }
 
         try {
             await api.put(`/update-colaborador-info/${corporationId}`, payload);
@@ -311,7 +315,12 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
                         <TextField label="Correo electrónico (ingresa tu correo personal)" type="email" fullWidth margin="normal" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} required />
 
                         <FormControlLabel control={<Checkbox checked={changePassword} onChange={(e) => setChangePassword(e.target.checked)} />} label="¿Cambiar contraseña?" />
-                        {changePassword && (<TextField label="Nueva contraseña" type="password" fullWidth margin="normal" value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Nueva contraseña opcional" />)}
+                        {changePassword && (
+                            <>
+                                <TextField label="Contraseña actual" type="password" autoComplete="current-password" fullWidth margin="normal" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+                                <TextField label="Nueva contraseña" type="password" autoComplete="new-password" fullWidth margin="normal" value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Nueva contraseña opcional" helperText="Mínimo 8 caracteres y distinta de la actual." />
+                            </>
+                        )}
                     </Box>
                 )}
             </DialogContent>

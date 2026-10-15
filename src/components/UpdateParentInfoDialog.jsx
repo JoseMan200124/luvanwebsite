@@ -57,6 +57,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
     const [accountFullName, setAccountFullName] = useState('');
     const [accountEmail, setAccountEmail] = useState('');
     const [accountPassword, setAccountPassword] = useState('');
+    const [currentPassword, setCurrentPassword] = useState('');
     const [changePassword, setChangePassword] = useState(false);
 
     // Campos extras
@@ -201,6 +202,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
 
         if (changePassword && accountPassword) {
             payload.accountPassword = accountPassword;
+            payload.currentPassword = currentPassword;
         }
 
         try {
@@ -432,15 +434,29 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
                             label="¿Cambiar contraseña?"
                         />
                         {changePassword && (
-                            <TextField
-                                label="Nueva contraseña"
-                                type="password"
-                                fullWidth
-                                margin="normal"
-                                value={accountPassword}
-                                onChange={(e) => setAccountPassword(e.target.value)}
-                                placeholder="Nueva contraseña"
-                            />
+                            <>
+                                <TextField
+                                    label="Contraseña actual"
+                                    type="password"
+                                    autoComplete="current-password"
+                                    fullWidth
+                                    margin="normal"
+                                    value={currentPassword}
+                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                    required
+                                />
+                                <TextField
+                                    label="Nueva contraseña"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    fullWidth
+                                    margin="normal"
+                                    value={accountPassword}
+                                    onChange={(e) => setAccountPassword(e.target.value)}
+                                    placeholder="Nueva contraseña"
+                                    helperText="Mínimo 8 caracteres y distinta de la actual."
+                                />
+                            </>
                         )}
                     </Box>
                 )}

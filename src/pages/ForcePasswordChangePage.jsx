@@ -9,11 +9,27 @@ import {
     Alert,
     Box
 } from '@mui/material';
+import { Navigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig'; // <---- en lugar de axios
 
+const PASSWORD_MIN_LENGTH = 8;
+
+const getValidationError = ({ oldPassword, newPassword, confirmNewPassword }) => {
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+        return `La nueva contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+    }
+    if (newPassword === oldPassword) {
+        return 'La nueva contraseña debe ser distinta de la actual.';
+    }
+    if (newPassword !== confirmNewPassword) {
+        return 'Las contraseñas nuevas no coinciden.';
+    }
+    return null;
+};
+
 const ForcePasswordChangePage = () => {
-    const { auth, logout } = useContext(AuthContext);
+    const { auth, initialLoad, logout } = useContext(AuthContext);
 
     const [formData, setFormData] = useState({
         oldPassword: '',
@@ -43,6 +59,12 @@ const ForcePasswordChangePage = () => {
                 severity: 'error',
                 message: 'Por favor complete todos los campos.',
             });
+            return;
+        }
+
+        const validationError = getValidationError(formData);
+        if (validationError) {
+            setSnackbar({ open: true, severity: 'error', message: validationError });
             return;
         }
 
@@ -78,6 +100,10 @@ const ForcePasswordChangePage = () => {
         setSnackbar((prev) => ({ ...prev, open: false }));
     };
 
+    if (!initialLoad && !auth?.token) {
+        return <Navigate to="/login" replace />;
+    }
+
     return (
         <Box
             sx={{
@@ -93,7 +119,8 @@ const ForcePasswordChangePage = () => {
                 Cambio de Contraseña Obligatorio
             </Typography>
             <Typography variant="body1" gutterBottom>
-                Tu contraseña ha expirado. Ingresa tu contraseña actual y una nueva contraseña.
+                Debes cambiar tu contraseña para continuar. Ingresa tu contraseña actual y una nueva
+                de al menos {PASSWORD_MIN_LENGTH} caracteres.
             </Typography>
             <Box
                 component="form"

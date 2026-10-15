@@ -24,8 +24,8 @@ const EnrollmentLoginStep = ({ initialEmail = '', onSuccess, onBack, onPasswordE
         setSubmitting(true);
         try {
             // Quién puede reinscribirse lo decide el backend con `padre-reinscripcion-ver`.
-            const { passwordExpired } = await login(trimmedEmail, password);
-            if (passwordExpired) {
+            const { mustChangePassword } = await login(trimmedEmail, password);
+            if (mustChangePassword) {
                 onPasswordExpired();
                 return;
             }

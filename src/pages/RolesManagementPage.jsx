@@ -1453,6 +1453,7 @@ const RolesManagementPage = () => {
                                     name="password"
                                     label="Contraseña"
                                     type="password"
+                                    autoComplete="new-password"
                                     fullWidth
                                     variant="outlined"
                                     value={selectedUser?.password || ''}
@@ -1467,6 +1468,7 @@ const RolesManagementPage = () => {
                                     name="password"
                                     label="Nueva Contraseña (opcional)"
                                     type="password"
+                                    autoComplete="new-password"
                                     fullWidth
                                     variant="outlined"
                                     value={selectedUser?.password || ''}
