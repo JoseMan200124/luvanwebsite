@@ -237,7 +237,12 @@ const SchoolPaymentsPage = () => {
             // Clear stale metrics when school changes
             setMetricsData(null);
             // If the current `school` is missing or does not match the requested `schoolId`, fetch it.
-            if (!school || String(school.id) !== String(schoolId)) await fetchSchool();
+            const currentSchool = (!school || String(school.id) !== String(schoolId)) ? await fetchSchool() : school;
+            // Colegio excluido del flujo de pagos: no se piden pagos, análisis ni débitos (el backend respondería 409).
+            if (currentSchool?.paymentsEnabled === false) {
+                setLoading(false);
+                return;
+            }
             // Avoid school-wide mora recalculation on page load. Opening the register modal
             // refreshes only the selected family's payment with /payments/:id/recalc.
             // Trigger auto-debits for this school as a fire-and-forget operation.
@@ -330,7 +335,9 @@ const SchoolPaymentsPage = () => {
     const fetchSchool = async () => {
         try {
             const res = await api.get(`/schools/${schoolId}`);
-            setSchool(res.data.school || null);
+            const fetched = res.data.school || null;
+            setSchool(fetched);
+            return fetched;
         } catch (err) {
             console.error('fetchSchool', err);
         }

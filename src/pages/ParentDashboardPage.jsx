@@ -316,14 +316,15 @@ const ParentDashboardPage = () => {
   // Suspendido específicamente por falta de contrato (sin mora)
   const isSuspendedForNoContract = isSuspended && hasSignedContract === false;
 
-  const [paymentsEnabled, setPaymentsEnabled] = useState(true);
+  // null = aún no se sabe (llega con route-info); evita pintar/pedir pagos de un colegio excluido.
+  const [paymentsEnabled, setPaymentsEnabled] = useState(null);
 
   // Saldo de inscripción del ciclo pendiente de pago (null = sin cargo o ya pagado)
   const [pendingEnrollmentFee, setPendingEnrollmentFee] = useState(null);
   useEffect(() => {
     const userId = auth?.user?.id;
     if (!userId) return;
-    if (!paymentsEnabled) {
+    if (paymentsEnabled !== true) {
       setPendingEnrollmentFee(null);
       return;
     }
@@ -1043,7 +1044,7 @@ const ParentDashboardPage = () => {
                           Mis Solicitudes
                         </Button>
                       </Grid>
-                      {paymentsEnabled && (
+                      {paymentsEnabled === true && (
                       <Grid item xs={12} sx={{ mt: 1, textAlign: 'center' }}>
                         <Button
                           variant="outlined"
@@ -1064,7 +1065,7 @@ const ParentDashboardPage = () => {
           {/* Columna derecha: horarios + estudiantes */}
           <Grid item xs={12} md={8}>
             <Grid container spacing={3}>
-              {paymentsEnabled && pendingEnrollmentFee && (
+              {paymentsEnabled === true && pendingEnrollmentFee && (
                 <Grid item xs={12}>
                   <SectionCard elevation={3}>
                     <CardContent>
@@ -1086,7 +1087,7 @@ const ParentDashboardPage = () => {
                           <br />
                           Por favor, firma el contrato para activar el servicio y tener acceso completo.
                         </Alert>
-                      ) : paymentsEnabled ? (
+                      ) : paymentsEnabled !== false ? (
                         <Alert severity="warning">
                           Cuenta suspendida por mora. Si no ha subido su boleta, por favor subirla; si ya fue subida, su pago se encuentra en revisión.
                         </Alert>
