@@ -237,7 +237,12 @@ const SchoolPaymentsPage = () => {
             // Clear stale metrics when school changes
             setMetricsData(null);
             // If the current `school` is missing or does not match the requested `schoolId`, fetch it.
-            if (!school || String(school.id) !== String(schoolId)) await fetchSchool();
+            const currentSchool = (!school || String(school.id) !== String(schoolId)) ? await fetchSchool() : school;
+            // Colegio excluido del flujo de pagos: no se piden pagos, análisis ni débitos (el backend respondería 409).
+            if (currentSchool?.paymentsEnabled === false) {
+                setLoading(false);
+                return;
+            }
             // Avoid school-wide mora recalculation on page load. Opening the register modal
             // refreshes only the selected family's payment with /payments/:id/recalc.
             // Trigger auto-debits for this school as a fire-and-forget operation.
@@ -330,7 +335,9 @@ const SchoolPaymentsPage = () => {
     const fetchSchool = async () => {
         try {
             const res = await api.get(`/schools/${schoolId}`);
-            setSchool(res.data.school || null);
+            const fetched = res.data.school || null;
+            setSchool(fetched);
+            return fetched;
         } catch (err) {
             console.error('fetchSchool', err);
         }
@@ -3253,10 +3260,45 @@ const SchoolPaymentsPage = () => {
     const cargosStudents = hasSinglePendingPeriod ? effectiveStudents : studentCount;
     
     // Total a pagar en pestaña de Tarifa: NO incluye mora (se paga por separado)
-    const dialogTotalToPay = Math.max(0, 
+    const dialogTotalToPay = Math.max(0,
         dialogLeftover - dialogCredito - dialogExtraDiscount
     );
+    if (!school && loading) {
+        return (
+            <PageContainer>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', minHeight: '60vh' }}>
+                    <CircularProgress />
+                    <Typography sx={{ mt: 2 }}>Cargando datos...</Typography>
+                </Box>
+            </PageContainer>
+        );
+    }
 
+    if (school && school.paymentsEnabled === false) {
+        return (
+            <PageContainer>
+                <HeaderCard>
+                    <CardContent>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Button startIcon={<ArrowBack />} onClick={handleBack}>
+                                Volver
+                            </Button>
+                            <Typography variant="h6">{school.name || 'Colegio'}</Typography>
+                        </Box>
+                    </CardContent>
+                </HeaderCard>
+                <Box sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography variant="h6" gutterBottom>
+                        Este colegio no utiliza el flujo de pagos
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        No se generan cuotas, mora, inscripciones ni débitos automáticos, y el colegio
+                        no aparece en las estadísticas financieras.
+                    </Typography>
+                </Box>
+            </PageContainer>
+        );
+    }
 
     return (
         <PageContainer>

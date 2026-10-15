@@ -37,7 +37,9 @@ import {
     AccordionDetails,
     Chip,
     Divider,
-    Popover
+    Popover,
+    Radio,
+    Stack
 } from '@mui/material';
 import { 
     School as SchoolIcon, 
@@ -173,6 +175,48 @@ const getStatusMeta = (map, value) => {
     return map[normalized] || { label: normalized || 'Sin estado', color: 'default' };
 };
 
+// Opción seleccionable en formato tarjeta (título, etiqueta opcional y viñetas de detalle).
+const ChoiceCard = ({ selected, onSelect, title, tag, details = [] }) => (
+    <Box
+        role="radio"
+        aria-checked={selected}
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(event) => {
+            if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                onSelect();
+            }
+        }}
+        sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1,
+            p: 1.5,
+            borderRadius: 2,
+            cursor: 'pointer',
+            border: '2px solid',
+            borderColor: selected ? 'primary.main' : 'divider',
+            bgcolor: selected ? 'action.selected' : 'background.paper',
+            transition: 'border-color 0.15s, background-color 0.15s',
+            '&:hover': { borderColor: selected ? 'primary.main' : 'text.secondary' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 }
+        }}
+    >
+        <Radio checked={selected} tabIndex={-1} sx={{ p: 0.5, pointerEvents: 'none' }} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{title}</Typography>
+                {tag && <Chip label={tag} size="small" color={selected ? 'primary' : 'default'} variant={selected ? 'filled' : 'outlined'} />}
+            </Box>
+            {details.map((detail) => (
+                <Typography key={detail} variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    {detail}
+                </Typography>
+            ))}
+        </Box>
+    </Box>
+);
 // Personal que muestra el diálogo de eliminación de colegio, en el orden en que se lista.
 const DELETE_IMPACT_STAFF = [
     { key: 'monitoras', label: 'Monitoras' },
@@ -194,6 +238,9 @@ const CicloEscolarSelectionPage = () => {
     const [operationalConflict, setOperationalConflict] = useState(null);
     const [billingConflict, setBillingConflict] = useState(null);
     const [billingDecision, setBillingDecision] = useState({ action: 'SET_NEXT_MONTH_START', customStartDate: '', confirmText: '' });
+    // Reactivar el flujo de pagos de un colegio que ya opera: el backend pide cómo cobrar (409).
+    const [paymentsReactivationPrompt, setPaymentsReactivationPrompt] = useState(null);
+    const [paymentsReactivationChoice, setPaymentsReactivationChoice] = useState({ chargeEnrollment: null, billingStart: null, clearPenalty: false });
     const [opStatusConfirm, setOpStatusConfirm] = useState({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
     
     // Estados para diálogos y acciones
@@ -338,6 +385,7 @@ const CicloEscolarSelectionPage = () => {
         bankAccount: '',
         dailyPenalty: 0,
         penaltyPaused: false,
+        paymentsEnabled: true,
         operationStatus: getDefaultOperationStatusForNewSchool(),
         enrollmentStatus: 'CLOSED',
         enrollmentFeeAmount: 0
@@ -404,6 +452,7 @@ const CicloEscolarSelectionPage = () => {
             bankAccount: source.bankAccount || '',
             dailyPenalty: source.dailyPenalty ?? 0,
             penaltyPaused: !!source.penaltyPaused,
+            paymentsEnabled: source.paymentsEnabled !== false,
             operationStatus: getDefaultOperationStatusForNewSchool(),
             enrollmentStatus: 'CLOSED',
             enrollmentFeeAmount: source.enrollmentFeeAmount ?? 0
@@ -501,6 +550,8 @@ const CicloEscolarSelectionPage = () => {
                     // Penalty fields defaults
                     dailyPenalty: Number(school.dailyPenalty) || 0,
                     penaltyPaused: !!school.penaltyPaused,
+                    paymentsEnabled: school.paymentsEnabled !== false,
+                    paymentsToggleLocked: !!school.paymentsToggleLocked,
                     isTrainingSchool: !!school.isTrainingSchool,
                     operationStatus: school.operationStatus || 'ACTIVE',
                     enrollmentStatus: school.enrollmentStatus || 'OPEN'
@@ -636,6 +687,8 @@ const CicloEscolarSelectionPage = () => {
             bankAccount: bankAccountValue,
             dailyPenalty: dailyPenaltyValue,
             penaltyPaused: penaltyPausedValue,
+            paymentsEnabled: school.paymentsEnabled !== false,
+            paymentsToggleLocked: !!school.paymentsToggleLocked,
             operationStatus: school.operationStatus || 'ACTIVE',
             enrollmentStatus: school.enrollmentStatus || 'OPEN'
         });
@@ -1285,6 +1338,7 @@ const CicloEscolarSelectionPage = () => {
                 // Penalty settings
                 dailyPenalty: Number(selectedSchool.dailyPenalty) || 0,
                 penaltyPaused: !!selectedSchool.penaltyPaused,
+                paymentsEnabled: selectedSchool.paymentsEnabled !== false,
                 enrollmentFeeAmount: Number(selectedSchool.enrollmentFeeAmount) || 0,
                 // Tramos de descuento por fecha, solo aplican al crear (en edición se guardan aparte vía EnrollmentFeeTiersEditor)
                 ...(selectedSchool.id ? {} : {
@@ -1339,6 +1393,24 @@ const CicloEscolarSelectionPage = () => {
                     open: true,
                     message: responseData.message || 'Ya existe un ciclo de este colegio en operación.',
                     severity: 'warning'
+                });
+                return;
+            }
+            if (err.response?.status === 409 && responseData?.code === 'SCHOOL_HAS_PAYMENT_MOVEMENTS') {
+                setSnackbar({
+                    open: true,
+                    message: responseData.message || 'Este colegio ya tiene movimientos de pago registrados. Contacta a soporte.',
+                    severity: 'warning'
+                });
+                return;
+            }
+            if (err.response?.status === 409 && responseData?.code === 'PAYMENTS_REACTIVATION_DECISION_REQUIRED') {
+                setPaymentsReactivationPrompt(responseData);
+                // Sin inscripción configurada no hay nada que decidir sobre ella.
+                setPaymentsReactivationChoice({
+                    chargeEnrollment: Number(responseData.enrollmentFeeAmount) > 0 ? null : false,
+                    billingStart: null,
+                    clearPenalty: false
                 });
                 return;
             }
@@ -1399,6 +1471,20 @@ const CicloEscolarSelectionPage = () => {
                 action,
                 schoolYearStart: nextStartDate || null,
                 confirmBillingConflict: true
+            }
+        });
+    };
+
+    const handleApplyPaymentsReactivation = async () => {
+        const { chargeEnrollment, billingStart, clearPenalty } = paymentsReactivationChoice;
+        if (typeof chargeEnrollment !== 'boolean' || !billingStart) return;
+
+        setPaymentsReactivationPrompt(null);
+        await handleSave({
+            paymentsReactivationDecision: {
+                chargeEnrollment,
+                billingStart,
+                clearPenalty: billingStart === 'CURRENT_MONTH' && clearPenalty
             }
         });
     };
@@ -2152,6 +2238,72 @@ const CicloEscolarSelectionPage = () => {
                         </StyledAccordionSummary>
                         <AccordionDetails>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <Box
+                                    sx={{
+                                        p: 2,
+                                        borderRadius: 2,
+                                        border: '1px solid',
+                                        borderColor: selectedSchool?.paymentsEnabled === false ? 'warning.main' : 'divider',
+                                        bgcolor: selectedSchool?.paymentsEnabled === false ? 'warning.50' : 'background.paper'
+                                    }}
+                                >
+                                    <FormControlLabel
+                                        sx={{ alignItems: 'flex-start', m: 0 }}
+                                        control={
+                                            <Checkbox
+                                                sx={{ pt: 0.5 }}
+                                                checked={selectedSchool ? selectedSchool.paymentsEnabled === false : false}
+                                                disabled={!selectedSchool || !!selectedSchool.paymentsToggleLocked}
+                                                onChange={(e) => setSelectedSchool(prev => ({ ...prev, paymentsEnabled: !e.target.checked }))}
+                                            />
+                                        }
+                                        label={
+                                            <Box>
+                                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                                    Excluir del flujo de pagos
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                    Para colegios que no pagan a través del sistema (por ejemplo, un convenio o un
+                                                    colegio que solo usa la parte operativa). Al excluirlo:
+                                                </Typography>
+                                                <Box
+                                                    component="ul"
+                                                    sx={{
+                                                        m: 0,
+                                                        mt: 0.5,
+                                                        pl: 2.5,
+                                                        color: 'text.secondary',
+                                                        typography: 'body2',
+                                                        // Un reset global de estilos quita las viñetas de las listas.
+                                                        listStyleType: 'disc',
+                                                        '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
+                                                    }}
+                                                >
+                                                    <li>No se generan cuotas mensuales, mora, cargo de inscripción ni débitos automáticos.</li>
+                                                    <li>Las familias dejan de suspenderse por mora, y las suspensiones automáticas por mora que ya tuvieran se levantan (las de contrato o manuales no cambian).</li>
+                                                    <li>El colegio no aparece en las estadísticas financieras.</li>
+                                                    <li>Se bloquea cualquier operación de pagos: registrar pagos, boletas, descuentos, períodos, etc.</li>
+                                                    <li>Los padres no ven la sección de pagos.</li>
+                                                </Box>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                                    Todo lo demás sigue funcionando normal: rutas, buses, asistencia, circulares y contratos.
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                                    Solo se puede excluir un colegio que no tenga movimientos de dinero (pagos, abonos de
+                                                    inscripción ni crédito a favor). Si más adelante se vuelve a activar el flujo de pagos,
+                                                    el sistema pregunta cómo cobrar la inscripción y desde qué mes la mensualidad.
+                                                </Typography>
+                                            </Box>
+                                        }
+                                    />
+                                    {selectedSchool?.paymentsToggleLocked && (
+                                        <Alert severity="info" sx={{ mt: 1.5 }}>
+                                            Este colegio ya tiene movimientos de pago registrados, por lo que no se puede excluir.
+                                            Contacta a soporte si necesitas hacerlo.
+                                        </Alert>
+                                    )}
+                                </Box>
+
                                 <Box sx={{ display: 'flex', gap: 2 }}>
                                     <TextField
                                         label="Inicio Ciclo del Colegio"
@@ -2885,6 +3037,131 @@ const CicloEscolarSelectionPage = () => {
                         }
                     >
                         {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Aplicar decisión'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={!!paymentsReactivationPrompt}
+                onClose={() => setPaymentsReactivationPrompt(null)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Reactivar el flujo de pagos</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        {paymentsReactivationPrompt?.schoolName || 'Este colegio'} ya está operando. Las familias que no tienen
+                        registro de pago lo recibirán ahora. Indica cómo cobrarles; no se genera ningún cobro de meses anteriores. 
+                        Esto aplica para las familias ya registradas en el sistema.
+                    </DialogContentText>
+
+                    {Number(paymentsReactivationPrompt?.enrollmentFeeAmount) > 0 && (
+                        <Box sx={{ mt: 3 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                                1. ¿Cobrar la inscripción del ciclo?
+                            </Typography>
+                            <Stack spacing={1.5} role="radiogroup" aria-label="Cobro de inscripción">
+                                <ChoiceCard
+                                    selected={paymentsReactivationChoice.chargeEnrollment === true}
+                                    onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, chargeEnrollment: true }))}
+                                    title="Sí, cobrarla"
+                                    tag={`Q${Number(paymentsReactivationPrompt.enrollmentFeeAmount).toFixed(2)} por alumno`}
+                                    details={[
+                                        'Se aplica el descuento por fecha de inscripción.',
+                                        'Las familias recibirán una notificación del cargo.'
+                                    ]}
+                                />
+                                <ChoiceCard
+                                    selected={paymentsReactivationChoice.chargeEnrollment === false}
+                                    onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, chargeEnrollment: false }))}
+                                    title="No cobrarla"
+                                    details={[
+                                        'Queda registrada como exonerada (Q0).',
+                                        'No se volverá a cobrar después.'
+                                    ]}
+                                />
+                            </Stack>
+                        </Box>
+                    )}
+
+                    <Box sx={{ mt: 3 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                            {Number(paymentsReactivationPrompt?.enrollmentFeeAmount) > 0 ? '2. ' : ''}¿Desde cuándo cobrar la mensualidad?
+                        </Typography>
+                        <Stack spacing={1.5} role="radiogroup" aria-label="Inicio del cobro de mensualidad">
+                            <ChoiceCard
+                                selected={paymentsReactivationChoice.billingStart === 'CURRENT_MONTH'}
+                                onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, billingStart: 'CURRENT_MONTH' }))}
+                                title="Desde el mes actual"
+                                tag={paymentsReactivationPrompt?.currentPeriod}
+                                details={[
+                                    'Se genera el cargo del mes actual.'
+                                ]}
+                            />
+                            <ChoiceCard
+                                selected={paymentsReactivationChoice.billingStart === 'NEXT_MONTH'}
+                                onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, billingStart: 'NEXT_MONTH', clearPenalty: false }))}
+                                title="Desde el próximo mes"
+                                tag={paymentsReactivationPrompt?.nextMonthStart}
+                                details={[
+                                    'El mes actual no se cobra a las familias que ya están inscritas.',
+                                    'Las familias que se inscriban durante el mes actual sí tendrán el cargo del mes.'
+                                ]}
+                            />
+                        </Stack>
+                    </Box>
+
+                    {paymentsReactivationChoice.billingStart === 'CURRENT_MONTH' && (
+                        <Box
+                            onClick={() => setPaymentsReactivationChoice((prev) => ({ ...prev, clearPenalty: !prev.clearPenalty }))}
+                            sx={{
+                                mt: 2,
+                                p: 1.5,
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 1,
+                                borderRadius: 2,
+                                cursor: 'pointer',
+                                border: '1px dashed',
+                                borderColor: paymentsReactivationChoice.clearPenalty ? 'warning.main' : 'divider',
+                                bgcolor: paymentsReactivationChoice.clearPenalty ? 'warning.50' : 'transparent'
+                            }}
+                        >
+                            <Checkbox
+                                checked={paymentsReactivationChoice.clearPenalty}
+                                tabIndex={0}
+                                sx={{ p: 0.5 }}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => setPaymentsReactivationChoice((prev) => ({ ...prev, clearPenalty: event.target.checked }))}
+                                inputProps={{ 'aria-label': 'Limpiar la mora del mes actual' }}
+                            />
+                            <Box>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                    Limpiar la mora del mes actual ({paymentsReactivationPrompt?.currentPeriod || ''})
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                    Si ya pasó el vencimiento, las familias nacerían con mora de este mes. Al limpiarla, ese período no
+                                    vuelve a acumular mora.
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                    Aplica a todas las familias del colegio en este mes, tengan o no mora todavía.
+                                </Typography>
+                            </Box>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPaymentsReactivationPrompt(null)}>Cancelar</Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleApplyPaymentsReactivation}
+                        disabled={
+                            savingSchool
+                            || typeof paymentsReactivationChoice.chargeEnrollment !== 'boolean'
+                            || !paymentsReactivationChoice.billingStart
+                        }
+                    >
+                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Reactivar pagos'}
                     </Button>
                 </DialogActions>
             </Dialog>

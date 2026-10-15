@@ -158,6 +158,9 @@ const SchoolContextSelectionPage = () => {
                                             </Stack>
 
                                             <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                                                {context.cycleStatus === 'ARCHIVED' && (
+                                                    <Chip label="Ciclo anterior" color="warning" size="small" variant="outlined" />
+                                                )}
                                                 <Chip label={operation.label} color={operation.color} size="small" variant={context.operationStatus === 'ACTIVE' ? 'filled' : 'outlined'} />
                                                 <Chip label={enrollment.label} color={enrollment.color} size="small" variant={context.enrollmentStatus === 'OPEN' ? 'filled' : 'outlined'} />
                                             </Stack>

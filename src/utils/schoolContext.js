@@ -94,6 +94,7 @@ export const normalizeSchoolContext = (context = {}) => {
         cicloEscolarName,
         cicloEscolarYear: cicloEscolar.anio || context.cicloEscolarYear || '',
         operationStatus: safeString(school.operationStatus || context.operationStatus || 'ACTIVE').trim().toUpperCase(),
+        cycleStatus: safeString(school.cycleStatus || context.cycleStatus || 'ACTIVE').trim().toUpperCase(),
         enrollmentStatus: safeString(school.enrollmentStatus || context.enrollmentStatus || 'OPEN').trim().toUpperCase()
     };
 };
