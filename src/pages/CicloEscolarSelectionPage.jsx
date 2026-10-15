@@ -1,6 +1,6 @@
 // src/pages/CicloEscolarSelectionPage.jsx
 
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import {
     Typography,
     Box,
@@ -240,6 +240,8 @@ const CicloEscolarSelectionPage = () => {
     const [billingDecision, setBillingDecision] = useState({ action: 'SET_NEXT_MONTH_START', customStartDate: '', confirmText: '' });
     // Reactivar el flujo de pagos de un colegio que ya opera: el backend pide cómo cobrar (409).
     const [paymentsReactivationPrompt, setPaymentsReactivationPrompt] = useState(null);
+    const [paymentsExclusionPromptOpen, setPaymentsExclusionPromptOpen] = useState(false);
+    const paymentsExclusionConfirmedRef = useRef(false);
     const [paymentsReactivationChoice, setPaymentsReactivationChoice] = useState({ chargeEnrollment: null, billingStart: null, clearPenalty: false });
     const [opStatusConfirm, setOpStatusConfirm] = useState({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
     
@@ -688,6 +690,8 @@ const CicloEscolarSelectionPage = () => {
             dailyPenalty: dailyPenaltyValue,
             penaltyPaused: penaltyPausedValue,
             paymentsEnabled: school.paymentsEnabled !== false,
+            // Estado original: sólo se avisa del borrado al pasar de habilitado a excluido.
+            wasPaymentsEnabled: school.paymentsEnabled !== false,
             paymentsToggleLocked: !!school.paymentsToggleLocked,
             operationStatus: school.operationStatus || 'ACTIVE',
             enrollmentStatus: school.enrollmentStatus || 'OPEN'
@@ -1192,6 +1196,17 @@ const CicloEscolarSelectionPage = () => {
     const handleSave = async (extraPayload = {}) => {
         if (!selectedSchool) return;
 
+        // Excluir del flujo de pagos borra los datos de pagos del colegio: se confirma antes de guardar.
+        if (
+            selectedSchool.id
+            && selectedSchool.wasPaymentsEnabled
+            && selectedSchool.paymentsEnabled === false
+            && !paymentsExclusionConfirmedRef.current
+        ) {
+            setPaymentsExclusionPromptOpen(true);
+            return;
+        }
+
         if (
             Number(selectedSchool.transportFeeComplete) < 0 ||
             Number(selectedSchool.transportFeeHalf) < 0
@@ -1382,6 +1397,7 @@ const CicloEscolarSelectionPage = () => {
                 });
             }
 
+            paymentsExclusionConfirmedRef.current = false;
             fetchSchoolsByYear(); // Recargar la lista
             handleCloseEditDialog();
         } catch (err) {
@@ -1473,6 +1489,12 @@ const CicloEscolarSelectionPage = () => {
                 confirmBillingConflict: true
             }
         });
+    };
+
+    const handleConfirmPaymentsExclusion = async () => {
+        paymentsExclusionConfirmedRef.current = true;
+        setPaymentsExclusionPromptOpen(false);
+        await handleSave();
     };
 
     const handleApplyPaymentsReactivation = async () => {
@@ -2254,7 +2276,10 @@ const CicloEscolarSelectionPage = () => {
                                                 sx={{ pt: 0.5 }}
                                                 checked={selectedSchool ? selectedSchool.paymentsEnabled === false : false}
                                                 disabled={!selectedSchool || !!selectedSchool.paymentsToggleLocked}
-                                                onChange={(e) => setSelectedSchool(prev => ({ ...prev, paymentsEnabled: !e.target.checked }))}
+                                                onChange={(e) => {
+                                                    paymentsExclusionConfirmedRef.current = false;
+                                                    setSelectedSchool(prev => ({ ...prev, paymentsEnabled: !e.target.checked }));
+                                                }}
                                             />
                                         }
                                         label={
@@ -3037,6 +3062,60 @@ const CicloEscolarSelectionPage = () => {
                         }
                     >
                         {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Aplicar decisión'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={paymentsExclusionPromptOpen}
+                onClose={() => setPaymentsExclusionPromptOpen(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Excluir del flujo de pagos</DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ mb: 1.5 }}>
+                        Al guardar, se eliminarán de forma permanente todos los datos de pagos de{' '}
+                        <strong>{selectedSchool?.name || 'este colegio'}</strong>. Esta acción no se puede deshacer.
+                    </DialogContentText>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Se eliminan:</Typography>
+                    <Box
+                        component="ul"
+                        sx={{
+                            m: 0, mt: 0.5, pl: 2.5, typography: 'body2', listStyleType: 'disc',
+                            '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
+                        }}
+                    >
+                        <li>Los pagos de todas las familias del colegio y sus períodos mensuales.</li>
+                        <li>Las transacciones, el historial contable (ledger) y la línea de tiempo de cada pago.</li>
+                        <li>La mora acumulada y las limpiezas de mora registradas.</li>
+                        <li>Los cargos de inscripción.</li>
+                        <li>Los pagos extraordinarios.</li>
+                    </Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1.5 }}>Se conserva:</Typography>
+                    <Box
+                        component="ul"
+                        sx={{
+                            m: 0, mt: 0.5, pl: 2.5, typography: 'body2', listStyleType: 'disc',
+                            '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
+                        }}
+                    >
+                        <li>Las boletas subidas por los padres (quedan sin vínculo a un pago).</li>
+                        <li>Rutas, buses, asistencia, circulares y contratos.</li>
+                    </Box>
+                    <Typography variant="body2" sx={{ mt: 1.5 }}>
+                        Además, las familias suspendidas automáticamente por mora se reactivarán (las suspendidas por
+                        falta de contrato o de forma manual no cambian).
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+                        Solo es posible porque el colegio no tiene dinero registrado. Si más adelante se vuelve a incluir
+                        en el flujo de pagos, los datos eliminados no se recuperan.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPaymentsExclusionPromptOpen(false)}>Cancelar</Button>
+                    <Button variant="contained" color="error" onClick={handleConfirmPaymentsExclusion} disabled={savingSchool}>
+                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Eliminar datos y excluir'}
                     </Button>
                 </DialogActions>
             </Dialog>
