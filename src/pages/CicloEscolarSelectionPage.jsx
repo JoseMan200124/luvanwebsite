@@ -217,6 +217,13 @@ const ChoiceCard = ({ selected, onSelect, title, tag, details = [] }) => (
         </Box>
     </Box>
 );
+// Personal que muestra el diálogo de eliminación de colegio, en el orden en que se lista.
+const DELETE_IMPACT_STAFF = [
+    { key: 'monitoras', label: 'Monitoras' },
+    { key: 'pilotos', label: 'Pilotos' },
+    { key: 'supervisores', label: 'Supervisores' },
+    { key: 'auxiliares', label: 'Auxiliares' }
+];
 
 const CicloEscolarSelectionPage = () => {
     const { auth } = useContext(AuthContext);
@@ -280,6 +287,9 @@ const CicloEscolarSelectionPage = () => {
     const [openSendNotifModal, setOpenSendNotifModal] = useState(false);
     const [extraOptionsAnchorEl, setExtraOptionsAnchorEl] = useState(null);
     const [openNivelesModal, setOpenNivelesModal] = useState(false);
+    // Eliminación de colegio: { schoolId, loading, impact, error } mientras el diálogo está abierto
+    const [deleteDialog, setDeleteDialog] = useState(null);
+    const [deletingSchool, setDeletingSchool] = useState(false);
     // Nombre legible del período actual (ej: Enero 2026)
     const monthNamesEs = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const currentMonthIndex = new Date().getMonth();
@@ -774,26 +784,49 @@ const CicloEscolarSelectionPage = () => {
         setOpenEditDialog(true);
     };
 
+    // Abre el diálogo de eliminación y consulta qué se eliminaría (solo lectura).
     const handleDeleteClick = async (schoolId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este colegio?')) {
-            try {
-                await api.delete(`/schools/${schoolId}`, {
-                    headers: { Authorization: `Bearer ${auth.token}` },
-                });
-                setSnackbar({
-                    open: true,
-                    message: 'Colegio eliminado exitosamente',
-                    severity: 'success'
-                });
-                fetchSchoolsByYear(); // Recargar la lista
-            } catch (err) {
-                console.error('Error al eliminar colegio:', err);
-                setSnackbar({
-                    open: true,
-                    message: 'Error al eliminar colegio',
-                    severity: 'error'
-                });
-            }
+        setDeleteDialog({ schoolId, loading: true, impact: null, error: null });
+        try {
+            const { data } = await api.get(`/schools/${schoolId}/deletion-impact`, {
+                headers: { Authorization: `Bearer ${auth.token}` },
+            });
+            setDeleteDialog({ schoolId, loading: false, impact: data, error: null });
+        } catch (err) {
+            console.error('Error al calcular el impacto de eliminar el colegio:', err);
+            setDeleteDialog({
+                schoolId,
+                loading: false,
+                impact: null,
+                error: err?.response?.data?.message || 'No se pudo calcular qué se eliminaría. Intenta de nuevo.'
+            });
+        }
+    };
+
+    const handleConfirmDeleteSchool = async () => {
+        if (!deleteDialog?.schoolId) return;
+        setDeletingSchool(true);
+        try {
+            await api.delete(`/schools/${deleteDialog.schoolId}`, {
+                headers: { Authorization: `Bearer ${auth.token}` },
+            });
+            setDeleteDialog(null);
+            setSnackbar({
+                open: true,
+                message: 'Colegio eliminado exitosamente',
+                severity: 'success'
+            });
+            fetchSchoolsByYear(); // Recargar la lista
+        } catch (err) {
+            console.error('Error al eliminar colegio:', err);
+            setDeleteDialog(null);
+            setSnackbar({
+                open: true,
+                message: err?.response?.data?.message || 'Error al eliminar colegio',
+                severity: 'error'
+            });
+        } finally {
+            setDeletingSchool(false);
         }
     };
 
@@ -2791,6 +2824,95 @@ const CicloEscolarSelectionPage = () => {
                     >
                         {opStatusConfirm.pendingValue === 'ACTIVE' ? 'Activar' : 'Desactivar'}
                     </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={!!deleteDialog}
+                onClose={deletingSchool ? undefined : () => setDeleteDialog(null)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>
+                    {deleteDialog?.impact?.schoolName ? `Eliminar ${deleteDialog.impact.schoolName}` : 'Eliminar colegio'}
+                </DialogTitle>
+                <DialogContent>
+                    {deleteDialog?.loading && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+                            <CircularProgress size={24} />
+                            <Typography>Calculando qué se eliminaría…</Typography>
+                        </Box>
+                    )}
+                    {deleteDialog?.error && (
+                        <Alert severity="error">{deleteDialog.error}</Alert>
+                    )}
+                    {deleteDialog?.impact?.blockedByPayments && (
+                        <Alert severity="error">
+                            Este colegio no se puede eliminar porque ya tiene pagos recibidos
+                            ({deleteDialog.impact.moneyReceived.total} registros de pago). Eliminarlo dejaría esos
+                            pagos sin colegio y alteraría las estadísticas.
+                        </Alert>
+                    )}
+                    {deleteDialog?.impact && !deleteDialog.impact.blockedByPayments && (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                            <DialogContentText>
+                                Este colegio no tiene pagos recibidos. Al eliminarlo ocurrirá lo siguiente:
+                            </DialogContentText>
+                            <Typography variant="body2">
+                                • Familias que se eliminan: <strong>{deleteDialog.impact.families.removed}</strong>
+                                {' '}({deleteDialog.impact.students} alumnos)
+                            </Typography>
+                            {DELETE_IMPACT_STAFF.map(({ key, label }) => (
+                                <Typography key={key} variant="body2">
+                                    • {label} que se eliminan: <strong>{deleteDialog.impact.staff[key].removed}</strong>
+                                </Typography>
+                            ))}
+                            {deleteDialog.impact.staff.otros.removed > 0 && (
+                                <Typography variant="body2">
+                                    • Otros usuarios que se eliminan: <strong>{deleteDialog.impact.staff.otros.removed}</strong>
+                                </Typography>
+                            )}
+                            <Typography variant="body2">
+                                • Cobros pendientes que dejan de contar: <strong>{deleteDialog.impact.pendingCharges}</strong>
+                            </Typography>
+                            <Typography variant="body2">
+                                • Buses que quedan sin colegio: <strong>{deleteDialog.impact.buses}</strong>
+                            </Typography>
+                            {(() => {
+                                const kept = [
+                                    { label: 'familias', n: deleteDialog.impact.families.kept },
+                                    ...DELETE_IMPACT_STAFF.map(({ key, label }) => ({ label: label.toLowerCase(), n: deleteDialog.impact.staff[key].kept })),
+                                    { label: 'otros usuarios', n: deleteDialog.impact.staff.otros.kept }
+                                ].filter((item) => item.n > 0);
+                                if (kept.length === 0) return null;
+                                return (
+                                    <Alert severity="info">
+                                        Conservan su cuenta ({kept.map((item) => `${item.n} ${item.label}`).join(', ')}) porque
+                                        tienen datos en otro ciclo o pagos recibidos, o porque son supervisores o auxiliares,
+                                        que nunca se eliminan con un colegio. Solo se les quita este colegio.
+                                    </Alert>
+                                );
+                            })()}
+                            <Alert severity="warning">
+                                Esta acción no se puede deshacer desde el sistema.
+                            </Alert>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeleteDialog(null)} disabled={deletingSchool}>
+                        {deleteDialog?.impact && !deleteDialog.impact.blockedByPayments ? 'Cancelar' : 'Cerrar'}
+                    </Button>
+                    {deleteDialog?.impact && !deleteDialog.impact.blockedByPayments && (
+                        <Button
+                            onClick={handleConfirmDeleteSchool}
+                            color="error"
+                            variant="contained"
+                            disabled={deletingSchool}
+                        >
+                            {deletingSchool ? 'Eliminando…' : 'Eliminar colegio'}
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 

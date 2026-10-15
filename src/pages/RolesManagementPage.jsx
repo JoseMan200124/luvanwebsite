@@ -531,7 +531,7 @@ const RolesManagementPage = () => {
                 fetchUsers();
             } catch (err) {
                 console.error('[handleDeleteClick] Error:', err);
-                setSnackbar({ open: true, message: 'Error al eliminar usuario', severity: 'error' });
+                setSnackbar({ open: true, message: err?.response?.data?.message || 'Error al eliminar usuario', severity: 'error' });
             }
         }
     };
