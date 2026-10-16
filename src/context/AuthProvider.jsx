@@ -17,7 +17,7 @@ const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutos
 const CHECK_INTERVAL_MS = 30 * 1000;
 const SILENT_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos
 
-const getMustChangePassword = (data) => Boolean(data?.mustChangePassword ?? data?.passwordExpired);
+const getMustChangePassword = (data) => Boolean(data?.mustChangePassword);
 
 const AuthProvider = ({ children }) => {
     const navigate = useNavigate();

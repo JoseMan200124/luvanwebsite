@@ -12,15 +12,12 @@ import {
 import { Navigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig'; // <---- en lugar de axios
-
-const PASSWORD_MIN_LENGTH = 8;
+import { PASSWORD_MIN_LENGTH, getPasswordChangeError } from '../utils/passwordPolicy';
 
 const getValidationError = ({ oldPassword, newPassword, confirmNewPassword }) => {
-    if (newPassword.length < PASSWORD_MIN_LENGTH) {
-        return `La nueva contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
-    }
-    if (newPassword === oldPassword) {
-        return 'La nueva contraseña debe ser distinta de la actual.';
+    const passwordError = getPasswordChangeError({ currentPassword: oldPassword, newPassword });
+    if (passwordError) {
+        return passwordError;
     }
     if (newPassword !== confirmNewPassword) {
         return 'Las contraseñas nuevas no coinciden.';

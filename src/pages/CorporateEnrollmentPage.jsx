@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
+import { PASSWORD_MIN_LENGTH, getPasswordLengthError } from '../utils/passwordPolicy';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
 
 // Función para convertir tiempo de 24h a 12h con AM/PM
@@ -68,6 +69,12 @@ const CorporateEnrollmentPage = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        const passwordError = getPasswordLengthError(accountPassword);
+        if (passwordError) {
+            setSnackbar({ open: true, message: passwordError, severity: 'error' });
+            return;
+        }
 
         const payload = {
             corporationId,
@@ -535,12 +542,13 @@ const CorporateEnrollmentPage = () => {
                         <TextField
                             label="Contraseña del Usuario"
                             type="password"
+                            autoComplete="new-password"
                             fullWidth
                             margin="normal"
                             value={accountPassword}
                             onChange={(e) => setAccountPassword(e.target.value)}
                             required
-                            helperText="Mínimo 6 caracteres"
+                            helperText={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
                         />
 
                         <Button
