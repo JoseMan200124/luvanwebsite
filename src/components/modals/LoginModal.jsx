@@ -71,10 +71,10 @@ const LoginModal = ({ open, onClose, onLoginSuccess }) => {
             // Llamamos a login del AuthContext
             // Este login internamente hace la petición a /api/auth/login
             // y ya maneja el storage del token.
-            const { passwordExpired, roleId } = await loginUpdateParentsInfo(trimmedEmail, formData.password);
+            const { mustChangePassword, roleId } = await loginUpdateParentsInfo(trimmedEmail, formData.password);
 
-            // Si el backend nos dice que la contraseña ha expirado:
-            if (passwordExpired) {
+            // Si el backend indica que debe cambiar la contraseña (temporal o asignada por un admin):
+            if (mustChangePassword) {
                 navigate('/force-password-change');
                 return;
             }

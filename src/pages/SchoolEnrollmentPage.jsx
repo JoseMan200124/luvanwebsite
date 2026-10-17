@@ -30,6 +30,7 @@ import {
 } from '../utils/familyEnrollmentForm';
 import { getReenrollmentForm, submitReenrollment } from '../services/familyReenrollmentService';
 import { normalizeSchoolContext, setStoredSchoolContext } from '../utils/schoolContext';
+import { PASSWORD_MIN_LENGTH, getPasswordLengthError } from '../utils/passwordPolicy';
 
 const REENROLL_VIEW_PERMISSION = 'padre-reinscripcion-ver';
 const STEPS = { CHOOSE: 'choose', LOGIN: 'login', PUBLIC: 'public', REENROLL: 'reenroll' };
@@ -149,6 +150,11 @@ const SchoolEnrollmentPage = () => {
         event.preventDefault();
         if (!hasValidStudent(form.students)) {
             showSnackbar('Agrega al menos un alumno con nombre y grado.', 'warning');
+            return;
+        }
+        const passwordError = getPasswordLengthError(account.password);
+        if (passwordError) {
+            showSnackbar(passwordError, 'warning');
             return;
         }
 
@@ -363,10 +369,12 @@ const SchoolEnrollmentPage = () => {
             <TextField
                 label="Contraseña del usuario"
                 type="password"
+                autoComplete="new-password"
                 fullWidth
                 margin="normal"
                 value={account.password}
                 onChange={(event) => setAccount({ ...account, password: event.target.value })}
+                helperText={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres.`}
                 required
             />
 
@@ -416,7 +424,7 @@ const SchoolEnrollmentPage = () => {
                     initialEmail={loginEmail}
                     onSuccess={loadReenrollment}
                     onBack={() => setStep(STEPS.CHOOSE)}
-                    onPasswordExpired={() => navigate('/force-password-change')}
+                    onMustChangePassword={() => navigate('/force-password-change')}
                 />
             );
         }

@@ -55,9 +55,9 @@ const LoginPage = () => {
         }
 
         try {
-            const { passwordExpired, roleId } = await login(trimmedEmail, formData.password);
+            const { mustChangePassword, roleId } = await login(trimmedEmail, formData.password);
 
-            if (passwordExpired) {
+            if (mustChangePassword) {
                 navigate('/force-password-change');
                 return;
             }

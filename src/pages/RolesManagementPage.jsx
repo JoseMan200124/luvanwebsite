@@ -25,6 +25,7 @@ import {
     TableSortLabel,
     Checkbox,
     FormControl,
+    FormHelperText,
     InputLabel,
     Select,
     MenuItem,
@@ -214,7 +215,6 @@ const RolesManagementPage = () => {
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
 
-    const [, setSchoolGrades] = useState([]);
     // bulk editors removed
 
 
@@ -229,8 +229,8 @@ const RolesManagementPage = () => {
     const [roleFilter, setRoleFilter] = useState('');
     const [clientFilter, setClientFilter] = useState(null); // { type: 'Colegio'|'Corporación', id, name }
 
-    // Roles allowed to be created from the "Añadir Usuario" dialog
-    const allowedRolesForCreate = new Set(['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado', 'mecanica']);
+    // Roles que se pueden asignar desde este diálogo, al crear y al editar. Padre y Colaborador
+    const assignableRoles = new Set(['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado', 'mecanica']);
     // Roles that should NOT be assigned a school or corporation
     // (Mecanica ve todos los clientes: no se le asigna uno)
     const rolesWithoutSchoolOrCorp = new Set(['administrador', 'supervisor', 'auxiliar', 'mecanica']);
@@ -418,25 +418,12 @@ const RolesManagementPage = () => {
 
     
 
-    const fetchSchoolGrades = async (schoolId) => {
-        try {
-            const response = await api.get(`/schools/${schoolId}`);
-            if (response.data && response.data.school && Array.isArray(response.data.school.grades)) {
-                setSchoolGrades(response.data.school.grades);
-            } else {
-                setSchoolGrades([]);
-            }
-        } catch (error) {
-            console.error('[fetchSchoolGrades] Error:', error);
-            setSchoolGrades([]);
-        }
-    };
-
     const handleEditClick = async (user) => {
         const parsedRoleId = Number(user.roleId);
         setSelectedUser({
             ...user,
             roleId: parsedRoleId,
+            originalRoleId: parsedRoleId,
             password: '',
             corporationId: user.corporationId || ''
         });
@@ -509,7 +496,6 @@ const RolesManagementPage = () => {
         setSelectedSupervisorCorporations([]);
         setSelectedAuxiliarSchools([]);
         setSelectedAuxiliarCorporations([]);
-        setSchoolGrades([]);
         setOpenDialog(true);
     };
 
@@ -623,7 +609,7 @@ const RolesManagementPage = () => {
             }
 
             console.error('[handleSaveUser] Error:', err);
-            setSnackbar({ open: true, message: 'Error al guardar usuario', severity: 'error' });
+            setSnackbar({ open: true, message: err?.response?.data?.message || 'Error al guardar usuario', severity: 'error' });
         }
     };
 
@@ -1453,6 +1439,7 @@ const RolesManagementPage = () => {
                                     name="password"
                                     label="Contraseña"
                                     type="password"
+                                    autoComplete="new-password"
                                     fullWidth
                                     variant="outlined"
                                     value={selectedUser?.password || ''}
@@ -1467,6 +1454,7 @@ const RolesManagementPage = () => {
                                     name="password"
                                     label="Nueva Contraseña (opcional)"
                                     type="password"
+                                    autoComplete="new-password"
                                     fullWidth
                                     variant="outlined"
                                     value={selectedUser?.password || ''}
@@ -1486,15 +1474,15 @@ const RolesManagementPage = () => {
                                     <MenuItem value="">
                                         <em>Seleccione un rol</em>
                                     </MenuItem>
-                                    {(selectedUser?.id
-                                        ? roleOptions
-                                        : roleOptions.filter(r => allowedRolesForCreate.has(String(r.name).toLowerCase()))
-                                    ).map((r) => (
+                                    {roleOptions.filter(r => assignableRoles.has(String(r.name).toLowerCase())).map((r) => (
                                         <MenuItem key={r.id} value={r.id}>
                                             {r.name}
                                         </MenuItem>
                                     ))}
                                 </Select>
+                                {selectedUser?.id && Number(selectedUser?.roleId) !== Number(selectedUser?.originalRoleId) && (
+                                    <FormHelperText>Al cambiar el rol, el usuario deberá iniciar sesión de nuevo.</FormHelperText>
+                                )}
                             </FormControl>
                         </Grid>
                         {Number(selectedUser?.roleId) === 4 && (
@@ -1531,16 +1519,13 @@ const RolesManagementPage = () => {
                                         <Select
                                             name="school"
                                             value={selectedUser?.school || ''}
-                                            onChange={async (e) => {
+                                            onChange={(e) => {
                                                 const newSchoolId = e.target.value;
-                                                setSelectedUser(prev => ({ 
-                                                    ...prev, 
+                                                setSelectedUser(prev => ({
+                                                    ...prev,
                                                     school: newSchoolId,
                                                     corporationId: newSchoolId ? '' : prev.corporationId
                                                 }));
-                                                if (Number(selectedUser?.roleId) === 3 && newSchoolId) {
-                                                    await fetchSchoolGrades(newSchoolId);
-                                                }
                                             }}
                                             label="Colegio"
                                         >

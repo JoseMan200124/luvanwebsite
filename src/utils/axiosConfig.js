@@ -296,11 +296,22 @@ const handleUnauthorizedResponse = async (error) => {
     }
 };
 
+const FORCE_PASSWORD_CHANGE_PATH = '/force-password-change';
+
+const redirectToForcePasswordChange = () => {
+    if (globalThis.location.pathname !== FORCE_PASSWORD_CHANGE_PATH) {
+        globalThis.location.assign(FORCE_PASSWORD_CHANGE_PATH);
+    }
+};
+
 api.interceptors.response.use(
     response => response,
     async (error) => {
         if (error.response?.status === 401) {
             return handleUnauthorizedResponse(error);
+        }
+        if (error.response?.status === 403 && error.response.data?.code === 'PASSWORD_CHANGE_REQUIRED') {
+            redirectToForcePasswordChange();
         }
         throw error;
     }

@@ -1,5 +1,5 @@
 // src/components/UpdateParentInfoDialog.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {
     Dialog,
     DialogTitle,
@@ -22,8 +22,11 @@ import {
     Autocomplete
 } from '@mui/material';
 import api from '../utils/axiosConfig';
+import { AuthContext } from '../context/AuthProvider';
+import { getPasswordChangeError } from '../utils/passwordPolicy';
 
 const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) => {
+    const { logout } = useContext(AuthContext);
     const [loading, setLoading] = useState(false);
 
     const [schoolId, setSchoolId] = useState('');
@@ -57,6 +60,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
     const [accountFullName, setAccountFullName] = useState('');
     const [accountEmail, setAccountEmail] = useState('');
     const [accountPassword, setAccountPassword] = useState('');
+    const [currentPassword, setCurrentPassword] = useState('');
     const [changePassword, setChangePassword] = useState(false);
 
     // Campos extras
@@ -199,12 +203,25 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
             extraFields: formExtraValues
         };
 
-        if (changePassword && accountPassword) {
+        const isChangingPassword = changePassword && !!accountPassword;
+        if (isChangingPassword) {
+            const passwordError = getPasswordChangeError({ currentPassword, newPassword: accountPassword });
+            if (passwordError) {
+                setSnackbar({ open: true, message: passwordError, severity: 'error' });
+                return;
+            }
             payload.accountPassword = accountPassword;
+            payload.currentPassword = currentPassword;
         }
 
         try {
             await api.put(`/update-parent-info/${schoolId}`, payload);
+
+            if (isChangingPassword) {
+                setSnackbar({ open: true, message: 'Contraseña actualizada. Inicia sesión con tu nueva contraseña.', severity: 'success' });
+                setTimeout(() => logout(), 2000);
+                return;
+            }
 
             setSnackbar({ open: true, message: '¡Información actualizada correctamente!', severity: 'success' });
             onSaved && onSaved();
@@ -432,15 +449,29 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
                             label="¿Cambiar contraseña?"
                         />
                         {changePassword && (
-                            <TextField
-                                label="Nueva contraseña"
-                                type="password"
-                                fullWidth
-                                margin="normal"
-                                value={accountPassword}
-                                onChange={(e) => setAccountPassword(e.target.value)}
-                                placeholder="Nueva contraseña"
-                            />
+                            <>
+                                <TextField
+                                    label="Contraseña actual"
+                                    type="password"
+                                    autoComplete="current-password"
+                                    fullWidth
+                                    margin="normal"
+                                    value={currentPassword}
+                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                    required
+                                />
+                                <TextField
+                                    label="Nueva contraseña"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    fullWidth
+                                    margin="normal"
+                                    value={accountPassword}
+                                    onChange={(e) => setAccountPassword(e.target.value)}
+                                    placeholder="Nueva contraseña"
+                                    helperText="Mínimo 8 caracteres y distinta de la actual."
+                                />
+                            </>
                         )}
                     </Box>
                 )}
