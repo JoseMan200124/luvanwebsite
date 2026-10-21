@@ -10,6 +10,7 @@ import {
     CardContent,
     Button,
     CircularProgress,
+    LinearProgress,
     Snackbar,
     Alert,
     Grid,
@@ -63,14 +64,14 @@ import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import styled from 'styled-components';
 import { normalizeKey } from '../utils/stringHelpers';
-import DuplicateEmailAlert from '../components/DuplicateEmailAlert';
+import BulkFamilyDraftsReview, { BulkPendingSteps, getDraftIssues, getDuplicateRowsByEmail, getExistingChanges, hasNothingToUpdate } from '../components/BulkFamilyDraftsReview';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import BulkScheduleModal from '../components/modals/BulkScheduleModal';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
-import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, resolveScheduleCodeFromSlot, slotHasScheduleData } from '../utils/scheduleConfig';
+import { getScheduleCodesFromSchool, resolveScheduleCodeFromSlot, slotHasScheduleData } from '../utils/scheduleConfig';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
 
 // Opciones de roles disponibles en esta vista: Padre solamente
@@ -108,6 +109,12 @@ const HeaderCard = styled(Card)`
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
 `;
+
+// Familias por petición al guardar la carga masiva (el backend acepta hasta 100 por petición).
+const BULK_COMMIT_CHUNK_SIZE = 20;
+
+// Campos de la pantalla de revisión que no forman parte de la familia y no se mandan al servidor.
+const toBulkServerDraft = ({ _key, hadIssues, skip, autoSkipped, analyzedCorreo, serverIssue, infoNotice, issues, existing, otherSchool, editing, ...draft }) => draft;
 
 const SchoolUsersPage = () => {
     const { hasPermission, hasAnyPermission } = usePermissions();
@@ -157,9 +164,17 @@ const SchoolUsersPage = () => {
     // Estados para diferentes operaciones
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
-    const [bulkGradeIssues, setBulkGradeIssues] = useState([]);
-    const [bulkGradeAssignments, setBulkGradeAssignments] = useState({});
-    const [bulkGradeSaving, setBulkGradeSaving] = useState(false);
+    const [bulkDrafts, setBulkDrafts] = useState([]);
+    const [bulkAllowedGrades, setBulkAllowedGrades] = useState([]);
+    const [bulkAllowedRouteTypes, setBulkAllowedRouteTypes] = useState([]);
+    const [bulkPasswordMinLength, setBulkPasswordMinLength] = useState(0);
+    const [bulkCicloLabel, setBulkCicloLabel] = useState('');
+    const [bulkSaving, setBulkSaving] = useState(false);
+    const [bulkSaveProgress, setBulkSaveProgress] = useState({ done: 0, total: 0 });
+    // Familias ya guardadas a las que les quedó un paso por completar (pagos, estado de servicio o correo).
+    const [bulkPendingFamilies, setBulkPendingFamilies] = useState([]);
+    const [bulkCompleting, setBulkCompleting] = useState(false);
+    const [bulkConfirmCancelOpen, setBulkConfirmCancelOpen] = useState(false);
     // Dialogo de descarga de familias (selección múltiple de filtros)
     const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
     const [downloadChoice, setDownloadChoice] = useState([]); // ('all' | 'new' | 'ACTIVE' | 'PAUSED' | 'SUSPENDED' | 'INACTIVE')[]
@@ -1460,6 +1475,10 @@ const SchoolUsersPage = () => {
                     setSnackbar({ open: true, message: 'La familia debe tener al menos un estudiante con nombre y grado.', severity: 'warning' });
                     return;
                 }
+                if (!selectedUser.id && !familyDetail.routeType) {
+                    setSnackbar({ open: true, message: 'Selecciona el tipo de ruta de la familia.', severity: 'warning' });
+                    return;
+                }
             }
 
             // Arma el payload del usuario
@@ -1687,13 +1706,53 @@ const SchoolUsersPage = () => {
 
     
 
+    const bulkHasDrafts = bulkDrafts.length > 0;
+    const bulkIncludedDrafts = useMemo(() => bulkDrafts.filter(draft => !draft.skip), [bulkDrafts]);
+    // Se recalcula solo cuando cambian las familias: validar todas en cada render es caro con cargas grandes.
+    const bulkUnresolvedCount = useMemo(() => {
+        const duplicateRowsByEmail = getDuplicateRowsByEmail(bulkDrafts);
+        return bulkIncludedDrafts.filter(draft => getDraftIssues(
+            draft, bulkAllowedGrades, bulkAllowedRouteTypes, bulkPasswordMinLength,
+            duplicateRowsByEmail.get(String(draft.correo || '').trim().toLowerCase()) || ''
+        ).length > 0).length;
+    }, [bulkDrafts, bulkIncludedDrafts, bulkAllowedGrades, bulkAllowedRouteTypes, bulkPasswordMinLength]);
+    const bulkProblemCount = bulkDrafts.filter(draft => draft.hadIssues).length;
+    const bulkAutoSkippedCount = bulkDrafts.filter(draft => draft.skip && draft.autoSkipped).length;
+    const bulkExistingCount = useMemo(
+        () => bulkIncludedDrafts.filter(draft => getExistingChanges(draft)).length,
+        [bulkIncludedDrafts]
+    );
+
+    const resetBulkState = () => {
+        setBulkFile(null);
+        setBulkDrafts([]);
+        setBulkAllowedGrades([]);
+        setBulkAllowedRouteTypes([]);
+        setBulkPasswordMinLength(0);
+        setBulkCicloLabel('');
+        setBulkPendingFamilies([]);
+    };
+
+    const closeBulkDialog = () => {
+        setBulkConfirmCancelOpen(false);
+        setOpenBulkDialog(false);
+        resetBulkState();
+    };
+
+    // Con familias sin guardar, cerrar el dialogo pide confirmacion: cancelar descarta toda la carga.
+    const handleRequestCloseBulkDialog = () => {
+        if (bulkSaving || bulkCompleting) return;
+        if (bulkHasDrafts || bulkPendingFamilies.length > 0) setBulkConfirmCancelOpen(true);
+        else closeBulkDialog();
+    };
+
     const handleBulkUpload = async () => {
         if (!bulkFile) return;
         if (!canCreateUsersInManagedSchool) {
             setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
             return;
         }
-        
+
         setBulkLoading(true);
         try {
             const formData = new FormData();
@@ -1701,7 +1760,8 @@ const SchoolUsersPage = () => {
             // Adjuntar el colegio gestionado para que el backend pueda enlazar los padres automáticamente
             const schoolToAttach = currentSchool?.id || schoolId || '';
             if (schoolToAttach) formData.append('schoolId', String(schoolToAttach));
-            
+
+            // El backend solo analiza el archivo: no guarda nada hasta confirmar con "Guardar".
             const response = await api.post('/parents/bulk-upload', formData, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
@@ -1709,39 +1769,36 @@ const SchoolUsersPage = () => {
                 }
             });
 
-            const gradeIssues = Array.isArray(response.data?.gradeAssignmentIssues)
-                ? response.data.gradeAssignmentIssues
-                : [];
-
-            if (gradeIssues.length > 0) {
-                setBulkGradeIssues(gradeIssues);
-                setBulkGradeAssignments({});
-                setSnackbar({
-                    open: true,
-                    message: `Carga procesada. ${gradeIssues.length} estudiante(s) necesitan un grado válido.`,
-                    severity: 'warning'
-                });
-                fetchUsers();
+            const drafts = Array.isArray(response.data?.drafts) ? response.data.drafts : [];
+            if (drafts.length === 0) {
+                setSnackbar({ open: true, message: 'No se encontraron familias en la hoja "Padres" del archivo.', severity: 'warning' });
                 return;
             }
 
-            setBulkGradeIssues([]);
-            setBulkGradeAssignments({});
-            
-            setSnackbar({
-                open: true,
-                message: 'Carga masiva completada exitosamente',
-                severity: 'success'
-            });
-            
-            setOpenBulkDialog(false);
-            setBulkFile(null);
-            fetchUsers();
+            setBulkAllowedGrades(Array.isArray(response.data?.allowedGrades) ? response.data.allowedGrades : []);
+            setBulkAllowedRouteTypes(Array.isArray(response.data?.allowedRouteTypes) ? response.data.allowedRouteTypes : []);
+            setBulkPasswordMinLength(Number(response.data?.passwordMinLength) || 0);
+            setBulkCicloLabel(response.data?.cicloLabel || '');
+            lookedUpBulkEmails.current = {};
+            setBulkDrafts(drafts.map(({ issues, ...draft }) => {
+                const hadIssues = Array.isArray(issues) && issues.length > 0;
+                // Una familia que ya existe y no cambia nada no se procesa: se omite sola (se puede volver a incluir).
+                const autoSkipped = !hadIssues && hasNothingToUpdate(draft);
+                return {
+                    ...draft,
+                    _key: `${draft.hoja}-${draft.row}`,
+                    analyzedCorreo: String(draft.correo || '').trim().toLowerCase(),
+                    hadIssues,
+                    skip: autoSkipped,
+                    autoSkipped,
+                    serverIssue: null
+                };
+            }));
         } catch (err) {
             console.error('Error in bulk upload:', err);
             setSnackbar({
                 open: true,
-                message: 'Error en la carga masiva',
+                message: err?.response?.data?.message || 'Error al analizar el archivo',
                 severity: 'error'
             });
         } finally {
@@ -1749,21 +1806,81 @@ const SchoolUsersPage = () => {
         }
     };
 
-    const handleBulkGradeAssignmentChange = (studentId, grade) => {
-        setBulkGradeAssignments(prev => ({
-            ...prev,
-            [String(studentId)]: grade
-        }));
-    };
+    const handleToggleBulkDraftSkip = useCallback((key) => {
+        setBulkDrafts(prev => prev.map(draft => (draft._key === key ? { ...draft, skip: !draft.skip } : draft)));
+    }, []);
 
-    const handleSaveBulkGradeAssignments = async () => {
-        if (bulkGradeIssues.length === 0) return;
-
-        const missingGrade = bulkGradeIssues.some(issue => !bulkGradeAssignments[String(issue.studentId)]);
-        if (missingGrade) {
-            setSnackbar({ open: true, message: 'Selecciona un grado para cada estudiante pendiente.', severity: 'warning' });
+    // Completa solo los pasos pendientes de familias YA guardadas (pagos, estado de servicio, correos), sin reprocesarlas.
+    const handleCompletePendingSteps = async () => {
+        const schoolToAttach = currentSchool?.id || schoolId || '';
+        if (!schoolToAttach) {
+            setSnackbar({ open: true, message: 'No se pudo determinar el colegio.', severity: 'error' });
             return;
         }
+
+        const canResetPassword = hasPermission('padres-restablecer-password');
+        const items = bulkPendingFamilies
+            .map(family => ({
+                correo: family.correo,
+                steps: family.steps.filter(step => step.status === 'failed' && (step.step !== 'welcomeEmail' || canResetPassword)).map(step => step.step)
+            }))
+            .filter(item => item.steps.length > 0);
+        if (items.length === 0) return;
+
+        setBulkCompleting(true);
+        try {
+            const resultsByEmail = new Map();
+            for (let start = 0; start < items.length; start += 100) {
+                const response = await api.post('/parents/bulk-upload/complete', {
+                    schoolId: schoolToAttach,
+                    items: items.slice(start, start + 100)
+                }, { headers: { Authorization: `Bearer ${auth.token}` } });
+                (response.data?.results || []).forEach(result => resultsByEmail.set(result.correo, result.steps || []));
+            }
+
+            // 'ok' = completado y sale de la lista; lo demás se queda con su motivo ('failed' se puede reintentar).
+            let completedCount = 0;
+            setBulkPendingFamilies(prev => prev
+                .map(family => {
+                    const results = resultsByEmail.get(String(family.correo || '').trim().toLowerCase());
+                    if (!results) return family;
+                    return {
+                        ...family,
+                        steps: family.steps
+                            .map(step => {
+                                const result = results.find(item => item.step === step.step);
+                                if (!result) return step;
+                                return result.status === 'ok' ? null : { ...step, status: result.status, message: result.message || null };
+                            })
+                            .filter(Boolean)
+                    };
+                })
+                .filter(family => family.steps.length > 0));
+
+            resultsByEmail.forEach(results => results.forEach(result => { if (result.status === 'ok') completedCount += 1; }));
+            const totalAsked = items.reduce((total, item) => total + item.steps.length, 0);
+            setSnackbar({
+                open: true,
+                message: completedCount === totalAsked
+                    ? `${completedCount} paso(s) completado(s).`
+                    : `${completedCount} de ${totalAsked} paso(s) completado(s). Revisa los que siguen pendientes.`,
+                severity: completedCount === totalAsked ? 'success' : 'warning'
+            });
+            if (completedCount > 0) fetchUsers();
+        } catch (err) {
+            console.error('Error completing bulk pending steps:', err);
+            setSnackbar({
+                open: true,
+                message: err?.response?.data?.message || 'No se pudieron completar los pasos pendientes. Inténtalo de nuevo.',
+                severity: 'error'
+            });
+        } finally {
+            setBulkCompleting(false);
+        }
+    };
+
+    const handleSaveBulkDrafts = async () => {
+        if (bulkIncludedDrafts.length === 0 || bulkUnresolvedCount > 0) return;
 
         const schoolToAttach = currentSchool?.id || schoolId || '';
         if (!schoolToAttach) {
@@ -1771,33 +1888,127 @@ const SchoolUsersPage = () => {
             return;
         }
 
-        setBulkGradeSaving(true);
-        try {
-            await api.post('/parents/bulk-upload/resolve-grades', {
-                schoolId: schoolToAttach,
-                assignments: bulkGradeIssues.map(issue => ({
-                    studentId: issue.studentId,
-                    grade: bulkGradeAssignments[String(issue.studentId)]
-                }))
-            }, {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
+        const authHeaders = { headers: { Authorization: `Bearer ${auth.token}` } };
+        const draftsToSave = bulkIncludedDrafts;
+        setBulkSaving(true);
+        setBulkSaveProgress({ done: 0, total: draftsToSave.length });
 
-            setSnackbar({ open: true, message: 'Grados actualizados correctamente.', severity: 'success' });
-            setBulkGradeIssues([]);
-            setBulkGradeAssignments({});
-            setBulkFile(null);
-            setOpenBulkDialog(false);
-            fetchUsers();
-        } catch (err) {
-            console.error('Error saving bulk grade assignments:', err);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'No se pudieron guardar los grados.',
-                severity: 'error'
-            });
+        // Se guarda por bloques: una sola petición con cientos de familias dura minutos (correos, pagos) y el proxy o el
+        // navegador pueden cortarla aunque el servidor siga guardando. Así cada petición dura segundos y hay progreso.
+        // Un bloque que falla no detiene a los demás; lo guardado sale de la lista y lo demás se queda para reintentarlo.
+        let successCount = 0;
+        const failedByKey = new Map();    // rechazadas por el servidor, con su motivo
+        const answeredKeys = new Set();   // familias de bloques que el servidor respondió
+        const uncertainKeys = new Set();  // bloques sin respuesta (red, tiempo de espera, 5xx): pudieron guardarse en parte
+        let blockedMessage = null;        // un 4xx (permiso, límite de uso, sesión) se repetiría igual en cada bloque
+        const pendingFamilies = [];       // guardadas con algún paso posterior sin completar
+
+        try {
+            for (let start = 0; start < draftsToSave.length; start += BULK_COMMIT_CHUNK_SIZE) {
+                const chunk = draftsToSave.slice(start, start + BULK_COMMIT_CHUNK_SIZE);
+                try {
+                    const response = await api.post('/parents/bulk-upload/commit', {
+                        schoolId: schoolToAttach,
+                        drafts: chunk.map(toBulkServerDraft)
+                    }, authHeaders);
+                    successCount += response.data?.successCount || 0;
+                    (Array.isArray(response.data?.failedDrafts) ? response.data.failedDrafts : [])
+                        .forEach(draft => failedByKey.set(`${draft.hoja}-${draft.row}`, draft));
+                    chunk.forEach(draft => answeredKeys.add(draft._key));
+                    (Array.isArray(response.data?.savedDrafts) ? response.data.savedDrafts : []).forEach(saved => pendingFamilies.push({
+                        key: `${saved.hoja}-${saved.row}`, row: saved.row, nombre: saved.nombre, correo: saved.correo, steps: saved.pending
+                    }));
+                } catch (err) {
+                    console.error('Error saving bulk families:', err);
+                    const status = err?.response?.status;
+                    if (!status || status >= 500 || status === 408) {
+                        chunk.forEach(draft => uncertainKeys.add(draft._key));
+                    } else {
+                        blockedMessage = err?.response?.data?.message || 'El servidor rechazó el guardado.';
+                        break;
+                    }
+                }
+                setBulkSaveProgress({ done: Math.min(start + BULK_COMMIT_CHUNK_SIZE, draftsToSave.length), total: draftsToSave.length });
+            }
+
+            if (successCount > 0) fetchUsers();
+            if (pendingFamilies.length > 0) setBulkPendingFamilies(prev => [...prev, ...pendingFamilies]);
+
+            if (!blockedMessage && failedByKey.size === 0 && uncertainKeys.size === 0 && pendingFamilies.length === 0) {
+                const skippedCount = bulkDrafts.filter(draft => draft.skip).length;
+                setSnackbar({
+                    open: true,
+                    message: `${successCount} familia(s) guardada(s)${skippedCount > 0 ? `; ${skippedCount} omitida(s)` : ''}.`,
+                    severity: 'success'
+                });
+                closeBulkDialog();
+                return;
+            }
+
+            // Las rechazadas y las de resultado incierto se vuelven a analizar para refrescar lo que el sistema ya
+            // tiene de ellas: así se ve cuáles sí llegaron a guardarse y cuáles hay que reenviar.
+            const toRecheck = draftsToSave.filter(draft => failedByKey.has(draft._key) || uncertainKeys.has(draft._key));
+            const rechecked = new Map();
+            let recheckFailed = false;
+            try {
+                for (let start = 0; start < toRecheck.length; start += 100) {
+                    const chunk = toRecheck.slice(start, start + 100);
+                    const response = await api.post('/parents/bulk-upload/analyze', {
+                        schoolId: schoolToAttach,
+                        drafts: chunk.map(toBulkServerDraft)
+                    }, authHeaders);
+                    (response.data?.drafts || []).forEach((result, index) => rechecked.set(chunk[index]._key, result));
+                }
+            } catch (err) {
+                console.error('Error re-analyzing bulk families:', err);
+                recheckFailed = true;
+            }
+
+            const savedKeys = new Set([...answeredKeys].filter(key => !failedByKey.has(key)));
+            // Función pura (React puede ejecutar el updater más de una vez): deja la tarjeta lista para corregirla o reenviarla.
+            const reconcileDraft = (draft) => {
+                const failed = failedByKey.get(draft._key);
+                const uncertain = uncertainKeys.has(draft._key);
+                if (!failed && !uncertain) return draft; // omitida, o no llegó a enviarse
+                const fresh = rechecked.get(draft._key);
+                let next = { ...draft, hadIssues: true, ...(fresh ? { existing: fresh.existing, otherSchool: fresh.otherSchool } : {}) };
+                if (failed) {
+                    // Cualquier rechazo del servidor debe verse: si solo hay issues de campo que el formulario no
+                    // detecta, la tarjeta quedaría en "Listo" sin explicar por qué no se guardó.
+                    const reason = (failed.issues || []).find(issue => issue.field === 'general') || (failed.issues || [])[0];
+                    next.serverIssue = reason?.message || null;
+                }
+                if (uncertain) {
+                    // No se sabe si el restablecimiento de contraseña llegó a aplicarse: se desmarca para no enviar dos temporales.
+                    next = {
+                        ...next,
+                        resetPassword: false,
+                        infoNotice: recheckFailed
+                            ? 'El guardado de este grupo se interrumpió y no se pudo verificar si esta familia se guardó. Se desmarcó "Restablecer contraseña" por si ya se había aplicado.'
+                            : 'El guardado de este grupo se interrumpió; la familia se volvió a analizar. Se desmarcó "Restablecer contraseña" por si ya se había aplicado: márcala de nuevo si hace falta.'
+                    };
+                    if (fresh && hasNothingToUpdate(next)) {
+                        next = { ...next, skip: true, hadIssues: false, infoNotice: 'Esta familia ya figura guardada: el guardado se completó antes de interrumpirse. Se omite automáticamente.' };
+                    }
+                }
+                return next;
+            };
+            const alreadySavedCount = draftsToSave.filter(draft => uncertainKeys.has(draft._key) && reconcileDraft(draft).skip).length;
+            setBulkDrafts(prev => prev.filter(draft => !savedKeys.has(draft._key)).map(reconcileDraft));
+
+            const parts = [`${successCount} familia(s) guardada(s).`];
+            if (pendingFamilies.length > 0) parts.push(`${pendingFamilies.length} con pasos por completar (pagos o correo): revísalas arriba.`);
+            if (failedByKey.size > 0) parts.push(`${failedByKey.size} rechazada(s): corrígelas para reenviarlas.`);
+            if (uncertainKeys.size > 0) {
+                parts.push(`${uncertainKeys.size} con resultado incierto por una interrupción${recheckFailed ? ' (no se pudieron verificar)' : ` (${alreadySavedCount} ya figuran guardadas)`}.`);
+            }
+            if (blockedMessage) {
+                const notSent = draftsToSave.filter(draft => !answeredKeys.has(draft._key) && !uncertainKeys.has(draft._key)).length;
+                parts.push(`El guardado se detuvo: ${blockedMessage} ${notSent} familia(s) no se enviaron.`);
+            }
+            setSnackbar({ open: true, message: parts.join(' '), severity: blockedMessage || uncertainKeys.size > 0 ? 'error' : 'warning' });
         } finally {
-            setBulkGradeSaving(false);
+            setBulkSaving(false);
         }
     };
 
@@ -1936,6 +2147,62 @@ const SchoolUsersPage = () => {
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
     };
+
+    // Fuente de la lista para las consultas asíncronas: así una respuesta tardía puede descartarse si el correo ya cambió.
+    const bulkDraftsRef = useRef([]);
+    bulkDraftsRef.current = bulkDrafts;
+
+    // Al cambiar el correo de una familia, lo que el análisis del archivo dijo del correo anterior ya no vale:
+    // se consulta si el nuevo ya es una cuenta, si tiene familia en este ciclo o si es de otro colegio.
+    const refreshBulkDraftAccount = useCallback(async (key, email) => {
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        const schoolToAttach = currentSchool?.id || schoolId || '';
+        const current = bulkDraftsRef.current.find(draft => draft._key === key);
+        if (!current || !schoolToAttach) return;
+
+        let existing = null;
+        let otherSchool = null;
+        if (normalizedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+            try {
+                const response = await api.post('/parents/bulk-upload/lookup', {
+                    schoolId: schoolToAttach,
+                    drafts: [{ hoja: current.hoja, row: current.row, correo: normalizedEmail }]
+                }, { headers: { Authorization: `Bearer ${auth.token}` } });
+                existing = response.data?.drafts?.[0]?.existing || null;
+                otherSchool = response.data?.drafts?.[0]?.otherSchool || null;
+            } catch (err) {
+                console.error('Error consultando el correo de la familia:', err);
+                // Sin respuesta no se sabe nada del correo; el guardado lo vuelve a validar en el servidor.
+                setSnackbar({
+                    open: true,
+                    message: `${err?.response?.data?.message || 'No se pudo verificar el correo.'} Se volverá a validar al guardar.`,
+                    severity: 'warning'
+                });
+            }
+        }
+
+        setBulkDrafts(prev => prev.map(draft => {
+            if (draft._key !== key || String(draft.correo || '').trim().toLowerCase() !== normalizedEmail) return draft;
+            return { ...draft, existing, otherSchool };
+        }));
+    }, [auth.token, currentSchool?.id, schoolId]);
+
+    const handleChangeBulkDraft = useCallback((key, patch) => {
+        setBulkDrafts(prev => prev.map(draft => (draft._key === key ? { ...draft, ...patch } : draft)));
+    }, []);
+
+    // La consulta se hace solo cuando el campo del correo pierde el foco (no mientras se escribe) y únicamente si el
+    // correo es distinto al último consultado; por defecto, el que ya analizó el archivo.
+    const lookedUpBulkEmails = useRef({});
+    const handleBulkDraftEmailBlur = useCallback((key, email) => {
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        const current = bulkDraftsRef.current.find(draft => draft._key === key);
+        if (!current) return;
+        const lastLookedUp = key in lookedUpBulkEmails.current ? lookedUpBulkEmails.current[key] : current.analyzedCorreo;
+        if (normalizedEmail === lastLookedUp) return;
+        lookedUpBulkEmails.current[key] = normalizedEmail;
+        refreshBulkDraftAccount(key, normalizedEmail);
+    }, [refreshBulkDraftAccount]);
 
     const handleChangeRowsPerPage = (event) => {
     const v = parseInt(event.target.value, 10);
@@ -2484,7 +2751,7 @@ const SchoolUsersPage = () => {
                 </CardContent>
             </Card>
 
-            <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth={bulkGradeIssues.length > 0 ? 'md' : 'sm'} fullWidth>
+            <Dialog open={openBulkDialog} onClose={handleRequestCloseBulkDialog} maxWidth={bulkHasDrafts ? 'md' : 'sm'} fullWidth>
                 <DialogTitle>Carga Masiva de Familias</DialogTitle>
                 <DialogContent>
                     <Typography variant="body1" sx={{ mb: 1 }}>
@@ -2503,15 +2770,14 @@ const SchoolUsersPage = () => {
                         >
                             Descargar Plantilla
                         </Button>
-                        <Button variant="outlined" component="label" startIcon={<FileUpload />}>
+                        <Button variant="outlined" component="label" startIcon={<FileUpload />} disabled={bulkLoading || bulkSaving}>
                             Seleccionar Archivo
                             <input
                                 type="file"
                                 hidden
                                 onChange={(e) => {
                                     setBulkFile(e.target.files[0]);
-                                    setBulkGradeIssues([]);
-                                    setBulkGradeAssignments({});
+                                    setBulkDrafts([]);
                                 }}
                                 accept=".xlsx,.xls,.csv"
                             />
@@ -2530,85 +2796,99 @@ const SchoolUsersPage = () => {
                             </Typography>
                         </Box>
                     )}
-                    {bulkGradeIssues.length > 0 && (
+                    <Box sx={{ mt: bulkPendingFamilies.length > 0 ? 2 : 0 }}>
+                        <BulkPendingSteps
+                            families={bulkPendingFamilies}
+                            canResetPassword={hasPermission('padres-restablecer-password')}
+                            completing={bulkCompleting}
+                            onComplete={handleCompletePendingSteps}
+                            onDismiss={() => setBulkPendingFamilies([])}
+                        />
+                    </Box>
+                    {bulkSaving && (
+                        <Box sx={{ mt: 2 }}>
+                            <LinearProgress
+                                variant="determinate"
+                                value={bulkSaveProgress.total > 0 ? (bulkSaveProgress.done / bulkSaveProgress.total) * 100 : 0}
+                            />
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                Guardando familias: {bulkSaveProgress.done} de {bulkSaveProgress.total}. No cierres esta ventana hasta que termine.
+                            </Typography>
+                        </Box>
+                    )}
+                    {bulkHasDrafts && (
                         <Box sx={{ mt: 3 }}>
-                            <Alert severity="warning" sx={{ mb: 2 }}>
-                                La carga terminó, pero algunos estudiantes venían con un grado vacío o que no pertenece al colegio. Asigna un grado válido para finalizar la corrección.
+                            <Alert severity={bulkProblemCount > 0 ? 'warning' : 'info'} sx={{ mb: 1 }}>
+                                Aún no se guardó ninguna familia{bulkCicloLabel ? ` (ciclo escolar ${bulkCicloLabel})` : ''}. Se encontraron {bulkDrafts.length} familia(s)
+                                {bulkProblemCount > 0
+                                    ? `; ${bulkProblemCount} tienen datos por corregir (abajo). Corrígelas u omítelas para poder guardar.`
+                                    : ' y todas están listas para guardar.'}
+                                {bulkExistingCount > 0 && ` ${bulkExistingCount} ya existen y se actualizarán: revisa sus cambios con "Ver cambios".`}
+                                {bulkAutoSkippedCount > 0 && ` ${bulkAutoSkippedCount} ya existen sin cambios y se omiten automáticamente.`}
                             </Alert>
-                            <TableContainer component={Paper} sx={{ maxHeight: 360 }}>
-                                <Table size="small" stickyHeader>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Familia</TableCell>
-                                            <TableCell>Estudiante</TableCell>
-                                            <TableCell>Grado en Excel</TableCell>
-                                            <TableCell>Grado válido</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {bulkGradeIssues.map((issue) => {
-                                            const issueGrades = Array.isArray(issue.allowedGrades) && issue.allowedGrades.length > 0
-                                                ? issue.allowedGrades
-                                                : availableGrades;
-                                            return (
-                                                <TableRow key={issue.studentId}>
-                                                    <TableCell>
-                                                        <Typography variant="body2" fontWeight={600}>
-                                                            {issue.familyLastName || issue.email || 'Familia'}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Fila {issue.row}{issue.email ? ` - ${issue.email}` : ''}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell>{issue.studentName}</TableCell>
-                                                    <TableCell>{issue.originalGrade || 'Sin grado'}</TableCell>
-                                                    <TableCell sx={{ minWidth: 220 }}>
-                                                        <FormControl size="small" fullWidth>
-                                                            <InputLabel>Grado</InputLabel>
-                                                            <Select
-                                                                label="Grado"
-                                                                value={bulkGradeAssignments[String(issue.studentId)] || ''}
-                                                                onChange={(e) => handleBulkGradeAssignmentChange(issue.studentId, e.target.value)}
-                                                            >
-                                                                <MenuItem value="">
-                                                                    <em>Seleccione un grado</em>
-                                                                </MenuItem>
-                                                                {issueGrades.map((grade) => (
-                                                                    <MenuItem key={grade} value={grade}>{grade}</MenuItem>
-                                                                ))}
-                                                            </Select>
-                                                        </FormControl>
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
+                            <BulkFamilyDraftsReview
+                                drafts={bulkDrafts}
+                                allowedGrades={bulkAllowedGrades}
+                                allowedRouteTypes={bulkAllowedRouteTypes}
+                                passwordMinLength={bulkPasswordMinLength}
+                                canResetPassword={hasPermission('padres-restablecer-password')}
+                                cicloLabel={bulkCicloLabel}
+                                onChangeDraft={handleChangeBulkDraft}
+                                onToggleSkip={handleToggleBulkDraftSkip}
+                                onEmailBlur={handleBulkDraftEmailBlur}
+                            />
                         </Box>
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setOpenBulkDialog(false)}>Cancelar</Button>
-                    {hasPermission('padres-carga-masiva') && (bulkGradeIssues.length > 0 ? (
+                    <Button onClick={handleRequestCloseBulkDialog} disabled={bulkSaving}>Cancelar</Button>
+                    {hasPermission('padres-carga-masiva') && (bulkHasDrafts ? (
                         <Button
                             variant="contained"
                             color="primary"
-                            disabled={bulkGradeSaving || bulkGradeIssues.some(issue => !bulkGradeAssignments[String(issue.studentId)])}
-                            onClick={handleSaveBulkGradeAssignments}
+                            disabled={bulkSaving || bulkIncludedDrafts.length === 0 || bulkUnresolvedCount > 0}
+                            onClick={handleSaveBulkDrafts}
                         >
-                            {bulkGradeSaving ? 'Guardando...' : 'Guardar grados'}
+                            {bulkSaving
+                                ? `Guardando ${bulkSaveProgress.done} de ${bulkSaveProgress.total}...`
+                                : bulkIncludedDrafts.length === 0
+                                    ? 'No hay familias por guardar'
+                                    : bulkUnresolvedCount > 0
+                                        ? `Faltan ${bulkUnresolvedCount} por corregir`
+                                        : `Guardar ${bulkIncludedDrafts.length} familia(s)`}
                         </Button>
                     ) : (
-                        <Button 
-                            variant="contained" 
-                            color="primary" 
+                        <Button
+                            variant="contained"
+                            color="primary"
                             disabled={!bulkFile || bulkLoading}
                             onClick={handleBulkUpload}
                         >
                             Subir
                         </Button>
                     ))}
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={bulkConfirmCancelOpen} onClose={() => setBulkConfirmCancelOpen(false)}>
+                <DialogTitle>¿Cancelar la carga masiva?</DialogTitle>
+                <DialogContent>
+                    {bulkDrafts.length > 0 && (
+                        <Typography variant="body1">
+                            Hay {bulkDrafts.length} familia(s) sin guardar{bulkUnresolvedCount > 0 ? `, ${bulkUnresolvedCount} de ellas con datos pendientes por corregir` : ''}.
+                            Si cancelas, <strong>no se guardará ninguna de ellas</strong> y tendrás que volver a subir el archivo.
+                        </Typography>
+                    )}
+                    {bulkPendingFamilies.length > 0 && (
+                        <Typography variant="body1" sx={{ mt: bulkDrafts.length > 0 ? 1.5 : 0 }}>
+                            {bulkPendingFamilies.length} familia(s) ya guardada(s) tienen pasos por completar (pagos o correo).
+                            Si cancelas, <strong>se perderá este seguimiento</strong>: esas familias quedan guardadas, pero tendrás que completar a mano lo que falte.
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setBulkConfirmCancelOpen(false)}>Seguir revisando</Button>
+                    <Button color="error" variant="contained" onClick={closeBulkDialog}>Sí, descartar carga</Button>
                 </DialogActions>
             </Dialog>
 
@@ -3075,7 +3355,7 @@ const SchoolUsersPage = () => {
                                         />
                                     </Grid>
                                     <Grid item xs={12} md={4}>
-                                        <FormControl variant="outlined" fullWidth>
+                                        <FormControl variant="outlined" fullWidth required={!selectedUser?.id}>
                                             <InputLabel>Tipo de Ruta</InputLabel>
                                             <Select
                                                 name="routeType"
