@@ -1308,7 +1308,7 @@ const SchoolUsersPage = () => {
         setScheduleModalStudents(user.FamilyDetail?.Students || []);
         // Ensure the modal receives a schoolId so it can load schedules and route numbers.
         // Prefer the user's assigned school, then the route param, then the currentSchool from location state.
-        const sch = user?.school || schoolId || currentSchool?.id || null;
+        const sch = user?.schoolId || user?.school || schoolId || currentSchool?.id || null;
         setScheduleSchoolId(sch ? Number(sch) : null);
         setOpenStudentScheduleModal(true);
     };
@@ -1385,7 +1385,7 @@ const SchoolUsersPage = () => {
                         source: 'school-users-direct-family',
                         channel: 'push',
                         targetUserId: Number(selectedUser.id),
-                        schoolId: selectedUser.school || schoolId || currentSchool?.id ? Number(selectedUser.school || schoolId || currentSchool?.id) : null,
+                        schoolId: (selectedUser.schoolId || selectedUser.school || schoolId || currentSchool?.id) ? Number(selectedUser.schoolId || selectedUser.school || schoolId || currentSchool?.id) : null,
                         cicloEscolarId: stateCicloEscolarId ? Number(stateCicloEscolarId) : null,
                     },
                     targetingCriteria: {
@@ -1487,8 +1487,8 @@ const SchoolUsersPage = () => {
                 name: selectedUser.name,
                 email: selectedUser.email,
                 roleId: roleIdNum,
-                // Asegura tipo numérico para school
-                school: selectedUser.school ? Number(selectedUser.school) : null
+                // Colegio de la edición: las familias lo traen como schoolId (memberships), el staff como school
+                school: (selectedUser.schoolId || selectedUser.school) ? Number(selectedUser.schoolId || selectedUser.school) : null
             };
 
             if (selectedUser.password && selectedUser.password.trim() !== '') {
@@ -2027,13 +2027,14 @@ const SchoolUsersPage = () => {
     const availableGrades = (() => {
         let sch = null;
 
-        // Try find school by selectedUser.school (may be id or string)
-        if (selectedUser?.school) {
+        // Try find school by the user's school id (families: schoolId; staff: school)
+        const selectedUserSchoolId = selectedUser?.schoolId || selectedUser?.school;
+        if (selectedUserSchoolId) {
             if (Array.isArray(schools)) {
-                sch = schools.find(s => String(s.id) === String(selectedUser.school));
+                sch = schools.find(s => String(s.id) === String(selectedUserSchoolId));
             }
             // as fallback, if currentSchool matches the id
-            if (!sch && currentSchool && String(currentSchool.id) === String(selectedUser.school)) {
+            if (!sch && currentSchool && String(currentSchool.id) === String(selectedUserSchoolId)) {
                 sch = currentSchool;
             }
         }
