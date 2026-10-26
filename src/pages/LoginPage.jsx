@@ -77,6 +77,9 @@ const LoginPage = () => {
                     navigate(targetPath);
                 } else if (contexts.length > 1) {
                     navigate('/select-context', { replace: true, state: { nextPath: targetPath, forceChoice: true } });
+                } else if (Number(roleId) === 8) {
+                    // Colaboradores no tienen memberships de colegio; su portal no exige contexto
+                    navigate(targetPath, { replace: true });
                 } else {
                     // No school contexts: attempt corporation fallback (users assigned to a corporation)
                     try {
