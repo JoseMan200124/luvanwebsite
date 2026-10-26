@@ -1290,7 +1290,7 @@ const SchoolPaymentsPage = () => {
             let paymentDetail = null;
             let familyAccount = null;
             try {
-                const detailRes = await api.get(`/payments/by-user/${userId}`);
+                const detailRes = await api.get(`/payments/by-user/${userId}`, { params: payment?.id ? { paymentId: payment.id } : {} });
                 paymentDetail = detailRes?.data?.payment || null;
                 familyAccount = detailRes?.data?.familyAccount || null;
 
