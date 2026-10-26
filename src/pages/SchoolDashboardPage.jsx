@@ -945,7 +945,7 @@ const SchoolDashboardPage = () => {
                                         </Grid>
                                     </PermissionGuard>
 
-                                    {/* Sub-sección 3: Botón de pagos */}
+                                    {currentSchool && currentSchool.paymentsEnabled !== false && (
                                     <PermissionGuard permission="colegios-pagos">
                                         <Grid item xs={12}>
                                             <SummaryCard>
@@ -972,6 +972,7 @@ const SchoolDashboardPage = () => {
                                             </SummaryCard>
                                         </Grid>
                                     </PermissionGuard>
+                                    )}
 
                                     {/* Sub-sección 4: Botón de buses */}
                                     <PermissionGuard permission="colegios-gestion-buses">

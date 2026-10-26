@@ -35,9 +35,9 @@ const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '
         return <Navigate to="/login" replace />;
     }
 
-    // 3) Si la contraseña ha expirado => forzamos /force-password-change
-    //    (asumiendo que auth.user?.passwordExpired es `true` cuando expira)
-    if (auth.user?.passwordExpired) {
+    // 3) Cambio de contraseña pendiente => forzamos /force-password-change
+    //    (mustChangePassword viene en el JWT, o en /auth/verify para el rol 9)
+    if (auth.user?.mustChangePassword) {
         return <Navigate to="/force-password-change" replace />;
     }
 

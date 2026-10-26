@@ -4,7 +4,7 @@ import { Alert, Box, Button, Link, Stack, TextField, Typography } from '@mui/mat
 import { AuthContext } from '../../context/AuthProvider';
 import ForgotPasswordModal from '../modals/ForgotPasswordModal';
 
-const EnrollmentLoginStep = ({ initialEmail = '', onSuccess, onBack, onPasswordExpired }) => {
+const EnrollmentLoginStep = ({ initialEmail = '', onSuccess, onBack, onMustChangePassword }) => {
     const { login } = useContext(AuthContext);
     const [email, setEmail] = useState(initialEmail);
     const [password, setPassword] = useState('');
@@ -24,9 +24,9 @@ const EnrollmentLoginStep = ({ initialEmail = '', onSuccess, onBack, onPasswordE
         setSubmitting(true);
         try {
             // Quién puede reinscribirse lo decide el backend con `padre-reinscripcion-ver`.
-            const { passwordExpired } = await login(trimmedEmail, password);
-            if (passwordExpired) {
-                onPasswordExpired();
+            const { mustChangePassword } = await login(trimmedEmail, password);
+            if (mustChangePassword) {
+                onMustChangePassword();
                 return;
             }
             onSuccess();

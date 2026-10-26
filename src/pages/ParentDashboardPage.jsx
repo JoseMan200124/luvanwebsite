@@ -316,11 +316,18 @@ const ParentDashboardPage = () => {
   // Suspendido específicamente por falta de contrato (sin mora)
   const isSuspendedForNoContract = isSuspended && hasSignedContract === false;
 
+  // null = aún no se sabe (llega con route-info); evita pintar/pedir pagos de un colegio excluido.
+  const [paymentsEnabled, setPaymentsEnabled] = useState(null);
+
   // Saldo de inscripción del ciclo pendiente de pago (null = sin cargo o ya pagado)
   const [pendingEnrollmentFee, setPendingEnrollmentFee] = useState(null);
   useEffect(() => {
     const userId = auth?.user?.id;
     if (!userId) return;
+    if (paymentsEnabled !== true) {
+      setPendingEnrollmentFee(null);
+      return;
+    }
     let cancelled = false;
     api.get(`/enrollment-payments/by-user/${userId}`)
       .then(({ data }) => {
@@ -332,7 +339,7 @@ const ParentDashboardPage = () => {
         if (!cancelled) setPendingEnrollmentFee(null);
       });
     return () => { cancelled = true; };
-  }, [auth?.user?.id]);
+  }, [auth?.user?.id, paymentsEnabled]);
 
   const cleanPhoneDigits = (phone) => {
     if (!phone) return '';
@@ -378,6 +385,7 @@ const ParentDashboardPage = () => {
 
       const backendServiceStatus = rawData?.serviceStatus || rawData?.parent?.serviceStatus || rawData?.user?.serviceStatus || '';
       setServiceStatus(backendServiceStatus || auth?.user?.serviceStatus || '');
+      setPaymentsEnabled(rawData.paymentsEnabled !== false);
       const backendSchoolId = rawData.schoolId ?? rawData.school?.id ?? null;
 
       // Use the flags returned by the backend to decide contract state.
@@ -900,7 +908,6 @@ const ParentDashboardPage = () => {
                   '&:hover': { bgcolor: 'info.main' },
                 }}
                 startIcon={<AttachEmail />}
-                sx={{ height: 56 }}
                 onClick={() => navigate('/parent/circulares')}
               >
                 Circulares
@@ -1037,6 +1044,7 @@ const ParentDashboardPage = () => {
                           Mis Solicitudes
                         </Button>
                       </Grid>
+                      {paymentsEnabled === true && (
                       <Grid item xs={12} sx={{ mt: 1, textAlign: 'center' }}>
                         <Button
                           variant="outlined"
@@ -1048,6 +1056,7 @@ const ParentDashboardPage = () => {
                           Información de Pagos
                         </Button>
                       </Grid>
+                      )}
                     </Grid>
                   </CardContent>
                 </Paper>
@@ -1056,7 +1065,7 @@ const ParentDashboardPage = () => {
           {/* Columna derecha: horarios + estudiantes */}
           <Grid item xs={12} md={8}>
             <Grid container spacing={3}>
-              {pendingEnrollmentFee && (
+              {paymentsEnabled === true && pendingEnrollmentFee && (
                 <Grid item xs={12}>
                   <SectionCard elevation={3}>
                     <CardContent>
@@ -1078,9 +1087,13 @@ const ParentDashboardPage = () => {
                           <br />
                           Por favor, firma el contrato para activar el servicio y tener acceso completo.
                         </Alert>
-                      ) : (
+                      ) : paymentsEnabled !== false ? (
                         <Alert severity="warning">
                           Cuenta suspendida por mora. Si no ha subido su boleta, por favor subirla; si ya fue subida, su pago se encuentra en revisión.
+                        </Alert>
+                      ) : (
+                        <Alert severity="warning">
+                          El servicio está suspendido. Comunícate con tu colegio para más información.
                         </Alert>
                       )}
                     </CardContent>
