@@ -111,7 +111,10 @@ const LoginPage = () => {
             setSnackbarSeverity('success');
             setOpenSnackbar(true);
         } catch (loginError) {
-            const customMessage = loginError.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
+            // El backend manda el motivo en data.message (p. ej. "Correo o contraseña incorrectos.")
+            const customMessage = loginError.response?.data?.message
+                || loginError.message
+                || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
             setError(customMessage);
             setSnackbarMessage(customMessage);
             setSnackbarSeverity('error');
