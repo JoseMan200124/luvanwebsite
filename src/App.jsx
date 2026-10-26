@@ -339,6 +339,7 @@ function App() {
                             <ProtectedRoute
                                 moduleKey={'colaborador-dashboard'}
                                 redirectTo="/login"
+                                requireSchoolContext={false}
                             >
                                 <ColaboradorDashboardPage />
                             </ProtectedRoute>
@@ -351,6 +352,7 @@ function App() {
                             <ProtectedRoute
                                 moduleKey={'colaborador-protocolos-reglamentos'}
                                 redirectTo="/colaborador/dashboard"
+                                requireSchoolContext={false}
                             >
                                 <ColaboradorProtocolsPage />
                             </ProtectedRoute>

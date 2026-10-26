@@ -783,8 +783,11 @@ const SchoolContractsPage = () => {
         setFilledContractsPage(1);
     };
 
-    // Componente local para renderizar un filled contract (evita duplicación móvil/desktop)
-    const RenderFilledContract = ({ filledContract, isMobileView }) => {
+    // Función de render para un filled contract (evita duplicación móvil/desktop).
+    // No debe ser un componente (<RenderFilledContract />): declarado dentro de la página,
+    // cada re-render (p. ej. AuthProvider en cada mousemove) crea un tipo nuevo, React
+    // remonta las filas y el click de "Ver Detalles"/"Descargar PDF" nunca llega a dispararse.
+    const renderFilledContract = (filledContract, isMobileView) => {
         const familyLastName = (
             filledContract?.familyDetail?.familyLastName ||
             filledContract?.parent?.familyLastName ||
@@ -1167,9 +1170,7 @@ const SchoolContractsPage = () => {
                                         </Typography>
                                     ) : (
                                         <>
-                                            {filledContracts.map((filledContract) => (
-                                                <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={true} />
-                                            ))}
+                                            {filledContracts.map((filledContract) => renderFilledContract(filledContract, true))}
                                         </>
                                     )
                                 )}
@@ -1217,9 +1218,7 @@ const SchoolContractsPage = () => {
                                         </Typography>
                                     ) : (
                                         <>
-                                            {filledContracts.map((filledContract) => (
-                                                <RenderFilledContract key={filledContract.id} filledContract={filledContract} isMobileView={false} />
-                                            ))}
+                                            {filledContracts.map((filledContract) => renderFilledContract(filledContract, false))}
                                         </>
                                     )
                                 )}

@@ -77,6 +77,9 @@ const LoginPage = () => {
                     navigate(targetPath);
                 } else if (contexts.length > 1) {
                     navigate('/select-context', { replace: true, state: { nextPath: targetPath, forceChoice: true } });
+                } else if (Number(roleId) === 8) {
+                    // Colaboradores no tienen memberships de colegio; su portal no exige contexto
+                    navigate(targetPath, { replace: true });
                 } else {
                     // No school contexts: attempt corporation fallback (users assigned to a corporation)
                     try {
@@ -108,7 +111,10 @@ const LoginPage = () => {
             setSnackbarSeverity('success');
             setOpenSnackbar(true);
         } catch (loginError) {
-            const customMessage = loginError.message || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
+            // El backend manda el motivo en data.message (p. ej. "Correo o contraseña incorrectos.")
+            const customMessage = loginError.response?.data?.message
+                || loginError.message
+                || 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
             setError(customMessage);
             setSnackbarMessage(customMessage);
             setSnackbarSeverity('error');

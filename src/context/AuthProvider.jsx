@@ -1,6 +1,6 @@
 // src/context/AuthProvider.jsx
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import { jwtDecode } from 'jwt-decode';
@@ -165,7 +165,7 @@ const AuthProvider = ({ children }) => {
     useEffect(() => { if (auth.user?.id) initSocket(auth.user.id); }, [auth.user]);
 
     // login functions
-    const loginUpdateParentsInfo = async (email, password) => {
+    const loginUpdateParentsInfo = useCallback(async (email, password) => {
         try {
             const response = await loginUser({ email, password });
             const { token, refreshToken } = response.data;
@@ -183,9 +183,9 @@ const AuthProvider = ({ children }) => {
             }
             return { mustChangePassword, roleId: decoded.roleId };
         } catch (error) { throw error; }
-    };
+    }, [verifyToken]);
 
-    const login = async (email, password) => {
+    const login = useCallback(async (email, password) => {
         try {
             const response = await loginUser({ email, password });
             const { token, refreshToken } = response.data;
@@ -202,9 +202,14 @@ const AuthProvider = ({ children }) => {
             }
             return { mustChangePassword, roleId: decoded.roleId };
         } catch (error) { throw error; }
-    };
+    }, [verifyToken]);
 
-    const value = { auth, initialLoad, loginUpdateParentsInfo, login, logout, verifyToken };
+    // Memoizado: lastActivity cambia en cada mousemove/scroll y re-renderiza este provider;
+    // sin useMemo, cada consumidor de AuthContext (toda página) se re-renderizaba con el mouse.
+    const value = useMemo(
+        () => ({ auth, initialLoad, loginUpdateParentsInfo, login, logout, verifyToken }),
+        [auth, initialLoad, loginUpdateParentsInfo, login, logout, verifyToken]
+    );
 
     return (
         <AuthContext.Provider value={value}>
