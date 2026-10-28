@@ -2260,74 +2260,76 @@ const CicloEscolarSelectionPage = () => {
                         </StyledAccordionSummary>
                         <AccordionDetails>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <Box
-                                    sx={{
-                                        p: 2,
-                                        borderRadius: 2,
-                                        border: '1px solid',
-                                        borderColor: selectedSchool?.paymentsEnabled === false ? 'warning.main' : 'divider',
-                                        bgcolor: selectedSchool?.paymentsEnabled === false ? 'warning.50' : 'background.paper'
-                                    }}
-                                >
-                                    <FormControlLabel
-                                        sx={{ alignItems: 'flex-start', m: 0 }}
-                                        control={
-                                            <Checkbox
-                                                sx={{ pt: 0.5 }}
-                                                checked={selectedSchool ? selectedSchool.paymentsEnabled === false : false}
-                                                disabled={!selectedSchool || !!selectedSchool.paymentsToggleLocked}
-                                                onChange={(e) => {
-                                                    paymentsExclusionConfirmedRef.current = false;
-                                                    setSelectedSchool(prev => ({ ...prev, paymentsEnabled: !e.target.checked }));
-                                                }}
-                                            />
-                                        }
-                                        label={
-                                            <Box>
-                                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                                    Excluir del flujo de pagos
-                                                </Typography>
-                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                                    Para colegios que no pagan a través del sistema (por ejemplo, un convenio o un
-                                                    colegio que solo usa la parte operativa). Al excluirlo:
-                                                </Typography>
-                                                <Box
-                                                    component="ul"
-                                                    sx={{
-                                                        m: 0,
-                                                        mt: 0.5,
-                                                        pl: 2.5,
-                                                        color: 'text.secondary',
-                                                        typography: 'body2',
-                                                        // Un reset global de estilos quita las viñetas de las listas.
-                                                        listStyleType: 'disc',
-                                                        '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
+                                <PermissionGuard permission="colegios-excluir-pagos">
+                                    <Box
+                                        sx={{
+                                            p: 2,
+                                            borderRadius: 2,
+                                            border: '1px solid',
+                                            borderColor: selectedSchool?.paymentsEnabled === false ? 'warning.main' : 'divider',
+                                            bgcolor: selectedSchool?.paymentsEnabled === false ? 'warning.50' : 'background.paper'
+                                        }}
+                                    >
+                                        <FormControlLabel
+                                            sx={{ alignItems: 'flex-start', m: 0 }}
+                                            control={
+                                                <Checkbox
+                                                    sx={{ pt: 0.5 }}
+                                                    checked={selectedSchool ? selectedSchool.paymentsEnabled === false : false}
+                                                    disabled={!selectedSchool || !!selectedSchool.paymentsToggleLocked}
+                                                    onChange={(e) => {
+                                                        paymentsExclusionConfirmedRef.current = false;
+                                                        setSelectedSchool(prev => ({ ...prev, paymentsEnabled: !e.target.checked }));
                                                     }}
-                                                >
-                                                    <li>No se generan cuotas mensuales, mora, cargo de inscripción ni débitos automáticos.</li>
-                                                    <li>Las familias dejan de suspenderse por mora, y las suspensiones automáticas por mora que ya tuvieran se levantan (las de contrato o manuales no cambian).</li>
-                                                    <li>El colegio no aparece en las estadísticas financieras.</li>
-                                                    <li>Se bloquea cualquier operación de pagos: registrar pagos, boletas, descuentos, períodos, etc.</li>
-                                                    <li>Los padres no ven la sección de pagos.</li>
+                                                />
+                                            }
+                                            label={
+                                                <Box>
+                                                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                                        Excluir del flujo de pagos
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                        Para colegios que no pagan a través del sistema (por ejemplo, un convenio o un
+                                                        colegio que solo usa la parte operativa). Al excluirlo:
+                                                    </Typography>
+                                                    <Box
+                                                        component="ul"
+                                                        sx={{
+                                                            m: 0,
+                                                            mt: 0.5,
+                                                            pl: 2.5,
+                                                            color: 'text.secondary',
+                                                            typography: 'body2',
+                                                            // Un reset global de estilos quita las viñetas de las listas.
+                                                            listStyleType: 'disc',
+                                                            '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
+                                                        }}
+                                                    >
+                                                        <li>No se generan cuotas mensuales, mora, cargo de inscripción ni débitos automáticos.</li>
+                                                        <li>Las familias dejan de suspenderse por mora, y las suspensiones automáticas por mora que ya tuvieran se levantan (las de contrato o manuales no cambian).</li>
+                                                        <li>El colegio no aparece en las estadísticas financieras.</li>
+                                                        <li>Se bloquea cualquier operación de pagos: registrar pagos, boletas, descuentos, períodos, etc.</li>
+                                                        <li>Los padres no ven la sección de pagos.</li>
+                                                    </Box>
+                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                                        Todo lo demás sigue funcionando normal: rutas, buses, asistencia, circulares y contratos.
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                                        Solo se puede excluir un colegio que no tenga movimientos de dinero (pagos, abonos de
+                                                        inscripción ni crédito a favor). Si más adelante se vuelve a activar el flujo de pagos,
+                                                        el sistema pregunta cómo cobrar la inscripción y desde qué mes la mensualidad.
+                                                    </Typography>
                                                 </Box>
-                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                                    Todo lo demás sigue funcionando normal: rutas, buses, asistencia, circulares y contratos.
-                                                </Typography>
-                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                                    Solo se puede excluir un colegio que no tenga movimientos de dinero (pagos, abonos de
-                                                    inscripción ni crédito a favor). Si más adelante se vuelve a activar el flujo de pagos,
-                                                    el sistema pregunta cómo cobrar la inscripción y desde qué mes la mensualidad.
-                                                </Typography>
-                                            </Box>
-                                        }
-                                    />
-                                    {selectedSchool?.paymentsToggleLocked && (
-                                        <Alert severity="info" sx={{ mt: 1.5 }}>
-                                            Este colegio ya tiene movimientos de pago registrados, por lo que no se puede excluir.
-                                            Contacta a soporte si necesitas hacerlo.
-                                        </Alert>
-                                    )}
-                                </Box>
+                                            }
+                                        />
+                                        {selectedSchool?.paymentsToggleLocked && (
+                                            <Alert severity="info" sx={{ mt: 1.5 }}>
+                                                Este colegio ya tiene movimientos de pago registrados, por lo que no se puede excluir.
+                                                Contacta a soporte si necesitas hacerlo.
+                                            </Alert>
+                                        )}
+                                    </Box>
+                                </PermissionGuard>
 
                                 <Box sx={{ display: 'flex', gap: 2 }}>
                                     <TextField
