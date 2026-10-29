@@ -39,6 +39,7 @@ import {
     TrendingUp,
     People,
     Description as ContractIcon,
+    Assignment as RequestsIcon,
     Work as DepartmentIcon,
     ChevronLeft,
     ChevronRight
@@ -360,6 +361,15 @@ const CorporateDashboardPage = () => {
 
     const handleViewProtocols = () => {
         navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/protocolos`, {
+            state: {
+                fiscalYear: fiscalYear || stateFiscalYear,
+                corporation: corporationData || stateCorporation
+            }
+        });
+    };
+
+    const handleViewRequests = () => {
+        navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/solicitudes`, {
             state: {
                 fiscalYear: fiscalYear || stateFiscalYear,
                 corporation: corporationData || stateCorporation
@@ -974,6 +984,33 @@ const CorporateDashboardPage = () => {
                                             </CardContent>
                                         </SummaryCard>
                                     </Grid>
+
+                                    {hasPermission('corporaciones-solicitudes') && (
+                                        <Grid item xs={12}>
+                                            <SummaryCard>
+                                                <CardContent sx={{ textAlign: 'center' }}>
+                                                    <RequestsIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                    <Typography variant="h6" gutterBottom>
+                                                        Solicitudes
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                        Ver y gestionar las solicitudes de usuarios de esta corporación
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="large"
+                                                        startIcon={<RequestsIcon />}
+                                                        onClick={handleViewRequests}
+                                                        fullWidth
+                                                        sx={{ borderRadius: 2 }}
+                                                    >
+                                                        Ver Solicitudes
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    )}
                                 </Grid>
                             </Box>
                         </Grid>

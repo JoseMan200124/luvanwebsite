@@ -115,13 +115,6 @@ const ColaboradorDashboardPage = () => {
       service_cancellation: 'Baja del Servicio',
       schedule_change: 'Cambio de Horario',
       route_change: 'Cambio de Ruta',
-      payment_adjustment: 'Ajuste de Pago',
-      contract_modification: 'Modificación de Contrato',
-      student_transfer: 'Transferencia de Estudiante',
-      bus_change: 'Cambio de Bus',
-      temporary_suspension: 'Suspensión Temporal',
-      complaint: 'Queja/Reclamo',
-      suggestion: 'Sugerencia',
       other: 'Otro'
     };
     return labels[type] || type;

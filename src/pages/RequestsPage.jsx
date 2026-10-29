@@ -1,9 +1,10 @@
 /**
  * pages/RequestsPage.jsx
  *
- * Enhanced Requests management page (uses layout from MechanicRequestsPage)
+ * Solicitudes de usuarios de un colegio o una corporación
  */
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Box,
@@ -17,7 +18,6 @@ import {
     TableRow,
     TablePagination,
     TextField,
-    Autocomplete,
     MenuItem,
     Grid,
     Chip,
@@ -31,17 +31,16 @@ import {
     DialogContent,
     DialogActions,
     Button,
-    TableSortLabel,
-    Divider
+    TableSortLabel
 } from '@mui/material';
 import {
     Visibility as VisibilityIcon,
     Delete as DeleteIcon,
-    Check as CheckIcon,
     Edit as EditIcon,
-    Build as BuildIcon,
-    Refresh as RefreshIcon,
-    Warning as WarningIcon
+    ArrowBack as ArrowBackIcon,
+    School as SchoolIcon,
+    Business as BusinessIcon,
+    CalendarToday
 } from '@mui/icons-material';
 import {
     HourglassEmpty as PendingIcon,
@@ -52,7 +51,6 @@ import {
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import moment from 'moment-timezone';
-import { AuthContext } from '../context/AuthProvider';
 import {
     getAllRequests,
     getRequestById,
@@ -60,29 +58,35 @@ import {
     updateRequestStatus,
     deleteRequest,
     getRequestStatistics,
-    getSchoolsList,
-    getCorporationsList,
     REQUEST_TYPE_META,
     VALID_REQUEST_TYPES,
-    REQUEST_STATES,
-    STATE_COLORS
+    REQUEST_STATES
 } from '../services/requestService';
 import {
     Schedule as ScheduleIcon,
-    Payments as PaymentsIcon,
-    Description as DescriptionIcon,
-    SwapHoriz as SwapHorizIcon,
     DirectionsBus as DirectionsBusIcon,
-    PauseCircle as PauseCircleIcon,
-    Lightbulb as LightbulbIcon,
     Create as CreateIcon,
 } from '@mui/icons-material';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import PermissionGuard from '../components/PermissionGuard';
+import api from '../utils/axiosConfig';
+import { getCicloEscolarYear } from '../services/cicloEscolarService';
 
+// Mismo contenedor y encabezado que SchoolProtocolsPage / CorporateProtocolsPage
 const PageContainer = styled.div`
-    ${tw`p-6`}
+    ${tw`bg-gray-50 min-h-screen w-full`}
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+
+    @media (max-width: 640px) {
+        padding: 1rem;
+    }
+`;
+
+const HeaderCard = styled(Card)`
+    ${tw`mb-6 shadow-lg`}
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
 `;
 
 const FiltersContainer = styled(Paper)`
@@ -99,8 +103,10 @@ const StatsCard = styled(Card)`
  * Componente de React que muestra y gestiona una lista paginada de solicitudes de usuarios.
  * - Obtiene datos mediante llamadas a la API: getAllRequests, getRequestById, deleteRequest, updateRequestStatus.
  * - Muestra estadísticas agregadas mediante getRequestStatistics.
- * - Carga listas auxiliares con getSchoolsList y getCorporationsList para el selector de cliente.
- * - Soporta filtrado (tipo, estado, solicitante, cliente, rango de fechas), ordenamiento y paginación.
+ * - Siempre trabaja sobre un colegio (ruta /escuelas/ciclo/:cicloEscolarId/:schoolId/solicitudes) o una
+ *   corporación (ruta /corporaciones/:fiscalYear/:corporationId/solicitudes), tomados de la URL.
+ * - No manda cicloEscolarId: el interceptor de axios aporta el ciclo de la URL y un valor explícito lo pisaría.
+ * - Soporta filtrado (tipo, estado, solicitante, rango de fechas), ordenamiento y paginación.
  * - Permite ver detalle de una solicitud, cambiar su estado (con notas) y eliminarla; actualiza la lista y estadísticas tras acciones.
  * - Gestiona estados locales para: requests, loading, statistics, filtros (aplicados y draft), paginación, ordenamiento,
  *   selección de request, y modales (detalle, confirmación de borrado, cambio de estado).
@@ -108,10 +114,10 @@ const StatsCard = styled(Card)`
  *
  * Uso interno de utilidades UI:
  * - Genera Chips con etiquetas y colores según prioridad/estado.
- * - Usa componentes de MUI: Table, Dialogs, Autocomplete, Buttons, Icons, etc.
+ * - Usa componentes de MUI: Table, Dialogs, Buttons, Icons, etc.
  *
  * Notas:
- * - No recibe props; consume AuthContext para contexto de autenticación.
+ * - No recibe props; lee el scope (colegio o corporación) de la URL.
  * - Las keys esperadas en objetos de solicitud incluyen campos como id, createdAt, priority, requestType, title,
  *   requester, status, reviewNotes/review_notes, reviewer/reviewedBy, reviewedAt, school, corporation.
  *
@@ -119,7 +125,24 @@ const StatsCard = styled(Card)`
  * @see {@link https://mui.com/material-ui/icons/} Para ver otros iconos disponibles (paquete @mui/icons-material).
  */
 const RequestsPage = () => {
-    const { auth } = useContext(AuthContext);
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { cicloEscolarId, schoolId, fiscalYear, corporationId } = useParams();
+    const scopeParams = useMemo(
+        () => (schoolId ? { schoolId } : { corporationId }),
+        [schoolId, corporationId]
+    );
+    const hubPath = schoolId
+        ? `/admin/escuelas/ciclo/${cicloEscolarId}/${schoolId}`
+        : `/admin/corporaciones/${fiscalYear}/${corporationId}`;
+
+    // Datos del colegio o la corporación para el encabezado (del estado de navegación o de la API)
+    const stateSchool = location.state?.school;
+    const stateCorporation = location.state?.corporation;
+    const [scopeData, setScopeData] = useState(null);
+    const currentCicloEscolar = scopeData?.cicloEscolar || scopeData?.CicloEscolar
+        || location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
+    const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
 
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -129,12 +152,9 @@ const RequestsPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [totalCount, setTotalCount] = useState(0);
 
-    const initialFilters = { userName: '', client: '', schoolId: '', corporationId: '', status: '', requestType: '', startDate: '', endDate: '' };
+    const initialFilters = { userName: '', status: '', requestType: '', startDate: '', endDate: '' };
     const [filters, setFilters] = useState(initialFilters);
     const [draftFilters, setDraftFilters] = useState(initialFilters);
-    const [schools, setSchools] = useState([]);
-    const [corporations, setCorporations] = useState([]);
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [sortBy, setSortBy] = useState('createdAt');
     const [sortOrder, setSortOrder] = useState('desc');
 
@@ -170,7 +190,7 @@ const RequestsPage = () => {
                 limit: rowsPerPage,
                 sortBy,
                 sortOrder: sortOrder.toUpperCase(),
-                ...getCicloEscolarFilterParams(selectedCicloEscolar),
+                ...scopeParams,
                 ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== ''))
             };
             const res = await getAllRequests(params);
@@ -181,66 +201,52 @@ const RequestsPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, rowsPerPage, filters, selectedCicloEscolar, sortBy, sortOrder]);
+    }, [page, rowsPerPage, filters, scopeParams, sortBy, sortOrder]);
 
     // Load statistics
     const fetchStatistics = useCallback(async () => {
         try {
-            const params = {
-                ...getCicloEscolarFilterParams(selectedCicloEscolar),
-            };
+            const params = { ...scopeParams };
             if (filters.startDate) params.startDate = filters.startDate;
             if (filters.endDate) params.endDate = filters.endDate;
-            if (filters.schoolId) params.schoolId = filters.schoolId;
-            if (filters.corporationId) params.corporationId = filters.corporationId;
             const stats = await getRequestStatistics(params);
             setStatistics(stats);
         } catch (err) {
             console.error('Error fetching statistics', err);
         }
-    }, [filters.startDate, filters.endDate, filters.schoolId, filters.corporationId, selectedCicloEscolar]);
+    }, [filters.startDate, filters.endDate, scopeParams]);
 
     useEffect(() => { fetchRequests(); }, [fetchRequests]);
     useEffect(() => { fetchStatistics(); }, [fetchStatistics]);
+
     useEffect(() => {
-        // Fetch schools and corporations for client selector
-        (async () => {
+        const stateScope = schoolId ? stateSchool : stateCorporation;
+        if (stateScope) {
+            setScopeData(stateScope);
+            return;
+        }
+        const fetchScopeData = async () => {
             try {
-                const sc = await getSchoolsList(getCicloEscolarFilterParams(selectedCicloEscolar));
-                setSchools(sc || []);
-            } catch (e) { console.error('Error loading schools', e); }
-            try {
-                const cc = await getCorporationsList(getCicloEscolarFilterParams(selectedCicloEscolar));
-                setCorporations(cc || []);
-            } catch (e) { console.error('Error loading corporations', e); }
-        })();
-    }, [selectedCicloEscolar]);
+                const response = await api.get(schoolId ? `/schools/${schoolId}` : `/corporations/${corporationId}`);
+                setScopeData(response.data);
+            } catch (error) {
+                console.error('Error al obtener datos del encabezado:', error);
+            }
+        };
+        fetchScopeData();
+    }, [schoolId, corporationId, stateSchool, stateCorporation]);
+
+    const handleBackToDashboard = () => {
+        navigate(hubPath, {
+            state: schoolId
+                ? { cicloEscolarId, cicloEscolar: currentCicloEscolar, school: scopeData || stateSchool }
+                : { fiscalYear, corporation: scopeData || stateCorporation }
+        });
+    };
 
     const handleDraftChange = (field) => (event) => {
         setDraftFilters(prev => ({ ...prev, [field]: event.target.value }));
     };
-
-    const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
-
-    // Build client options for Autocomplete (grouped). Cuando el filtro de página está en
-    // "Todos los ciclos", el grupo también distingue por ciclo escolar, porque /schools puede
-    // traer varias filas con el mismo nombre (una por año) que serían indistinguibles si no.
-    const clientOptionsRaw = [
-        ...((schools || []).map(s => ({
-            label: s.name,
-            value: `school:${s.id}`,
-            group: isSpecificCicloEscolarSelected
-                ? 'Colegios'
-                : `Colegios · ${getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar')}`
-        }))),
-        ...((corporations || []).map(c => ({ label: c.name, value: `corp:${c.id}`, group: 'Corporaciones' })))
-    ];
-
-    // MUI Autocomplete requiere que las opciones ya vengan contiguas por grupo, si no
-    // el mismo header de grupo puede repetirse en distintos puntos de la lista.
-    const clientOptions = isSpecificCicloEscolarSelected
-        ? clientOptionsRaw
-        : [...clientOptionsRaw].sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
 
     const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => { setRowsPerPage(parseInt(event.target.value, 10)); setPage(0); };
@@ -249,12 +255,6 @@ const RequestsPage = () => {
         const isAsc = sortBy === column && sortOrder === 'asc';
         setSortOrder(isAsc ? 'desc' : 'asc');
         setSortBy(column);
-    };
-
-    const handleRefresh = () => {
-        setPage(0);
-        fetchRequests();
-        fetchStatistics();
     };
 
     // Register global refresh handler so the global button triggers this page's refresh
@@ -437,13 +437,6 @@ const RequestsPage = () => {
         service_cancellation: CancelIcon,
         schedule_change: ScheduleIcon,
         route_change: DirectionsBusIcon,
-        payment_adjustment: PaymentsIcon,
-        contract_modification: DescriptionIcon,
-        student_transfer: SwapHorizIcon,
-        bus_change: DirectionsBusIcon,
-        temporary_suspension: PauseCircleIcon,
-        complaint: WarningIcon,
-        suggestion: LightbulbIcon,
         other: CreateIcon,
     };
 
@@ -662,14 +655,40 @@ const RequestsPage = () => {
 
     return (
         <PageContainer>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="h4" component="div" sx={{ display: 'flex', alignItems: 'center' }}>
-                    Solicitudes de Usuarios
-                </Typography>
-                <Box>
-                    {/* Refrescar global: botón local eliminado */}
-                </Box>
-            </Box>
+            <HeaderCard>
+                <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Button
+                            startIcon={<ArrowBackIcon />}
+                            onClick={handleBackToDashboard}
+                            sx={{
+                                color: 'white',
+                                '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' }
+                            }}
+                        >
+                            Volver al Dashboard
+                        </Button>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        {schoolId ? <SchoolIcon sx={{ fontSize: 40 }} /> : <BusinessIcon sx={{ fontSize: 40 }} />}
+                        <Box>
+                            <Typography variant="h4" component="h1" gutterBottom>
+                                Solicitudes de Usuarios - {scopeData?.name || 'Cargando...'}
+                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <Chip
+                                    icon={<CalendarToday />}
+                                    label={schoolId ? `Ciclo Escolar ${currentCycleLabel || ''}` : `Año Fiscal ${fiscalYear}`}
+                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
+                                />
+                                <Typography variant="body1" sx={{ opacity: 0.9 }}>
+                                    {totalCount} solicitudes encontradas
+                                </Typography>
+                            </Box>
+                        </Box>
+                    </Box>
+                </CardContent>
+            </HeaderCard>
 
             {/* Statistics */}
             {statistics && (
@@ -737,18 +756,6 @@ const RequestsPage = () => {
             <FiltersContainer elevation={1}>
                 <Grid container spacing={2} alignItems="center">
                     <Grid item xs="auto" sm="auto" md={"auto"}>
-                        <CicloEscolarFilter
-                            value={selectedCicloEscolar}
-                            onChange={(value) => {
-                                setSelectedCicloEscolar(value);
-                                setDraftFilters(initialFilters);
-                                setFilters(initialFilters);
-                                setPage(0);
-                            }}
-                            sx={{ width: 190 }}
-                        />
-                    </Grid>
-                    <Grid item xs="auto" sm="auto" md={"auto"}>
                         <TextField fullWidth size="small" label="Tipo" select value={draftFilters.requestType} onChange={handleDraftChange('requestType')} sx={{ width: 200 }}>
                             <MenuItem value="">Todos</MenuItem>
                             {Object.entries(VALID_REQUEST_TYPES).map(([k, label]) => (
@@ -768,20 +775,6 @@ const RequestsPage = () => {
                         <TextField fullWidth size="small" label="Solicitante (nombre)" value={draftFilters.userName} onChange={handleDraftChange('userName')} />
                     </Grid>
                     <Grid item xs="auto" sm="auto" md={"auto"}>
-                        <Autocomplete
-                            size="small"
-                            options={clientOptions}
-                            groupBy={(option) => option.group}
-                            getOptionLabel={(option) => option.label || ''}
-                            value={clientOptions.find(o => o.value === draftFilters.client) || null}
-                            onChange={(e, val) => setDraftFilters(prev => ({ ...prev, client: val ? val.value : '' }))}
-                            renderInput={(params) => <TextField {...params} label="Cliente" />}
-                            isOptionEqualToValue={(option, value) => !!value && option.value === value.value}
-                            clearOnEscape
-                            sx={{ width: 200 }}
-                        />
-                    </Grid>
-                    <Grid item xs="auto" sm="auto" md={"auto"}>
                         <TextField sx={{ width: 150 }} size="small" type="date" fullWidth label="Fecha Inicio" value={draftFilters.startDate} onChange={handleDraftChange('startDate')} InputLabelProps={{ shrink: true }} />
                     </Grid>
                     <Grid item xs="auto" sm="auto" md={"auto"}>
@@ -789,23 +782,7 @@ const RequestsPage = () => {
                     </Grid>
                     <Grid item xs="auto" sm="auto" md={"auto"} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Button size="small" variant="outlined" onClick={() => { setDraftFilters(initialFilters); setFilters(initialFilters); setPage(0); }}>Limpiar filtros</Button>
-                        <Button size="small" variant="contained" onClick={() => {
-                            // Parse client selection and translate to schoolId/corporationId
-                            const applied = { ...draftFilters };
-                            applied.schoolId = '';
-                            applied.corporationId = '';
-                            if (draftFilters.client && typeof draftFilters.client === 'string') {
-                                if (draftFilters.client.startsWith('school:')) {
-                                    applied.schoolId = draftFilters.client.split(':')[1];
-                                } else if (draftFilters.client.startsWith('corp:')) {
-                                    applied.corporationId = draftFilters.client.split(':')[1];
-                                }
-                            }
-                            // remove client key before applying
-                            delete applied.client;
-                            setFilters(applied);
-                            setPage(0);
-                        }}>Buscar</Button>
+                        <Button size="small" variant="contained" onClick={() => { setFilters(draftFilters); setPage(0); }}>Buscar</Button>
                     </Grid>
                 </Grid>
             </FiltersContainer>

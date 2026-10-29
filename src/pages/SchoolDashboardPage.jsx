@@ -38,6 +38,7 @@ import {
     ArrowBack,
     People,
     Description as ContractIcon,
+    Assignment as RequestsIcon,
     Payment as PaymentIcon,
     Policy as ProtocolIcon,
     ChevronLeft,
@@ -358,6 +359,16 @@ const SchoolDashboardPage = () => {
 
     const handleViewPayments = () => {
         navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/pagos`, {
+            state: {
+                cicloEscolarId: currentCicloEscolarId,
+                cicloEscolar: currentCicloEscolar,
+                school: currentSchool
+            }
+        });
+    };
+
+    const handleViewRequests = () => {
+        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/solicitudes`, {
             state: {
                 cicloEscolarId: currentCicloEscolarId,
                 cicloEscolar: currentCicloEscolar,
@@ -973,6 +984,33 @@ const SchoolDashboardPage = () => {
                                         </Grid>
                                     </PermissionGuard>
                                     )}
+
+                                    <PermissionGuard permission="colegios-solicitudes">
+                                        <Grid item xs={12}>
+                                            <SummaryCard>
+                                                <CardContent sx={{ textAlign: 'center' }}>
+                                                    <RequestsIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                                                    <Typography variant="h6" gutterBottom>
+                                                        Solicitudes
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                        Ver y gestionar las solicitudes de usuarios de este colegio en este ciclo escolar
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="large"
+                                                        startIcon={<RequestsIcon />}
+                                                        onClick={handleViewRequests}
+                                                        fullWidth
+                                                        sx={{ borderRadius: 2 }}
+                                                    >
+                                                        Ver Solicitudes
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    </PermissionGuard>
 
                                     {/* Sub-sección 4: Botón de buses */}
                                     <PermissionGuard permission="colegios-gestion-buses">

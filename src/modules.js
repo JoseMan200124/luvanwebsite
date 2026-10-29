@@ -15,7 +15,7 @@ import MonitorsManagementPage from './pages/MonitorsManagementPage';
 import PilotsManagementPage from './pages/PilotsManagementPage';
 import SupervisorsManagementPage from './pages/SupervisorsManagementPage';
 import AuxiliaresManagementPage from './pages/AuxiliaresManagementPage';
-import ReportsUsagePage from './pages/ReportsUsagePage';
+import GeneralStatisticsPage from './pages/GeneralStatisticsPage';
 import FinancialStatisticsPage from './pages/FinancialStatisticsPage';
 import CircularHistoryPage from './pages/CircularHistoryPage';
 import NotificationHistoryPage from './pages/NotificationHistoryPage';
@@ -31,7 +31,6 @@ import BusIncidentsPage from './pages/BusIncidentsPage';
 import FailureMappingPage from './pages/FailureMappingPage';
 import BusEmergenciesPage from './pages/BusEmergenciesPage';
 import MechanicRequestsPage from './pages/MechanicRequestsPage';
-import RequestsPage from './pages/RequestsPage';
 import RouteTimeLogsPage from './pages/RouteTimeLogsPage';
 import FuelRecordsPage from './pages/FuelRecordsPage';
 import CorporationsPage from './pages/CorporationsPage';
@@ -118,12 +117,6 @@ export const modules = [
                 name: 'Envíos Programados',
                 path: 'envios-programados',
                 component: ScheduledSendsPage,
-            },
-            {
-                key: 'solicitudes-usuarios',
-                name: 'Solicitudes Usuarios',
-                path: 'solicitudes-usuarios',
-                component: RequestsPage,
             },
         ],
     },
@@ -232,10 +225,10 @@ export const modules = [
         icon: BarChart,
         submodules: [
             {
-                key: 'reportes-uso',
-                name: 'Reportes de Uso',
-                path: 'reportes-uso',
-                component: ReportsUsagePage,
+                key: 'estadisticas-generales',
+                name: 'Estadísticas Generales',
+                path: 'estadisticas-generales',
+                component: GeneralStatisticsPage,
             },
             {
                 key: 'estadisticas-financieras',
