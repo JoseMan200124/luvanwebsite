@@ -58,7 +58,7 @@ export default function SeleccionFamiliasDialog({
                 {descripcion && <Typography variant="body2" sx={{ mb: 2 }}>{descripcion}</Typography>}
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                 <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                    <TextField size="small" select label="Estado" value={estado} onChange={e => setEstado(e.target.value)} sx={{ minWidth: 140 }}>
+                    <TextField size="small" select label="Estado" value={estado} onChange={e => { setEstado(e.target.value); setTodasDelFiltro(false); }} sx={{ minWidth: 140 }}>
                         <MenuItem value="activas">Activas</MenuItem>
                         <MenuItem value="inactivas">Inactivas</MenuItem>
                         <MenuItem value="todas">Todas</MenuItem>

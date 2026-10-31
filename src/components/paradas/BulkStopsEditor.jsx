@@ -8,7 +8,7 @@ import {
     Alert, AppBar, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText,
     DialogTitle, Toolbar, Typography,
 } from '@mui/material';
-import { Close, GroupAdd } from '@mui/icons-material';
+import { Close, CloudDownload, CloudUpload, GroupAdd } from '@mui/icons-material';
 import paradasService, { codigoError, liberarAlCerrar, mensajeError } from '../../services/paradasService';
 import { paradasReducer, estadoInicial, familiasAfectadas } from './paradasReducer';
 import { reconciliar, familiasCambiadasPorReconciliacion, hayNovedades } from './reconciliacion';
@@ -21,6 +21,10 @@ import SeleccionFamiliasDialog from './SeleccionFamiliasDialog';
 import ParadasToolbar from './ParadasToolbar';
 import ResumenCarga from './ResumenCarga';
 import { fechaCorta, fechaHora } from './textoParada';
+import { descargarExcel } from './excelPuntoGuardado';
+import CargarPuntoGuardadoDialog from './CargarPuntoGuardadoDialog';
+import DescargarEstadoActualDialog from './DescargarEstadoActualDialog';
+import { ResumenExcel } from './ExcelEditadoDialog';
 
 const conActuales = (familias) => familias.map(f => ({
     ...f,
@@ -42,6 +46,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     const [selector, setSelector] = useState(null);
     const [confirmacion, setConfirmacion] = useState(null);
     const [ocupado, setOcupado] = useState(false);
+    const [cargaArchivo, setCargaArchivo] = useState(null); // { reemplaza } | null
+    const [descargaActual, setDescargaActual] = useState(false);
+    const [resumenExcel, setResumenExcel] = useState(null);
     const estadoRef = useRef(estado);
     estadoRef.current = estado;
     const ignorarPerdida = useRef(false);
@@ -69,7 +76,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         onFueraDeScope: d => quitarFueraDeScopeRef.current?.(d),
         onGuardado: r => setEliminaAt(r.eliminaAt),
     });
-    const { marcarSucia, marcarQuitada, detener } = autoguardado;
+    const { marcarSucia, marcarQuitada, detener, reanudar } = autoguardado;
     useBloqueoParadas({ schoolId, lockToken, activo: fase === 'editor' || fase === 'seleccion', onPerdido: perderBloqueo });
 
     // Desmontaje sin pasar por cerrar() (atrás del navegador, cambio de ruta): guardar lo pendiente y
@@ -181,7 +188,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     }, [recargarConAviso, perderBloqueo]);
 
     const cargar = useCallback(async ({ reintento = false } = {}) => {
-        setFase('cargando'); setError(null); setPerdido(null); setAviso(null); setResumenCarga(null); setSelector(null);
+        setFase('cargando'); setError(null); setPerdido(null); setAviso(null); setResumenCarga(null); setResumenExcel(null); setSelector(null);
         try {
             const [ctx, d] = await Promise.all([paradasService.contexto(schoolId), leerBorrador()]);
             setContexto(ctx);
@@ -275,7 +282,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         texto: `Se perderán los cambios de ${draft?.borrador?.familias?.length || 0} familia(s). Si los necesitas, descarga antes el punto de guardado.`,
         textoAceptar: 'Descartar trabajo',
         color: 'error',
-        extra: null, // Task 9: botón de descarga del punto de guardado
+        extra: <Box sx={{ mt: 2 }}>{botonDescargaBorrador}</Box>,
         onAceptar: () => conManejo(async () => {
             const { lockToken: token } = await paradasService.tomarBloqueo(schoolId);
             try {
@@ -299,7 +306,70 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         });
     };
 
-    // FUNCIONES_EXTRA
+    /** Vaciar la cola antes de leer desde BD: el archivo sale del borrador guardado, no del cliente. */
+    const descargarPuntoGuardado = () => conManejo(async () => {
+        try {
+            await autoguardado.forzar();
+        } catch (e) {
+            setAviso({ severity: 'error', texto: `No se pudo guardar el último cambio, así que no se descargó: ${mensajeError(e, 'error del servidor')}` });
+            return;
+        }
+        await descargarExcel(await paradasService.exportar(schoolId, { tipo: 'borrador' })); // directo: ya está dentro de conManejo
+    });
+
+    /** Descarga sin vaciar la cola (vistas sin edición en curso). Task 10 la reusa para 'previo' y 'procesado'. */
+    const descargarTipo = tipo => conManejo(async () => descargarExcel(await paradasService.exportar(schoolId, { tipo })));
+
+    const botonDescargaBorrador = (
+        <Button size="small" startIcon={<CloudDownload />} onClick={() => descargarTipo('borrador')}>
+            Descargar punto de guardado
+        </Button>
+    );
+
+    const pedirCargaArchivo = () => {
+        const b = draft?.borrador;
+        let reemplaza = null;
+        // En el editor, `draft` puede estar viejo (el primer PUT no lo relee): se decide por la fase.
+        if (fase === 'editor' && familias.length) {
+            reemplaza = { texto: 'Cargar un archivo reemplaza el borrador completo, incluidos los cambios de esta sesión. Si lo necesitas, descarga antes su punto de guardado.' };
+        } else if (draft?.estado === 'en_edicion' && b?.familias?.length) {
+            reemplaza = { texto: `Cargar un archivo reemplaza el borrador completo (último cambio por ${b?.lastEditedBy?.nombre || 'otro usuario'} el ${fechaHora(b?.ultimaActividadAt)}). Si lo necesitas, descarga antes su punto de guardado.` };
+        } else if (draft?.estado === 'procesado') {
+            reemplaza = { texto: `Se eliminará el respaldo del procesamiento del ${fechaCorta(b?.procesadoAt)} cuando se guarde el archivo cargado. Descárgalo antes si lo necesitas.` };
+        }
+        setCargaArchivo({ reemplaza });
+    };
+
+    const aplicarArchivo = ({ familias: delArchivo, importadoEditado: editado, resumenExcel: resExcel }) => conManejo(async () => {
+        setCargaArchivo(null);
+        let token = lockToken;
+        const tomado = !token;
+        if (token) {
+            await autoguardado.forzar(); // si falla, no se reemplaza (la cola reescribiría familias viejas)
+            detener(); // lo editado durante el reemplazo no debe salir después y pisar el archivo cargado
+        } else {
+            ({ lockToken: token } = await paradasService.tomarBloqueo(schoolId, { nuevo: draft?.estado === 'procesado' }));
+        }
+        let rec;
+        let res;
+        try {
+            const snap = delArchivo.length ? await paradasService.snapshot(schoolId, delArchivo.map(f => f.familyDetailId)) : { familias: [], excluidas: [] };
+            ({ familias: rec, resumen: res } = reconciliar(delArchivo, snap));
+            await paradasService.guardarFamilias(schoolId, { lockToken: token, familias: rec.map(paraGuardar), reemplazar: true, importadoEditado: editado });
+            await leerBorrador();
+        } catch (e) {
+            if (tomado) await paradasService.liberar(schoolId, token).catch(() => {}); // ver tomarYAbrir
+            else reanudar();
+            throw e;
+        }
+        setLockToken(token);
+        despacharBase({ tipo: 'cargar', familias: rec });
+        reanudar();
+        setResumenCarga(hayNovedades(res) ? res : null);
+        setResumenExcel(resExcel);
+        setPerdido(null);
+        setFase('editor');
+    });
 
     const bloqueo = draft?.borrador?.bloqueo;
 
@@ -330,7 +400,8 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                             <Button variant="contained" disabled={ocupado} onClick={() => conManejo(() => tomarYAbrir())}>Continuar con este trabajo</Button>
                             <Button variant="outlined" color="error" disabled={ocupado} onClick={pedirDescarte}>Descartar y empezar de cero</Button>
-                            {/* ACCIONES_PUNTO_GUARDADO_DECISION */}
+                            <Button variant="outlined" startIcon={<CloudDownload />} disabled={ocupado} onClick={() => descargarTipo('borrador')}>Descargar punto de guardado</Button>
+                            <Button variant="outlined" startIcon={<CloudUpload />} disabled={ocupado} onClick={pedirCargaArchivo}>Cargar otro punto de guardado</Button>
                         </Box>
                     </Box>
                 )}
@@ -360,14 +431,23 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                                     <Button variant="outlined" onClick={pedirTomarControl} disabled={ocupado} sx={{ mb: 1 }}>Tomar control</Button>
                                 )}
                                 {!familias.length && <Typography color="text.secondary">No hay un borrador con familias.</Typography>}
-                                {/* ACCIONES_PUNTO_GUARDADO_LECTURA */}
+                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                    {draft?.estado === 'en_edicion' && familias.length > 0 && (
+                                        <Button variant="outlined" startIcon={<CloudDownload />} disabled={ocupado} onClick={() => descargarTipo('borrador')}>Descargar punto de guardado</Button>
+                                    )}
+                                    <Button variant="outlined" startIcon={<CloudDownload />} disabled={ocupado} onClick={() => setDescargaActual(true)}>Descargar estado actual</Button>
+                                </Box>
                             </Box>
                         )}
                         <ParadasToolbar estadoGuardado={autoguardado.estado} eliminaAt={fase === 'editor' ? eliminaAt : null} soloLectura={soloLectura}>
                             {fase === 'editor' && <Button variant="outlined" startIcon={<GroupAdd />} onClick={() => setSelector('agregar')} disabled={ocupado}>Agregar familias</Button>}
                             {fase === 'editor' && (
                                 <>
-                                    {/* ACCIONES_PUNTO_GUARDADO_EDITOR */}
+                                    <Button variant="outlined" startIcon={<CloudDownload />} onClick={descargarPuntoGuardado} disabled={ocupado || autoguardado.estado.tipo === 'guardando'}>
+                                        {autoguardado.estado.tipo === 'guardando' ? 'Guardando cambios…' : 'Descargar punto de guardado'}
+                                    </Button>
+                                    <Button variant="outlined" startIcon={<CloudUpload />} onClick={pedirCargaArchivo} disabled={ocupado}>Cargar punto de guardado</Button>
+                                    <Button variant="text" onClick={() => setDescargaActual(true)} disabled={ocupado}>Descargar estado actual</Button>
                                     {/* ACCIONES_PROCESAR */}
                                 </>
                             )}
@@ -376,6 +456,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                             <Alert severity="warning" sx={{ mb: 2 }}>Datos cargados desde un Excel editado a mano por {importadoEditado.nombre || 'un usuario'} el {fechaCorta(importadoEditado.at)}. Revisa los marcados como "Editado en Excel" antes de procesar.</Alert>
                         )}
                         <ResumenCarga resumen={resumenCarga} onCerrar={() => setResumenCarga(null)} />
+                        <ResumenExcel resumen={resumenExcel} onCerrar={() => setResumenExcel(null)} />
                         {resumen && fase === 'editor' && (resumen.conErrores > 0 || resumen.conflictos > 0) && (
                             <Alert severity="error" sx={{ mb: 2 }}>
                                 Para poder procesar faltan: {resumen.conErrores > 0 && `${resumen.conErrores} estudiante(s) con errores`}
@@ -395,6 +476,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                 titulo="¿Qué familias vas a editar?"
                 descripcion="Elige las familias cuyas paradas quieres revisar o cambiar. Puedes agregar o quitar familias después."
                 textoConfirmar="Abrir en el editor"
+                accionesExtra={<Button startIcon={<CloudUpload />} onClick={() => { setSelector(null); pedirCargaArchivo(); }}>Cargar punto de guardado en su lugar</Button>}
                 onConfirmar={confirmarSeleccionInicial}
                 onCancelar={liberarYCerrar}
             />
@@ -407,6 +489,14 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                 onConfirmar={agregarFamilias}
                 onCancelar={() => setSelector(null)}
             />
+            <CargarPuntoGuardadoDialog
+                open={!!cargaArchivo}
+                schoolId={schoolId}
+                reemplaza={cargaArchivo?.reemplaza}
+                onCancelar={() => { setCargaArchivo(null); if (fase === 'seleccion') setSelector('inicio'); }}
+                onCargado={aplicarArchivo}
+            />
+            <DescargarEstadoActualDialog open={descargaActual} schoolId={schoolId} onCerrar={() => setDescargaActual(false)} onAviso={setAviso} />
             {/* DIALOGOS_EXTRA */}
 
             <Dialog open={!!confirmacion} onClose={() => setConfirmacion(null)} maxWidth="sm" fullWidth>
