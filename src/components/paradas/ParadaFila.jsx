@@ -11,7 +11,7 @@ function ParadaFila({ parada, indice, errores, avisos, contexto, deshabilitado, 
     const rutaFuera = parada.routeNumber && !rutas.includes(parada.routeNumber);
 
     return (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '150px 130px 120px minmax(160px, 1fr) auto auto' }, gap: 1, alignItems: 'start', py: 1, borderBottom: '1px dashed', borderColor: 'divider' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '150px 130px 150px minmax(160px, 1fr) auto auto' }, gap: 1, alignItems: 'start', py: 1, borderBottom: '1px dashed', borderColor: 'divider' }}>
             <TextField
                 select size="small" label="Franja" value={parada.franja || ''} disabled={deshabilitado}
                 error={!!error('franja')} helperText={error('franja') || ' '}
@@ -27,10 +27,11 @@ function ParadaFila({ parada, indice, errores, avisos, contexto, deshabilitado, 
                 {rutas.map(r => <MenuItem key={r} value={r}>Ruta {r}</MenuItem>)}
                 {rutaFuera && <MenuItem value={parada.routeNumber} disabled>Ruta {parada.routeNumber} (no válida)</MenuItem>}
             </TextField>
+            {/* Selector nativo (hora, minutos, AM/PM) como en la asignación individual de paradas; el valor sigue siendo "HH:mm". */}
             <TextField
-                size="small" label="Hora parada" placeholder="06:45" value={parada.time || ''} disabled={deshabilitado}
-                inputProps={{ maxLength: 5, inputMode: 'numeric' }}
-                error={!!error('time')} helperText={error('time') || aviso || 'Formato HH:mm'}
+                size="small" type="time" label="Hora parada" value={parada.time || ''} disabled={deshabilitado}
+                InputLabelProps={{ shrink: true }}
+                error={!!error('time')} helperText={error('time') || aviso || ' '}
                 FormHelperTextProps={{ sx: aviso && !error('time') ? { color: 'warning.main' } : undefined }}
                 onChange={e => onCampo(indice, 'time', e.target.value)}
             />
