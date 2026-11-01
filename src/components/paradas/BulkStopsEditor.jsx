@@ -30,6 +30,7 @@ import { ResumenExcel } from './ExcelEditadoDialog';
 import ProcesarDialog from './ProcesarDialog';
 import DescargaObligatoriaDialog from './DescargaObligatoriaDialog';
 import BorradorProcesadoVista from './BorradorProcesadoVista';
+import GuiaParadas from './GuiaParadas';
 
 const conActuales = (familias) => familias.map(f => ({
     ...f,
@@ -502,6 +503,8 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             </AppBar>
             <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, width: '100%', mx: 'auto' }}>
                 {aviso && <Alert severity={aviso.severity} onClose={() => setAviso(null)} sx={{ mb: 2 }}>{aviso.texto}</Alert>}
+
+                {!['cargando', 'error'].includes(fase) && <GuiaParadas />}
 
                 {fase === 'cargando' && <Box sx={{ textAlign: 'center', py: 8 }}><CircularProgress /><Typography sx={{ mt: 2 }}>Abriendo el editor…</Typography></Box>}
                 {fase === 'error' && <Alert severity="error" action={<Button onClick={() => cargar()}>Reintentar</Button>}>{error}</Alert>}
