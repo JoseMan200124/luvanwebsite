@@ -82,7 +82,19 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         onGuardado: r => setEliminaAt(r.eliminaAt),
     });
     const { marcarSucia, marcarQuitada, detener, reanudar } = autoguardado;
-    useBloqueoParadas({ schoolId, lockToken, activo: fase === 'editor' || fase === 'seleccion', onPerdido: perderBloqueo });
+    useBloqueoParadas({ schoolId, lockToken, activo: fase === 'editor' || fase === 'seleccion', hayPendiente: autoguardado.pendiente, onPerdido: perderBloqueo });
+
+    // Bloqueos tomados fuera del editor (sin heartbeat): si el flujo falla o el editor ya se cerró,
+    // se liberan; si no, el propio bloqueo traba el reintento 2 minutos.
+    const liberarSilencioso = useCallback(token => paradasService.liberar(schoolId, token).catch(() => {}), [schoolId]);
+    const liberarSiFalla = useCallback(async (token, fn) => {
+        try {
+            return await fn();
+        } catch (e) {
+            await liberarSilencioso(token);
+            throw e;
+        }
+    }, [liberarSilencioso]);
 
     // Desmontaje sin pasar por cerrar() (atrás del navegador, cambio de ruta): guardar lo pendiente y
     // recién después liberar; al revés, el PUT llegaría sin bloqueo (LOCK_LOST).
@@ -153,29 +165,25 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
 
     const tomarYAbrir = useCallback(async ({ force = false } = {}) => {
         const { lockToken: token } = await paradasService.tomarBloqueo(schoolId, { force });
-        try {
+        await liberarSiFalla(token, async () => {
             const d = await leerBorrador(); // re-leer: otro pudo guardar mientras tanto
             await cargarEnEditor(d.borrador?.familias || [], token);
-        } catch (e) {
-            // Sin liberar, el propio bloqueo (sin heartbeat fuera del editor) traba el reintento 2 min.
-            await paradasService.liberar(schoolId, token).catch(() => {});
-            throw e;
-        }
-        if (cerradoRef.current) { await paradasService.liberar(schoolId, token).catch(() => {}); return; }
+        });
+        if (cerradoRef.current) { await liberarSilencioso(token); return; }
         setLockToken(token);
         setPerdido(null);
         setFase('editor');
-    }, [schoolId, leerBorrador, cargarEnEditor]);
+    }, [schoolId, leerBorrador, cargarEnEditor, liberarSiFalla, liberarSilencioso]);
 
     const iniciarSeleccion = useCallback(async ({ nuevo = false, force = false } = {}) => {
         const { lockToken: token } = await paradasService.tomarBloqueo(schoolId, { nuevo, force });
-        if (cerradoRef.current) { await paradasService.liberar(schoolId, token).catch(() => {}); return; }
+        if (cerradoRef.current) { await liberarSilencioso(token); return; }
         setLockToken(token);
         setPerdido(null);
         despacharBase({ tipo: 'cargar', familias: [] });
         setSelector('inicio');
         setFase('seleccion');
-    }, [schoolId]);
+    }, [schoolId, liberarSilencioso]);
 
     const cargarRef = useRef(null);
 
@@ -300,13 +308,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         extra: <Box sx={{ mt: 2 }}>{botonDescargaBorrador}</Box>,
         onAceptar: () => conManejo(async () => {
             const { lockToken: token } = await paradasService.tomarBloqueo(schoolId);
-            try {
-                await paradasService.descartar(schoolId, token);
-            } catch (e) {
-                // Sin liberar, el propio bloqueo (sin heartbeat fuera del editor) traba el reintento 2 min.
-                await paradasService.liberar(schoolId, token).catch(() => {});
-                throw e;
-            }
+            await liberarSiFalla(token, () => paradasService.descartar(schoolId, token));
             await cargar();
         }),
     });
@@ -332,13 +334,18 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         await descargarExcel(await paradasService.exportar(schoolId, { tipo: 'borrador' })); // directo: ya está dentro de conManejo
     });
 
-    /** Descarga sin vaciar la cola (vistas sin edición en curso). Task 10 la reusa para 'previo' y 'procesado'. */
+    /** Descarga sin vaciar la cola (vistas sin edición en curso). */
     const descargarTipo = tipo => conManejo(async () => descargarExcel(await paradasService.exportar(schoolId, { tipo })));
 
     const botonDescargaBorrador = (
         <Button size="small" startIcon={<CloudDownload />} onClick={() => descargarTipo('borrador')}>
             Descargar punto de guardado
         </Button>
+    );
+    const botonDescargaPrevio = (
+        <Box sx={{ mt: 2 }}>
+            <Button size="small" startIcon={<CloudDownload />} onClick={() => descargarTipo('previo')}>Descargar estado anterior</Button>
+        </Box>
     );
 
     const pedirCargaArchivo = () => {
@@ -373,11 +380,11 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             await paradasService.guardarFamilias(schoolId, { lockToken: token, familias: rec.map(paraGuardar), reemplazar: true, importadoEditado: editado });
             await leerBorrador();
         } catch (e) {
-            if (tomado) await paradasService.liberar(schoolId, token).catch(() => {}); // ver tomarYAbrir
+            if (tomado) await liberarSilencioso(token);
             else reanudar();
             throw e;
         }
-        if (tomado && cerradoRef.current) { await paradasService.liberar(schoolId, token).catch(() => {}); return; }
+        if (tomado && cerradoRef.current) { await liberarSilencioso(token); return; }
         setLockToken(token);
         despacharBase({ tipo: 'cargar', familias: rec });
         reanudar();
@@ -445,7 +452,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         titulo: 'Reemplazar el trabajo procesado',
         texto: `Se eliminará el respaldo del procesamiento del ${fechaCorta(draft?.borrador?.procesadoAt)} en cuanto guardes el trabajo nuevo; descárgalo antes si lo necesitas. Si sales sin elegir familias, el respaldo se conserva.`,
         textoAceptar: 'Continuar',
-        extra: <Box sx={{ mt: 2 }}><Button size="small" startIcon={<CloudDownload />} onClick={() => descargarTipo('previo')}>Descargar estado anterior</Button></Box>,
+        extra: botonDescargaPrevio,
         onAceptar: accion,
     });
 
@@ -501,7 +508,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                                     texto: 'Se eliminará el resumen del procesamiento y el respaldo del estado anterior. Las paradas reales no cambian.',
                                     textoAceptar: 'Descartar',
                                     color: 'error',
-                                    extra: <Box sx={{ mt: 2 }}><Button size="small" startIcon={<CloudDownload />} onClick={() => descargarTipo('previo')}>Descargar estado anterior</Button></Box>,
+                                    extra: botonDescargaPrevio,
                                     onAceptar: () => conManejo(async () => { await paradasService.descartar(schoolId, null); await cargar(); }),
                                 })}
                             />

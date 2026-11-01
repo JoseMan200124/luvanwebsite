@@ -119,8 +119,14 @@ export default function useAutoguardadoParadas({ schoolId, lockToken, familiaPor
         if (pendiente()) programar(DEBOUNCE_MS);
     }, [programar, pendiente]);
 
-    // Token nuevo (tomar control, reabrir): el autoguardado vuelve a correr.
-    useEffect(() => { if (lockToken) detenido.current = false; }, [lockToken]);
+    // Token nuevo (tomar control, reabrir): el autoguardado vuelve a correr. Sin token (bloqueo
+    // perdido o cerrado), la cola se vacía: el editor se recarga desde la BD al recuperar el
+    // bloqueo, y una quitada vieja borraría del borrador una familia que se ve en pantalla.
+    useEffect(() => {
+        if (lockToken) { detenido.current = false; return; }
+        sucias.current.clear();
+        quitadas.current.clear();
+    }, [lockToken]);
 
     useEffect(() => {
         const alOcultar = () => { if (document.visibilityState === 'hidden') enviar().catch(() => {}); };
@@ -132,7 +138,7 @@ export default function useAutoguardadoParadas({ schoolId, lockToken, familiaPor
     }, [enviar]);
 
     return useMemo(
-        () => ({ estado, marcarSucia, marcarQuitada, forzar, detener, reanudar }),
-        [estado, marcarSucia, marcarQuitada, forzar, detener, reanudar],
+        () => ({ estado, pendiente, marcarSucia, marcarQuitada, forzar, detener, reanudar }),
+        [estado, pendiente, marcarSucia, marcarQuitada, forzar, detener, reanudar],
     );
 }

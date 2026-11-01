@@ -1,14 +1,18 @@
 // src/components/paradas/useBloqueoParadas.js
 // Heartbeat cada 30 s mientras el editor tiene el bloqueo; liberación best-effort al cerrar la
 // pestaña (pagehide + fetch keepalive). Si la liberación no llega, el bloqueo expira a los 2 min.
+// Con cambios sin guardar no se libera: el PUT de visibilitychange (useAutoguardadoParadas) podría
+// llegar después de la liberación y perderse con LOCK_LOST; el bloqueo expira solo.
 import { useEffect, useRef } from 'react';
 import paradasService, { codigoError, liberarAlCerrar } from '../../services/paradasService';
 
 const HEARTBEAT_MS = 30000;
 
-export default function useBloqueoParadas({ schoolId, lockToken, activo, onPerdido }) {
+export default function useBloqueoParadas({ schoolId, lockToken, activo, hayPendiente, onPerdido }) {
     const alPerder = useRef(onPerdido);
     alPerder.current = onPerdido;
+    const pendienteRef = useRef(hayPendiente);
+    pendienteRef.current = hayPendiente;
 
     useEffect(() => {
         if (!activo || !lockToken) return undefined;
@@ -25,7 +29,7 @@ export default function useBloqueoParadas({ schoolId, lockToken, activo, onPerdi
 
     useEffect(() => {
         if (!lockToken) return undefined;
-        const alSalir = () => liberarAlCerrar(schoolId, lockToken);
+        const alSalir = () => { if (!pendienteRef.current?.()) liberarAlCerrar(schoolId, lockToken); };
         window.addEventListener('pagehide', alSalir);
         return () => window.removeEventListener('pagehide', alSalir);
     }, [schoolId, lockToken]);

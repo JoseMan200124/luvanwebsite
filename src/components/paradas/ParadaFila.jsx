@@ -2,11 +2,13 @@
 import React, { memo } from 'react';
 import { Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Tooltip, Typography } from '@mui/material';
 import { ContentCopy, DeleteOutline } from '@mui/icons-material';
-import { DIAS, MAX_NOTA, rutasParaFranja } from './paradasModel';
+import { DIAS, HORA_RE, MAX_NOTA, rutasParaFranja } from './paradasModel';
 
 function ParadaFila({ parada, indice, errores, avisos, contexto, deshabilitado, onCampo, onDia, onDuplicar, onQuitar }) {
     const error = (campo) => errores.find(e => e.indice === indice && e.campo === campo)?.mensaje;
     const aviso = avisos.find(a => a.indice === indice && a.campo === 'time')?.mensaje;
+    // El selector nativo deja en blanco lo que no sea HH:mm (p. ej. "7.30" heredado): se muestra en el mensaje.
+    const horaNoVisible = parada.time && !HORA_RE.test(parada.time) ? ` Valor actual: "${parada.time}".` : '';
     const rutas = rutasParaFranja(contexto, parada.franja);
     const rutaFuera = parada.routeNumber && !rutas.includes(parada.routeNumber);
 
@@ -31,7 +33,7 @@ function ParadaFila({ parada, indice, errores, avisos, contexto, deshabilitado, 
             <TextField
                 size="small" type="time" label="Hora parada" value={parada.time || ''} disabled={deshabilitado}
                 InputLabelProps={{ shrink: true }}
-                error={!!error('time')} helperText={error('time') || aviso || ' '}
+                error={!!error('time')} helperText={error('time') ? `${error('time')}${horaNoVisible}` : (aviso || ' ')}
                 FormHelperTextProps={{ sx: aviso && !error('time') ? { color: 'warning.main' } : undefined }}
                 onChange={e => onCampo(indice, 'time', e.target.value)}
             />

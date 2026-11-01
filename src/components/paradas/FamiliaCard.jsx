@@ -1,5 +1,5 @@
 // src/components/paradas/FamiliaCard.jsx
-import React, { memo, useState } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Grid, Paper, Typography } from '@mui/material';
 import { Add, ExpandLess, ExpandMore } from '@mui/icons-material';
 import { paradaNueva, revisarEstudiante, revisarFamilia } from './paradasModel';
@@ -10,7 +10,13 @@ function EstudianteParadas({ familyDetailId, est, contexto, soloLectura, despach
     const [verCambios, setVerCambios] = useState(false);
     const r = revisarEstudiante(est, contexto);
     const bloqueado = soloLectura || r.conflictoPendiente;
-    const a = { familyDetailId, studentId: est.studentId };
+    const { studentId } = est;
+    const a = { familyDetailId, studentId };
+    // Callbacks estables: sin ellos memo(ParadaFila) no evita redibujar las filas de los hermanos.
+    const onCampo = useCallback((indice, campo, valor) => despachar({ tipo: 'editarParada', familyDetailId, studentId, indice, campo, valor }), [despachar, familyDetailId, studentId]);
+    const onDia = useCallback((indice, dia) => despachar({ tipo: 'alternarDia', familyDetailId, studentId, indice, dia }), [despachar, familyDetailId, studentId]);
+    const onDuplicar = useCallback(indice => despachar({ tipo: 'duplicarParada', familyDetailId, studentId, indice }), [despachar, familyDetailId, studentId]);
+    const onQuitar = useCallback(indice => despachar({ tipo: 'quitarParada', familyDetailId, studentId, indice }), [despachar, familyDetailId, studentId]);
 
     return (
         <Box sx={{ mt: 2 }}>
@@ -36,10 +42,7 @@ function EstudianteParadas({ familyDetailId, est, contexto, soloLectura, despach
                     // eslint-disable-next-line react/no-array-index-key
                     key={i}
                     parada={p} indice={i} errores={r.errores} avisos={r.avisos} contexto={contexto} deshabilitado={bloqueado}
-                    onCampo={(indice, campo, valor) => despachar({ tipo: 'editarParada', ...a, indice, campo, valor })}
-                    onDia={(indice, dia) => despachar({ tipo: 'alternarDia', ...a, indice, dia })}
-                    onDuplicar={indice => despachar({ tipo: 'duplicarParada', ...a, indice })}
-                    onQuitar={indice => despachar({ tipo: 'quitarParada', ...a, indice })}
+                    onCampo={onCampo} onDia={onDia} onDuplicar={onDuplicar} onQuitar={onQuitar}
                 />
             ))}
             {!est.paradas.length && (
