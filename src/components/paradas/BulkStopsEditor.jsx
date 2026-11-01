@@ -2,13 +2,13 @@
 // Editor de carga masiva de paradas (reemplaza la plantilla Excel "Carga Horarios").
 // Diseño: LuvanWorkspace/plans/2026-10-27-carga-masiva-paradas-plan.md, "Editor (frontend)".
 // Fases: cargando → decision (hay trabajo en curso) | seleccion (elegir familias) | editor
-//        | lectura (otro tiene el bloqueo, ciclo inactivo o bloqueo perdido) | procesado | error.
+//        | lectura (otro tiene el bloqueo, ciclo inactivo o bloqueo perdido) | procesando | procesado | error.
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
-    Alert, AppBar, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText,
+    Alert, AppBar, Backdrop, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText,
     DialogTitle, Toolbar, Typography,
 } from '@mui/material';
-import { Close, CloudDownload, CloudUpload, GroupAdd } from '@mui/icons-material';
+import { Close, CloudDownload, CloudUpload, GroupAdd, PlayArrow } from '@mui/icons-material';
 import paradasService, { codigoError, liberarAlCerrar, mensajeError } from '../../services/paradasService';
 import { paradasReducer, estadoInicial, familiasAfectadas } from './paradasReducer';
 import { reconciliar, familiasCambiadasPorReconciliacion, hayNovedades } from './reconciliacion';
@@ -25,6 +25,9 @@ import { descargarExcel } from './excelPuntoGuardado';
 import CargarPuntoGuardadoDialog from './CargarPuntoGuardadoDialog';
 import DescargarEstadoActualDialog from './DescargarEstadoActualDialog';
 import { ResumenExcel } from './ExcelEditadoDialog';
+import ProcesarDialog from './ProcesarDialog';
+import DescargaObligatoriaDialog from './DescargaObligatoriaDialog';
+import BorradorProcesadoVista from './BorradorProcesadoVista';
 
 const conActuales = (familias) => familias.map(f => ({
     ...f,
@@ -49,6 +52,8 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     const [cargaArchivo, setCargaArchivo] = useState(null); // { reemplaza } | null
     const [descargaActual, setDescargaActual] = useState(false);
     const [resumenExcel, setResumenExcel] = useState(null);
+    const [dialogoProcesar, setDialogoProcesar] = useState(false);
+    const [descargaObligatoria, setDescargaObligatoria] = useState(null); // { resultado }
     const estadoRef = useRef(estado);
     estadoRef.current = estado;
     const ignorarPerdida = useRef(false);
@@ -84,11 +89,18 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     const cerradoRef = useRef(false);
     const salidaRef = useRef(null);
     salidaRef.current = { schoolId, lockToken, forzar: autoguardado.forzar };
-    useEffect(() => () => {
-        if (cerradoRef.current) return;
-        const { schoolId: sid, lockToken: token, forzar } = salidaRef.current;
-        if (!token) return;
-        forzar().catch(() => {}).finally(() => liberarAlCerrar(sid, token));
+    // cerradoRef también avisa a los flujos en vuelo (tomar bloqueo, abrir) que ya nadie los espera:
+    // si el bloqueo les llega después de cerrar, lo liberan en vez de dejarlo huérfano 2 minutos.
+    useEffect(() => {
+        cerradoRef.current = false; // StrictMode (dev) monta, desmonta y vuelve a montar
+        return () => {
+            const yaCerrado = cerradoRef.current;
+            cerradoRef.current = true;
+            if (yaCerrado) return;
+            const { schoolId: sid, lockToken: token, forzar } = salidaRef.current;
+            if (!token) return;
+            forzar().catch(() => {}).finally(() => liberarAlCerrar(sid, token));
+        };
     }, []);
 
     const despachar = useCallback((accion) => {
@@ -149,6 +161,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             await paradasService.liberar(schoolId, token).catch(() => {});
             throw e;
         }
+        if (cerradoRef.current) { await paradasService.liberar(schoolId, token).catch(() => {}); return; }
         setLockToken(token);
         setPerdido(null);
         setFase('editor');
@@ -156,6 +169,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
 
     const iniciarSeleccion = useCallback(async ({ nuevo = false, force = false } = {}) => {
         const { lockToken: token } = await paradasService.tomarBloqueo(schoolId, { nuevo, force });
+        if (cerradoRef.current) { await paradasService.liberar(schoolId, token).catch(() => {}); return; }
         setLockToken(token);
         setPerdido(null);
         despacharBase({ tipo: 'cargar', familias: [] });
@@ -247,6 +261,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     }, [schoolId, lockToken, onClose, detener]);
 
     const cerrar = useCallback(async () => {
+        if (ocupado || fase === 'procesando' || descargaObligatoria) return; // hay una acción a medias: cerrar dejaría su bloqueo huérfano
         setOcupado(true);
         try {
             if (lockToken && fase === 'editor') await autoguardado.forzar();
@@ -262,7 +277,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         } finally {
             setOcupado(false);
         }
-    }, [lockToken, fase, autoguardado, liberarYCerrar]);
+    }, [ocupado, lockToken, fase, descargaObligatoria, autoguardado, liberarYCerrar]);
 
     const quitarFamilia = useCallback((fam) => {
         const n = fam.students.filter(s => s.touched || s.conflicto).length;
@@ -362,6 +377,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             else reanudar();
             throw e;
         }
+        if (tomado && cerradoRef.current) { await paradasService.liberar(schoolId, token).catch(() => {}); return; }
         setLockToken(token);
         despacharBase({ tipo: 'cargar', familias: rec });
         reanudar();
@@ -369,6 +385,68 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         setResumenExcel(resExcel);
         setPerdido(null);
         setFase('editor');
+    });
+
+    // No lanza: se llama desde el catch de procesar, que nadie espera (un rechazo saldría sin manejar).
+    const marcarConflictos = async (estudiantes) => {
+        try {
+            const ids = [...new Set(estudiantes.map(e => e.familyDetailId))];
+            const actuales = ids.map(id => estadoRef.current.porId[id]).filter(Boolean);
+            const snap = await paradasService.snapshot(schoolId, ids);
+            const { familias: rec } = reconciliar(actuales, snap);
+            despacharBase({ tipo: 'reemplazarFamilias', familias: rec });
+            setAviso({ severity: 'warning', texto: `${estudiantes.length} estudiante(s) cambiaron en la plataforma mientras editabas. Resuelve los conflictos y vuelve a procesar.` });
+        } catch (e) {
+            setAviso({ severity: 'warning', texto: `${estudiantes.length} estudiante(s) cambiaron en la plataforma mientras editabas, pero no se pudieron traer sus datos nuevos (${mensajeError(e, 'error del servidor')}). Vuelve a pulsar Procesar para reintentar.` });
+        }
+    };
+
+    const procesar = async (confirmarSinParadas) => {
+        setDialogoProcesar(false);
+        setOcupado(true);
+        setAviso(null);
+        try {
+            await autoguardado.forzar(); // procesar trabaja sobre el borrador guardado, no sobre el cliente
+        } catch (e) {
+            setOcupado(false);
+            setAviso({ severity: 'error', texto: `No se pudo guardar el último cambio, así que no se procesó: ${mensajeError(e, 'error del servidor')}` });
+            return;
+        }
+        // El propio procesamiento libera el bloqueo: cualquier LOCK_LOST que llegue ahora se ignora.
+        ignorarPerdida.current = true;
+        detener();
+        setFase('procesando');
+        try {
+            const resultado = await paradasService.procesar(schoolId, { lockToken, confirmarSinParadas });
+            setLockToken(null);
+            setDescargaObligatoria({ resultado });
+        } catch (e) {
+            const code = codigoError(e);
+            const d = e.response?.data || {};
+            if (code === 'YA_PROCESADO') {
+                setLockToken(null);
+                setDescargaObligatoria({ resultado: null });
+                return;
+            }
+            ignorarPerdida.current = false;
+            setFase('editor');
+            reanudar();
+            if (code === 'CONFLICTO') await marcarConflictos(d.estudiantes || []);
+            else if (code === 'FUERA_DE_SCOPE') quitarFueraDeScopeRef.current(d);
+            else if (code === 'SIN_PARADAS_SIN_CONFIRMAR') { setAviso({ severity: 'warning', texto: d.message }); setDialogoProcesar(true); }
+            else if (code === 'LOCK_LOST') perderBloqueo(d);
+            else setAviso({ severity: 'error', texto: mensajeError(e, 'No se pudo procesar. El borrador quedó igual; puedes reintentar.') });
+        } finally {
+            setOcupado(false);
+        }
+    };
+
+    const confirmarReemplazoProcesado = (accion) => setConfirmacion({
+        titulo: 'Reemplazar el trabajo procesado',
+        texto: `Se eliminará el respaldo del procesamiento del ${fechaCorta(draft?.borrador?.procesadoAt)} en cuanto guardes el trabajo nuevo; descárgalo antes si lo necesitas. Si sales sin elegir familias, el respaldo se conserva.`,
+        textoAceptar: 'Continuar',
+        extra: <Box sx={{ mt: 2 }}><Button size="small" startIcon={<CloudDownload />} onClick={() => descargarTipo('previo')}>Descargar estado anterior</Button></Box>,
+        onAceptar: accion,
     });
 
     const bloqueo = draft?.borrador?.bloqueo;
@@ -408,11 +486,30 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
 
                 {fase === 'procesado' && (
                     <Box>
-                        {/* VISTA_PROCESADO */}
+                        {draft?.borrador && (
+                            <BorradorProcesadoVista
+                                draft={draft}
+                                contexto={contexto}
+                                ocupado={ocupado}
+                                onDescargar={descargarTipo}
+                                onDescargarActual={() => setDescargaActual(true)}
+                                onIniciarNuevo={() => confirmarReemplazoProcesado(() => conManejo(() => iniciarSeleccion({ nuevo: true })))}
+                                onTomarControl={() => confirmarReemplazoProcesado(() => conManejo(() => iniciarSeleccion({ nuevo: true, force: true })))}
+                                onCargarArchivo={pedirCargaArchivo}
+                                onDescartar={() => setConfirmacion({
+                                    titulo: 'Descartar el trabajo procesado',
+                                    texto: 'Se eliminará el resumen del procesamiento y el respaldo del estado anterior. Las paradas reales no cambian.',
+                                    textoAceptar: 'Descartar',
+                                    color: 'error',
+                                    extra: <Box sx={{ mt: 2 }}><Button size="small" startIcon={<CloudDownload />} onClick={() => descargarTipo('previo')}>Descargar estado anterior</Button></Box>,
+                                    onAceptar: () => conManejo(async () => { await paradasService.descartar(schoolId, null); await cargar(); }),
+                                })}
+                            />
+                        )}
                     </Box>
                 )}
 
-                {(fase === 'editor' || fase === 'lectura') && contexto && (
+                {(fase === 'editor' || fase === 'lectura' || fase === 'procesando') && contexto && (
                     <>
                         {fase === 'lectura' && (
                             <Box sx={{ mb: 2 }}>
@@ -448,7 +545,14 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                                     </Button>
                                     <Button variant="outlined" startIcon={<CloudUpload />} onClick={pedirCargaArchivo} disabled={ocupado}>Cargar punto de guardado</Button>
                                     <Button variant="text" onClick={() => setDescargaActual(true)} disabled={ocupado}>Descargar estado actual</Button>
-                                    {/* ACCIONES_PROCESAR */}
+                                    <Button
+                                        variant="contained" startIcon={<PlayArrow />}
+                                        disabled={ocupado || autoguardado.estado.tipo === 'guardando' || !resumen?.modificados}
+                                        onClick={() => setDialogoProcesar(true)}
+                                    >
+                                        {autoguardado.estado.tipo === 'guardando' ? 'Guardando cambios…' : `Procesar (${resumen?.modificados || 0})`}
+                                    </Button>
+
                                 </>
                             )}
                         </ParadasToolbar>
@@ -497,7 +601,17 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                 onCargado={aplicarArchivo}
             />
             <DescargarEstadoActualDialog open={descargaActual} schoolId={schoolId} onCerrar={() => setDescargaActual(false)} onAviso={setAviso} />
-            {/* DIALOGOS_EXTRA */}
+            <ProcesarDialog open={dialogoProcesar} resumen={resumen} ocupado={ocupado} onCancelar={() => setDialogoProcesar(false)} onConfirmar={procesar} />
+            <DescargaObligatoriaDialog
+                open={!!descargaObligatoria}
+                schoolId={schoolId}
+                resultado={descargaObligatoria?.resultado}
+                onTerminar={() => { setDescargaObligatoria(null); ignorarPerdida.current = false; cargar(); }}
+            />
+            <Backdrop open={fase === 'procesando'} sx={{ color: '#fff', zIndex: t => t.zIndex.modal + 1, flexDirection: 'column', gap: 2 }}>
+                <CircularProgress color="inherit" />
+                <Typography>Procesando {resumen?.modificados || 0} estudiante(s)… no cierres esta ventana.</Typography>
+            </Backdrop>
 
             <Dialog open={!!confirmacion} onClose={() => setConfirmacion(null)} maxWidth="sm" fullWidth>
                 <DialogTitle>{confirmacion?.titulo}</DialogTitle>
