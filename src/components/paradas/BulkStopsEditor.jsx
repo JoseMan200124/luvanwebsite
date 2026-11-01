@@ -3,14 +3,16 @@
 // Diseño: LuvanWorkspace/plans/2026-10-27-carga-masiva-paradas-plan.md, "Editor (frontend)".
 // Fases: cargando → decision (hay trabajo en curso) | seleccion (elegir familias) | editor
 //        | lectura (otro tiene el bloqueo, ciclo inactivo o bloqueo perdido) | procesando | procesado | error.
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert, AppBar, Backdrop, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText,
-    DialogTitle, Toolbar, Typography,
+    DialogTitle, Snackbar, Toolbar, Tooltip, Typography,
 } from '@mui/material';
-import { Close, CloudDownload, CloudUpload, GroupAdd, PlayArrow } from '@mui/icons-material';
+import { Close, CloudDownload, CloudUpload, GroupAdd, PlayArrow, Redo, Undo } from '@mui/icons-material';
 import paradasService, { codigoError, liberarAlCerrar, mensajeError } from '../../services/paradasService';
 import { paradasReducer, estadoInicial, familiasAfectadas } from './paradasReducer';
+import useHistorialParadas from './useHistorialParadas';
+import { cambiosParaGuardar } from './paradasHistorial';
 import { reconciliar, familiasCambiadasPorReconciliacion, hayNovedades } from './reconciliacion';
 import { paraGuardar, resumenGlobal } from './paradasModel';
 import useAutoguardadoParadas from './useAutoguardadoParadas';
@@ -39,7 +41,8 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     const [contexto, setContexto] = useState(null);
     const [draft, setDraft] = useState(null);
     const [lockToken, setLockToken] = useState(null);
-    const [estado, despacharBase] = useReducer(paradasReducer, estadoInicial);
+    const { estado, despachar: despacharBase, deshacer: deshacerBase, rehacer: rehacerBase, puedeDeshacer, puedeRehacer, etiquetaDeshacer, etiquetaRehacer, ultimo } = useHistorialParadas(paradasReducer, estadoInicial);
+    const [avisoDeshacerCerrado, setAvisoDeshacerCerrado] = useState(0); // versión del historial cuyo aviso ya se cerró
     const [resumenCarga, setResumenCarga] = useState(null);
     const [aviso, setAviso] = useState(null);
     const [perdido, setPerdido] = useState(null);
@@ -121,6 +124,16 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         sucias.forEach(marcarSucia);
         quitadas.forEach(marcarQuitada);
     }, [marcarSucia, marcarQuitada]);
+
+    // Deshacer/rehacer cambian familias sin pasar por despachar: se reenvían (o se quitan) las que difieren.
+    const sincronizarHistorial = useCallback((resultado) => {
+        if (!resultado) return;
+        const { sucias, quitadas } = cambiosParaGuardar(resultado.antes, resultado.despues);
+        sucias.forEach(marcarSucia);
+        quitadas.forEach(marcarQuitada);
+    }, [marcarSucia, marcarQuitada]);
+    const deshacer = useCallback(() => sincronizarHistorial(deshacerBase()), [sincronizarHistorial, deshacerBase]);
+    const rehacer = useCallback(() => sincronizarHistorial(rehacerBase()), [sincronizarHistorial, rehacerBase]);
 
     quitarFueraDeScopeRef.current = (d) => {
         despachar({ tipo: 'quitarFueraDeScope', familias: d.familias || [], estudiantes: d.estudiantes || [] });
@@ -458,6 +471,26 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
 
     const bloqueo = draft?.borrador?.bloqueo;
 
+    // Atajos Ctrl/Cmd+Z y Ctrl+Shift+Z / Ctrl+Y. No en campos de texto (ahí Ctrl+Z deshace el texto) ni con un diálogo abierto.
+    const hayDialogoAbierto = !!(selector || confirmacion || cargaArchivo || dialogoProcesar || descargaActual || descargaObligatoria);
+    const atajoRef = useRef(null);
+    atajoRef.current = { deshacer, rehacer, bloqueado: ocupado || hayDialogoAbierto };
+    useEffect(() => {
+        if (fase !== 'editor') return undefined;
+        const alTeclear = (e) => {
+            if (!(e.ctrlKey || e.metaKey) || e.altKey || atajoRef.current.bloqueado) return;
+            const t = e.target;
+            const enTexto = t && (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT'
+                || (t.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(t.type)));
+            if (enTexto) return;
+            const k = e.key.toLowerCase();
+            if (k === 'z' && !e.shiftKey) { e.preventDefault(); atajoRef.current.deshacer(); }
+            else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); atajoRef.current.rehacer(); }
+        };
+        document.addEventListener('keydown', alTeclear);
+        return () => document.removeEventListener('keydown', alTeclear);
+    }, [fase]);
+
     return (
         // Esc sube desde cualquier campo de texto y cerraría todo el editor; se cierra solo con el botón "Cerrar".
         <Dialog fullScreen open={open} onClose={cerrar} disableEscapeKeyDown>
@@ -544,6 +577,16 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                             </Box>
                         )}
                         <ParadasToolbar estadoGuardado={autoguardado.estado} eliminaAt={fase === 'editor' ? eliminaAt : null} soloLectura={soloLectura}>
+                            {fase === 'editor' && (
+                                <>
+                                    <Tooltip title={etiquetaDeshacer ? `Deshacer: ${etiquetaDeshacer} (Ctrl+Z)` : 'No hay nada que deshacer'}>
+                                        <span><Button variant="outlined" startIcon={<Undo />} onClick={deshacer} disabled={ocupado || !puedeDeshacer}>Deshacer</Button></span>
+                                    </Tooltip>
+                                    <Tooltip title={etiquetaRehacer ? `Rehacer: ${etiquetaRehacer} (Ctrl+Shift+Z)` : 'No hay nada que rehacer'}>
+                                        <span><Button variant="outlined" startIcon={<Redo />} onClick={rehacer} disabled={ocupado || !puedeRehacer}>Rehacer</Button></span>
+                                    </Tooltip>
+                                </>
+                            )}
                             {fase === 'editor' && <Button variant="outlined" startIcon={<GroupAdd />} onClick={() => setSelector('agregar')} disabled={ocupado}>Agregar familias</Button>}
                             {fase === 'editor' && (
                                 <>
@@ -608,6 +651,13 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                 onCargado={aplicarArchivo}
             />
             <DescargarEstadoActualDialog open={descargaActual} schoolId={schoolId} onCerrar={() => setDescargaActual(false)} onAviso={setAviso} />
+            <Snackbar
+                open={fase === 'editor' && !!ultimo?.destructiva && ultimo.version !== avisoDeshacerCerrado}
+                autoHideDuration={8000}
+                onClose={(_, motivo) => { if (motivo !== 'clickaway') setAvisoDeshacerCerrado(ultimo?.version || 0); }}
+                message={ultimo?.etiqueta}
+                action={<Button color="secondary" size="small" startIcon={<Undo />} onClick={() => { setAvisoDeshacerCerrado(ultimo?.version || 0); deshacer(); }}>Deshacer</Button>}
+            />
             <ProcesarDialog open={dialogoProcesar} resumen={resumen} ocupado={ocupado} onCancelar={() => setDialogoProcesar(false)} onConfirmar={procesar} />
             <DescargaObligatoriaDialog
                 open={!!descargaObligatoria}
