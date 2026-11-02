@@ -11,7 +11,7 @@ const leerVista = () => { try { return localStorage.getItem(CLAVE) === '1'; } ca
 const guardarVista = () => { try { localStorage.setItem(CLAVE, '1'); } catch (_) { /* sin almacenamiento: la guía se abre cada vez */ } };
 
 const PASOS = [
-    ['Elige las familias', 'Al abrir el editor eliges las familias que vas a revisar (filtra por Activas, Inactivas o Todas, o busca por apellido). Puedes agregar o quitar familias después.'],
+    ['Elige las familias', 'Al abrir el editor eliges las familias que vas a revisar (puedes buscar por apellido). Puedes agregar o quitar familias después.'],
     ['Edita las paradas', 'Abre una familia con "Ver y editar paradas". Por cada estudiante cambia franja, ruta, hora (con el selector de hora, minutos y AM/PM), nota y días. "Duplicar" y "Quitar" actúan sobre una parada; "Ver cambios" compara contra lo que hay hoy en la plataforma. Los estudiantes que cambies quedan marcados como "Modificado".'],
     ['Se guarda solo, en la nube', 'Cada cambio se guarda automáticamente en el servidor (unos 2 segundos después), no en tu equipo; el indicador de arriba muestra el estado. Puedes cerrar, apagar o cambiar de computador o dispositivo: entra con tu cuenta, abre "Carga de Paradas" y pulsa "Continuar con este trabajo" para seguir donde lo dejaste.'],
     ['Corrige lo marcado', 'Los errores aparecen en la fila y en el aviso rojo con cuántos faltan; el filtro "Mostrar" los encuentra. Sin errores ni conflictos pendientes se puede procesar.'],

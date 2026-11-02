@@ -1,6 +1,6 @@
 // src/components/paradas/DescargarEstadoActualDialog.jsx
 // Excel sellado desde los slots reales (sin borrador). Disponible también en ciclos inactivos.
-// "Seleccionar todas" sin desmarcar → se manda el filtro (estado) y el servidor consulta directo.
+// "Seleccionar todas" sin desmarcar ni buscar → se manda estado 'todas' y el servidor consulta directo.
 import React from 'react';
 import paradasService, { mensajeError } from '../../services/paradasService';
 import { descargarExcel } from './excelPuntoGuardado';
@@ -10,7 +10,7 @@ export default function DescargarEstadoActualDialog({ open, schoolId, onCerrar, 
     const confirmar = async (sel) => {
         try {
             const exp = await paradasService.exportar(schoolId, sel.todasDelFiltro
-                ? { tipo: 'actual', estado: sel.estado }
+                ? { tipo: 'actual', estado: 'todas' }
                 : { tipo: 'actual', familyIds: sel.familyIds });
             await descargarExcel(exp);
             onAviso(exp.excluidas.length

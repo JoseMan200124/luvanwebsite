@@ -22,6 +22,7 @@ import ConflictosPanel from './ConflictosPanel';
 import SeleccionFamiliasDialog from './SeleccionFamiliasDialog';
 import ParadasToolbar from './ParadasToolbar';
 import ResumenCarga from './ResumenCarga';
+import { liberarBloqueoPrevio } from './bloqueoPestana';
 import { fechaCorta, fechaHora } from './textoParada';
 import { descargarExcel } from './excelPuntoGuardado';
 import CargarPuntoGuardadoDialog from './CargarPuntoGuardadoDialog';
@@ -252,7 +253,7 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     useEffect(() => {
         if (!open || !schoolId || abierto.current) return;
         abierto.current = true; // StrictMode (dev) corre el efecto dos veces: serían dos tomarBloqueo en paralelo
-        cargar();
+        liberarBloqueoPrevio(schoolId).then(() => cargar()); // tras F5 el bloqueo anterior de esta pestaña sigue puesto
     }, [open, schoolId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const confirmarSeleccionInicial = sel => conManejo(async () => {

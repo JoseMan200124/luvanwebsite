@@ -16,7 +16,9 @@ export default function CargarPuntoGuardadoDialog({ open, schoolId, reemplaza, o
     const [error, setError] = useState(null);
     const [editado, setEditado] = useState(null); // { filas, payload }
 
-    useEffect(() => { if (open) { setArchivo(null); setError(null); setEditado(null); } }, [open]);
+    // Al abrir y al cerrar: el diálogo de "Excel editado" cuelga de `editado` y, si solo se limpiara al abrir,
+    // seguiría visible después de cargar al borrador o cancelar (el padre solo apaga `open`).
+    useEffect(() => { setArchivo(null); setError(null); setEditado(null); }, [open]);
 
     const cargar = async () => {
         setLeyendo(true);
