@@ -68,7 +68,7 @@ import BulkFamilyDraftsReview, { BulkPendingSteps, getDraftIssues, getDuplicateR
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
-import BulkScheduleModal from '../components/modals/BulkScheduleModal';
+import BulkStopsEditor from '../components/paradas/BulkStopsEditor';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import { getScheduleCodesFromSchool, resolveScheduleCodeFromSlot, slotHasScheduleData } from '../utils/scheduleConfig';
@@ -147,7 +147,7 @@ const SchoolUsersPage = () => {
     // Nuevos estados para funcionalidades
     
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
-    const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
+    const [openBulkStopsEditor, setOpenBulkStopsEditor] = useState(false);
     const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
     const [openServiceStatusModal, setOpenServiceStatusModal] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
@@ -2371,9 +2371,9 @@ const SchoolUsersPage = () => {
                                 color="primary"
                                 startIcon={<FileUpload />}
                                 fullWidth
-                                onClick={() => setOpenBulkScheduleDialog(true)}
+                                onClick={() => setOpenBulkStopsEditor(true)}
                             >
-                                Carga Horarios
+                                Carga de Paradas
                             </Button>
                         </Grid>
                         </PermissionGuard>
@@ -2893,13 +2893,14 @@ const SchoolUsersPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Modal: Carga masiva de horarios */}
-            <BulkScheduleModal
-                open={openBulkScheduleDialog}
-                onClose={() => setOpenBulkScheduleDialog(false)}
-                schoolId={currentSchool?.id || schoolId}
-                cicloEscolarId={stateCicloEscolarId}
-            />
+            {/* Editor de carga masiva de paradas */}
+            {openBulkStopsEditor && (
+                <BulkStopsEditor
+                    open={openBulkStopsEditor}
+                    onClose={() => setOpenBulkStopsEditor(false)}
+                    schoolId={currentSchool?.id || schoolId}
+                />
+            )}
 
             {/* Diálogo de confirmación para eliminación de usuario */}
             <Dialog open={openDeleteConfirm} onClose={handleCancelDelete} maxWidth="xs" fullWidth>
