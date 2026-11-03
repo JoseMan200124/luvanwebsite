@@ -28,7 +28,8 @@ import {
     InputLabel,
     Select,
     MenuItem,
-    IconButton
+    IconButton,
+    alpha
 } from '@mui/material';
 import { 
     School as SchoolIcon, 
@@ -62,7 +63,7 @@ import { getCicloEscolarYear } from '../services/cicloEscolarService';
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
     padding: 2rem;
-    max-width: 1400px;
+    max-width: 1600px;
     margin: 0 auto;
 
     @media (max-width: 640px) {
@@ -918,36 +919,32 @@ const SchoolDashboardPage = () => {
                             </Grid>
                         </Grid>
 
-                        {/* Compact: mostrar 2 tarjetas visibles y el resto en un contenedor scrollable */}
-                        <Grid item xs={12}>
-                            <Box sx={{
-                                maxHeight: 220,
-                                overflowY: 'auto',
-                                pr: 1,
-                                '&::-webkit-scrollbar': { width: 18 },
-                                '&::-webkit-scrollbar-thumb': { backgroundColor: 'grey.400', borderRadius: 2 }
-                            }}>
-                                <Grid container spacing={2}>
-                                    {/* Sub-sección 3: Botón de usuarios */}
+                    </Grid>
+                </Grid>
+
+                {/* Acciones: fila completa debajo del dashboard */}
+                <Grid item xs={12}>
+                    <Grid container spacing={2}>
                                     <PermissionGuard permission="colegios-familias">
-                                        <Grid item xs={12}>
-                                            <SummaryCard>
-                                                <CardContent sx={{ textAlign: 'center' }}>
-                                                    <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                    <Typography variant="h6" gutterBottom>
+                                        <Grid item xs={12} sm={6} md={4}>
+                                            <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                                <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                    <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                        <People sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                    </Box>
+                                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                                                         Gestión de Familias
                                                     </Typography>
-                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
                                                         Ver y gestionar todas las familias registradas en este colegio
                                                     </Typography>
                                                     <Button
                                                         variant="contained"
                                                         color="primary"
-                                                        size="large"
+                                                        size="medium"
                                                         startIcon={<Group />}
                                                         onClick={handleViewUsers}
-                                                        fullWidth
-                                                        sx={{ borderRadius: 2 }}
+                                                        sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
                                                     >
                                                         Ver Familias
                                                     </Button>
@@ -956,26 +953,55 @@ const SchoolDashboardPage = () => {
                                         </Grid>
                                     </PermissionGuard>
 
+                                    <PermissionGuard permission="colegios-solicitudes">
+                                        <Grid item xs={12} sm={6} md={4}>
+                                            <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                                <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                    <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                        <RequestsIcon sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                    </Box>
+                                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                                        Solicitudes
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
+                                                        Ver y gestionar las solicitudes de usuarios de este colegio en este ciclo escolar
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="medium"
+                                                        startIcon={<RequestsIcon />}
+                                                        onClick={handleViewRequests}
+                                                        sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
+                                                    >
+                                                        Ver Solicitudes
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    </PermissionGuard>
+
                                     {currentSchool && currentSchool.paymentsEnabled !== false && (
                                     <PermissionGuard permission="colegios-pagos">
-                                        <Grid item xs={12}>
-                                            <SummaryCard>
-                                                <CardContent sx={{ textAlign: 'center' }}>
-                                                    <PaymentIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                    <Typography variant="h6" gutterBottom>
+                                        <Grid item xs={12} sm={6} md={4}>
+                                            <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                                <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                    <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                        <PaymentIcon sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                    </Box>
+                                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                                                         Gestión de Pagos
                                                     </Typography>
-                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
                                                         Accede al panel de pagos y cobros específico de este colegio
                                                     </Typography>
                                                     <Button
                                                         variant="contained"
                                                         color="primary"
-                                                        size="large"
+                                                        size="medium"
                                                         startIcon={<PaymentIcon />}
                                                         onClick={handleViewPayments}
-                                                        fullWidth
-                                                        sx={{ borderRadius: 2 }}
+                                                        sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
                                                     >
                                                         Ver Pagos
                                                     </Button>
@@ -985,53 +1011,27 @@ const SchoolDashboardPage = () => {
                                     </PermissionGuard>
                                     )}
 
-                                    <PermissionGuard permission="colegios-solicitudes">
-                                        <Grid item xs={12}>
-                                            <SummaryCard>
-                                                <CardContent sx={{ textAlign: 'center' }}>
-                                                    <RequestsIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                    <Typography variant="h6" gutterBottom>
-                                                        Solicitudes
-                                                    </Typography>
-                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                                        Ver y gestionar las solicitudes de usuarios de este colegio en este ciclo escolar
-                                                    </Typography>
-                                                    <Button
-                                                        variant="contained"
-                                                        color="primary"
-                                                        size="large"
-                                                        startIcon={<RequestsIcon />}
-                                                        onClick={handleViewRequests}
-                                                        fullWidth
-                                                        sx={{ borderRadius: 2 }}
-                                                    >
-                                                        Ver Solicitudes
-                                                    </Button>
-                                                </CardContent>
-                                            </SummaryCard>
-                                        </Grid>
-                                    </PermissionGuard>
-
                                     {/* Sub-sección 4: Botón de buses */}
                                     <PermissionGuard permission="colegios-gestion-buses">
-                                        <Grid item xs={12}>
-                                            <SummaryCard>
-                                                <CardContent sx={{ textAlign: 'center' }}>
-                                                    <DirectionsBus sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                    <Typography variant="h6" gutterBottom>
+                                        <Grid item xs={12} sm={6} md={4}>
+                                            <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                                <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                    <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                        <DirectionsBus sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                    </Box>
+                                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                                                         Gestión de Buses
                                                     </Typography>
-                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                                        Ver y gestionar los buses asignados a este colegio
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
+                                                        Ver los buses y rutas de este colegio, junto con el personal asignado a cada uno
                                                     </Typography>
                                                     <Button
                                                         variant="contained"
                                                         color="primary"
-                                                        size="large"
+                                                        size="medium"
                                                         startIcon={<DirectionsBus />}
                                                         onClick={handleViewBuses}
-                                                        fullWidth
-                                                        sx={{ borderRadius: 2 }}
+                                                        sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
                                                     >
                                                         Ver Buses
                                                     </Button>
@@ -1042,24 +1042,25 @@ const SchoolDashboardPage = () => {
 
                                     {/* Sub-sección 5: Botón de contratos */}
                                     <PermissionGuard permission="colegios-contratos">
-                                        <Grid item xs={12}>
-                                            <SummaryCard>
-                                                <CardContent sx={{ textAlign: 'center' }}>
-                                                    <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                    <Typography variant="h6" gutterBottom>
+                                        <Grid item xs={12} sm={6} md={4}>
+                                            <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                                <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                    <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                        <ContractIcon sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                    </Box>
+                                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                                                         Gestión de Contratos
                                                     </Typography>
-                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
                                                         Ver y gestionar los contratos específicos de este colegio
                                                     </Typography>
                                                     <Button
                                                         variant="contained"
                                                         color="primary"
-                                                        size="large"
+                                                        size="medium"
                                                         startIcon={<ContractIcon />}
                                                         onClick={handleViewContracts}
-                                                        fullWidth
-                                                        sx={{ borderRadius: 2 }}
+                                                        sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
                                                     >
                                                         Ver Contratos
                                                     </Button>
@@ -1070,24 +1071,25 @@ const SchoolDashboardPage = () => {
 
                                     {/* Sub-sección 6: Botón de protocolos */}
                                     <PermissionGuard permission="colegios-protocolos-reglamentos">
-                                        <Grid item xs={12}>
-                                            <SummaryCard>
-                                                <CardContent sx={{ textAlign: 'center' }}>
-                                                    <ProtocolIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                    <Typography variant="h6" gutterBottom>
+                                        <Grid item xs={12} sm={6} md={4}>
+                                            <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                                <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                    <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                        <ProtocolIcon sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                    </Box>
+                                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                                                         Protocolos y Reglamentos
                                                     </Typography>
-                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
                                                         Ver y gestionar protocolos y reglamentos de este colegio
                                                     </Typography>
                                                     <Button
                                                         variant="contained"
                                                         color="primary"
-                                                        size="large"
+                                                        size="medium"
                                                         startIcon={<ProtocolIcon />}
                                                         onClick={handleViewProtocols}
-                                                        fullWidth
-                                                        sx={{ borderRadius: 2 }}
+                                                        sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
                                                     >
                                                         Ver Protocolos
                                                     </Button>
@@ -1095,9 +1097,6 @@ const SchoolDashboardPage = () => {
                                             </SummaryCard>
                                         </Grid>
                                     </PermissionGuard>
-                                </Grid>
-                            </Box>
-                        </Grid>
                     </Grid>
                 </Grid>
             </Grid>
