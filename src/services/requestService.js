@@ -27,11 +27,6 @@ export const getRequestEvents = async (id) => {
     return res.data?.events || [];
 };
 
-export const createRequest = async (data) => {
-    const res = await api.post(API_URL, data);
-    return res.data;
-};
-
 export const createServiceCancellation = async (data) => {
     const res = await api.post(`${API_URL}/service-cancellation`, data);
     return res.data;
@@ -99,7 +94,6 @@ export default {
     getRequestById,
     getMyRequests,
     getRequestEvents,
-    createRequest,
     createServiceCancellation,
     updateRequestStatus,
     deleteRequest,

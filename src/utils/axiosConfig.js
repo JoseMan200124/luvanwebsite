@@ -268,6 +268,9 @@ const handleUnauthorizedResponse = async (error) => {
 
     if (!originalRequest) throw error;
 
+    // Un 401 del login son credenciales incorrectas, no un token vencido: no refrescar
+    if (originalRequest.url === '/auth/login') throw error;
+
     if (isSessionInvalidatedMessage(errorMessage)) {
         dispatchSessionInvalidated(errorMessage);
         throw error;

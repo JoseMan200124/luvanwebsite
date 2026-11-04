@@ -28,7 +28,8 @@ import {
     InputLabel,
     Select,
     MenuItem,
-    IconButton
+    IconButton,
+    alpha
 } from '@mui/material';
 import { 
     Business as CorporationIcon, 
@@ -38,7 +39,8 @@ import {
     ArrowBack,
     TrendingUp,
     People,
-    Description as ContractIcon,
+    Policy as ProtocolIcon,
+    Assignment as RequestsIcon,
     Work as DepartmentIcon,
     ChevronLeft,
     ChevronRight
@@ -56,7 +58,7 @@ import { generateCorporateRouteOccupancyPDF } from '../utils/pdfExport';
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
     padding: 2rem;
-    max-width: 1400px;
+    max-width: 1600px;
     margin: 0 auto;
 
     @media (max-width: 640px) {
@@ -360,6 +362,15 @@ const CorporateDashboardPage = () => {
 
     const handleViewProtocols = () => {
         navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/protocolos`, {
+            state: {
+                fiscalYear: fiscalYear || stateFiscalYear,
+                corporation: corporationData || stateCorporation
+            }
+        });
+    };
+
+    const handleViewRequests = () => {
+        navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/solicitudes`, {
             state: {
                 fiscalYear: fiscalYear || stateFiscalYear,
                 corporation: corporationData || stateCorporation
@@ -893,29 +904,32 @@ const CorporateDashboardPage = () => {
                         </Grid>
                         )}
 
-                        {/* Action cards */}
-                        <Grid item xs={12}>
-                            <Box sx={{ maxHeight: 220, overflowY: 'auto', pr: 1 }}>
-                                <Grid container spacing={2}>
+                                        </Grid>
+            </Grid>
+
+                {/* Acciones: fila completa debajo del dashboard */}
+                <Grid item xs={12}>
+                    <Grid container spacing={2}>
                                     {/* Gestión de Colaboradores */}
-                                    <Grid item xs={12}>
-                                        <SummaryCard>
-                                            <CardContent sx={{ textAlign: 'center' }}>
-                                                <People sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                <Typography variant="h6" gutterBottom>
+                                    <Grid item xs={12} sm={6} md={4}>
+                                        <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                            <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                    <People sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                </Box>
+                                                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                                                     Gestión de Colaboradores
                                                 </Typography>
-                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
                                                     Ver y gestionar todos los colaboradores registrados en esta corporación
                                                 </Typography>
                                                 <Button
                                                     variant="contained"
                                                     color="primary"
-                                                    size="large"
+                                                    size="medium"
                                                     startIcon={<Group />}
                                                     onClick={handleViewColaboradores}
-                                                    fullWidth
-                                                    sx={{ borderRadius: 2 }}
+                                                    sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
                                                 >
                                                     Ver Colaboradores
                                                 </Button>
@@ -923,25 +937,54 @@ const CorporateDashboardPage = () => {
                                         </SummaryCard>
                                     </Grid>
 
+                                    {hasPermission('corporaciones-solicitudes') && (
+                                        <Grid item xs={12} sm={6} md={4}>
+                                            <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                                <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                    <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                        <RequestsIcon sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                    </Box>
+                                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                                        Solicitudes
+                                                    </Typography>
+                                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
+                                                        Ver y gestionar las solicitudes de usuarios de esta corporación
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        size="medium"
+                                                        startIcon={<RequestsIcon />}
+                                                        onClick={handleViewRequests}
+                                                        sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
+                                                    >
+                                                        Ver Solicitudes
+                                                    </Button>
+                                                </CardContent>
+                                            </SummaryCard>
+                                        </Grid>
+                                    )}
+
                                     {/* Gestión de Buses */}
-                                    <Grid item xs={12}>
-                                        <SummaryCard>
-                                            <CardContent sx={{ textAlign: 'center' }}>
-                                                <DirectionsBus sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                <Typography variant="h6" gutterBottom>
+                                    <Grid item xs={12} sm={6} md={4}>
+                                        <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                            <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                    <DirectionsBus sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                </Box>
+                                                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                                                     Gestión de Buses
                                                 </Typography>
-                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                                    Ver y gestionar los buses asignados a esta corporación
+                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
+                                                    Ver los buses y rutas de esta corporación, junto con el personal asignado a cada uno
                                                 </Typography>
                                                 <Button
                                                     variant="contained"
                                                     color="primary"
-                                                    size="large"
+                                                    size="medium"
                                                     startIcon={<DirectionsBus />}
                                                     onClick={handleViewBuses}
-                                                    fullWidth
-                                                    sx={{ borderRadius: 2 }}
+                                                    sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
                                                 >
                                                     Ver Buses
                                                 </Button>
@@ -950,33 +993,31 @@ const CorporateDashboardPage = () => {
                                     </Grid>
 
                                     {/* Gestión de Protocolos y Reglamentos */}
-                                    <Grid item xs={12}>
-                                        <SummaryCard>
-                                            <CardContent sx={{ textAlign: 'center' }}>
-                                                <ContractIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                                                <Typography variant="h6" gutterBottom>
+                                    <Grid item xs={12} sm={6} md={4}>
+                                        <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>
+                                            <CardContent sx={{ textAlign: 'center', p: 2, '&:last-child': { pb: 2 } }}>
+                                                <Box sx={{ width: 52, height: 52, borderRadius: '50%', mx: 'auto', mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: (t) => alpha(t.palette.primary.main, 0.12) }}>
+                                                    <ProtocolIcon sx={{ fontSize: 30, color: 'primary.main' }} />
+                                                </Box>
+                                                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                                                     Protocolos y Reglamentos
                                                 </Typography>
-                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2, minHeight: { md: 40 }, maxWidth: 280, mx: 'auto' }}>
                                                     Ver y gestionar los protocolos y reglamentos de esta corporación
                                                 </Typography>
                                                 <Button
                                                     variant="contained"
                                                     color="primary"
-                                                    size="large"
-                                                    startIcon={<ContractIcon />}
+                                                    size="medium"
+                                                    startIcon={<ProtocolIcon />}
                                                     onClick={handleViewProtocols}
-                                                    fullWidth
-                                                    sx={{ borderRadius: 2 }}
+                                                    sx={{ borderRadius: 2, py: 1.5, width: 250, fontSize: '1rem' }}
                                                 >
                                                     Ver Protocolos
                                                 </Button>
                                             </CardContent>
                                         </SummaryCard>
                                     </Grid>
-                                </Grid>
-                            </Box>
-                        </Grid>
                     </Grid>
                 </Grid>
             </Grid>

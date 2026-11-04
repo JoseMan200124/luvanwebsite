@@ -1,4 +1,4 @@
-// src/pages/ReportsUsagePage.jsx
+// src/components/generalStatistics/UsageStatisticsTab.jsx
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
@@ -28,20 +28,14 @@ import {
     Legend,
     ResponsiveContainer
 } from 'recharts';
-import api from '../utils/axiosConfig';
-import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import tw from 'twin.macro';
+import api from '../../utils/axiosConfig';
+import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import moment from 'moment-timezone';
-import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../CicloEscolarFilter';
 
 moment.tz.setDefault('America/Guatemala');
-
-// Contenedor principal
-const PageContainer = tw.div`
-  p-8 w-full bg-gray-100 flex flex-col min-h-screen
-`;
 
 const toNumber = (v) => {
     const n = Number(v);
@@ -114,7 +108,7 @@ const calcDynamicHeight = (rowsCount, { min = 280, max = 620, perRow = 34 } = {}
     return Math.max(min, Math.min(max, h));
 };
 
-const ReportsUsagePage = () => {
+const UsageStatisticsTab = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -270,11 +264,7 @@ const ReportsUsagePage = () => {
     );
 
     return (
-        <PageContainer>
-            <Typography variant="h4" gutterBottom>
-                Reportes de Uso
-            </Typography>
-
+        <>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
                 <Button variant="contained" color="primary" onClick={generatePDF}>
                     Generar PDF
@@ -439,8 +429,8 @@ const ReportsUsagePage = () => {
                     </Grid>
                 </div>
             )}
-        </PageContainer>
+        </>
     );
 };
 
-export default ReportsUsagePage;
+export default UsageStatisticsTab;

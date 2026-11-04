@@ -590,8 +590,13 @@ const RolesManagementPage = () => {
 
             // Crear o actualizar (no envíes id en POST)
             if (selectedUser.id) {
-                await api.put(`/users/${selectedUser.id}`, payload);
-                setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
+                const { data: updateData } = await api.put(`/users/${selectedUser.id}`, payload);
+                const releasedBuses = updateData?.releasedBuses || [];
+                const releasedPlates = releasedBuses.map(b => b.plate || `#${b.id}`).join(', ');
+                const releasedMessage = releasedBuses.length > 0
+                    ? `. Se desasignó ${releasedBuses.length === 1 ? 'del bus' : 'de los buses'} ${releasedPlates}`
+                    : '';
+                setSnackbar({ open: true, message: `Usuario actualizado exitosamente${releasedMessage}`, severity: 'success' });
             } else {
                 const { id, ...payloadForPost } = payload;
                 await api.post('/users', payloadForPost);

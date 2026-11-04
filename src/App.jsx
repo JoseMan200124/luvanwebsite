@@ -34,6 +34,7 @@ import SchoolBusesPage from './pages/SchoolBusesPage';
 import SchoolContractsPage from './pages/SchoolContractsPage';
 import SchoolProtocolsPage from './pages/SchoolProtocolsPage';
 import SchoolPaymentsPage from './pages/SchoolPaymentsPage';
+import RequestsPage from './pages/RequestsPage';
 import CorporateDashboardPage from './pages/CorporateDashboardPage';
 import CorporateBusesPage from './pages/CorporateBusesPage';
 import CorporateProtocolsPage from './pages/CorporateProtocolsPage';
@@ -209,6 +210,14 @@ function App() {
                                 </ProtectedRoute>
                             }
                         />
+                        <Route
+                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/solicitudes"
+                            element={
+                                <ProtectedRoute moduleKey={'colegios-solicitudes'}>
+                                    <RequestsPage />
+                                </ProtectedRoute>
+                            }
+                        />
 
                         {/* Rutas para gestión de corporaciones por año fiscal */}
                         <Route
@@ -248,6 +257,14 @@ function App() {
                             element={
                                 <ProtectedRoute moduleKey="pagos-listar" requireSchoolContext={false}>
                                     <SchoolPaymentsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="corporaciones/:fiscalYear/:corporationId/solicitudes"
+                            element={
+                                <ProtectedRoute moduleKey={'corporaciones-solicitudes'} requireSchoolContext={false}>
+                                    <RequestsPage />
                                 </ProtectedRoute>
                             }
                         />

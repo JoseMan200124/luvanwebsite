@@ -66,7 +66,7 @@ const PageContainer = styled.div`
 
 const HeaderCard = styled(Card)`
     ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
 `;
 
