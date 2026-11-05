@@ -864,7 +864,9 @@ const ParentDashboardPage = () => {
       if (pad && !pad.isEmpty()) {
           signatures[`${name}_signature`] = pad.getTrimmedCanvas().toDataURL('image/png');
       }
-      else signatures[`${name}_signature`] = '';
+      else {
+          signatures[`${name}_signature`] = '';
+      }
     }
 
     const payload = { 

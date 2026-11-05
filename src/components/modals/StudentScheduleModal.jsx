@@ -427,7 +427,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
             } else {
               throw err; // rethrow original
             }
-          } else throw err;
+          } else {
+              throw err;
+          }
         }
       } else {
         // update existing slot removing only that day
@@ -455,7 +457,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
             } else {
               throw err;
             }
-          } else throw err;
+          } else {
+              throw err;
+          }
         }
       }
       const map = { ...slotsMap };

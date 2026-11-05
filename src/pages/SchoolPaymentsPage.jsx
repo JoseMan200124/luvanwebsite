@@ -2463,7 +2463,9 @@ const SchoolPaymentsPage = () => {
                             if (penaltyDue > 0) {
                                 doc.setTextColor(244, 67, 54);
                             }
-                            else doc.setTextColor(0, 0, 0);
+                            else {
+                                doc.setTextColor(0, 0, 0);
+                            }
                             doc.text(money(penaltyDue), pageWidth - 50, cursorY, { align: 'right' });
                             cursorY += 12;
                             if (period?.penaltyFrozen) {
@@ -2494,7 +2496,9 @@ const SchoolPaymentsPage = () => {
                         if (amountDue > 0) {
                             doc.setTextColor(244, 67, 54);
                         }
-                        else doc.setTextColor(21, 128, 61);
+                        else {
+                            doc.setTextColor(21, 128, 61);
+                        }
                         doc.text(money(amountDue), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
                         if (penaltyDue > 0) {
@@ -2507,7 +2511,9 @@ const SchoolPaymentsPage = () => {
                         if (totalPending > 0) {
                             doc.setTextColor(244, 67, 54);
                         }
-                        else doc.setTextColor(21, 128, 61);
+                        else {
+                            doc.setTextColor(21, 128, 61);
+                        }
                         doc.text('Total a pagar:', 50, cursorY);
                         doc.text(money(totalPending), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
@@ -2758,7 +2764,9 @@ const SchoolPaymentsPage = () => {
         const startYear = Number.isFinite(baseYear) ? baseYear : currentYear;
 
         const years = [];
-        for (let y = startYear; y <= currentYear; y++) years.push(String(y));
+        for (let y = startYear; y <= currentYear; y++) {
+            years.push(String(y));
+        }
         // Mostrar descendente (más reciente primero)
         return years.reverse();
     }, [currentCycleYear]);

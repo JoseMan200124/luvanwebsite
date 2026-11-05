@@ -50,7 +50,9 @@ export function consolidar(paradas) {
         if (previa) {
             previa.days = DIA_KEYS.filter(d => previa.days.includes(d) || p.days.includes(d));
         }
-        else m.set(k, p);
+        else {
+            m.set(k, p);
+        }
     }
     return [...m.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, p]) => p);
 }

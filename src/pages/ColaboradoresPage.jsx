@@ -1553,7 +1553,9 @@ const ColaboradoresPage = () => {
                                 if (Array.isArray(parsed)) {
                                     slotDays = parsed;
                                 }
-                                else slotDays = [slot.days];
+                                else {
+                                    slotDays = [slot.days];
+                                }
                             } catch (e) {
                                 slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days];
                             }
@@ -1590,7 +1592,9 @@ const ColaboradoresPage = () => {
                                 if (Array.isArray(parsed)) {
                                     slotDays = parsed;
                                 }
-                                else slotDays = [slot.days];
+                                else {
+                                    slotDays = [slot.days];
+                                }
                             } catch (e) {
                                 slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days];
                             }

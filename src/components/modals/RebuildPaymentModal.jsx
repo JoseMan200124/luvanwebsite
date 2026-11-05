@@ -378,7 +378,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         if (noAplica) {
             next[decisionKey] = false;
         }
-        else delete next[decisionKey];
+        else {
+            delete next[decisionKey];
+        }
         setCreditAutoDecisions(next);
         setRefreshing(true);
         try {
@@ -407,7 +409,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         if (waive) {
             next[period] = false;
         }
-        else delete next[period];
+        else {
+            delete next[period];
+        }
         setLateStartDecisions(next);
         setRefreshing(true);
         try {
@@ -439,7 +443,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         if (applies) {
             next[caseKey] = true;
         }
-        else delete next[caseKey];
+        else {
+            delete next[caseKey];
+        }
         setMoraPaidAsTariffDecisions(next);
         setRefreshing(true);
         try {
@@ -541,7 +547,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         if (shouldDelete) {
             next[transactionId] = true;
         }
-        else delete next[transactionId];
+        else {
+            delete next[transactionId];
+        }
         let nextMoraPaidAsTariffDecisions = moraPaidAsTariffDecisions;
         if (shouldDelete) {
             const matchingCase = findMoraIncludedCaseForDeletedAutoCredit(payment, txBefore, transactionId);

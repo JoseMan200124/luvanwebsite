@@ -383,7 +383,9 @@ export default function AdminAuditHidden() {
 
         let start = 0;
         const minLength = Math.min(left.length, right.length);
-        while (start < minLength && left[start] === right[start]) start += 1;
+        while (start < minLength && left[start] === right[start]) {
+            start += 1;
+        }
 
         let endLeft = left.length - 1;
         let endRight = right.length - 1;

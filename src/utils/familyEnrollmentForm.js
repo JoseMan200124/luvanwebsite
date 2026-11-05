@@ -28,7 +28,9 @@ export const emptyFamilyForm = () => ({
 export const resizeStudents = (students, count) => {
     const target = Math.max(1, Math.min(MAX_STUDENTS, Number(count) || 1));
     const next = students.slice(0, target).map((student) => ({ ...student }));
-    while (next.length < target) next.push(emptyStudent());
+    while (next.length < target) {
+        next.push(emptyStudent());
+    }
     return next;
 };
 

@@ -230,7 +230,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             else if (code === 'LOCK_LOST') {
                 perderBloqueo(e.response.data);
             }
-            else setAviso({ severity: 'error', texto: mensajeError(e, 'No se pudo completar la acción.') });
+            else {
+                setAviso({ severity: 'error', texto: mensajeError(e, 'No se pudo completar la acción.') });
+            }
         } finally {
             setOcupado(false);
         }
@@ -420,7 +422,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             if (tomado) {
                 await liberarSilencioso(token);
             }
-            else reanudar();
+            else {
+                reanudar();
+            }
             throw e;
         }
         if (tomado && cerradoRef.current) { await liberarSilencioso(token); return; }
@@ -487,7 +491,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             else if (code === 'LOCK_LOST') {
                 perderBloqueo(d);
             }
-            else setAviso({ severity: 'error', texto: mensajeError(e, 'No se pudo procesar. El borrador quedó igual; puedes reintentar.') });
+            else {
+                setAviso({ severity: 'error', texto: mensajeError(e, 'No se pudo procesar. El borrador quedó igual; puedes reintentar.') });
+            }
         } finally {
             setOcupado(false);
         }

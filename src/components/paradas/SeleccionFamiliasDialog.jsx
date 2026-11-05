@@ -45,7 +45,9 @@ export default function SeleccionFamiliasDialog({
         setTodasDelFiltro(false);
         setSeleccion((s) => { const n = new Set(s); if (n.has(id)) {
             n.delete(id);
-        } else n.add(id); return n; });
+        } else {
+            n.add(id);
+        } return n; });
     };
     const seleccionarVisibles = () => {
         setSeleccion(new Set(visibles.map(f => f.familyDetailId)));

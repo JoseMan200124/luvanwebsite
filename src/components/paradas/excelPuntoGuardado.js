@@ -63,7 +63,9 @@ export async function construirExcel(exp) {
 
     const meta = wb.addWorksheet(HOJA_META, { state: 'veryHidden' });
     const trozos = [];
-    for (let i = 0; i < exp.bloque.length; i += TROZO) trozos.push(exp.bloque.slice(i, i + TROZO));
+    for (let i = 0; i < exp.bloque.length; i += TROZO) {
+        trozos.push(exp.bloque.slice(i, i + TROZO));
+    }
     meta.addRow(['formatVersion', exp.formatVersion]);
     meta.addRow(['keyId', exp.keyId]);
     meta.addRow(['trozos', trozos.length]);

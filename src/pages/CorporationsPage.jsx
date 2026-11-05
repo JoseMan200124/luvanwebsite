@@ -899,7 +899,9 @@ const CorporationsPage = () => {
                                                 if (idxByName === -1) {
                                                     curr.push(cleaned);
                                                 } 
-                                                else curr[idxByName] = cleaned;
+                                                else {
+                                                    curr[idxByName] = cleaned;
+                                                }
                                             }
                                         } else {
                                             if (idxByName !== -1) {

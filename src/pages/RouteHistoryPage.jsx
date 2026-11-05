@@ -820,7 +820,9 @@ const RouteHistoryPage = () => {
             else if (statsSelectedClient?.type === 'corporation') {
                 clientParam.corporationId = selectedStatsClientId;
             }
-            else clientParam.schoolId = selectedStatsClientId;
+            else {
+                clientParam.schoolId = selectedStatsClientId;
+            }
 
             const groupByToUse = groupByOverride || statsGroupBy;
 

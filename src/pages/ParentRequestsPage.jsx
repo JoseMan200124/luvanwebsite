@@ -175,7 +175,9 @@ const extractStatusFromMetadata = (meta) => {
       return;
     }
     if (Array.isArray(obj)) {
-      for (const v of obj) scan(v, depth + 1);
+      for (const v of obj) {
+        scan(v, depth + 1);
+      }
       return;
     }
     if (typeof obj === 'object') {

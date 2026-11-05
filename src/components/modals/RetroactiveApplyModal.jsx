@@ -279,7 +279,9 @@ const RetroactiveApplyModal = ({
                     if (onlyCurrent) {
                         payload = { ...payload, scope: 'CURRENT' };
                     }
-                    else payload = { ...payload, scope: 'SELECTED', periods: selectedPeriods };
+                    else {
+                        payload = { ...payload, scope: 'SELECTED', periods: selectedPeriods };
+                    }
                 }
             }
 

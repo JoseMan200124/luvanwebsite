@@ -448,7 +448,9 @@ const SchoolUsersPage = () => {
                                 else if (typeof slot.days === 'string') {
                                     try { const parsed = JSON.parse(slot.days); if (Array.isArray(parsed)) {
                                         slotDays = parsed;
-                                    } else slotDays = [slot.days]; } catch (e) { slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days]; }
+                                    } else {
+                                        slotDays = [slot.days];
+                                    } } catch (e) { slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days]; }
                                 } else if (slot.days) {
                                     slotDays = [slot.days];
                                 }
@@ -1784,7 +1786,9 @@ const SchoolUsersPage = () => {
                 try { parsed = JSON.parse(gradesRaw); } catch (e) { parsed = gradesRaw.split(',').map(x => x.trim()).filter(Boolean).map(name => ({ name })); }
             } else if (Array.isArray(gradesRaw)) {
                 parsed = gradesRaw;
-            } else return [];
+            } else {
+                return [];
+            }
             return parsed.map(g => {
                 if (!g) {
                     return '';
@@ -1875,7 +1879,9 @@ const SchoolUsersPage = () => {
         if (bulkHasDrafts || bulkPendingFamilies.length > 0) {
             setBulkConfirmCancelOpen(true);
         }
-        else closeBulkDialog();
+        else {
+            closeBulkDialog();
+        }
     };
 
     const handleBulkUpload = async () => {

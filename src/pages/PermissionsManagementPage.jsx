@@ -170,7 +170,9 @@ const TarjetaGrupo = memo(function TarjetaGrupo({
                             if (todos) {
                                 onAplicar(grupo, 'ninguno');
                             }
-                            else onPedirConfirmacion(grupo);
+                            else {
+                                onPedirConfirmacion(grupo);
+                            }
                         }}
                         sx={{ mr: 1 }}
                     />
@@ -364,7 +366,9 @@ const PermissionsManagementPage = () => {
             return;
         }
         const abiertos = {};
-        for (const grupo of gruposFiltrados) abiertos[grupo.key] = true;
+        for (const grupo of gruposFiltrados) {
+            abiertos[grupo.key] = true;
+        }
         setExpandidos(abiertos);
     }, [busqueda, gruposFiltrados, totalFiltrado]);
 
@@ -463,7 +467,9 @@ const PermissionsManagementPage = () => {
             // Se envían únicamente las claves del catálogo. Las filas heredadas
             // que aún viven en la base no se tocan.
             const aEnviar = {};
-            for (const key of clavesCatalogo) aEnviar[key] = !!permissions[key];
+            for (const key of clavesCatalogo) {
+                aEnviar[key] = !!permissions[key];
+            }
 
             const res = await api.put(
                 `/permissions/role/${selectedRoleId}`,

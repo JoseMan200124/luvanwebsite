@@ -201,7 +201,9 @@ export const AudienceSummaryText = ({ summary }) => {
     else if (summary.kind === 'all') {
         scope = 'Todos los colegios';
     }
-    else scope = summary.schoolNames.length === 1 ? summary.schoolNames[0] : `${summary.schoolNames.length} colegios`;
+    else {
+        scope = summary.schoolNames.length === 1 ? summary.schoolNames[0] : `${summary.schoolNames.length} colegios`;
+    }
 
     const text = (
         <Box>

@@ -1205,7 +1205,9 @@ const CicloEscolarSelectionPage = () => {
                 if (idx !== -1) {
                     arr[idx] = { routeNumber: String(value), schedules: Array.isArray(arr[idx].schedules) ? arr[idx].schedules : [] };
                 }
-                else arr.push({ routeNumber: String(value), schedules: [] });
+                else {
+                    arr.push({ routeNumber: String(value), schedules: [] });
+                }
                 return arr;
             });
             return clone;
@@ -2729,7 +2731,9 @@ const CicloEscolarSelectionPage = () => {
                                                 const cleaned = { code: schObj.code, name: schObj.name || `HORARIO ${schObj.code}`, times: Array.isArray(schObj.times) && schObj.times[0] ? [String(schObj.times[0])] : [] };
                                                 if (idxByCode === -1) {
                                                     curr.push(cleaned);
-                                                } else curr[idxByCode] = cleaned;
+                                                } else {
+                                                    curr[idxByCode] = cleaned;
+                                                }
                                             } else {
                                                 if (idxByCode !== -1) {
                                                     curr.splice(idxByCode, 1);

@@ -45,7 +45,9 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
 
   const toggle = (id) => setSelected(prev => { const copy = new Set(prev); if (copy.has(id)) {
       copy.delete(id);
-  } else copy.add(id); return copy; });
+  } else {
+      copy.add(id);
+  } return copy; });
 
   const generateTemplate = async () => {
     setGenerating(true);
@@ -98,7 +100,9 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
         else if (/Nota Parada/i.test(h)) {
             col.width = 30;
         }
-        else col.width = Math.min(Math.max(h.length + 6, 12), 40);
+        else {
+            col.width = Math.min(Math.max(h.length + 6, 12), 40);
+        }
         col.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
       }
 
@@ -231,7 +235,9 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
               <label>
                 <input type="checkbox" checked={selected.size === colaboradores.length && colaboradores.length>0} onChange={(e)=>{ if (e.target.checked) {
                     setSelected(new Set(colaboradores.map(c=>c.id)));
-                } else setSelected(new Set()); }} /> Seleccionar todo
+                } else {
+                    setSelected(new Set());
+                } }} /> Seleccionar todo
               </label>
             </Box>
             {colaboradores.map(c => (
