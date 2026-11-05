@@ -593,7 +593,7 @@ const ActivityLogPage = () => {
         setBusPage(newPage);
     };
     const handleChangeBusRowsPerPage = (event) => {
-        setBusRowsPerPage(parseInt(event.target.value, 10));
+        setBusRowsPerPage(Number.parseInt(event.target.value, 10));
         setBusPage(0);
     };
 
@@ -631,7 +631,7 @@ const ActivityLogPage = () => {
         setIncPage(newPage);
     };
     const handleChangeIncRowsPerPage = (event) => {
-        setIncRowsPerPage(parseInt(event.target.value, 10));
+        setIncRowsPerPage(Number.parseInt(event.target.value, 10));
         setIncPage(0);
     };
 
@@ -665,7 +665,7 @@ const ActivityLogPage = () => {
         setEmePage(newPage);
     };
     const handleChangeEmeRowsPerPage = (event) => {
-        setEmeRowsPerPage(parseInt(event.target.value, 10));
+        setEmeRowsPerPage(Number.parseInt(event.target.value, 10));
         setEmePage(0);
     };
 
@@ -674,7 +674,7 @@ const ActivityLogPage = () => {
         setPayPage(newPage);
     };
     const handleChangePayRowsPerPage = (event) => {
-        setPayRowsPerPage(parseInt(event.target.value, 10));
+        setPayRowsPerPage(Number.parseInt(event.target.value, 10));
         setPayPage(0);
     };
     
@@ -1432,7 +1432,7 @@ const ActivityLogPage = () => {
                                                     <MobileLabel>Ubicación (Lat,Lng):</MobileLabel>
                                                     <MobileValue>
                                                         {eme.latitud && eme.longitud
-                                                            ? `${parseFloat(eme.latitud).toFixed(6)}, ${parseFloat(eme.longitud).toFixed(6)}`
+                                                            ? `${Number.parseFloat(eme.latitud).toFixed(6)}, ${Number.parseFloat(eme.longitud).toFixed(6)}`
                                                             : '—'}
                                                     </MobileValue>
                                                     {eme.latitud && eme.longitud && (
@@ -1441,8 +1441,8 @@ const ActivityLogPage = () => {
                                                                 size="small"
                                                                 onClick={() =>
                                                                     handleOpenMap(
-                                                                        parseFloat(eme.latitud),
-                                                                        parseFloat(eme.longitud)
+                                                                        Number.parseFloat(eme.latitud),
+                                                                        Number.parseFloat(eme.longitud)
                                                                     )
                                                                 }
                                                             >
@@ -1508,16 +1508,16 @@ const ActivityLogPage = () => {
                                                         <TableCell>
                                                             {eme.latitud && eme.longitud ? (
                                                                 <>
-                                                                    {parseFloat(eme.latitud).toFixed(6)},
+                                                                    {Number.parseFloat(eme.latitud).toFixed(6)},
                                                                     {' '}
-                                                                    {parseFloat(eme.longitud).toFixed(6)}
+                                                                    {Number.parseFloat(eme.longitud).toFixed(6)}
                                                                     <Tooltip title="Ver mapa" sx={{ ml: 1 }}>
                                                                         <IconButton
                                                                             size="small"
                                                                             onClick={() =>
                                                                                 handleOpenMap(
-                                                                                    parseFloat(eme.latitud),
-                                                                                    parseFloat(eme.longitud)
+                                                                                    Number.parseFloat(eme.latitud),
+                                                                                    Number.parseFloat(eme.longitud)
                                                                                 )
                                                                             }
                                                                         >

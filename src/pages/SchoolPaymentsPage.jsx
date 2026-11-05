@@ -3056,7 +3056,7 @@ const SchoolPaymentsPage = () => {
             return null;
         }
 
-        const dailyPenalty = parseFloat(school?.dailyPenalty || allSchools.find(s => s.id === registerPaymentTarget?.schoolId)?.dailyPenalty || 0);
+        const dailyPenalty = Number.parseFloat(school?.dailyPenalty || allSchools.find(s => s.id === registerPaymentTarget?.schoolId)?.dailyPenalty || 0);
         const fallbackStudentCount = Number(
             registerPaymentTarget?.studentCount ||
             registerPaymentTarget?.User?.FamilyDetail?.studentsCount ||
@@ -5915,7 +5915,7 @@ const SchoolPaymentsPage = () => {
                                 }}
                                 rowsPerPage={rowsPerPage}
                                 onRowsPerPageChange={(e) => {
-                                    const rp = parseInt(e.target.value, 10);
+                                    const rp = Number.parseInt(e.target.value, 10);
                                     setRowsPerPage(rp);
                                     setPage(0);
                                 }}

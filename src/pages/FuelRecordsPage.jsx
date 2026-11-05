@@ -392,10 +392,10 @@ const FuelRecordsPage = () => {
                 if (totalsFromList) {
                     const t = totalsFromList;
                     setStatistics(prev => ({
-                        totalRecords: parseInt(t.totalRecords || t.total || prev.totalRecords) || 0,
-                        totalGallons: parseFloat(t.totalGallonage || t.totalGallons || prev.totalGallons) || 0,
-                        totalAmount: parseFloat(t.totalAmount || prev.totalAmount) || 0,
-                        averagePrice: parseFloat(t.avgPricePerGallon || t.averagePrice || prev.averagePrice) || 0,
+                        totalRecords: Number.parseInt(t.totalRecords || t.total || prev.totalRecords) || 0,
+                        totalGallons: Number.parseFloat(t.totalGallonage || t.totalGallons || prev.totalGallons) || 0,
+                        totalAmount: Number.parseFloat(t.totalAmount || prev.totalAmount) || 0,
+                        averagePrice: Number.parseFloat(t.avgPricePerGallon || t.averagePrice || prev.averagePrice) || 0,
                         byReason: prev.byReason
                     }));
                 }
@@ -446,18 +446,18 @@ const FuelRecordsPage = () => {
                 const byReason = {};
                 byFuelType.forEach(stat => {
                     byReason[stat.fuelingReason] = {
-                        count: parseInt(stat.count) || 0,
-                        totalGallonage: parseFloat(stat.totalGallonage) || 0,
-                        totalAmount: parseFloat(stat.totalAmount) || 0,
-                        avgPricePerGallon: parseFloat(stat.avgPricePerGallon) || 0
+                        count: Number.parseInt(stat.count) || 0,
+                        totalGallonage: Number.parseFloat(stat.totalGallonage) || 0,
+                        totalAmount: Number.parseFloat(stat.totalAmount) || 0,
+                        avgPricePerGallon: Number.parseFloat(stat.avgPricePerGallon) || 0
                     };
                 });
 
                 setStatistics({
-                    totalRecords: parseInt(totals.totalRecords) || 0,
-                    totalGallons: parseFloat(totals.totalGallonage) || 0,
-                    totalAmount: parseFloat(totals.totalAmount) || 0,
-                    averagePrice: parseFloat(totals.avgPricePerGallon) || 0,
+                    totalRecords: Number.parseInt(totals.totalRecords) || 0,
+                    totalGallons: Number.parseFloat(totals.totalGallonage) || 0,
+                    totalAmount: Number.parseFloat(totals.totalAmount) || 0,
+                    averagePrice: Number.parseFloat(totals.avgPricePerGallon) || 0,
                     efficiency: response.data.efficiency || {
                         estimatedConsumptionPerDay: 0,
                         estimatedConsumptionPerRoute: 0,
@@ -519,7 +519,7 @@ const FuelRecordsPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -1356,7 +1356,7 @@ const FuelRecordsPage = () => {
                                                     )}
                                                 </TableCell>
                                                 <TableCell align="right">
-                                                    {parseFloat(record.gallonage).toFixed(2)}
+                                                    {Number.parseFloat(record.gallonage).toFixed(2)}
                                                 </TableCell>
                                                 <TableCell align="right">
                                                     {formatCurrency(record.pricePerGallon)}
@@ -1653,7 +1653,7 @@ const FuelRecordsPage = () => {
                                         Galones
                                     </Typography>
                                     <Typography variant="h6" gutterBottom>
-                                        {parseFloat(selectedRecord.gallonage).toFixed(2)}
+                                        {Number.parseFloat(selectedRecord.gallonage).toFixed(2)}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={4}>

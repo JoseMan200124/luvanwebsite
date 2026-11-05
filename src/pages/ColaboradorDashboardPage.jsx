@@ -252,7 +252,7 @@ const ColaboradorDashboardPage = () => {
     // Try ISO time like HH:mm or HH:mm:ss
     const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
     if (!m) return s;
-    let hh = parseInt(m[1], 10);
+    let hh = Number.parseInt(m[1], 10);
     const mm = m[2];
     const ampm = hh >= 12 ? 'PM' : 'AM';
     hh = hh % 12 || 12;

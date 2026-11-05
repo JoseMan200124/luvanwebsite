@@ -172,12 +172,12 @@ const ContractFillPage = () => {
             // ========================================
             // Mandar parentId y familyDetailId si existen
             // ========================================
-            parentId: parentId ? parseInt(parentId, 10) : undefined,
-            familyDetailId: familyDetailId ? parseInt(familyDetailId, 10) : undefined
+            parentId: parentId ? Number.parseInt(parentId, 10) : undefined,
+            familyDetailId: familyDetailId ? Number.parseInt(familyDetailId, 10) : undefined
         };
 
         // All fields complete. Now check auth (open login only after validation passed)
-        const effectiveParentId = sessionParentId || (parentId ? parseInt(parentId, 10) : null);
+        const effectiveParentId = sessionParentId || (parentId ? Number.parseInt(parentId, 10) : null);
         if (!effectiveParentId) {
             // open login modal and store filledData temporarily in component state
             setLoginOpen(true);
@@ -205,8 +205,8 @@ const ContractFillPage = () => {
 
     // Keep pending payload when login required
     const [pendingPayload, setPendingPayload] = useState(null);
-    const [sessionParentId, setSessionParentId] = useState(parentId ? parseInt(parentId, 10) : null);
-    const [sessionFamilyDetailId, setSessionFamilyDetailId] = useState(familyDetailId ? parseInt(familyDetailId, 10) : null);
+    const [sessionParentId, setSessionParentId] = useState(parentId ? Number.parseInt(parentId, 10) : null);
+    const [sessionFamilyDetailId, setSessionFamilyDetailId] = useState(familyDetailId ? Number.parseInt(familyDetailId, 10) : null);
 
     // Handle login from modal
     const handleLogin = async () => {

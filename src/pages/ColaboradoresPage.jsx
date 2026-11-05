@@ -123,7 +123,7 @@ const StyledAccordion = styled(Accordion)`
 const formatTime12Hour = (time24) => {
     if (!time24) return '';
     const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours, 10);
+    const hour = Number.parseInt(hours, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
@@ -604,7 +604,7 @@ const ColaboradoresPage = () => {
         let scheduleIndex = -1;
         if (colaborador.ColaboradorDetail?.selectedSchedule !== undefined && colaborador.ColaboradorDetail?.selectedSchedule !== null) {
             scheduleIndex = Number(colaborador.ColaboradorDetail.selectedSchedule);
-            if (isNaN(scheduleIndex)) scheduleIndex = -1;
+            if (Number.isNaN(scheduleIndex)) scheduleIndex = -1;
         }
         
         setColaboradorForm({
@@ -2422,7 +2422,7 @@ const ColaboradoresPage = () => {
                                 onPageChange={(e, newPage) => setPage(newPage)}
                                 rowsPerPage={rowsPerPage}
                                 onRowsPerPageChange={(e) => {
-                                    setRowsPerPage(parseInt(e.target.value, 10));
+                                    setRowsPerPage(Number.parseInt(e.target.value, 10));
                                     setPage(0);
                                 }}
                                 rowsPerPageOptions={[5, 10, 25, 50]}

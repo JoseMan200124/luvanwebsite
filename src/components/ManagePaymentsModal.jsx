@@ -1281,7 +1281,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 page={histPage}
                                 onPageChange={(e, newPage) => setHistPage(newPage)}
                                 rowsPerPage={histLimit}
-                                onRowsPerPageChange={(e) => { setHistLimit(parseInt(e.target.value, 10)); setHistPage(0); }}
+                                onRowsPerPageChange={(e) => { setHistLimit(Number.parseInt(e.target.value, 10)); setHistPage(0); }}
                                 rowsPerPageOptions={[5,10,25,50]}
                                 labelRowsPerPage="Filas"
                                 sx={{
@@ -1396,7 +1396,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         page={histPage}
                                         onPageChange={(e, newPage) => setHistPage(newPage)}
                                         rowsPerPage={histLimit}
-                                        onRowsPerPageChange={(e) => { setHistLimit(parseInt(e.target.value, 10)); setHistPage(0); }}
+                                        onRowsPerPageChange={(e) => { setHistLimit(Number.parseInt(e.target.value, 10)); setHistPage(0); }}
                                         rowsPerPageOptions={[5,10,25,50]}
                                         labelRowsPerPage="Filas"
                                         sx={{

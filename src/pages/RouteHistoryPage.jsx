@@ -159,8 +159,8 @@ const RouteHistoryPage = () => {
         // monthStr: 'YYYY-MM'
         if (!monthStr) return { start: undefined, end: undefined };
         const [yyStr, mmStr] = monthStr.split('-');
-        const yy = parseInt(yyStr, 10);
-        const mm = parseInt(mmStr, 10);
+        const yy = Number.parseInt(yyStr, 10);
+        const mm = Number.parseInt(mmStr, 10);
         if (Number.isNaN(yy) || Number.isNaN(mm)) return { start: undefined, end: undefined };
 
         const start = `${monthStr}-01`;
@@ -695,7 +695,7 @@ const RouteHistoryPage = () => {
         const rows = statsData?.rows || [];
         return rows
             .slice()
-            .sort((a, b) => (parseFloat(b?.totalKm || 0) - parseFloat(a?.totalKm || 0)));
+            .sort((a, b) => (Number.parseFloat(b?.totalKm || 0) - Number.parseFloat(a?.totalKm || 0)));
     }, [statsData]);
 
     const statsRowsSortedForSelector = useMemo(() => {
@@ -1083,7 +1083,7 @@ const RouteHistoryPage = () => {
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
                                         <Box sx={{ minWidth: 0 }}>
                                             <Typography variant="caption" color="textSecondary">Total Kilómetros</Typography>
-                                            <Typography variant="h4" sx={{ letterSpacing: -0.5 }} noWrap>{statsData ? `${parseFloat(statsData.totalKm || 0).toFixed(2)} km` : '-'}</Typography>
+                                            <Typography variant="h4" sx={{ letterSpacing: -0.5 }} noWrap>{statsData ? `${Number.parseFloat(statsData.totalKm || 0).toFixed(2)} km` : '-'}</Typography>
                                         </Box>
                                         <Box sx={{ width: 34, height: 34, borderRadius: 1.5, backgroundColor: softPrimaryBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             <Speed fontSize="small" color="primary" />
@@ -1120,7 +1120,7 @@ const RouteHistoryPage = () => {
                                                     </IconButton>
                                                 </Tooltip>
                                             </Box>
-                                            <Typography variant="h4" sx={{ letterSpacing: -0.5 }} noWrap>{statsData ? `${parseFloat(statsData.overallAvgPerActiveDay || ((statsData.totalKm || 0) / Math.max(1, statsData.daysCount))).toFixed(2)} km` : '-'}</Typography>
+                                            <Typography variant="h4" sx={{ letterSpacing: -0.5 }} noWrap>{statsData ? `${Number.parseFloat(statsData.overallAvgPerActiveDay || ((statsData.totalKm || 0) / Math.max(1, statsData.daysCount))).toFixed(2)} km` : '-'}</Typography>
                                         </Box>
                                         <Box sx={{ width: 34, height: 34, borderRadius: 1.5, backgroundColor: softPrimaryBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             <CalendarToday fontSize="small" color="primary" />
@@ -1307,8 +1307,8 @@ const RouteHistoryPage = () => {
                                         value={(() => {
                                             if (!statsMonth) return '';
                                             const [yyStr, mmStr] = statsMonth.split('-');
-                                            const yy = parseInt(yyStr, 10);
-                                            const mm = parseInt(mmStr, 10);
+                                            const yy = Number.parseInt(yyStr, 10);
+                                            const mm = Number.parseInt(mmStr, 10);
                                             if (Number.isNaN(yy) || Number.isNaN(mm)) return statsMonth;
 
                                             const dt = new Date(Date.UTC(yy, mm - 1, 1));
@@ -1323,7 +1323,7 @@ const RouteHistoryPage = () => {
                                             const base = statsMonth ? `${statsMonth}-01` : undefined;
                                             if (base) {
                                                 const [yyStr] = base.split('-');
-                                                const yy = parseInt(yyStr, 10);
+                                                const yy = Number.parseInt(yyStr, 10);
                                                 if (!Number.isNaN(yy)) setStatsMonthViewYear(yy);
                                             } else {
                                                 setStatsMonthViewYear(new Date().getFullYear());
@@ -1669,7 +1669,7 @@ const RouteHistoryPage = () => {
                                                                         content={TopKmTooltip}
                                                                     />
                                                                     <Bar dataKey="km" radius={[6,6,6,6]} isAnimationActive={false} maxBarSize={28} activeBar={false}>
-                                                                        <LabelList dataKey="km" position="right" offset={10} formatter={(v) => `${parseFloat(v).toFixed(2)} km`} style={{ pointerEvents: 'none' }} />
+                                                                        <LabelList dataKey="km" position="right" offset={10} formatter={(v) => `${Number.parseFloat(v).toFixed(2)} km`} style={{ pointerEvents: 'none' }} />
                                                                         {topChartRows.map((entry, index) => (
                                                                             <Cell
                                                                                 key={`cell-${index}`}
@@ -2110,7 +2110,7 @@ const RouteHistoryPage = () => {
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                             <Speed color="action" fontSize="small" />
                                                             <Typography variant="body2" color="textSecondary">Kilometraje:</Typography>
-                                                            <Typography variant="body2" fontWeight="medium">{route.kilometraje ? `${parseFloat(route.kilometraje).toFixed(2)} km` : '0.00 km'}</Typography>
+                                                            <Typography variant="body2" fontWeight="medium">{route.kilometraje ? `${Number.parseFloat(route.kilometraje).toFixed(2)} km` : '0.00 km'}</Typography>
                                                         </Box>
 
                                                         <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -2155,7 +2155,7 @@ const RouteHistoryPage = () => {
                                                         <TableCell>{formatTime(route.startTime)}</TableCell>
                                                         <TableCell>{route.endTime ? formatTime(route.endTime) : 'En progreso'}</TableCell>
                                                         <TableCell>{formatDuration(route.startTime, route.endTime)}</TableCell>
-                                                        <TableCell>{route.kilometraje ? `${parseFloat(route.kilometraje).toFixed(2)} km` : '0.00 km'}</TableCell>
+                                                        <TableCell>{route.kilometraje ? `${Number.parseFloat(route.kilometraje).toFixed(2)} km` : '0.00 km'}</TableCell>
                                                         <TableCell>
                                                             <Chip icon={route.reporteFalla ? <Warning /> : <CheckCircle />} label={route.reporteFalla ? 'Con falla' : 'Sin falla'} color={route.reporteFalla ? 'error' : 'success'} size="small" />
                                                         </TableCell>

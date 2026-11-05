@@ -74,7 +74,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
         if (!time24) return '';
         const parts = String(time24).split(':');
         if (parts.length < 2) return time24;
-        const hours = parseInt(parts[0], 10);
+        const hours = Number.parseInt(parts[0], 10);
         const minutes = parts[1];
         if (Number.isNaN(hours)) return time24;
         const ampm = hours >= 12 ? 'PM' : 'AM';

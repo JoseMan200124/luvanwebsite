@@ -969,7 +969,7 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                         onPageChange={(e, newPage) => setFlowPage(newPage)}
                         rowsPerPage={flowLimit}
                         onRowsPerPageChange={(e) => {
-                            setFlowLimit(parseInt(e.target.value, 10));
+                            setFlowLimit(Number.parseInt(e.target.value, 10));
                             setFlowPage(0);
                         }}
                         rowsPerPageOptions={[10, 20, 50]}

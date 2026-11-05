@@ -75,7 +75,7 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
         if (!timeStr) return null;
         const m = timeStr.match(/(\d{1,2}):(\d{2})/);
         if (!m) return null;
-        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+        return Number.parseInt(m[1], 10) * 60 + Number.parseInt(m[2], 10);
     };
 
     // Solo se envían los campos con texto (>= 2 caracteres tras trim).

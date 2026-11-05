@@ -511,7 +511,7 @@ const SchoolUsersPage = () => {
                 sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
             });
 
-            const selectedSchool = schools.find(s => s.id === parseInt(schoolIdToUse));
+            const selectedSchool = schools.find(s => s.id === Number.parseInt(schoolIdToUse));
             const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
             const fileName = `reporte_rutas_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
             const buffer = await workbook.xlsx.writeBuffer();
@@ -649,7 +649,7 @@ const SchoolUsersPage = () => {
 
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const selectedSchool = schools.find(s => s.id === parseInt(schoolIdToUse));
+            const selectedSchool = schools.find(s => s.id === Number.parseInt(schoolIdToUse));
             const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
             const fileName = `${prefix}_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
             const url = URL.createObjectURL(blob);
@@ -905,7 +905,7 @@ const SchoolUsersPage = () => {
         const arr = getStudentsArray(user);
         if (Array.isArray(arr) && arr.length > 0) return arr.length;
         if (typeof user.studentsCount === 'number') return user.studentsCount;
-        if (user.studentsCount && !isNaN(Number(user.studentsCount))) return Number(user.studentsCount);
+        if (user.studentsCount && !Number.isNaN(Number(user.studentsCount))) return Number(user.studentsCount);
         return 0;
     };
 
@@ -2132,7 +2132,7 @@ const SchoolUsersPage = () => {
                 return sortOrder === 'asc' ? da - db : db - da;
             }
 
-            if (!isNaN(Number(va)) && !isNaN(Number(vb))) {
+            if (!Number.isNaN(Number(va)) && !Number.isNaN(Number(vb))) {
                 return sortOrder === 'asc' ? Number(va) - Number(vb) : Number(vb) - Number(va);
             }
 
@@ -2206,7 +2206,7 @@ const SchoolUsersPage = () => {
     }, [refreshBulkDraftAccount]);
 
     const handleChangeRowsPerPage = (event) => {
-    const v = parseInt(event.target.value, 10);
+    const v = Number.parseInt(event.target.value, 10);
     setRowsPerPage(Number.isNaN(v) ? 10 : v);
     setPage(0);
     };
@@ -2610,7 +2610,7 @@ const SchoolUsersPage = () => {
                                                             const famCreated = getFamilyCreatedAt(user);
                                                             if (!famCreated) return '-';
                                                             const d = new Date(famCreated);
-                                                            if (isNaN(d.getTime())) return '-';
+                                                            if (Number.isNaN(d.getTime())) return '-';
                                                             const dd = String(d.getDate()).padStart(2, '0');
                                                             const mm = String(d.getMonth() + 1).padStart(2, '0');
                                                             const yyyy = d.getFullYear();
@@ -2623,7 +2623,7 @@ const SchoolUsersPage = () => {
                                                         {(() => {
                                                             const famUpdated = getFamilyUpdatedAt(user);
                                                             const d = new Date(famUpdated || user.updatedAt || user.createdAt);
-                                                            if (isNaN(d.getTime())) return '-';
+                                                            if (Number.isNaN(d.getTime())) return '-';
                                                             const dd = String(d.getDate()).padStart(2, '0');
                                                             const mm = String(d.getMonth() + 1).padStart(2, '0');
                                                             const yyyy = d.getFullYear();

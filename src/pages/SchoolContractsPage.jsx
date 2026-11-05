@@ -416,14 +416,14 @@ const SchoolContractsPage = () => {
                 response = await api.put(`/contracts/${currentContract.uuid}`, {
                     title: contractTitle,
                     content: editorData,
-                    schoolId: parseInt(schoolId) // Asignar al colegio actual
+                    schoolId: Number.parseInt(schoolId) // Asignar al colegio actual
                 });
             } else {
                 // Crear
                 response = await api.post('/contracts', {
                     title: contractTitle,
                     content: editorData,
-                    schoolId: parseInt(schoolId) // Asignar al colegio actual
+                    schoolId: Number.parseInt(schoolId) // Asignar al colegio actual
                 });
             }
 
@@ -434,7 +434,7 @@ const SchoolContractsPage = () => {
                 title: contractTitle,
                 content: editorData,
                 url,
-                schoolId: parseInt(schoolId),
+                schoolId: Number.parseInt(schoolId),
                 School: School || schoolData
             };
 

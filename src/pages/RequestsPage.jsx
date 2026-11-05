@@ -249,7 +249,7 @@ const RequestsPage = () => {
     };
 
     const handleChangePage = (event, newPage) => setPage(newPage);
-    const handleChangeRowsPerPage = (event) => { setRowsPerPage(parseInt(event.target.value, 10)); setPage(0); };
+    const handleChangeRowsPerPage = (event) => { setRowsPerPage(Number.parseInt(event.target.value, 10)); setPage(0); };
 
     const handleSort = (column) => {
         const isAsc = sortBy === column && sortOrder === 'asc';

@@ -74,8 +74,8 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
         // accept formats like '07:15' or '7:15 AM' or '07:15 AM'
         const m = timeStr.match(/(\d{1,2}):(\d{2})/);
         if (!m) return null;
-        const hh = parseInt(m[1], 10);
-        const mm = parseInt(m[2], 10);
+        const hh = Number.parseInt(m[1], 10);
+        const mm = Number.parseInt(m[2], 10);
         return hh * 60 + mm;
     };
 

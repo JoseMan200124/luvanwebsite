@@ -7,7 +7,7 @@ import usePermissions from '../../hooks/usePermissions';
 const formatTime12Hour = (time24) => {
     if (!time24) return '';
     const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours, 10);
+    const hour = Number.parseInt(hours, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
@@ -756,7 +756,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                             const colaboradorScheduleIndex = Number(colaborador?.ColaboradorDetail?.selectedSchedule);
                                             
                                             // Si el colaborador no tiene horario asignado, mostrar todas las rutas
-                                            if (isNaN(colaboradorScheduleIndex) || colaboradorScheduleIndex < 0 || !Array.isArray(corporation?.schedules)) {
+                                            if (Number.isNaN(colaboradorScheduleIndex) || colaboradorScheduleIndex < 0 || !Array.isArray(corporation?.schedules)) {
                                                 console.log('[ColaboradorScheduleModal] Mostrando todas las rutas (sin horario asignado)');
                                                 return corporation?.routeNumbers && Array.isArray(corporation.routeNumbers) 
                                                     ? corporation.routeNumbers.map(route => (

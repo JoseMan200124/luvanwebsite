@@ -221,7 +221,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -534,7 +534,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                                             <TableCell>
                                                 {payment.eventDate ? moment(payment.eventDate).format('DD/MM/YYYY') : '-'}
                                             </TableCell>
-                                            <TableCell>Q {parseFloat(payment.amount).toFixed(2)}</TableCell>
+                                            <TableCell>Q {Number.parseFloat(payment.amount).toFixed(2)}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>

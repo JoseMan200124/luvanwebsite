@@ -434,7 +434,7 @@ const NotificationHistoryPage = () => {
           onPageChange={(_, newPage) => setPage(newPage)}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
+            setRowsPerPage(Number.parseInt(e.target.value, 10));
             setPage(0);
           }}
           rowsPerPageOptions={[10, 25, 50, 100]}

@@ -95,7 +95,7 @@ const DAYS = [
 const timeToMinutes = (t) => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
   if (!m) return Number.POSITIVE_INFINITY;
-  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  return Number.parseInt(m[1], 10) * 60 + Number.parseInt(m[2], 10);
 };
 
 // Extrae la parte HH:mm de un valor de schoolSchedule (ej. "15:00 PM", "12:00 MD", "07:00 AM")
@@ -104,7 +104,7 @@ const formatSchoolTime = (value) => {
   if (!value) return '';
   const m = String(value).match(/(\d{1,2}):(\d{2})/);
   if (!m) return String(value).trim();
-  let h = parseInt(m[1], 10);
+  let h = Number.parseInt(m[1], 10);
   const min = m[2];
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12;
@@ -119,7 +119,7 @@ const formatTime12 = (timeStr) => {
   if (/\b(am|pm)\b/i.test(s)) return s;
   const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return s;
-  let h = parseInt(m[1], 10);
+  let h = Number.parseInt(m[1], 10);
   const min = m[2];
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12;

@@ -231,7 +231,7 @@ const RouteTimeLogsPage = () => {
             if (totalFromServer && serverAvg !== undefined) {
                 setStatistics({
                     total: totalFromServer,
-                    averageDuration: parseFloat(serverAvg).toFixed(2),
+                    averageDuration: Number.parseFloat(serverAvg).toFixed(2),
                 });
             } else if (logsList.length > 0) {
                 const totalDuration = logsList.reduce((sum, log) => sum + (log.tripDuration || 0), 0);
@@ -281,7 +281,7 @@ const RouteTimeLogsPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -511,7 +511,7 @@ const RouteTimeLogsPage = () => {
                                 <Box display="flex" alignItems="baseline" gap={2}>
                                     <Box>
                                         <Typography variant="h3" component="span">
-                                            {Math.floor(parseFloat(statistics.averageDuration) / 60) || 0}
+                                            {Math.floor(Number.parseFloat(statistics.averageDuration) / 60) || 0}
                                         </Typography>
                                         <Typography variant="h6" component="span" color="textSecondary">
                                             {' h '}
@@ -519,7 +519,7 @@ const RouteTimeLogsPage = () => {
                                     </Box>
                                     <Box>
                                         <Typography variant="h3" component="span">
-                                            {Math.round(parseFloat(statistics.averageDuration) % 60) || 0}
+                                            {Math.round(Number.parseFloat(statistics.averageDuration) % 60) || 0}
                                         </Typography>
                                         <Typography variant="h6" component="span" color="textSecondary">
                                             {' min'}

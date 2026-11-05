@@ -76,8 +76,8 @@ const RouteColaboradoresModal = ({
         if (!timeStr) return null;
         const m = timeStr.match(/(\d{1,2}):(\d{2})/);
         if (!m) return null;
-        const hh = parseInt(m[1], 10);
-        const mm = parseInt(m[2], 10);
+        const hh = Number.parseInt(m[1], 10);
+        const mm = Number.parseInt(m[2], 10);
         return hh * 60 + mm;
     };
 
