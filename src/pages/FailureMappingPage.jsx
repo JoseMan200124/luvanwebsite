@@ -120,6 +120,8 @@ const FailureMappingPage = () => {
         byTipo: {},
         withRouteAffected: 0,
         noOperacional: 0,
+        colegios: 0,
+        corporativos: 0,
     });
     const [exportingPdf, setExportingPdf] = useState(false);
 
@@ -280,6 +282,8 @@ const FailureMappingPage = () => {
                 byTipo: data.countsByTipo || {},
                 withRouteAffected: Number(data.withRouteAffected || 0),
                 noOperacional: Number(data.noOperacional || 0),
+                colegios: Number(data.colegios || 0),
+                corporativos: Number(data.corporativos || 0),
             });
         } catch (error) {
             console.error('Error al cargar mapeos de fallas:', error);
@@ -654,6 +658,9 @@ const FailureMappingPage = () => {
                                 <Typography variant="h4">
                                     {statistics.total}
                                 </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                    {statistics.colegios} de colegios · {statistics.corporativos} corporativos
+                                </Typography>
                             </CardContent>
                         </Card>
                     </Grid>
@@ -694,6 +701,12 @@ const FailureMappingPage = () => {
                         </Card>
                     </Grid>
                 </Grid>
+
+                {isSpecificCicloEscolarSelected && (
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                        Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                    </Typography>
+                )}
 
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>

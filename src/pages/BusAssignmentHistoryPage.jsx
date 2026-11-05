@@ -445,7 +445,7 @@ const BusAssignmentHistoryPage = () => {
             {!loading && stats && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
-                        <strong>{stats.totalChanges}</strong> registros en total
+                        <strong>{stats.totalChanges}</strong> registros en total ({Number(stats.colegios || 0)} de colegios · {Number(stats.corporativos || 0)} corporativos)
                     </Typography>
                     {stats.byChangeType.map((item) => {
                         const ct = item.changeType;
@@ -456,6 +456,12 @@ const BusAssignmentHistoryPage = () => {
                         );
                     })}
                 </Box>
+            )}
+
+            {isSpecificCicloEscolarSelected && (
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                    Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                </Typography>
             )}
 
             {/* Filtros */}

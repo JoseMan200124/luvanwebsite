@@ -253,6 +253,7 @@ const AssignmentHistoryPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [totalRecords, setTotalRecords] = useState(0);
+    const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
     // Filtros
     const [assignmentType, setAssignmentType] = useState('');
@@ -344,6 +345,7 @@ const AssignmentHistoryPage = () => {
 
             setHistory(response.data.history || []);
             setTotalRecords(response.data.total || 0);
+            setClientBreakdown({ colegios: Number(response.data.colegios || 0), corporativos: Number(response.data.corporativos || 0) });
         } catch (err) {
             console.error('Error al cargar historial:', err);
             setError(err.response?.data?.message || 'Error al cargar el historial');
@@ -400,6 +402,13 @@ const AssignmentHistoryPage = () => {
                     </IconButton>
                 </Tooltip>
             </Box>
+
+            {!loading && (
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                    {totalRecords} registros: {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
+                    {isSpecificCicloEscolarSelected ? ' — Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.' : ''}
+                </Typography>
+            )}
 
             {/* Filtros */}
             <Card sx={{ mb: 3 }}>

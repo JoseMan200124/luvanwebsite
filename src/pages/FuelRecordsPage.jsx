@@ -62,7 +62,7 @@ import {
 } from '../services/fuelRecordService';
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
+import { getCicloEscolarOptionLabel, getCicloEscolarYear } from '../services/cicloEscolarService';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -153,6 +153,7 @@ const FuelRecordsPage = () => {
     });
 
     // Estadísticas
+    const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
     const [statistics, setStatistics] = useState({
         totalRecords: 0,
         totalGallons: 0,
@@ -230,7 +231,7 @@ const FuelRecordsPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) });
+            const response = await api.get('/corporations');
             const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
             setCorporations(corporationsData);
         } catch (error) {
@@ -398,6 +399,10 @@ const FuelRecordsPage = () => {
             if (response.success && response.data) {
                 setFuelRecords(response.data);
                 setTotalCount(response.pagination?.total || 0);
+                setClientBreakdown({
+                    colegios: Number(response.clientBreakdown?.colegios || 0),
+                    corporativos: Number(response.clientBreakdown?.corporativos || 0)
+                });
                 // Preferir totales/estadísticas devueltas por el endpoint de list (si las incluye)
                 const totalsFromList = response.totals || response.statistics || response.meta;
                 if (totalsFromList) {
@@ -606,10 +611,14 @@ const FuelRecordsPage = () => {
 
     const loadEditReferenceData = async (cicloEscolarId) => {
         try {
-            const params = cicloEscolarId ? { cicloEscolarId: String(cicloEscolarId), includeArchived: true } : { includeArchived: true };
+            // Sin ciclo (registro corporativo) se ofrecen colegios de todos los ciclos.
+            // Sin allCycles, interceptor y backend limitarían a uno.
+            const params = cicloEscolarId
+                ? { cicloEscolarId: String(cicloEscolarId), includeArchived: true }
+                : { allCycles: true, includeArchived: true };
             const [schoolsResponse, corporationsResponse, busesResponse] = await Promise.all([
                 api.get('/schools', { params }),
-                api.get('/corporations', { params: cicloEscolarId ? { cicloEscolarId: String(cicloEscolarId) } : {} }),
+                api.get('/corporations'),
                 api.get('/buses/simple')
             ]);
 
@@ -617,15 +626,10 @@ const FuelRecordsPage = () => {
             const corporationsData = Array.isArray(corporationsResponse.data) ? corporationsResponse.data : (corporationsResponse.data?.corporations || []);
             const busesData = Array.isArray(busesResponse.data) ? busesResponse.data : (busesResponse.data?.buses || []);
 
-            const normalizedCycleId = cicloEscolarId !== undefined && cicloEscolarId !== null && cicloEscolarId !== '' ? String(cicloEscolarId) : '';
-            const inSameCycle = (item) => {
-                const itemCycleId = item?.cicloEscolarId ?? item?.cicloEscolar?.id ?? item?.school?.cicloEscolarId ?? item?.school?.cicloEscolar?.id ?? null;
-                if (!normalizedCycleId) return itemCycleId === null || itemCycleId === undefined || itemCycleId === '';
-                return String(itemCycleId) === normalizedCycleId;
-            };
+            const inRecordCycle = (school) => String(school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? '') === String(cicloEscolarId);
 
-            setEditSchools(schoolsData.filter(inSameCycle));
-            setEditCorporations(corporationsData.filter(inSameCycle));
+            setEditSchools(cicloEscolarId ? schoolsData.filter(inRecordCycle) : schoolsData);
+            setEditCorporations(corporationsData);
             setEditBuses(busesData);
         } catch (error) {
             console.error('Error al cargar datos de edición:', error);
@@ -660,8 +664,6 @@ const FuelRecordsPage = () => {
             ?? record?.cicloEscolar?.id
             ?? record?.school?.cicloEscolarId
             ?? record?.school?.cicloEscolar?.id
-            ?? record?.corporation?.cicloEscolarId
-            ?? record?.corporation?.cicloEscolar?.id
             ?? null;
         setSelectedRecord(record);
         setEditRecordCycleId(recordCycleId);
@@ -835,19 +837,26 @@ const FuelRecordsPage = () => {
         }).format(amount || 0);
     };
 
+    const isSchoolInOperation = (school) => school?.operationStatus === 'ACTIVE' && school?.cycleStatus !== 'ARCHIVED';
+
+    // Registro sin ciclo: colegios de todos los ciclos, primero los que están en operación.
+    const orderedEditSchools = editRecordCycleId
+        ? editSchools
+        : [...editSchools].sort((a, b) => (
+            Number(isSchoolInOperation(b)) - Number(isSchoolInOperation(a))
+            || String(a.name).localeCompare(String(b.name))
+            || Number(getCicloEscolarYear(b.cicloEscolar) || 0) - Number(getCicloEscolarYear(a.cicloEscolar) || 0)
+        ));
+
     const editClientOptions = [
-        ...editSchools
-            .filter((school) => {
-                const schoolCycleId = school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? null;
-                return editRecordCycleId ? String(schoolCycleId) === String(editRecordCycleId) : schoolCycleId === null || schoolCycleId === undefined;
-            })
-            .map((school) => ({ label: `${school.name} (Colegio)`, type: 'school', id: school.id })),
-        ...editCorporations
-            .filter((corporation) => {
-                const corporationCycleId = corporation?.cicloEscolarId ?? corporation?.cicloEscolar?.id ?? null;
-                return editRecordCycleId ? String(corporationCycleId) === String(editRecordCycleId) : corporationCycleId === null || corporationCycleId === undefined;
-            })
-            .map((corporation) => ({ label: `${corporation.name} (Corporación)`, type: 'corp', id: corporation.id })),
+        ...orderedEditSchools.map((school) => ({
+            label: editRecordCycleId
+                ? `${school.name} (Colegio)`
+                : `${school.name} (Colegio · ${getCicloEscolarYear(school.cicloEscolar) || 'Sin ciclo'})`,
+            type: 'school',
+            id: school.id
+        })),
+        ...editCorporations.map((corporation) => ({ label: `${corporation.name} (Corporación)`, type: 'corp', id: corporation.id })),
     ];
 
     const editPlateOptions = [...new Set(editBuses.map((bus) => bus.plate).filter(Boolean))]
@@ -1008,6 +1017,9 @@ const FuelRecordsPage = () => {
                                 <Typography variant="h4">
                                     {statistics.totalRecords}
                                 </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                    {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
+                                </Typography>
                             </CardContent>
                         </Card>
                     </Grid>
@@ -1072,6 +1084,12 @@ const FuelRecordsPage = () => {
                         </Grid>
                     )}
                 </Grid>
+
+                {isSpecificCicloEscolarSelected && (
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                        Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                    </Typography>
+                )}
 
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>

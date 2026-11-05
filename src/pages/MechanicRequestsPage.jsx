@@ -99,6 +99,7 @@ const MechanicRequestsPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [totalCount, setTotalCount] = useState(0);
+    const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
     // Estados para filtros (separados para homogeneidad con otras páginas)
     const [schoolId, setSchoolId] = useState('');
@@ -241,6 +242,7 @@ const MechanicRequestsPage = () => {
             const response = await getAllMechanicRequests(params);
             setRequests(response.data || []);
             setTotalCount(response.pagination?.total || 0);
+            setClientBreakdown({ colegios: Number(response.clientBreakdown?.colegios || 0), corporativos: Number(response.clientBreakdown?.corporativos || 0) });
         } catch (error) {
             console.error('Error fetching mechanic requests:', error);
         } finally {
@@ -492,6 +494,9 @@ const MechanicRequestsPage = () => {
                                 <Typography variant="h4">
                                     {statistics.totalRequests}
                                 </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                    {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
+                                </Typography>
                             </CardContent>
                         </StatsCard>
                     </Grid>
@@ -559,6 +564,12 @@ const MechanicRequestsPage = () => {
                         </StatsCard>
                     </Grid>
                 </Grid>
+            )}
+
+            {isSpecificCicloEscolarSelected && (
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                    Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                </Typography>
             )}
 
             {/* Filtros */}

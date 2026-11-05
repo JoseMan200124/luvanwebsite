@@ -92,6 +92,8 @@ const BusEmergenciesPage = () => {
         total: 0,
         withLocation: 0,
         bySchool: {},
+        colegios: 0,
+        corporativos: 0,
     });
 
     useEffect(() => {
@@ -226,7 +228,9 @@ const BusEmergenciesPage = () => {
                 setStatistics({
                     total: Number(data.totalIncidents || data.total || emergencyList.length),
                     withLocation: Number(data.withLocation || 0),
-                    bySchool: data.countsBySchool || {}
+                    bySchool: data.countsBySchool || {},
+                    colegios: Number(data.colegios || 0),
+                    corporativos: Number(data.corporativos || 0)
                 });
             } else {
                 if (emergencyList.length > 0) {
@@ -353,6 +357,9 @@ const BusEmergenciesPage = () => {
                                 <Typography variant="h4" color="error">
                                     {statistics.total}
                                 </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                    {statistics.colegios || 0} de colegios · {statistics.corporativos || 0} corporativos
+                                </Typography>
                             </CardContent>
                         </Card>
                     </Grid>
@@ -385,6 +392,12 @@ const BusEmergenciesPage = () => {
                         </Card>
                     </Grid>
                 </Grid>
+
+                {isSpecificCicloEscolarSelected && (
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                        Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                    </Typography>
+                )}
 
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
