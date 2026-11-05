@@ -352,7 +352,7 @@ const RetroactiveApplyModal = ({
                                 </Box>
 
                                 <Box sx={{ maxHeight: 220, overflow: 'auto', borderTop: '1px solid rgba(0,0,0,0.06)', pt: 1 }}>
-                                    {unpaidPeriods && unpaidPeriods.length ? (
+                                    {unpaidPeriods?.length ? (
                                         unpaidPeriods.map(p => {
                                             const original = Number(p.originalAmount ?? p.amount ?? 0);
                                             const net = Number(p.netAmount ?? p.net ?? p.amount ?? 0);

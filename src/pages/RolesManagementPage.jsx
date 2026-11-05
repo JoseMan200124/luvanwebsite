@@ -111,7 +111,7 @@ const MobileValue = styled(Typography)`
 
 // Helper para saber si un usuario es "nuevo" (basado en fecha de creación)
 function isUserNew(user) {
-    if (!user || !user.createdAt) return false;
+    if (!user?.createdAt) return false;
     const createdAt = new Date(user.createdAt);
     const now = new Date();
     const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
@@ -303,7 +303,7 @@ const RolesManagementPage = () => {
         try {
             const resp = await api.get('/roles');
             // API may return { roles: [...] } or an array directly
-            const data = resp.data && resp.data.roles ? resp.data.roles : resp.data;
+            const data = resp.data?.roles ? resp.data.roles : resp.data;
             // Normalize to objects with id and name
             if (Array.isArray(data)) {
                 const normalized = data.map(r => ({ id: Number(r.id ?? r.roleId ?? r.value ?? r.key), name: r.name ?? r.label ?? String(r) }));
@@ -326,8 +326,8 @@ const RolesManagementPage = () => {
             };
             if (searchQuery) params.search = searchQuery;
             if (roleFilter) params.roleId = roleFilter;
-            if (clientFilter && clientFilter.type === 'Colegio') params.schoolId = clientFilter.id;
-            if (clientFilter && clientFilter.type === 'Corporación') params.corporationId = clientFilter.id;
+            if (clientFilter?.type === 'Colegio') params.schoolId = clientFilter.id;
+            if (clientFilter?.type === 'Corporación') params.corporationId = clientFilter.id;
 
             const response = await api.get('/users/non-parents', { params, skipSchoolCycleContext: true });
             const data = response.data || {};
@@ -435,7 +435,7 @@ const RolesManagementPage = () => {
             setSelectedUser(prev => ({ ...prev, monitoraFullName: mdFullName, phoneNumber: mdPhone }));
         }
             // Nota: El select de contrato NO se muestra en el diálogo de edición
-            if (parsedRoleId === 6 || (user.Role && user.Role.name === 'Supervisor')) {
+            if (parsedRoleId === 6 || (user.Role?.name === 'Supervisor')) {
                 // If backend provides attachedSupervisorSchools (optional), use it. Otherwise try to infer from user's school
                 const attachedSchools = user.attachedSupervisorSchools || [];
                 if (attachedSchools.length > 0) {
@@ -456,7 +456,7 @@ const RolesManagementPage = () => {
             }
         
         // Para el caso de Auxiliar
-        if (parsedRoleId === 7 || (user.Role && user.Role.name === 'Auxiliar')) {
+        if (parsedRoleId === 7 || (user.Role?.name === 'Auxiliar')) {
             // Load attached schools for auxiliar
             const attachedSchools = user.attachedAuxiliarSchools || [];
             if (attachedSchools.length > 0) {
@@ -557,7 +557,7 @@ const RolesManagementPage = () => {
                 corporationId: selectedUser.corporationId ? Number(selectedUser.corporationId) : null
             };
 
-            if (selectedUser.password && selectedUser.password.trim() !== '') {
+            if (selectedUser.password?.trim() !== '') {
                 payload.password = selectedUser.password;
             }
 

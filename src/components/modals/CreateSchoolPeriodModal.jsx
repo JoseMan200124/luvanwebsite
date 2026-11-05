@@ -31,7 +31,7 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
 
     const handleClose = () => {
         reset();
-        onClose && onClose();
+        onClose?.();
     };
 
     const handleCreate = async () => {
@@ -61,7 +61,7 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
                 if (onCreated) onCreated(successMessage);
                 setTimeout(() => {
                     reset();
-                    onClose && onClose();
+                    onClose?.();
                 }, 900);
             } else {
                 // Mensaje simple y auto-dismiss cuando no se creó ningún período

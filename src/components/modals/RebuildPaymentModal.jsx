@@ -1535,8 +1535,8 @@ function TxTable({ rows, markIds, updateIds, markFn, markStyle, creditAutoDecisi
             </TableHead>
             <TableBody>
                 {sorted.map((row, index) => {
-                    const marked = (markIds && markIds.has(row.id)) || (markFn && markFn(row));
-                    const updated = updateIds && updateIds.has(row.id);
+                    const marked = (markIds?.has(row.id)) || (markFn?.(row));
+                    const updated = updateIds?.has(row.id);
                     const fecha = row.date || row.realPaymentDate || '—';
                     const display = getTransactionDisplay(row);
                     const canSkipCreditAuto = row.synthetic && row.type === 'CREDIT_AUTO_TARIFF' && row.decisionKey && row.canSkipCreditAuto;

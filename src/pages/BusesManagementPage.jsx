@@ -353,7 +353,7 @@ const BusesManagementPage = () => {
 
         // Append newly selected files to existing ones so they don't disappear from the list
         setSelectedBus((prev) => {
-            const existing = prev && prev.files ? Array.from(prev.files) : [];
+            const existing = prev?.files ? Array.from(prev.files) : [];
             // Convert FileList to array and filter duplicates by name+size
             const newFiles = Array.from(files).filter((nf) => {
                 return !existing.some((ef) => ef.name === nf.name && ef.size === nf.size);
@@ -383,9 +383,9 @@ const BusesManagementPage = () => {
         setDeleteLoading(true);
 
         // If file has an id, it's already on the server
-        if (file && file.id) {
+        if (file?.id) {
             // backend expects a busId in the route: DELETE /buses/:busId/files/:fileId
-            if (!selectedBus || !selectedBus.id) {
+            if (!selectedBus?.id) {
                 setSnackbar({ open: true, message: 'No se pudo determinar el bus para eliminar el archivo.', severity: 'error' });
                 setDeleteLoading(false);
                 setOpenDeleteDialog(false);
@@ -563,8 +563,8 @@ const BusesManagementPage = () => {
 
     const filteredBuses = buses.filter((bus) => {
         const q = searchQuery.toLowerCase();
-        const inPlate = bus.plate && bus.plate.toLowerCase().includes(q);
-        const inDesc = bus.description && bus.description.toLowerCase().includes(q);
+        const inPlate = bus.plate?.toLowerCase().includes(q);
+        const inDesc = bus.description?.toLowerCase().includes(q);
         if (!(inPlate || inDesc)) return false;
 
         // Client filter (match both id and type)
@@ -1115,7 +1115,7 @@ const BusesManagementPage = () => {
             {/* Diálogo para crear/editar un bus */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
                 <DialogTitle>
-                    {selectedBus && selectedBus.id ? 'Editar Bus' : 'Añadir Bus'}
+                    {selectedBus?.id ? 'Editar Bus' : 'Añadir Bus'}
                 </DialogTitle>
                 <DialogContent>
                     <TextField
@@ -1209,7 +1209,7 @@ const BusesManagementPage = () => {
                         </Button>
                     </label>
 
-                    {selectedBus && selectedBus.files && selectedBus.files.length > 0 && (
+                    {selectedBus?.files && selectedBus.files.length > 0 && (
                         <List sx={{ mt: 2 }}>
                             {[...selectedBus.files].map((file, index) => {
                                 const isServerFile = !!file.id;
@@ -1254,9 +1254,9 @@ const BusesManagementPage = () => {
                     <Button onClick={handleDialogClose} color="primary">
                         Cancelar
                     </Button>
-                    {hasPermission(selectedBus && selectedBus.id ? 'buses-editar' : 'buses-crear') && (
+                    {hasPermission(selectedBus?.id ? 'buses-editar' : 'buses-crear') && (
                         <Button onClick={handleSave} color="primary" variant="contained">
-                            {selectedBus && selectedBus.id ? 'Guardar Cambios' : 'Crear Bus'}
+                            {selectedBus?.id ? 'Guardar Cambios' : 'Crear Bus'}
                         </Button>
                     )}
                 </DialogActions>

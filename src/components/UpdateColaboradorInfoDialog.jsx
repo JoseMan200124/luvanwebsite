@@ -121,7 +121,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
         try {
             const response = await api.get(`/corporations/${id}`);
 
-            if (response.data && response.data.corporation) {
+            if (response.data?.corporation) {
                 const corp = response.data.corporation;
                 if (Array.isArray(corp.schedules)) setSchedules(corp.schedules);
                 else if (corp.schedules && typeof corp.schedules === 'string') {
@@ -184,7 +184,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     };
 
     const handleSubmit = async (e) => {
-        e && e.preventDefault && e.preventDefault();
+        e?.preventDefault?.();
         const payload = {
             corporationId,
             firstName: firstName || null,
@@ -222,9 +222,9 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
             }
 
             setSnackbar({ open: true, message: '¡Registro actualizado correctamente!', severity: 'success' });
-            onSaved && onSaved();
+            onSaved?.();
             // close dialog after brief delay
-            setTimeout(() => onClose && onClose(), 1000);
+            setTimeout(() => onClose?.(), 1000);
         } catch (error) {
             console.error('Error al enviar formulario:', error);
             const messageToShow = 'Ocurrió un error al enviar tu registro. Intenta de nuevo.';
@@ -235,7 +235,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     if (!open) return null;
 
     return (
-        <Dialog open={open} onClose={() => onClose && onClose()} fullWidth maxWidth="md">
+        <Dialog open={open} onClose={() => onClose?.()} fullWidth maxWidth="md">
             <DialogTitle>Actualizar Datos de Colaborador</DialogTitle>
             <DialogContent dividers>
                 {loading ? (
@@ -340,7 +340,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
                 )}
             </DialogContent>
             <DialogActions sx={{ p: 2 }}>
-                <Button onClick={() => onClose && onClose()}>Cerrar</Button>
+                <Button onClick={() => onClose?.()}>Cerrar</Button>
                 <Button variant="contained" onClick={handleSubmit} color="primary">Actualizar Datos</Button>
             </DialogActions>
 

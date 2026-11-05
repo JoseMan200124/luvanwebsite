@@ -190,7 +190,7 @@ function getEventBreakdown(event) {
     // período en metadata.changes (period, netBefore/After, dueBefore/After, creditDelta),
     // distinto del desglose de dinero (periodBreakdown) y de la lista de campo (changes).
     const configPeriods = Array.isArray(meta.changes)
-        ? meta.changes.filter((row) => row && row.period)
+        ? meta.changes.filter((row) => row?.period)
         : [];
     return {
         moneyRows,

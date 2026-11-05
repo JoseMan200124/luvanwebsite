@@ -257,12 +257,12 @@ const NotificationsMenu = ({ authToken }) => {
         // Only the X (delete) will mark as read. This preserves the user's
         // explicit action intent.
         // For 'Nueva Boleta de Pago', show the receipt preview inside the menu (no navigation).
-        if (notification && notification.type === 'boleta-pago') {
+        if (notification?.type === 'boleta-pago') {
             setAnchorEl(null);
             // Fetch detailed preview on demand (receipt + payment)
             try {
                 const res = await api.get(`/notifications/${notification.id}/preview`, { headers: { Authorization: `Bearer ${authToken}` } });
-                const preview = res.data && res.data.preview ? res.data.preview : { notification, receipt: null };
+                const preview = res.data?.preview ? res.data.preview : { notification, receipt: null };
                 setPreviewNotification(preview);
                 setPreviewOpen(true);
             } catch (e) {
@@ -274,7 +274,7 @@ const NotificationsMenu = ({ authToken }) => {
         }
 
         // Otherwise, if notification has a link, navigate to it
-        if (notification && notification.link) {
+        if (notification?.link) {
             try {
                 setAnchorEl(null);
                 const { cicloEscolarId } = resolveNotificationCycle(notification);
@@ -692,14 +692,14 @@ const NotificationsMenu = ({ authToken }) => {
             <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} fullWidth maxWidth="md">
                 <DialogTitle>Vista previa de Boleta</DialogTitle>
                 <DialogContent>
-                    {previewNotification && previewNotification.receipt ? (
-                        (previewNotification.receipt.fileUrl && (previewNotification.receipt.fileUrl.match(/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)(\?|$)/i))) ? (
+                    {previewNotification?.receipt ? (
+                        (previewNotification.receipt.fileUrl?.match(/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)(\?|$)/i)) ? (
                             <div style={{ display: 'flex', justifyContent: 'center' }}>
                                 <img src={previewNotification.receipt.fileUrl} alt="boleta" style={{ maxWidth: '100%', maxHeight: '60vh' }} />
                             </div>
                         ) : (
                             <div>
-                                {previewNotification.receipt && previewNotification.receipt.fileUrl ? (
+                                {previewNotification.receipt?.fileUrl ? (
                                     <Button variant="outlined" href={previewNotification.receipt.fileUrl} target="_blank" rel="noreferrer">Abrir archivo</Button>
                                 ) : (
                                     <Typography variant="body2">No se encontró la boleta para vista previa.</Typography>

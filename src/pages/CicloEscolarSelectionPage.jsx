@@ -1248,7 +1248,7 @@ const CicloEscolarSelectionPage = () => {
         }
 
         // Validate schedules: codes must be 2-4 uppercase letters, no duplicates
-        const schedulesWithCode = schoolSchedules.filter(s => s && s.code);
+        const schedulesWithCode = schoolSchedules.filter(s => s?.code);
         const invalidCode = schedulesWithCode.find(s => !/^[A-Z]{2,4}$/.test(s.code));
         if (invalidCode) {
             setSnackbar({ open: true, message: `Código de horario inválido: "${invalidCode.code}". Use 2 a 4 letras mayúsculas (ej: AM, VE, NO).`, severity: 'error' });
@@ -1318,7 +1318,7 @@ const CicloEscolarSelectionPage = () => {
             // Build routeSchedules payload aligned to current routeNumbers
             const routeSchedulesPayload = (schoolRouteNumbers || []).map(rn => {
                 const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn));
-                const schedules = Array.isArray(entry && entry.schedules) ? entry.schedules : [];
+                const schedules = Array.isArray(entry?.schedules) ? entry.schedules : [];
                 // Clean schedules: ensure unique by code, keep only first time if present
                 const byCode = new Map();
                 (schedules || []).forEach(s => {
@@ -2653,7 +2653,7 @@ const CicloEscolarSelectionPage = () => {
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 {schoolRouteNumbers.map((rn, idx) => {
                                     const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
-                                    const selectedByCode = new Set((entry.schedules || []).map(s => s && s.code).filter(Boolean));
+                                    const selectedByCode = new Set((entry.schedules || []).map(s => s?.code).filter(Boolean));
                                     const toggleSchedule = (code, schObj, checked) => {
                                         setSchoolRouteSchedules(prev => {
                                             const arr = Array.isArray(prev) ? [...prev] : [];

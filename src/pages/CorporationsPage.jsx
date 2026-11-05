@@ -401,7 +401,7 @@ const CorporationsPage = () => {
             const detail = await api.get(`/corporations/${corporation.id}`, {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
-            const rs = (detail.data && detail.data.corporation && Array.isArray(detail.data.corporation.routeSchedules)) 
+            const rs = (detail.data?.corporation && Array.isArray(detail.data.corporation.routeSchedules)) 
                 ? detail.data.corporation.routeSchedules 
                 : [];
             setCorporationRouteSchedules(rs);
@@ -867,7 +867,7 @@ const CorporationsPage = () => {
 
                             {corporationRouteNumbers.map((rn, idx) => {
                                 const entry = (corporationRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
-                                const selectedSchedules = new Set((entry.schedules || []).map(s => s && s.name).filter(Boolean));
+                                const selectedSchedules = new Set((entry.schedules || []).map(s => s?.name).filter(Boolean));
                                 
                                 const toggleSchedule = (scheduleName, checked) => {
                                     setCorporationRouteSchedules(prev => {

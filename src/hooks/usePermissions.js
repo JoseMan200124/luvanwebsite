@@ -29,7 +29,7 @@ const usePermissions = () => {
         };
 
         const hasRole = (roles) => {
-            if (!auth.user || !auth.user.role) return false;
+            if (!auth.user?.role) return false;
             if (typeof roles === 'string') return auth.user.role === roles;
             if (Array.isArray(roles)) return roles.includes(auth.user.role);
             return false;
@@ -88,7 +88,7 @@ const usePermissions = () => {
      * @returns {boolean} true si el usuario tiene uno de los roles
      */
     const hasRole = (roles) => {
-        if (!auth.user || !auth.user.role) {
+        if (!auth.user?.role) {
             return false;
         }
         if (typeof roles === 'string') {

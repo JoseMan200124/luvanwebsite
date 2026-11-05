@@ -941,7 +941,7 @@ const ParentPaymentPage = () => {
                     <MetricCard label="Períodos pendientes" value={`${paymentAccount?.totals?.unpaidPeriodsCount || 0}`} icon={CalendarMonthIcon} tone="warning" />
                 </Box>
 
-                {enrollmentPayment && enrollmentPayment.status !== 'PAGADO' && (
+                {enrollmentPayment?.status !== 'PAGADO' && (
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, mt: 1.5, borderRadius: 1.5, backgroundColor: '#FFF4E6', color: '#7C3A00' }}>
                         <ReceiptLongIcon sx={{ fontSize: 20, color: '#B45309', mt: 0.1 }} />
                         <Typography sx={{ fontSize: 13, lineHeight: 1.55 }}>
@@ -1025,7 +1025,7 @@ const ParentPaymentPage = () => {
 
     // Colegio excluido del flujo de pagos: no hay cuotas, mora ni inscripciones que
     // mostrar. Se llega acá sólo por URL directa, porque el dashboard oculta el acceso.
-    if (!pageLoading && routeInfo && routeInfo.paymentsEnabled === false) {
+    if (!pageLoading && routeInfo?.paymentsEnabled === false) {
         return (
             <Box sx={{ minHeight: '100vh', backgroundColor: BACKGROUND_COLOR }}>
                 <ParentNavbar />

@@ -981,7 +981,7 @@ const SchoolDashboardPage = () => {
                                         </Grid>
                                     </PermissionGuard>
 
-                                    {currentSchool && currentSchool.paymentsEnabled !== false && (
+                                    {currentSchool?.paymentsEnabled !== false && (
                                     <PermissionGuard permission="colegios-pagos">
                                         <Grid item xs={12} sm={6} md={4}>
                                             <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>

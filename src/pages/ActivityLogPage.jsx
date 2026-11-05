@@ -890,7 +890,7 @@ const ActivityLogPage = () => {
                                                             {formatGuatemalaDatetime(bus.currentRoute.startTime)})
                                                         </MobileValue>
                                                     )}
-                                                    {bus.currentRoute && bus.currentRoute.endTime && (
+                                                    {bus.currentRoute?.endTime && (
                                                         <MobileValue>
                                                             Finalizada a las{' '}
                                                             {formatGuatemalaDatetime(bus.currentRoute.endTime)}
@@ -1037,7 +1037,7 @@ const ActivityLogPage = () => {
                                                             sx={{ ml: 2 }}
                                                         />
                                                     )}
-                                                    {bus.currentRoute && bus.currentRoute.endTime && (
+                                                    {bus.currentRoute?.endTime && (
                                                         <Chip
                                                             label={`Finalizada a las ${formatGuatemalaDatetime(
                                                                 bus.currentRoute.endTime

@@ -228,11 +228,11 @@ const tagSlotsByDay = (slotsForDay) => {
   const sorted = [...slotsForDay].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
 
   // If the API already provides a semantic `type` (pickup/dropoff), prefer it
-  const hasType = sorted.some((s) => s && s.type);
+  const hasType = sorted.some((s) => s?.type);
   if (hasType) {
     return sorted.map((s) => {
-      const t = (s && s.type) || '';
-      const lbl = t === 'pickup' ? 'Entrada' : t === 'dropoff' ? 'Salida' : (s && s._label) || 'Parada';
+      const t = (s?.type) || '';
+      const lbl = t === 'pickup' ? 'Entrada' : t === 'dropoff' ? 'Salida' : (s?._label) || 'Parada';
       return { ...s, _label: lbl };
     });
   }
@@ -333,7 +333,7 @@ const ParentDashboardPage = () => {
       .then(({ data }) => {
         if (cancelled) return;
         const enrollmentPayment = data?.enrollmentPayment || null;
-        setPendingEnrollmentFee(enrollmentPayment && enrollmentPayment.status !== 'PAGADO' ? enrollmentPayment : null);
+        setPendingEnrollmentFee(enrollmentPayment?.status !== 'PAGADO' ? enrollmentPayment : null);
       })
       .catch(() => {
         if (!cancelled) setPendingEnrollmentFee(null);
@@ -408,10 +408,10 @@ const ParentDashboardPage = () => {
         try {
           const routeSet = new Set();
           Object.values(byId).forEach((arr) => {
-            (arr || []).forEach((s) => { if (s && s.routeNumber) routeSet.add(String(s.routeNumber)); });
+            (arr || []).forEach((s) => { if (s?.routeNumber) routeSet.add(String(s.routeNumber)); });
           });
           // incluir rutas definidas en parentInfo.routes también
-          (info.routes || []).forEach((r) => { if (r && r.routeNumber) routeSet.add(String(r.routeNumber)); });
+          (info.routes || []).forEach((r) => { if (r?.routeNumber) routeSet.add(String(r.routeNumber)); });
           const routesArr = Array.from(routeSet).filter(Boolean);
           if (routesArr.length > 0) {
             const q = encodeURIComponent(routesArr.join(','));
@@ -421,7 +421,7 @@ const ParentDashboardPage = () => {
             const busesArr = platesRes.data?.data ?? platesRes.data ?? [];
             const pmap = {};
             if (Array.isArray(busesArr)) {
-              busesArr.forEach((b) => { if (b && b.routeNumber != null && b.plate != null) pmap[String(b.routeNumber)] = b.plate; });
+              busesArr.forEach((b) => { if (b?.routeNumber != null && b.plate != null) pmap[String(b.routeNumber)] = b.plate; });
             }
             setPlateMap(pmap);
           } else {
@@ -527,7 +527,7 @@ const ParentDashboardPage = () => {
   };
 
   const handleOpenContractShare = async (contract) => {
-    if (!contract || !contract.uuid) return;
+    if (!contract?.uuid) return;
     try {
       // Load shared contract HTML/content
       const res = await api.get(`/contracts/share/${contract.uuid}`);
@@ -545,7 +545,7 @@ const ParentDashboardPage = () => {
   };
 
   const handleOpenFilledView = (filled) => {
-    if (!filled || !filled.uuid) return;
+    if (!filled?.uuid) return;
     const uuid = filled.uuid;
     setViewFilledUuid(uuid);
     setViewFilledLoading(true);
@@ -782,7 +782,7 @@ const ParentDashboardPage = () => {
       setMissingFields(newlyMissing);
       setSnackbar({ open: true, sev: 'warning', msg: `Faltan campos: ${newlyMissing.slice(0,3).join(', ')}${newlyMissing.length>3? '...':''}` });
       const first = newlyMissing[0];
-      setTimeout(() => { const el = fieldRefs.current[first]; if (el && el.focus) try { el.focus(); } catch(e){} }, 50);
+      setTimeout(() => { const el = fieldRefs.current[first]; if (el?.focus) try { el.focus(); } catch(e){} }, 50);
       return;
     }
 

@@ -374,7 +374,7 @@ const SchoolContractsPage = () => {
     // ---------------------------
     const handleWordUpload = async (event) => {
         const file = event.target.files[0];
-        if (file && file.name.endsWith('.docx')) {
+        if (file?.name.endsWith('.docx')) {
             try {
                 const arrayBuffer = await file.arrayBuffer();
                 const result = await mammoth.convertToHtml({ arrayBuffer });

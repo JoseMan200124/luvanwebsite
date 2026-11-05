@@ -45,7 +45,7 @@ const PaymentFilters = ({
             </FormControl>
             <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 185 }, width: { xs: '100%', sm: 'auto' } }}>
                 <InputLabel>Débito Automático</InputLabel>
-                <Select label="D/A" value={autoDebit} onChange={(e) => onAutoDebitChange && onAutoDebitChange(e.target.value)}>
+                <Select label="D/A" value={autoDebit} onChange={(e) => onAutoDebitChange?.(e.target.value)}>
                     <MenuItem value="">Todos</MenuItem>
                     <MenuItem value="yes">Sí</MenuItem>
                     <MenuItem value="no">No</MenuItem>

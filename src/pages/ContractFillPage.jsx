@@ -224,7 +224,7 @@ const ContractFillPage = () => {
             // Verify and get user info
             const verifyRes = await api.get('/auth/verify');
             const user = verifyRes.data.user;
-            if (user && user.id) {
+            if (user?.id) {
                 // Set parentId and close modal
                 setLoginOpen(false);
                 setSessionParentId(user.id);

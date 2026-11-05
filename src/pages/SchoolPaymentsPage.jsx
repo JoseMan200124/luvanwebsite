@@ -1141,7 +1141,7 @@ const SchoolPaymentsPage = () => {
     // If navigation provided a payment object in location.state, open the register dialog immediately
     // NOTE: The payment from notification may not have full data. handleOpenRegister will fetch it from the query params path instead.
     useEffect(() => {
-        const navPayment = location.state && location.state.payment ? location.state.payment : null;
+        const navPayment = location.state?.payment ? location.state.payment : null;
         if (navPayment) {
             // Skip this effect if we also have openRegister query param - let the query param handler deal with it
             const qs = new URLSearchParams(location.search);
@@ -1166,8 +1166,8 @@ const SchoolPaymentsPage = () => {
     useEffect(() => {
         const qs = new URLSearchParams(location.search);
         const showReceipt = qs.get('showReceipt') === 'true' || qs.get('showReceipt') === '1';
-        const receiptId = qs.get('receiptId') || (location.state && location.state.receiptId) || null;
-        const navPayment = location.state && location.state.payment ? location.state.payment : null;
+        const receiptId = qs.get('receiptId') || (location.state?.receiptId) || null;
+        const navPayment = location.state?.payment ? location.state.payment : null;
         if (!showReceipt || !receiptId) return;
 
         (async () => {
@@ -1320,7 +1320,7 @@ const SchoolPaymentsPage = () => {
                     const r = await api.get('/payments/paymenthistory', { params });
                     return r;
                 } catch (e) {
-                    console.error('[handleDownloadHistory] fetch error', e && e.response ? e.response.data || e.response : e);
+                    console.error('[handleDownloadHistory] fetch error', e?.response ? e.response.data || e.response : e);
                     throw e;
                 }
             };
@@ -1380,9 +1380,9 @@ const SchoolPaymentsPage = () => {
                                             noTransactions = true;
                                         }
                         } catch (e) {
-                            console.error('[handleDownloadHistory] fallback fetch error', e && e.response ? e.response.data || e.response : e);
-                            const status = e && e.response && e.response.status;
-                            const respData = e && e.response && e.response.data;
+                            console.error('[handleDownloadHistory] fallback fetch error', e?.response ? e.response.data || e.response : e);
+                            const status = e?.response?.status;
+                            const respData = e?.response?.data;
                             // If API indicates not found or no content, treat as no transactions
                             if (status === 404 || status === 204 || (respData && typeof respData === 'string' && /not found|no history|no transactions/i.test(respData))) {
                                 // Treat as no transactions and continue to generate a PDF with a placeholder
@@ -2367,10 +2367,10 @@ const SchoolPaymentsPage = () => {
 
     const handleManageAction = async (actionName, payload) => {
         // Implement common management actions using available backend endpoints
-        const payment = payload && payload.payment ? payload.payment : payload || manageTarget;
+        const payment = payload?.payment ? payload.payment : payload || manageTarget;
 
         try {
-            if (!payment || !payment.id) {
+            if (!payment?.id) {
                 setSnackbar({ open: true, message: 'Pago no válido', severity: 'error' });
                 return;
             }
@@ -2705,7 +2705,7 @@ const SchoolPaymentsPage = () => {
                 
                 const familyLast = h.familyLastName || h.familyLast || h.familyLastname || h.User?.FamilyDetail?.familyLastName || h.User?.familyLastName || '';
                 // Use only finalStatus (as required). Fallback to Payment.finalStatus if the snapshot doesn't include it.
-                const estado = h.finalStatus || (h.Payment && h.Payment.finalStatus) || '';
+                const estado = h.finalStatus || (h.Payment?.finalStatus) || '';
                 const estadoUpper = normalizeUpper(estado);
                 
                 // Filtrar por estado de pago
@@ -2827,7 +2827,7 @@ const SchoolPaymentsPage = () => {
                 let maxLength = header.length;
                 sheet.eachRow((row) => {
                     const cell = row.getCell(index + 1);
-                    const value = cell && cell.value ? String(cell.value) : '';
+                    const value = cell?.value ? String(cell.value) : '';
                     if (value.length > maxLength) maxLength = value.length;
                 });
                 column.width = Math.min(Math.max(maxLength + 2, 10), 60);
@@ -3002,7 +3002,7 @@ const SchoolPaymentsPage = () => {
                 let maxLength = header.length;
                 sheet.eachRow((row) => {
                     const cell = row.getCell(index + 1);
-                    const value = cell && cell.value ? String(cell.value) : '';
+                    const value = cell?.value ? String(cell.value) : '';
                     if (value.length > maxLength) maxLength = value.length;
                 });
                 column.width = Math.min(Math.max(maxLength + 2, 10), 60);
@@ -3274,7 +3274,7 @@ const SchoolPaymentsPage = () => {
         );
     }
 
-    if (school && school.paymentsEnabled === false) {
+    if (school?.paymentsEnabled === false) {
         return (
             <PageContainer>
                 <HeaderCard>
@@ -3785,7 +3785,7 @@ const SchoolPaymentsPage = () => {
                                                                 <YAxis tickFormatter={(value) => `Q${(value/1000).toFixed(0)}k`} />
                                                                 <RechartsTooltip 
                                                                     formatter={(value) => [`Q ${Number(value).toLocaleString('es-GT', {minimumFractionDigits: 2})}`, 'Ingreso']}
-                                                                    labelFormatter={(label, payload) => payload && payload[0] ? payload[0].payload.fullLabel : label}
+                                                                    labelFormatter={(label, payload) => payload?.[0] ? payload[0].payload.fullLabel : label}
                                                                 />
                                                             <Legend />
                                                                 <Bar dataKey="total" name="Ingreso Total" radius={[8, 8, 0, 0]}>
@@ -4899,7 +4899,7 @@ const SchoolPaymentsPage = () => {
                                     )}
                                     
                                     {/* Alert retroactivo por período */}
-                                    {retroactivePenaltyCalc && retroactivePenaltyCalc.periods && retroactivePenaltyCalc.periods.some(p => p.daysLate > 0) && (
+                                    {retroactivePenaltyCalc?.periods?.some(p => p.daysLate > 0) && (
                                         <Box sx={{ mb: 2, p: 2, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ff9800' }}>
                                             <Typography variant="caption" sx={{ fontWeight: 700, color: '#e65100', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
                                                 ⏰ PAGO RETROACTIVO DETECTADO
@@ -5870,7 +5870,7 @@ const SchoolPaymentsPage = () => {
                             <DialogActions>
                                 <Button onClick={() => setPreviewReceipt(null)}>Cerrar</Button>
                                 <Button variant="contained" onClick={() => {
-                                    const navPayment = location.state && location.state.payment ? location.state.payment : null;
+                                    const navPayment = location.state?.payment ? location.state.payment : null;
                                     const localPreview = previewReceipt;
                                     setPreviewReceipt(null);
                                     if (navPayment) {

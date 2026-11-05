@@ -640,7 +640,7 @@ const FuelRecordsPage = () => {
     };
 
     const handleOpenEdit = (record) => {
-        if (!record || !record.canEdit) return;
+        if (!record?.canEdit) return;
         setSelectedRecord(record);
         setEditSchools([]);
         setEditCorporations([]);
@@ -730,7 +730,7 @@ const FuelRecordsPage = () => {
         try {
             setUpdating(true);
             const response = await updateFuelRecord(selectedRecord.id, payload);
-            if (response && response.success) {
+            if (response?.success) {
                 handleCloseEdit();
                 handleCloseDetails();
                 await Promise.all([fetchFuelRecords(), fetchStatistics()]);
@@ -918,7 +918,7 @@ const FuelRecordsPage = () => {
         try {
             setCreating(true);
             const response = await createFuelRecordWeb(payload);
-            if (response && response.success) {
+            if (response?.success) {
                 handleCloseCreate();
                 // Refresh list and stats
                 setPage(0);

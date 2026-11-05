@@ -60,7 +60,7 @@ export function rutasParaFranja(contexto, franja) {
     if (!franja) return rutas;
     return rutas.filter((r) => {
         const permitidas = contexto.franjasPorRuta?.[r];
-        return !permitidas || !permitidas.length || permitidas.includes(franja);
+        return !permitidas?.length || permitidas.includes(franja);
     });
 }
 
@@ -85,7 +85,7 @@ export function validarParadas(paradas, contexto) {
             errores.push({ indice, campo: 'routeNumber', mensaje: `La ruta ${p.routeNumber} no pertenece al colegio` });
         } else if (franjaOk) {
             const permitidas = contexto.franjasPorRuta?.[p.routeNumber];
-            if (permitidas && permitidas.length && !permitidas.includes(p.franja)) {
+            if (permitidas?.length && !permitidas.includes(p.franja)) {
                 errores.push({ indice, campo: 'franja', mensaje: `La ruta ${p.routeNumber} no tiene la franja ${p.franja}` });
             }
         }

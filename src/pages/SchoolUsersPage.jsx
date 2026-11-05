@@ -329,7 +329,7 @@ const SchoolUsersPage = () => {
                     const studentRoutePeriodSet = new Set();
                     slotsToUse.forEach(slot => {
                         let routeNumber = '';
-                        if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') {
+                        if (slot?.routeNumber != null && String(slot.routeNumber).trim() !== '') {
                             routeNumber = String(slot.routeNumber);
                         }
                         if (!routeNumber) routeNumber = 'Sin Ruta';
@@ -407,7 +407,7 @@ const SchoolUsersPage = () => {
                     row.push(fd.mainAddress || '');
                     row.push(fd.alternativeAddress || '');
                     for (let i = 0; i < maxStudents; i++) {
-                        const student = (fd.Students && fd.Students[i]) ? fd.Students[i] : null;
+                        const student = (fd.Students?.[i]) ? fd.Students[i] : null;
                         row.push(student ? (student.fullName || '') : '');
                         row.push(student ? (student.grade || '') : '');
 
@@ -431,7 +431,7 @@ const SchoolUsersPage = () => {
                                 const displayTime = (slot.time || slot.schoolSchedule || slot.timeSlot || '').toString();
                                 const note = slot.note || '';
                                 let routeLabel = '';
-                                if (slot && slot.routeNumber != null && String(slot.routeNumber).trim() !== '') routeLabel = String(slot.routeNumber);
+                                if (slot?.routeNumber != null && String(slot.routeNumber).trim() !== '') routeLabel = String(slot.routeNumber);
                                 const period = resolveScheduleCodeFromSlot(slot, SCHEDULE_CODES);
                                 if (!period) return;
                                 if (!dataForDay[`hora${period}`]) dataForDay[`hora${period}`] = displayTime;
@@ -457,10 +457,10 @@ const SchoolUsersPage = () => {
                         }
                     }
 
-                    const motherName = (fd.motherName && fd.motherName.trim()) || '';
-                    const motherPhone = (fd.motherCellphone && fd.motherCellphone.trim()) || '';
-                    const fatherName = (fd.fatherName && fd.fatherName.trim()) || '';
-                    const fatherPhone = (fd.fatherCellphone && fd.fatherCellphone.trim()) || '';
+                    const motherName = (fd.motherName?.trim()) || '';
+                    const motherPhone = (fd.motherCellphone?.trim()) || '';
+                    const fatherName = (fd.fatherName?.trim()) || '';
+                    const fatherPhone = (fd.fatherCellphone?.trim()) || '';
                     row.push(translateServiceStatus(user.familyServiceStatus?.status || user.serviceStatus || ''));
                     row.push(user.name || '');
                     row.push(user.email || '');
@@ -598,7 +598,7 @@ const SchoolUsersPage = () => {
                 if (key === 'madreCelular' || key === 'padreCelular') {
                     col.alignment = { horizontal: 'center', vertical: 'middle' };
                 }
-                if (key && key.startsWith('est_') && key.endsWith('_grado')) {
+                if (key?.startsWith('est_') && key.endsWith('_grado')) {
                     col.alignment = { horizontal: 'center', vertical: 'middle' };
                 }
             });
@@ -1209,7 +1209,7 @@ const SchoolUsersPage = () => {
         }
 
         setSelectedSupervisorPilots([]);
-        if (parsedRoleId === 6 || (user.Role && user.Role.name === 'Supervisor')) {
+        if (parsedRoleId === 6 || (user.Role?.name === 'Supervisor')) {
             const newArray = user.supervisorPilots ? user.supervisorPilots.map(sp => Number(sp.pilotId)) : [];
             setSelectedSupervisorPilots(newArray);
         }
@@ -1218,7 +1218,7 @@ const SchoolUsersPage = () => {
             const auxMonitoras = [];
             try {
                 const auxMonitorasResp = await api.get(`/users/${user.id}/assigned-monitoras`);
-                if (auxMonitorasResp.data && auxMonitorasResp.data.monitoraIds) {
+                if (auxMonitorasResp.data?.monitoraIds) {
                     auxMonitoras.push(...auxMonitorasResp.data.monitoraIds.map(id => Number(id)));
                 }
             } catch (error) {
@@ -1270,7 +1270,7 @@ const SchoolUsersPage = () => {
     };
 
     const handleConfirmDelete = async () => {
-        if (!selectedUser || !selectedUser.id) return;
+        if (!selectedUser?.id) return;
         const schoolIdToUse = currentSchool?.id || schoolId || stateSchool?.id;
         if (!schoolIdToUse || !stateCicloEscolarId) {
             setSnackbar({ open: true, message: 'No se pudo resolver el colegio y ciclo escolar para eliminar al usuario.', severity: 'error' });
@@ -1491,7 +1491,7 @@ const SchoolUsersPage = () => {
                 school: (selectedUser.schoolId || selectedUser.school) ? Number(selectedUser.schoolId || selectedUser.school) : null
             };
 
-            if (selectedUser.password && selectedUser.password.trim() !== '') {
+            if (selectedUser.password?.trim() !== '') {
                 payload.password = selectedUser.password;
             }
 

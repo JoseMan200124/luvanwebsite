@@ -79,7 +79,7 @@ export function generateRouteOccupancyPDF(data = [], meta = {}) {
     let first = true;
     order.forEach(dayKey => {
       if (data[dayKey] && data[dayKey].length >= 0) {
-        const label = meta.dayLabels && meta.dayLabels[dayKey] ? meta.dayLabels[dayKey] : dayKey;
+        const label = meta.dayLabels?.[dayKey] ? meta.dayLabels[dayKey] : dayKey;
         buildTable(data[dayKey], label, first);
         first = false;
       }
@@ -196,7 +196,7 @@ export function generateCorporateRouteOccupancyPDF(data = [], meta = {}) {
     
     order.forEach(dayKey => {
       if (data[dayKey] && data[dayKey].length >= 0) {
-        const label = meta.dayLabels && meta.dayLabels[dayKey] ? meta.dayLabels[dayKey] : dayKey;
+        const label = meta.dayLabels?.[dayKey] ? meta.dayLabels[dayKey] : dayKey;
         buildTable(data[dayKey], label, first);
         first = false;
       }

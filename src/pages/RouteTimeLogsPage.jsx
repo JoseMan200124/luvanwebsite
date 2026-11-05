@@ -223,11 +223,11 @@ const RouteTimeLogsPage = () => {
             const logsList = data.timeLogs || data.data || [];
             setTimeLogs(logsList);
 
-            const totalFromServer = data.total ?? data.totalTimeLogs ?? data.totalRecords ?? (data.pagination && data.pagination.total) ?? 0;
+            const totalFromServer = data.total ?? data.totalTimeLogs ?? data.totalRecords ?? (data.pagination?.total) ?? 0;
             setTotalCount(totalFromServer || 0);
 
             // Calcular estadísticas
-            const serverAvg = data.averageDuration ?? data.averageTripDuration ?? (data.statistics && data.statistics.averageDuration);
+            const serverAvg = data.averageDuration ?? data.averageTripDuration ?? (data.statistics?.averageDuration);
             if (totalFromServer && serverAvg !== undefined) {
                 setStatistics({
                     total: totalFromServer,

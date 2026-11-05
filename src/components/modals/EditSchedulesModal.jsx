@@ -222,7 +222,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
 
   const buildPayloadSchedules = () => {
     return schedules
-      .filter(s => s && s.code)
+      .filter(s => s?.code)
       .map(s => {
         const entry = {
           code: s.code.toUpperCase(),
@@ -240,7 +240,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   };
 
   const validateLocalSchedules = () => {
-    const schedulesWithCode = schedules.filter(s => s && s.code);
+    const schedulesWithCode = schedules.filter(s => s?.code);
     const invalidCode = schedulesWithCode.find(s => !/^[A-Z]{2,4}$/.test(s.code));
     if (invalidCode) {
       return `Codigo de horario invalido: "${invalidCode.code}". Use 2 a 4 letras mayusculas (ej: AM, VE).`;

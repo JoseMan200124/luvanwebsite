@@ -787,7 +787,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         (async () => {
             try {
                 const payloadRow = { ...row, paymentId: payment?.id };
-                if (row && row.id) {
+                if (row?.id) {
                     // Update transaction invoice status (V2 endpoint)
                     const response = await api.put(`/payments/v2/transactions/${row.id}/invoice`, { invoiceSent: newVal });
                     console.log('✅ Factura actualizada exitosamente:', response.data);

@@ -165,17 +165,17 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     if (studentArg) {
       targetStudent = typeof studentArg === 'object' ? studentArg : { id: studentArg };
     }
-    if (!targetStudent && slot && slot.studentId) targetStudent = { id: slot.studentId };
+    if (!targetStudent && slot?.studentId) targetStudent = { id: slot.studentId };
     // if first arg is a student object
-    if (slot && slot.id && slot.fullName && !day) {
+    if (slot?.id && slot.fullName && !day) {
       // called as openAssignPopup(student)
       targetStudent = slot;
       slot = null;
     }
 
-    if (targetStudent == null && students && students.length === 1) {
+    if (targetStudent == null && students?.length === 1) {
       // fallback to prop studentId / single student in students
-      targetStudent = { id: studentId || (students[0] && students[0].id) };
+      targetStudent = { id: studentId || (students[0]?.id) };
     }
 
     if (targetStudent) {
@@ -266,7 +266,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   }
 
   async function saveAssignedRoute() {
-  const resolvedStudent = (assignEditing && assignEditing.studentId) || assignTargetStudentId || studentId || (students && students[0] && students[0].id);
+  const resolvedStudent = (assignEditing?.studentId) || assignTargetStudentId || studentId || (students?.[0]?.id);
   console.log('[StudentScheduleModal] saveAssignedRoute called. resolvedStudent=', resolvedStudent, 'assignEditing=', assignEditing, 'assignForm=', assignForm);
     if (!resolvedStudent) return alert('Selecciona o proporciona un alumno antes de guardar');
     // validate
@@ -278,7 +278,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     // Build schoolSchedule string including selected dynamic code when possible
     const selectedSchedule = parseScheduleSelectValue(schoolSchedule);
     const matchedSchedule = findScheduleBySelectValue(schoolSchedule, schoolSchedules || []);
-    const matchedCode = matchedSchedule && matchedSchedule.code ? String(matchedSchedule.code).toUpperCase() : null;
+    const matchedCode = matchedSchedule?.code ? String(matchedSchedule.code).toUpperCase() : null;
     const schoolScheduleOut = selectedSchedule.time
       ? (matchedCode ? `${selectedSchedule.time} ${matchedCode}` : selectedSchedule.time)
       : null;
@@ -353,7 +353,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     try {
       const targetStudent = (typeof targetStudentIdParam !== 'undefined' && targetStudentIdParam !== null)
         ? targetStudentIdParam
-        : (assignTargetStudentId || studentId || (students && students[0] && students[0].id));
+        : (assignTargetStudentId || studentId || (students?.[0]?.id));
       if (!targetStudent) return;
       const slot = (slotsMap[targetStudent] || []).find(s => s.id === slotId);
       if (!slot) return;
@@ -365,7 +365,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
         } catch (err) {
           // If not found, try to locate the slot across other students and retry
           console.error('[removeSlotForDay] delete failed, attempting fallback check', err);
-          if (err && err.response && err.response.status === 404) {
+          if (err?.response?.status === 404) {
             // refresh all students' slots and try to find correct owner
             const allStudents = Array.isArray(students) && students.length > 0 ? students : (studentId ? [{ id: studentId }] : []);
             const freshMap = {};
@@ -390,7 +390,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
           await updateRemoteSlot(targetStudent, slotId, { days: newDays });
         } catch (err) {
           console.error('[removeSlotForDay] update failed, attempting fallback check', err);
-          if (err && err.response && err.response.status === 404) {
+          if (err?.response?.status === 404) {
             // refresh and try to find correct owner and retry update
             const allStudents = Array.isArray(students) && students.length > 0 ? students : (studentId ? [{ id: studentId }] : []);
             const freshMap = {};
@@ -431,7 +431,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
           await deleteRemoteSlot(targetStudentId, s.id);
         } catch (err) {
           // If slot not found, ignore; otherwise rethrow
-          if (!(err && err.response && err.response.status === 404)) {
+          if (!(err?.response?.status === 404)) {
             console.error('[removeAllSlotsForStudent] error deleting slot', s.id, err);
           }
         }
@@ -497,7 +497,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                       const getSlotType = (s) => {
                         try {
                           const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note;
-                          const sch = parsed && parsed.schoolSchedule;
+                          const sch = parsed?.schoolSchedule;
                           if (sch) return s.time <= sch ? 'entrada' : 'salida';
                         } catch (e) {}
                         // fallback by time of day
@@ -517,10 +517,10 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                               <button type="button" onClick={()=>{ openAssignPopup(s, day, st.id); }} style={{ background: 'transparent', border: 'none', color: '#2563EB', cursor: 'pointer' }} title="Editar">✏️</button>
                             </div>
                           </div>
-                          <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>Hora colegio: {(() => { try { const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note; return s.schoolSchedule || (parsed && parsed.schoolSchedule) || '—'; } catch(e) { return s.schoolSchedule || '—'; } })()}</div>
+                          <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>Hora colegio: {(() => { try { const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note; return s.schoolSchedule || (parsed?.schoolSchedule) || '—'; } catch(e) { return s.schoolSchedule || '—'; } })()}</div>
                           <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 6 }}>{s.routeNumber ? `Ruta ${s.routeNumber}` : 'Ruta: —'}</div>
                           <div style={{ fontSize: 12, color: '#6B7280' }}>Hora parada: {s.time}</div>
-                          <div style={{ fontSize: 12, color: '#6B7280' }}>Nota parada: {(() => { try { const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note; return parsed && parsed.note ? parsed.note : (s.note && typeof s.note === 'string' ? s.note : ''); } catch(e) { return s.note || ''; } })()}</div>
+                          <div style={{ fontSize: 12, color: '#6B7280' }}>Nota parada: {(() => { try { const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note; return parsed?.note ? parsed.note : (s.note && typeof s.note === 'string' ? s.note : ''); } catch(e) { return s.note || ''; } })()}</div>
                         </div>
                       );
 
@@ -559,7 +559,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                       <option value=''>-- seleccionar --</option>
                       {schoolSchedules.map((s, i) => {
                         const isStr = typeof s === 'string';
-                        const times = isStr ? [s] : (Array.isArray(s.times) ? s.times : (s && s.times ? [s.times] : []));
+                        const times = isStr ? [s] : (Array.isArray(s.times) ? s.times : (s?.times ? [s.times] : []));
                         const val = buildScheduleSelectValue(s);
                         const label = isStr ? s : `${s.name || 'Horario'} — ${times.join(', ')}`;
                         return <option key={i} value={val}>{label}</option>;
@@ -572,7 +572,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                       <option value=''>-- seleccionar --</option>
                       {assignRoutesOptions.map(r => {
                         // Prefer an explicit routeNumber. If missing, mark option as disabled
-                        const hasRouteNumber = r && r.routeNumber !== undefined && r.routeNumber !== null && String(r.routeNumber).trim() !== '';
+                        const hasRouteNumber = r?.routeNumber !== undefined && r.routeNumber !== null && String(r.routeNumber).trim() !== '';
                         const value = hasRouteNumber ? String(r.routeNumber) : '';
                         const label = hasRouteNumber ? `Ruta ${r.routeNumber}` : `Ruta (sin número) — ID ${r.id || '—'}`;
                         // Use r.id or a fallback for key stability
@@ -679,7 +679,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                 <div style={{ marginTop: 8 }}>
                   {(() => {
                     const st = (Array.isArray(students) ? students : []).find(x => x.id === confirmDeleteAllStudentId);
-                    const name = st && st.fullName ? st.fullName : `Alumno ${confirmDeleteAllStudentId || ''}`;
+                    const name = st?.fullName ? st.fullName : `Alumno ${confirmDeleteAllStudentId || ''}`;
                     return `¿Seguro que deseas eliminar todas las paradas de ${name}?`;
                   })()}
                 </div>

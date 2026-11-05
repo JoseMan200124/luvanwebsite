@@ -53,7 +53,7 @@ function validateDetail(detail, creditBalance, todayMoment) {
         errors.refundDate = 'No puede ser futura';
     }
 
-    if (!detail.referenceNumber || !detail.referenceNumber.trim()) {
+    if (!detail.referenceNumber?.trim()) {
         errors.referenceNumber = 'Requerido';
     }
 
@@ -107,7 +107,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
 
     const handleClose = useCallback(() => {
         reset();
-        onClose && onClose();
+        onClose?.();
     }, [reset, onClose]);
 
     useEffect(() => {
@@ -256,7 +256,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
             ? `Se reintegraron ${processed} crédito${processed === 1 ? '' : 's'} a favor por ${formatMoney(results?.totalRefunded)}`
             : null;
         reset();
-        onClose && onClose();
+        onClose?.();
         if (onApplied) onApplied(message);
     };
 

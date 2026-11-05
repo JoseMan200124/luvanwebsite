@@ -61,7 +61,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
     };
 
     const loadScheduleSlots = async () => {
-        if (!colaborador || !colaborador.id) return;
+        if (!colaborador?.id) return;
         setLoading(true);
         try {
             // Cargar los horarios del colaborador usando el nuevo endpoint
@@ -140,12 +140,12 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
             return;
         }
 
-        if (!colaborador || !colaborador.id) {
+        if (!colaborador?.id) {
             alert('No se encontró el colaborador');
             return;
         }
 
-        if (!corporation || !corporation.id) {
+        if (!corporation?.id) {
             alert('No se encontró el corporativo asociado');
             return;
         }

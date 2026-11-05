@@ -158,7 +158,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
         try {
             const response = await api.post('/payments/extraordinary', formData);
             setSnackbar({ open: true, message: response.data.message, severity: 'success' });
-            onPaymentCreated && onPaymentCreated(response.data.extraordinaryPayment);
+            onPaymentCreated?.(response.data.extraordinaryPayment);
             // Reiniciar formulario
             setFormData({
                 schoolId: '',
@@ -525,7 +525,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                                     {extraPayments.map((payment) => (
                                         <TableRow key={payment.id}>
                                             <TableCell>
-                                                {payment.School && payment.School.name
+                                                {payment.School?.name
                                                     ? payment.School.name
                                                     : payment.schoolId}
                                             </TableCell>

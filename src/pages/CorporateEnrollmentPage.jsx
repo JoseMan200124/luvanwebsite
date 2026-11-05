@@ -150,7 +150,7 @@ const CorporateEnrollmentPage = () => {
             try {
                 const response = await api.get(`/corporations/${corporationId}`);
                 
-                if (response.data && response.data.corporation) {
+                if (response.data?.corporation) {
                     const corp = response.data.corporation;
                     
                     // Parse schedules if it's a string

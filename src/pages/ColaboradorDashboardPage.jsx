@@ -281,7 +281,7 @@ const ColaboradorDashboardPage = () => {
     const entries = [];
     const exits = [];
     Object.values(byDay).forEach(arr => arr.forEach(slot => {
-      if (!slot || !slot._label) return;
+      if (!slot?._label) return;
       const t = slot.time || '';
       if (slot._label === 'Entrada' && t) entries.push(t);
       if (slot._label === 'Salida' && t) exits.push(t);
@@ -715,7 +715,7 @@ const ColaboradorDashboardPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => { setOpenRequestDetail(false); setSelectedRequest(null); }}>Cerrar</Button>
-          {selectedRequest && selectedRequest.status === 'pending' && (
+          {selectedRequest?.status === 'pending' && (
             <>
               <Button color="error" variant="contained" onClick={() => setOpenCancelConfirm(true)}>Cancelar solicitud</Button>
 
