@@ -121,7 +121,9 @@ const AttendanceManagementPage = () => {
             if (!map.has(key)) map.set(key, []);
             map.get(key).push(s);
         });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
+        return Array.from(map.entries())
+            .sort(([a], [b]) => a.localeCompare(b, 'es'))
+            .map(([cycleLabel, schools]) => ({ cycleLabel, schools: [...schools].sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')) }));
     }, [schools, isSpecificCicloEscolarSelected]);
 
     const fetchSchools = async () => {
@@ -388,6 +390,11 @@ const AttendanceManagementPage = () => {
                                         setSelectedSchedule('');
                                     }}
                                     label="Colegio"
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {isSpecificCicloEscolarSelected || groupedSchools.length === 0

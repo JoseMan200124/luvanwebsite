@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
     Autocomplete,
     Box,
@@ -9,10 +9,8 @@ import {
     CircularProgress,
     Alert,
     FormControl,
-    FormHelperText,
     Grid2,
     InputLabel,
-    ListSubheader,
     MenuItem,
     Paper,
     Select,
@@ -37,8 +35,8 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import moment from 'moment-timezone';
+import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -282,8 +280,9 @@ const BusAssignmentHistoryPage = () => {
     const [changeTypeFilter, setChangeTypeFilter] = useState('');
     const [busId, setBusId] = useState('');
     const [busInputValue, setBusInputValue] = useState('');
-    const [schoolId, setSchoolId] = useState('');
-    const [corporationId, setCorporationId] = useState('');
+    const [selectedClient, setSelectedClient] = useState(null);
+    const schoolId = getClientSchoolId(selectedClient);
+    const corporationId = getClientCorporationId(selectedClient);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
@@ -295,36 +294,11 @@ const BusAssignmentHistoryPage = () => {
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
-    const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
-        const map = new Map();
-        schools.forEach((s) => {
-            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(s);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
-    }, [schools, isSpecificCicloEscolarSelected]);
-
-    const groupedCorporations = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
-        const map = new Map();
-        corporations.forEach((c) => {
-            const cycleLabel = getCicloEscolarOptionLabel(c.cicloEscolar) || (c.cicloEscolarId ? `Ciclo ${c.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(c);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, corps]) => ({ cycleLabel, corporations: corps }));
-    }, [corporations, isSpecificCicloEscolarSelected]);
-
     const clearFilters = () => {
         setChangeTypeFilter('');
         setBusId('');
         setBusInputValue('');
-        setSchoolId('');
-        setCorporationId('');
+        setSelectedClient(null);
         setStartDate('');
         setEndDate('');
         setStats(null);
@@ -445,7 +419,7 @@ const BusAssignmentHistoryPage = () => {
             {!loading && stats && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
-                        <strong>{stats.totalChanges}</strong> registros en total
+                        <strong>{stats.totalChanges}</strong> registros en total ({Number(stats.colegios || 0)} de colegios · {Number(stats.corporativos || 0)} corporativos)
                     </Typography>
                     {stats.byChangeType.map((item) => {
                         const ct = item.changeType;
@@ -456,6 +430,12 @@ const BusAssignmentHistoryPage = () => {
                         );
                     })}
                 </Box>
+            )}
+
+            {isSpecificCicloEscolarSelected && (
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                    Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                </Typography>
             )}
 
             {/* Filtros */}
@@ -509,68 +489,24 @@ const BusAssignmentHistoryPage = () => {
                         <Grid2 size={{ xs: 12, sm: 6, md: 1.5 }}>
                             <CicloEscolarFilter
                                 value={selectedCicloEscolar}
-                                onChange={(value) => { setSelectedCicloEscolar(value); setBusId(''); setBusInputValue(''); setSchoolId(''); setCorporationId(''); setPage(0); }}
+                                onChange={(value) => { setSelectedCicloEscolar(value); setBusId(''); setBusInputValue(''); setSelectedClient(null); setPage(0); }}
                                 label="Ciclo escolar"
                                 allLabel="Todos los ciclos"
                                 size="small"
                             />
                         </Grid2>
 
-                        {/* 4. Colegio */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 2.5 }}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={schoolId}
-                                    onChange={(e) => { setSchoolId(e.target.value); setPage(0); }}
-                                    label="Colegio"
-                                >
-                                    <MenuItem value="">{isSpecificCicloEscolarSelected ? 'Todos los colegios del ciclo' : 'Todos los colegios'}</MenuItem>
-                                    {isSpecificCicloEscolarSelected ? (
-                                        schools.map((school) => (
-                                            <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                        ))
-                                    ) : (
-                                        groupedSchools.map((group) => [
-                                            <ListSubheader key={`header-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.schools.map((s) => (
-                                                <MenuItem key={s.id} value={s.id} sx={{ pl: 3 }}>{s.name}</MenuItem>
-                                            )),
-                                        ])
-                                    )}
-                                </Select>
-                                <FormHelperText>
-                                    {isSpecificCicloEscolarSelected && !schoolId
-                                        ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
-                                        : 'Las opciones dependen del ciclo escolar seleccionado.'}
-                                </FormHelperText>
-                            </FormControl>
-                        </Grid2>
-
-                        {/* 5. Corporación */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 2.5 }}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Corporación</InputLabel>
-                                <Select value={corporationId} onChange={(e) => { setCorporationId(e.target.value); setPage(0); }} label="Corporación">
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {isSpecificCicloEscolarSelected ? (
-                                        corporations.map((corp) => (
-                                            <MenuItem key={corp.id} value={corp.id}>{corp.name}</MenuItem>
-                                        ))
-                                    ) : (
-                                        groupedCorporations.map((group) => [
-                                            <ListSubheader key={`header-corp-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.corporations.map((c) => (
-                                                <MenuItem key={c.id} value={c.id} sx={{ pl: 3 }}>{c.name}</MenuItem>
-                                            )),
-                                        ])
-                                    )}
-                                </Select>
-                            </FormControl>
+                        {/* 4. Cliente (colegios por ciclo y corporaciones) */}
+                        <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+                            <ClientSelector
+                                schools={schools}
+                                corporations={corporations}
+                                value={selectedClient}
+                                onChange={(client) => { setSelectedClient(client); setPage(0); }}
+                                helperText={isSpecificCicloEscolarSelected && !selectedClient
+                                    ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
+                                    : 'Los colegios dependen del ciclo escolar seleccionado.'}
+                            />
                         </Grid2>
 
                         {/* 6. Rango de fechas */}

@@ -1,6 +1,6 @@
 // src/pages/BusIncidentsPage.jsx
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Typography,
     Paper,
@@ -19,7 +19,6 @@ import {
     CardContent,
     Select,
     MenuItem,
-    ListSubheader,
     FormControl,
     InputLabel,
     Chip,
@@ -52,8 +51,8 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, updateBusIncident, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
 import api from '../utils/axiosConfig';
+import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import PermissionGuard from '../components/PermissionGuard';
 
 moment.tz.setDefault('America/Guatemala');
@@ -73,8 +72,9 @@ const BusIncidentsPage = () => {
     const [corporations, setCorporations] = useState([]);
     const [buses, setBuses] = useState([]);
     const [schoolRoutes, setSchoolRoutes] = useState([]);
-    const [selectedSchool, setSelectedSchool] = useState('');
-    const [selectedCorporation, setSelectedCorporation] = useState('');
+    const [selectedClient, setSelectedClient] = useState(null);
+    const selectedSchool = getClientSchoolId(selectedClient);
+    const selectedCorporation = getClientCorporationId(selectedClient);
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedTipoFalla, setSelectedTipoFalla] = useState('');
@@ -112,6 +112,8 @@ const BusIncidentsPage = () => {
         byTipoFalla: {},
         byTipo: {},
         withImpact: 0,
+        colegios: 0,
+        corporativos: 0,
     });
 
     useEffect(() => {
@@ -149,18 +151,6 @@ const BusIncidentsPage = () => {
     };
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
-
-    const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
-        const map = new Map();
-        schools.forEach((s) => {
-            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(s);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
-    }, [schools, isSpecificCicloEscolarSelected]);
 
     const fetchCorporations = async () => {
         try {
@@ -256,6 +246,8 @@ const BusIncidentsPage = () => {
                     byTipoFalla: data.countsByTipoFalla || {},
                     byTipo: data.countsByTipo || {},
                     withRouteAffected: Number(data.withRouteAffected || 0),
+                    colegios: Number(data.colegios || 0),
+                    corporativos: Number(data.corporativos || 0),
                 });
             } else {
                 // Fallback: calcular desde la página
@@ -470,6 +462,9 @@ const BusIncidentsPage = () => {
                                 <Typography variant="h4">
                                     {statistics.total}
                                 </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                    {statistics.colegios || 0} de colegios · {statistics.corporativos || 0} corporativos
+                                </Typography>
                             </CardContent>
                         </Card>
                     </Grid>
@@ -515,6 +510,12 @@ const BusIncidentsPage = () => {
                     </Grid>
                 </Grid>
 
+                {isSpecificCicloEscolarSelected && (
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                        Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                    </Typography>
+                )}
+
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
@@ -523,67 +524,28 @@ const BusIncidentsPage = () => {
                                 value={selectedCicloEscolar}
                                 onChange={(value) => {
                                     setSelectedCicloEscolar(value);
-                                    setSelectedSchool('');
-                                    setSelectedCorporation('');
+                                    setSelectedClient(null);
                                     setSelectedPlate('');
                                     setSelectedRoute('');
                                     setPage(0);
                                 }}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={1.75}>
-                            <FormControl fullWidth>
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={selectedSchool}
-                                    onChange={(e) => {
-                                        setSelectedSchool(e.target.value);
-                                        setSelectedCorporation('');
-                                        setSelectedPlate('');
-                                        setSelectedRoute('');
-                                    }}
-                                    label="Colegio"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {isSpecificCicloEscolarSelected || groupedSchools.length === 0
-                                        ? schools.map((school) => (
-                                            <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                        ))
-                                        : groupedSchools.map((group) => [
-                                            <ListSubheader key={`header-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.schools.map((school) => (
-                                                <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                            ))
-                                        ])}
-                                </Select>
-                            </FormControl>
+                        <Grid item xs={12} sm={6} md={2.5}>
+                            <ClientSelector
+                                size="medium"
+                                schools={schools}
+                                corporations={corporations}
+                                value={selectedClient}
+                                onChange={(client) => {
+                                    setSelectedClient(client);
+                                    setSelectedPlate('');
+                                    setSelectedRoute('');
+                                    setPage(0);
+                                }}
+                            />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={1.75}>
-                            <FormControl fullWidth>
-                                <InputLabel>Corporación</InputLabel>
-                                <Select
-                                    value={selectedCorporation}
-                                    onChange={(e) => {
-                                        setSelectedCorporation(e.target.value);
-                                        setSelectedSchool('');
-                                        setSelectedPlate('');
-                                        setSelectedRoute('');
-                                    }}
-                                    label="Corporación"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {corporations.map((corp) => (
-                                        <MenuItem key={corp.id} value={corp.id}>
-                                            {corp.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
+
                         <Grid item xs={12} sm={6} md={1.3}>
                             <FormControl fullWidth>
                                 <InputLabel>Placa</InputLabel>

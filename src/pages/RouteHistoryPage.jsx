@@ -57,7 +57,8 @@ import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
-import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { renderClientGroup } from '../components/ClientSelector';
+import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
 const RouteHistoryPage = () => {
@@ -78,6 +79,7 @@ const RouteHistoryPage = () => {
     const [page, setPage] = useState(1);
     const pageSize = 10;
     const [total, setTotal] = useState(0);
+    const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
     // filtros
     const [startDate, setStartDate] = useState('');
@@ -216,6 +218,7 @@ const RouteHistoryPage = () => {
         if (cached) {
             setRoutes(cached.routes || []);
             setTotal(cached.total || 0);
+            setClientBreakdown(cached.clientBreakdown || { colegios: 0, corporativos: 0 });
             setInitialFetchDone(true);
             setError(null);
             setLoading(false);
@@ -230,7 +233,8 @@ const RouteHistoryPage = () => {
             const routesData = responseData.routes || [];
             const totalData = responseData.total || 0;
 
-            routeHistoryCacheRef.current.set(cacheKey, { routes: routesData, total: totalData });
+            const breakdownData = { colegios: Number(responseData.colegios || 0), corporativos: Number(responseData.corporativos || 0) };
+            routeHistoryCacheRef.current.set(cacheKey, { routes: routesData, total: totalData, clientBreakdown: breakdownData });
 
             const currentPage = Number(params.page || 1);
             const nextPage = currentPage + 1;
@@ -243,7 +247,8 @@ const RouteHistoryPage = () => {
                             const nextData = nextResponse.data || {};
                             routeHistoryCacheRef.current.set(nextCacheKey, {
                                 routes: nextData.routes || [],
-                                total: nextData.total || 0
+                                total: nextData.total || 0,
+                                clientBreakdown: { colegios: Number(nextData.colegios || 0), corporativos: Number(nextData.corporativos || 0) }
                             });
                         })
                         .catch(() => {});
@@ -252,6 +257,7 @@ const RouteHistoryPage = () => {
 
             setRoutes(routesData);
             setTotal(totalData);
+            setClientBreakdown(breakdownData);
             setInitialFetchDone(true);
         } catch (err) {
             console.error('Error fetching route history (page):', err);
@@ -322,6 +328,7 @@ const RouteHistoryPage = () => {
 
                         (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
                         (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
+                        combined.sort((a, b) => a.group.localeCompare(b.group, 'es') || a.name.localeCompare(b.name, 'es'));
 
                         // Añadir opcion "Todos los clientes" para que los usuarios puedan buscar globalmente
                         const allOption = { id: 'ALL', name: 'Todos los clientes', type: 'all', group: 'Todos' };
@@ -371,6 +378,7 @@ const RouteHistoryPage = () => {
 
                 (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
                 (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
+                combined.sort((a, b) => a.group.localeCompare(b.group, 'es') || a.name.localeCompare(b.name, 'es'));
 
                 const allOption = { id: 'ALL', name: 'Todos los clientes', type: 'all', group: 'Todos' };
                 setStatsClients([allOption, ...combined]);
@@ -1182,6 +1190,7 @@ const RouteHistoryPage = () => {
                                         size="small"
                                         options={statsClients.filter(c => c.type !== 'all')}
                                         groupBy={(option) => option.group || ''}
+                                        renderGroup={renderClientGroup}
                                         getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
                                         value={statsSelectedClient}
                                         onChange={(_, newValue) => {
@@ -1853,6 +1862,7 @@ const RouteHistoryPage = () => {
                             size="small"
                             options={clients}
                             groupBy={(option) => option.group || ''}
+                                        renderGroup={renderClientGroup}
                             getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
                             value={selectedClient}
                             onChange={(e, newVal) => { setSelectedClient(newVal); setClientTouched(true); }}
@@ -2021,6 +2031,13 @@ const RouteHistoryPage = () => {
                                 </Grid>
                             </Grid>
                         </Collapse>
+                    </Grid>
+
+                    <Grid item xs={12}>
+                        <Typography variant="body2" color="textSecondary">
+                            {total} recorridos: {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
+                            {selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE ? ' — Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.' : ''}
+                        </Typography>
                     </Grid>
 
                     <Grid item xs={12}>

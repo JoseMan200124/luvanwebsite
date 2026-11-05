@@ -55,6 +55,7 @@ import styled from 'styled-components';
 import * as XLSX from 'xlsx';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
+import { renderClientGroup, CORPORATIONS_GROUP_LABEL } from '../components/ClientSelector';
 
 const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
@@ -535,19 +536,20 @@ const BusesManagementPage = () => {
                     if (item.deleted) return;
                     const id = item.id || item._id || item.value || item.uuid || item.name;
                     const name = item.name || item.nombre || item.label || String(id);
-                    const cicloLabel = item.cicloEscolarId && cicloMap[item.cicloEscolarId]
-                        ? cicloMap[item.cicloEscolarId]
-                        : 'Sin ciclo';
+                    const cicloLabel = type === 'corporation'
+                        ? CORPORATIONS_GROUP_LABEL
+                        : (item.cicloEscolarId && cicloMap[item.cicloEscolarId] ? cicloMap[item.cicloEscolarId] : 'Sin ciclo');
                     combined.push({ id, name, cicloLabel, _raw: item, type });
                 };
 
                 (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
                 (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
 
+                // Secciones en orden alfabético (igual que el resto de selectores de cliente).
                 combined.sort((a, b) => {
-                    const cmp = b.cicloLabel.localeCompare(a.cicloLabel);
+                    const cmp = a.cicloLabel.localeCompare(b.cicloLabel, 'es');
                     if (cmp !== 0) return cmp;
-                    return a.name.localeCompare(b.name);
+                    return a.name.localeCompare(b.name, 'es');
                 });
 
                 setClientOptions(combined);
@@ -738,6 +740,7 @@ const BusesManagementPage = () => {
                         options={clientOptions}
                         getOptionLabel={(opt) => opt.name || ''}
                         groupBy={(opt) => opt.cicloLabel || 'Sin ciclo'}
+                        renderGroup={renderClientGroup}
                         value={clientFilter ? clientOptions.find((o) => 
                             String(o.id) === String(clientFilter.id) && o.type === clientFilter.type
                         ) || null : null}

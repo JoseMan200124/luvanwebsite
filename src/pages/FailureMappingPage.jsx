@@ -1,6 +1,6 @@
 // src/pages/FailureMappingPage.jsx
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Typography,
     Paper,
@@ -19,7 +19,6 @@ import {
     CardContent,
     Select,
     MenuItem,
-    ListSubheader,
     FormControl,
     InputLabel,
     Chip,
@@ -55,8 +54,8 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAllFailureMappings, getFailureMappingById, deleteFailureMapping, updateFailureMapping, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/failureMappingService';
 import api from '../utils/axiosConfig';
+import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import PermissionGuard from '../components/PermissionGuard';
 
 moment.tz.setDefault('America/Guatemala');
@@ -79,8 +78,9 @@ const FailureMappingPage = () => {
     const [corporations, setCorporations] = useState([]);
     const [buses, setBuses] = useState([]);
     const [schoolRoutes, setSchoolRoutes] = useState([]);
-    const [selectedSchool, setSelectedSchool] = useState('');
-    const [selectedCorporation, setSelectedCorporation] = useState('');
+    const [selectedClient, setSelectedClient] = useState(null);
+    const selectedSchool = getClientSchoolId(selectedClient);
+    const selectedCorporation = getClientCorporationId(selectedClient);
     const [selectedPlate, setSelectedPlate] = useState('');
     const [selectedRoute, setSelectedRoute] = useState('');
     const [selectedTipoFalla, setSelectedTipoFalla] = useState('');
@@ -120,13 +120,16 @@ const FailureMappingPage = () => {
         byTipo: {},
         withRouteAffected: 0,
         noOperacional: 0,
+        colegios: 0,
+        corporativos: 0,
     });
     const [exportingPdf, setExportingPdf] = useState(false);
 
     // Modal PDF
     const [pdfModalOpen, setPdfModalOpen] = useState(false);
-    const [pdfModalSchoolId, setPdfModalSchoolId] = useState('');
-    const [pdfModalCorporationId, setPdfModalCorporationId] = useState('');
+    const [pdfModalClient, setPdfModalClient] = useState(null);
+    const pdfModalSchoolId = getClientSchoolId(pdfModalClient);
+    const pdfModalCorporationId = getClientCorporationId(pdfModalClient);
     const [pdfModalMonth, setPdfModalMonth] = useState(moment().startOf('month'));
     const [pdfModalCicloEscolar, setPdfModalCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [pdfModalSchools, setPdfModalSchools] = useState([]);
@@ -162,18 +165,6 @@ const FailureMappingPage = () => {
     }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, selectedTipoFalla, selectedTipo, selectedOperacional, selectedCicloEscolar, startDate, endDate, orderBy, order]);
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
-
-    const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
-        const map = new Map();
-        schools.forEach((s) => {
-            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(s);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
-    }, [schools, isSpecificCicloEscolarSelected]);
 
     const fetchSchools = async () => {
         try {
@@ -280,6 +271,8 @@ const FailureMappingPage = () => {
                 byTipo: data.countsByTipo || {},
                 withRouteAffected: Number(data.withRouteAffected || 0),
                 noOperacional: Number(data.noOperacional || 0),
+                colegios: Number(data.colegios || 0),
+                corporativos: Number(data.corporativos || 0),
             });
         } catch (error) {
             console.error('Error al cargar mapeos de fallas:', error);
@@ -303,8 +296,7 @@ const FailureMappingPage = () => {
     };
 
     const handleOpenPdfModal = () => {
-        setPdfModalSchoolId('');
-        setPdfModalCorporationId('');
+        setPdfModalClient(null);
         setPdfModalMonth(moment().startOf('month'));
         setPdfModalCicloEscolar(getInitialCicloEscolarFilter);
         setPdfModalSchools([]);
@@ -383,20 +375,6 @@ const FailureMappingPage = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfModalCicloEscolar, pdfModalOpen]);
 
-    const isSpecificPdfCicloEscolarSelected = pdfModalCicloEscolar && pdfModalCicloEscolar !== ALL_CYCLES_VALUE;
-
-    const groupedPdfSchools = useMemo(() => {
-        if (isSpecificPdfCicloEscolarSelected) return [];
-        const map = new Map();
-        pdfModalSchools.forEach((s) => {
-            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(s);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
-    }, [pdfModalSchools, isSpecificPdfCicloEscolarSelected]);
-
     const handleExportPDF = async () => {
         if (!pdfModalSchoolId && !pdfModalCorporationId) {
             alert('Selecciona un cliente para generar el reporte.');
@@ -438,8 +416,8 @@ const FailureMappingPage = () => {
 
             const url = window.URL.createObjectURL(blob);
             const clientName = pdfModalSchoolId
-                ? (schools.find(s => s.id === pdfModalSchoolId)?.name || 'cliente')
-                : (corporations.find(c => c.id === pdfModalCorporationId)?.name || 'cliente');
+                ? (pdfModalSchools.find(s => String(s.id) === pdfModalSchoolId)?.name || 'cliente')
+                : (corporations.find(c => String(c.id) === pdfModalCorporationId)?.name || 'cliente');
             const filename = `mapeo_fallas_${clientName.replace(/\s+/g, '_')}_${pdfModalMonth.format('YYYY-MM')}.pdf`;
             const a = document.createElement('a');
             a.href = url;
@@ -654,6 +632,9 @@ const FailureMappingPage = () => {
                                 <Typography variant="h4">
                                     {statistics.total}
                                 </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                    {statistics.colegios} de colegios · {statistics.corporativos} corporativos
+                                </Typography>
                             </CardContent>
                         </Card>
                     </Grid>
@@ -695,6 +676,12 @@ const FailureMappingPage = () => {
                     </Grid>
                 </Grid>
 
+                {isSpecificCicloEscolarSelected && (
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                        Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                    </Typography>
+                )}
+
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
@@ -703,67 +690,28 @@ const FailureMappingPage = () => {
                                 value={selectedCicloEscolar}
                                 onChange={(value) => {
                                     setSelectedCicloEscolar(value);
-                                    setSelectedSchool('');
-                                    setSelectedCorporation('');
+                                    setSelectedClient(null);
                                     setSelectedPlate('');
                                     setSelectedRoute('');
                                     setPage(0);
                                 }}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={1.75}>
-                            <FormControl fullWidth>
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={selectedSchool}
-                                    onChange={(e) => {
-                                        setSelectedSchool(e.target.value);
-                                        setSelectedCorporation('');
-                                        setSelectedPlate('');
-                                        setSelectedRoute('');
-                                    }}
-                                    label="Colegio"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {isSpecificCicloEscolarSelected || groupedSchools.length === 0
-                                        ? schools.map((school) => (
-                                            <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                        ))
-                                        : groupedSchools.map((group) => [
-                                            <ListSubheader key={`header-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.schools.map((school) => (
-                                                <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                            ))
-                                        ])}
-                                </Select>
-                            </FormControl>
+                        <Grid item xs={12} sm={6} md={2.5}>
+                            <ClientSelector
+                                size="medium"
+                                schools={schools}
+                                corporations={corporations}
+                                value={selectedClient}
+                                onChange={(client) => {
+                                    setSelectedClient(client);
+                                    setSelectedPlate('');
+                                    setSelectedRoute('');
+                                    setPage(0);
+                                }}
+                            />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={1.75}>
-                            <FormControl fullWidth>
-                                <InputLabel>Corporación</InputLabel>
-                                <Select
-                                    value={selectedCorporation}
-                                    onChange={(e) => {
-                                        setSelectedCorporation(e.target.value);
-                                        setSelectedSchool('');
-                                        setSelectedPlate('');
-                                        setSelectedRoute('');
-                                    }}
-                                    label="Corporación"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {corporations.map((corp) => (
-                                        <MenuItem key={corp.id} value={corp.id}>
-                                            {corp.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
+
                         <Grid item xs={12} sm={6} md={1.3}>
                             <FormControl fullWidth>
                                 <InputLabel>Placa</InputLabel>
@@ -1385,48 +1333,16 @@ const FailureMappingPage = () => {
                             <CicloEscolarFilter
                                 size="small"
                                 value={pdfModalCicloEscolar}
-                                onChange={(val) => setPdfModalCicloEscolar(val)}
+                                onChange={(val) => { setPdfModalCicloEscolar(val); setPdfModalClient(null); }}
                                 allowAll={false}
                             />
-                            <FormControl fullWidth>
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={pdfModalSchoolId}
-                                    onChange={(e) => { setPdfModalSchoolId(e.target.value); setPdfModalCorporationId(''); }}
-                                    label="Colegio"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
-                                    disabled={Boolean(pdfModalCorporationId)}
-                                >
-                                    <MenuItem value="">Ninguno</MenuItem>
-                                    {isSpecificPdfCicloEscolarSelected || groupedPdfSchools.length === 0
-                                        ? pdfModalSchools.map((school) => (
-                                            <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                        ))
-                                        : groupedPdfSchools.map((group) => [
-                                            <ListSubheader key={`header-pdf-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.schools.map((school) => (
-                                                <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                            ))
-                                        ])}
-                                </Select>
-                            </FormControl>
-                            <FormControl fullWidth>
-                                <InputLabel>Corporación</InputLabel>
-                                <Select
-                                    value={pdfModalCorporationId}
-                                    onChange={(e) => { setPdfModalCorporationId(e.target.value); setPdfModalSchoolId(''); }}
-                                    label="Corporación"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
-                                    disabled={Boolean(pdfModalSchoolId)}
-                                >
-                                    <MenuItem value="">Ninguna</MenuItem>
-                                    {corporations.map((corp) => (
-                                        <MenuItem key={corp.id} value={corp.id}>{corp.name}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                            <ClientSelector
+                                size="medium"
+                                schools={pdfModalSchools}
+                                corporations={corporations}
+                                value={pdfModalClient}
+                                onChange={setPdfModalClient}
+                            />
                             <DatePicker
                                 label="Mes del reporte"
                                 value={pdfModalMonth}

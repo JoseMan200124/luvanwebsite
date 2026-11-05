@@ -108,7 +108,9 @@ const StudentIncidentsPage = () => {
             if (!map.has(key)) map.set(key, []);
             map.get(key).push(s);
         });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
+        return Array.from(map.entries())
+            .sort(([a], [b]) => a.localeCompare(b, 'es'))
+            .map(([cycleLabel, schools]) => ({ cycleLabel, schools: [...schools].sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')) }));
     }, [schools, isSpecificCicloEscolarSelected]);
 
     const fetchSchools = async () => {
