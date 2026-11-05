@@ -188,7 +188,7 @@ const CircularHistoryPage = () => {
       groups.get(groupKey).schools.push(school);
     });
 
-    return Array.from(groups.values()).map((group) => ({
+    return Array.from(groups.values()).sort((a, b) => a.cycleLabel.localeCompare(b.cycleLabel, 'es')).map((group) => ({
       ...group,
       schools: [...group.schools].sort((a, b) => safeStr(a?.name).localeCompare(safeStr(b?.name), 'es', { sensitivity: 'base' })),
     }));
@@ -484,6 +484,8 @@ const CircularHistoryPage = () => {
                   setPage(0);
                 }}
                 MenuProps={{
+                  anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                  transformOrigin: { vertical: 'top', horizontal: 'left' },
                   PaperProps: {
                     sx: {
                       maxHeight: 250,

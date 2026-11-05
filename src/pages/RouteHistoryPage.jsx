@@ -57,6 +57,7 @@ import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
+import { renderClientGroup } from '../components/ClientSelector';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
@@ -327,6 +328,7 @@ const RouteHistoryPage = () => {
 
                         (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
                         (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
+                        combined.sort((a, b) => a.group.localeCompare(b.group, 'es') || a.name.localeCompare(b.name, 'es'));
 
                         // Añadir opcion "Todos los clientes" para que los usuarios puedan buscar globalmente
                         const allOption = { id: 'ALL', name: 'Todos los clientes', type: 'all', group: 'Todos' };
@@ -376,6 +378,7 @@ const RouteHistoryPage = () => {
 
                 (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
                 (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
+                combined.sort((a, b) => a.group.localeCompare(b.group, 'es') || a.name.localeCompare(b.name, 'es'));
 
                 const allOption = { id: 'ALL', name: 'Todos los clientes', type: 'all', group: 'Todos' };
                 setStatsClients([allOption, ...combined]);
@@ -1187,6 +1190,7 @@ const RouteHistoryPage = () => {
                                         size="small"
                                         options={statsClients.filter(c => c.type !== 'all')}
                                         groupBy={(option) => option.group || ''}
+                                        renderGroup={renderClientGroup}
                                         getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
                                         value={statsSelectedClient}
                                         onChange={(_, newValue) => {
@@ -1858,6 +1862,7 @@ const RouteHistoryPage = () => {
                             size="small"
                             options={clients}
                             groupBy={(option) => option.group || ''}
+                                        renderGroup={renderClientGroup}
                             getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
                             value={selectedClient}
                             onChange={(e, newVal) => { setSelectedClient(newVal); setClientTouched(true); }}

@@ -62,7 +62,7 @@ import {
 } from '../services/fuelRecordService';
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel, getCicloEscolarYear } from '../services/cicloEscolarService';
+import ClientSelector from '../components/ClientSelector';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -117,7 +117,6 @@ const FuelRecordsPage = () => {
     const [editSchools, setEditSchools] = useState([]);
     const [editCorporations, setEditCorporations] = useState([]);
     const [editBuses, setEditBuses] = useState([]);
-    const [editRecordCycleId, setEditRecordCycleId] = useState(null);
     const [editClientRouteNumbers, setEditClientRouteNumbers] = useState([]);
     const [editForm, setEditForm] = useState({
         client: null,
@@ -253,21 +252,6 @@ const FuelRecordsPage = () => {
     };
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
-
-    const getSchoolCycleLabel = (school) =>
-        getCicloEscolarOptionLabel(school?.cicloEscolar) || (school?.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar');
-
-    // Opciones de cliente (colegios + corporaciones) y placas. groupLabel distingue colegios
-    // con el mismo nombre pero distinto ciclo escolar cuando el filtro de página está en
-    // "Todos los ciclos" — sin esto, dos filas "Colegio X" de años distintos se ven idénticas.
-    const clientOptionsRaw = [
-        ...schools.map(s => ({ label: `${s.name} (Colegio)`, value: `school-${s.id}`, type: 'school', id: s.id, groupLabel: getSchoolCycleLabel(s) })),
-        ...corporations.map(c => ({ label: `${c.name} (Corporación)`, value: `corp-${c.id}`, type: 'corp', id: c.id, groupLabel: 'Corporaciones' })),
-    ];
-
-    const clientOptions = isSpecificCicloEscolarSelected
-        ? clientOptionsRaw
-        : [...clientOptionsRaw].sort((a, b) => a.groupLabel.localeCompare(b.groupLabel) || a.label.localeCompare(b.label));
 
     const getBusClientId = (bus, type) => {
         if (type === 'school') return bus.schoolId ?? bus.school?.id;
@@ -609,13 +593,12 @@ const FuelRecordsPage = () => {
         setSelectedRecord(null);
     };
 
-    const loadEditReferenceData = async (cicloEscolarId) => {
+    const loadEditReferenceData = async () => {
         try {
-            // Sin ciclo (registro corporativo) se ofrecen colegios de todos los ciclos.
+            // Siempre colegios de todos los ciclos: un registro puede corregirse a un colegio de otro ciclo
+            // (p. ej. creado en un colegio de 2027 que en realidad es de 2026).
             // Sin allCycles, interceptor y backend limitarían a uno.
-            const params = cicloEscolarId
-                ? { cicloEscolarId: String(cicloEscolarId), includeArchived: true }
-                : { allCycles: true, includeArchived: true };
+            const params = { allCycles: true, includeArchived: true };
             const [schoolsResponse, corporationsResponse, busesResponse] = await Promise.all([
                 api.get('/schools', { params }),
                 api.get('/corporations'),
@@ -626,9 +609,7 @@ const FuelRecordsPage = () => {
             const corporationsData = Array.isArray(corporationsResponse.data) ? corporationsResponse.data : (corporationsResponse.data?.corporations || []);
             const busesData = Array.isArray(busesResponse.data) ? busesResponse.data : (busesResponse.data?.buses || []);
 
-            const inRecordCycle = (school) => String(school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? '') === String(cicloEscolarId);
-
-            setEditSchools(cicloEscolarId ? schoolsData.filter(inRecordCycle) : schoolsData);
+            setEditSchools(schoolsData);
             setEditCorporations(corporationsData);
             setEditBuses(busesData);
         } catch (error) {
@@ -660,18 +641,12 @@ const FuelRecordsPage = () => {
 
     const handleOpenEdit = (record) => {
         if (!record || !record.canEdit) return;
-        const recordCycleId = record?.cicloEscolarId
-            ?? record?.cicloEscolar?.id
-            ?? record?.school?.cicloEscolarId
-            ?? record?.school?.cicloEscolar?.id
-            ?? null;
         setSelectedRecord(record);
-        setEditRecordCycleId(recordCycleId);
         setEditSchools([]);
         setEditCorporations([]);
         setEditBuses([]);
         setEditForm(buildEditFormFromRecord(record));
-        loadEditReferenceData(recordCycleId);
+        loadEditReferenceData();
         setEditOpen(true);
         setDetailsOpen(false);
     };
@@ -679,7 +654,6 @@ const FuelRecordsPage = () => {
     const handleCloseEdit = () => {
         setEditOpen(false);
         setUpdating(false);
-        setEditRecordCycleId(null);
         setEditSchools([]);
         setEditCorporations([]);
         setEditBuses([]);
@@ -837,28 +811,6 @@ const FuelRecordsPage = () => {
         }).format(amount || 0);
     };
 
-    const isSchoolInOperation = (school) => school?.operationStatus === 'ACTIVE' && school?.cycleStatus !== 'ARCHIVED';
-
-    // Registro sin ciclo: colegios de todos los ciclos, primero los que están en operación.
-    const orderedEditSchools = editRecordCycleId
-        ? editSchools
-        : [...editSchools].sort((a, b) => (
-            Number(isSchoolInOperation(b)) - Number(isSchoolInOperation(a))
-            || String(a.name).localeCompare(String(b.name))
-            || Number(getCicloEscolarYear(b.cicloEscolar) || 0) - Number(getCicloEscolarYear(a.cicloEscolar) || 0)
-        ));
-
-    const editClientOptions = [
-        ...orderedEditSchools.map((school) => ({
-            label: editRecordCycleId
-                ? `${school.name} (Colegio)`
-                : `${school.name} (Colegio · ${getCicloEscolarYear(school.cicloEscolar) || 'Sin ciclo'})`,
-            type: 'school',
-            id: school.id
-        })),
-        ...editCorporations.map((corporation) => ({ label: `${corporation.name} (Corporación)`, type: 'corp', id: corporation.id })),
-    ];
-
     const editPlateOptions = [...new Set(editBuses.map((bus) => bus.plate).filter(Boolean))]
         .sort((firstPlate, secondPlate) => String(firstPlate).localeCompare(String(secondPlate)));
 
@@ -883,10 +835,6 @@ const FuelRecordsPage = () => {
             const bus = editBuses.find((item) => item.plate === plate);
             return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
         });
-
-    const selectedEditClientValue = editForm.client
-        ? editClientOptions.find((option) => option.type === editForm.client.type && String(option.id) === String(editForm.client.id)) || editForm.client
-        : null;
 
     const selectedEditBusValue = editForm.busId
         ? (() => {
@@ -1108,16 +1056,14 @@ const FuelRecordsPage = () => {
                             />
                         </Grid>
                         <Grid item xs="auto" sm="auto" md={"auto"}>
-                                <Autocomplete
-                                    options={clientOptions}
+                                <ClientSelector
+                                    schools={schools}
+                                    corporations={corporations}
                                     value={selectedClient}
-                                    onChange={(e, newValue) => { setSelectedClient(newValue); setSelectedRoute(''); setSelectedPlate(''); }}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    groupBy={isSpecificCicloEscolarSelected ? undefined : (option) => option.groupLabel}
-                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
+                                    onChange={(client) => { setSelectedClient(client); setSelectedRoute(''); setSelectedPlate(''); }}
+                                    fullWidth={false}
+                                    size="medium"
                                     sx={{ width: 250 }}
-                                    isOptionEqualToValue={(opt, val) => opt?.value === val?.value}
-                                    clearOnEscape
                                 />
                         </Grid>
 
@@ -1492,15 +1438,12 @@ const FuelRecordsPage = () => {
                     <DialogContent dividers>
                         <Grid container spacing={2} sx={{ mt: 0.5 }}>
                             <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={clientOptions}
+                                <ClientSelector
+                                    size="medium"
+                                    schools={schools}
+                                    corporations={corporations}
                                     value={createForm.client}
-                                    onChange={(e, newValue) => handleCreateChange('client', newValue)}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    groupBy={isSpecificCicloEscolarSelected ? undefined : (option) => option.groupLabel}
-                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
-                                    fullWidth
-                                    isOptionEqualToValue={(opt, val) => opt?.value === val?.value}
+                                    onChange={(client) => handleCreateChange('client', client)}
                                 />
                             </Grid>
 
@@ -1785,14 +1728,12 @@ const FuelRecordsPage = () => {
                         )}
                         <Grid container spacing={2} sx={{ mt: 0.5 }}>
                             <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={editClientOptions}
-                                    value={selectedEditClientValue}
-                                    onChange={(e, newValue) => handleEditChange('client', newValue)}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
-                                    fullWidth
-                                    isOptionEqualToValue={(opt, val) => opt?.type === val?.type && String(opt?.id) === String(val?.id)}
+                                <ClientSelector
+                                    size="medium"
+                                    schools={editSchools}
+                                    corporations={editCorporations}
+                                    value={editForm.client}
+                                    onChange={(client) => handleEditChange('client', client)}
                                 />
                             </Grid>
 
