@@ -13,10 +13,14 @@ let visibilityHandlerAttached = false;
 
 // Pestaña oculta: se corta el socket (y sus reintentos). Al volver, se reconecta una sola vez.
 const attachVisibilityHandler = () => {
-    if (visibilityHandlerAttached) return;
+    if (visibilityHandlerAttached) {
+        return;
+    }
     visibilityHandlerAttached = true;
     document.addEventListener('visibilitychange', () => {
-        if (!socket) return;
+        if (!socket) {
+            return;
+        }
         if (document.hidden) {
             socket.disconnect();
         } else if (!socket.connected) {

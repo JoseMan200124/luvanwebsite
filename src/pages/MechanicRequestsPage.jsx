@@ -176,8 +176,12 @@ const MechanicRequestsPage = () => {
                 setRouteOptions([]);
 
                 const params = {};
-                if (schoolId) params.schoolId = schoolId;
-                if (corporationId) params.corporationId = corporationId;
+                if (schoolId) {
+                    params.schoolId = schoolId;
+                }
+                if (corporationId) {
+                    params.corporationId = corporationId;
+                }
                 params.limit = 200;
 
                 const resp = await api.get('/buses', { params });
@@ -217,15 +221,33 @@ const MechanicRequestsPage = () => {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
-            if (schoolId) params.schoolId = schoolId;
-            if (corporationId) params.corporationId = corporationId;
-            if (plate) params.plate = plate;
-            if (routeNumber) params.routeNumber = routeNumber;
-            if (tipoTrabajo) params.tipoTrabajo = tipoTrabajo;
-            if (estado) params.estado = estado;
-            if (urgente !== '') params.urgente = urgente;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = endDate;
+            if (schoolId) {
+                params.schoolId = schoolId;
+            }
+            if (corporationId) {
+                params.corporationId = corporationId;
+            }
+            if (plate) {
+                params.plate = plate;
+            }
+            if (routeNumber) {
+                params.routeNumber = routeNumber;
+            }
+            if (tipoTrabajo) {
+                params.tipoTrabajo = tipoTrabajo;
+            }
+            if (estado) {
+                params.estado = estado;
+            }
+            if (urgente !== '') {
+                params.urgente = urgente;
+            }
+            if (startDate) {
+                params.startDate = startDate;
+            }
+            if (endDate) {
+                params.endDate = endDate;
+            }
 
             const response = await getAllMechanicRequests(params);
             setRequests(response.data || []);
@@ -244,10 +266,18 @@ const MechanicRequestsPage = () => {
             const params = {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
-            if (schoolId) params.schoolId = schoolId;
-            if (corporationId) params.corporationId = corporationId;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = endDate;
+            if (schoolId) {
+                params.schoolId = schoolId;
+            }
+            if (corporationId) {
+                params.corporationId = corporationId;
+            }
+            if (startDate) {
+                params.startDate = startDate;
+            }
+            if (endDate) {
+                params.endDate = endDate;
+            }
 
             const stats = await getMechanicRequestStatistics(params);
             setStatistics(stats);
@@ -307,7 +337,9 @@ const MechanicRequestsPage = () => {
 
     // Confirmar eliminación
     const handleConfirmDelete = async () => {
-        if (!requestToDelete) return;
+        if (!requestToDelete) {
+            return;
+        }
         try {
             await deleteMechanicRequest(requestToDelete.id);
             setDeleteModalOpen(false);
@@ -334,7 +366,9 @@ const MechanicRequestsPage = () => {
 
     // Confirmar cambio de estado
     const handleConfirmStatusChange = async () => {
-        if (!selectedRequest) return;
+        if (!selectedRequest) {
+            return;
+        }
         try {
             const updateData = {
                 estado: newStatus,
@@ -373,12 +407,18 @@ const MechanicRequestsPage = () => {
 
     const loadCreatePlates = async () => {
         setCreatePlateOptions([]);
-        if (!createSchoolId && !createCorporationId) return;
+        if (!createSchoolId && !createCorporationId) {
+            return;
+        }
         setCreateLoadingPlates(true);
         try {
             const params = { limit: 200 };
-            if (createSchoolId) params.schoolId = createSchoolId;
-            if (createCorporationId) params.corporationId = createCorporationId;
+            if (createSchoolId) {
+                params.schoolId = createSchoolId;
+            }
+            if (createCorporationId) {
+                params.corporationId = createCorporationId;
+            }
             const resp = await api.get('/buses', { params });
             const buses = resp.data?.buses || [];
             const plates = buses.map(b => ({ id: b.id, label: b.plate }));
@@ -444,13 +484,17 @@ const MechanicRequestsPage = () => {
 
     // Formatear fecha con hora
     const formatDate = (date) => {
-        if (!date) return '-';
+        if (!date) {
+            return '-';
+        }
         return moment(date).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
     };
 
     // Formatear solo fecha (sin hora)
     const formatDateOnly = (date) => {
-        if (!date) return '-';
+        if (!date) {
+            return '-';
+        }
         return moment(date).tz('America/Guatemala').format('DD/MM/YYYY');
     };
 

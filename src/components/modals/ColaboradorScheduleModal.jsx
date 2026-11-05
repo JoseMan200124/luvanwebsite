@@ -5,7 +5,9 @@ import usePermissions from '../../hooks/usePermissions';
 
 // Función para convertir tiempo de 24h a 12h con AM/PM
 const formatTime12Hour = (time24) => {
-    if (!time24) return '';
+    if (!time24) {
+        return '';
+    }
     const [hours, minutes] = time24.split(':');
     const hour = Number.parseInt(hours, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -41,7 +43,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
     });
 
     useEffect(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return undefined;
+        }
         const mediaQuery = window.matchMedia('(max-width: 600px)');
         const handleChange = (event) => setIsMobileViewport(event.matches);
         setIsMobileViewport(mediaQuery.matches);
@@ -61,7 +65,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
     };
 
     const loadScheduleSlots = async () => {
-        if (!colaborador?.id) return;
+        if (!colaborador?.id) {
+            return;
+        }
         setLoading(true);
         try {
             // Cargar los horarios del colaborador usando el nuevo endpoint
@@ -94,7 +100,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
     };
 
     useEffect(() => {
-        if (!open || !colaborador) return;
+        if (!open || !colaborador) {
+            return;
+        }
         loadScheduleSlots();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, colaborador]);
@@ -207,7 +215,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
             await loadScheduleSlots();
             setAssignOpen(false);
             setAssignEditing(null);
-            if (onScheduleUpdated) onScheduleUpdated();
+            if (onScheduleUpdated) {
+                onScheduleUpdated();
+            }
         } catch (err) {
             console.error('[ColaboradorScheduleModal] Error saving schedule:', err);
             alert('Error guardando el horario: ' + (err.response?.data?.message || err.message));
@@ -217,7 +227,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
     const removeSlotForDay = async (slotId, day) => {
         try {
             const slot = scheduleSlots.find(s => s.id === slotId);
-            if (!slot) return;
+            if (!slot) {
+                return;
+            }
 
             const currentDays = Array.isArray(slot.days) ? slot.days : [];
             
@@ -231,7 +243,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
             }
 
             await loadScheduleSlots();
-            if (onScheduleUpdated) onScheduleUpdated();
+            if (onScheduleUpdated) {
+                onScheduleUpdated();
+            }
         } catch (err) {
             console.error('[ColaboradorScheduleModal] Error deleting slot:', err);
             alert('Error eliminando el horario');
@@ -244,14 +258,18 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                 await api.delete(`/schedule-slots/${slot.id}`);
             }
             await loadScheduleSlots();
-            if (onScheduleUpdated) onScheduleUpdated();
+            if (onScheduleUpdated) {
+                onScheduleUpdated();
+            }
         } catch (err) {
             console.error('[ColaboradorScheduleModal] Error deleting all slots:', err);
             alert('Error eliminando los horarios');
         }
     };
 
-    if (!open) return null;
+    if (!open) {
+        return null;
+    }
 
     const modalContent = (
         <div style={{ 
@@ -1003,7 +1021,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                 <button 
                                     type="button"
                                     onClick={() => {
-                                        if (confirmLoading) return;
+                                        if (confirmLoading) {
+                                            return;
+                                        }
                                         setConfirmDeleteOpen(false);
                                         setConfirmTarget({ slotId: null, day: null });
                                     }}
@@ -1020,7 +1040,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                 <button 
                                     type="button"
                                     onClick={async () => {
-                                        if (confirmLoading) return;
+                                        if (confirmLoading) {
+                                            return;
+                                        }
                                         setConfirmLoading(true);
                                         try {
                                             await removeSlotForDay(
@@ -1081,7 +1103,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        if (confirmDeleteAllLoading) return;
+                                        if (confirmDeleteAllLoading) {
+                                            return;
+                                        }
                                         setConfirmDeleteAllOpen(false);
                                     }}
                                     style={{ 
@@ -1098,7 +1122,9 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                 <button
                                     type="button"
                                     onClick={async () => {
-                                        if (confirmDeleteAllLoading) return;
+                                        if (confirmDeleteAllLoading) {
+                                            return;
+                                        }
                                         setConfirmDeleteAllLoading(true);
                                         try {
                                             await removeAllSlots();

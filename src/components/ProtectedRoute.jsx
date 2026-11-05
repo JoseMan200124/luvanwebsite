@@ -65,7 +65,9 @@ const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '
     // 5) Si se requiere verificar roles (solo si NO hay moduleKey):
     if (roles.length > 0) {
         const allowed = roles.some((r) => r === userRoleName || (userRoleId != null && r === userRoleId));
-        if (!allowed) return <Navigate to={invitedRedirectTo} replace />;
+        if (!allowed) {
+            return <Navigate to={invitedRedirectTo} replace />;
+        }
     }
 
     // 6) Si pasa todas las condiciones, renderiza la ruta protegida

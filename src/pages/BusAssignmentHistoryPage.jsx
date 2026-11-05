@@ -41,13 +41,19 @@ import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getI
 moment.tz.setDefault('America/Guatemala');
 
 const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) return '—';
+    if (!dateString) {
+        return '—';
+    }
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY, hh:mm a');
 };
 
 const safeParseJson = (v) => {
-    if (!v) return {};
-    if (typeof v === 'object') return v;
+    if (!v) {
+        return {};
+    }
+    if (typeof v === 'object') {
+        return v;
+    }
     try {
         const parsed = JSON.parse(v);
         return typeof parsed === 'object' && parsed !== null ? parsed : {};
@@ -58,10 +64,14 @@ const safeParseJson = (v) => {
 
 /** Helper: "Colegio X — Ruta 5" or just the client name, or just "Ruta 5" */
 const clientRouteLabel = (o) => {
-    if (!o || Object.keys(o).length === 0) return null;
+    if (!o || Object.keys(o).length === 0) {
+        return null;
+    }
     const client = o.schoolName || o.corporationName || null;
     const route = o.routeNumber ? `Ruta ${o.routeNumber}` : null;
-    if (client && route) return `${client} \u2014 ${route}`;
+    if (client && route) {
+        return `${client} \u2014 ${route}`;
+    }
     return client || route || null;
 };
 
@@ -83,17 +93,29 @@ const ASSIGNMENT_ICONS = {
 
 /** Narrative: bus_pilot changes */
 const narrativePilot = (prev, next, plate, ctype) => {
-    if (ctype === 'assignment') return `Se asignó ${next.pilotName} como piloto al bus ${plate}`;
-    if (ctype === 'unassignment') return `Se retiró al piloto ${prev.pilotName} del bus ${plate}`;
-    if (ctype === 'reassignment') return `Cambio de piloto: ${prev.pilotName} → ${next.pilotName} en bus ${plate}`;
+    if (ctype === 'assignment') {
+        return `Se asignó ${next.pilotName} como piloto al bus ${plate}`;
+    }
+    if (ctype === 'unassignment') {
+        return `Se retiró al piloto ${prev.pilotName} del bus ${plate}`;
+    }
+    if (ctype === 'reassignment') {
+        return `Cambio de piloto: ${prev.pilotName} → ${next.pilotName} en bus ${plate}`;
+    }
     return '';
 };
 
 /** Narrative: bus_monitora changes */
 const narrativeMonitora = (prev, next, plate, ctype) => {
-    if (ctype === 'assignment') return `Se asignó ${next.monitoraName} como monitora al bus ${plate}`;
-    if (ctype === 'unassignment') return `Se retiró a la monitora ${prev.monitoraName} del bus ${plate}`;
-    if (ctype === 'reassignment') return `Cambio de monitora: ${prev.monitoraName} → ${next.monitoraName} en bus ${plate}`;
+    if (ctype === 'assignment') {
+        return `Se asignó ${next.monitoraName} como monitora al bus ${plate}`;
+    }
+    if (ctype === 'unassignment') {
+        return `Se retiró a la monitora ${prev.monitoraName} del bus ${plate}`;
+    }
+    if (ctype === 'reassignment') {
+        return `Cambio de monitora: ${prev.monitoraName} → ${next.monitoraName} en bus ${plate}`;
+    }
     return '';
 };
 
@@ -104,21 +126,39 @@ const narrativeClient = (prev, next, plate, ctype, atype, routeNumber) => {
     const isSwap = prev.busPlate && next.busPlate && prev.busPlate !== next.busPlate && prevLabel === nextLabel;
     if (isSwap) {
         const location = prevLabel || 'ruta ' + (routeNumber || '?');
-        if (ctype === 'reassignment') return `Cambio de bus: ${prev.busPlate} → ${next.busPlate} en ${location}`;
-        if (ctype === 'assignment') return `Se asignó el bus ${next.busPlate} a ${nextLabel}`;
-        if (ctype === 'unassignment') return `Se retiró el bus ${prev.busPlate} de ${prevLabel}`;
+        if (ctype === 'reassignment') {
+            return `Cambio de bus: ${prev.busPlate} → ${next.busPlate} en ${location}`;
+        }
+        if (ctype === 'assignment') {
+            return `Se asignó el bus ${next.busPlate} a ${nextLabel}`;
+        }
+        if (ctype === 'unassignment') {
+            return `Se retiró el bus ${prev.busPlate} de ${prevLabel}`;
+        }
     }
-    if (ctype === 'assignment') return `Se asignó el bus ${plate} a ${nextLabel}`;
-    if (ctype === 'unassignment') return `El bus ${plate} ya no está asignado a ${prevLabel}`;
-    if (ctype === 'reassignment') return `El bus ${plate} cambió: ${prevLabel} → ${nextLabel}`;
+    if (ctype === 'assignment') {
+        return `Se asignó el bus ${plate} a ${nextLabel}`;
+    }
+    if (ctype === 'unassignment') {
+        return `El bus ${plate} ya no está asignado a ${prevLabel}`;
+    }
+    if (ctype === 'reassignment') {
+        return `El bus ${plate} cambió: ${prevLabel} → ${nextLabel}`;
+    }
     return '';
 };
 
 /** Narrative: bus_plate changes */
 const narrativePlate = (prev, next, ctype) => {
-    if (ctype === 'reassignment') return `Cambio de placa: ${prev.busPlate || '?'} → ${next.busPlate || '?'}`;
-    if (ctype === 'assignment') return `Se registró el bus ${next.busPlate || '?'}`;
-    if (ctype === 'unassignment') return `Se dio de baja el bus ${prev.busPlate || '?'}`;
+    if (ctype === 'reassignment') {
+        return `Cambio de placa: ${prev.busPlate || '?'} → ${next.busPlate || '?'}`;
+    }
+    if (ctype === 'assignment') {
+        return `Se registró el bus ${next.busPlate || '?'}`;
+    }
+    if (ctype === 'unassignment') {
+        return `Se dio de baja el bus ${prev.busPlate || '?'}`;
+    }
     return '';
 };
 
@@ -130,10 +170,18 @@ const buildNarrative = (record) => {
     const ctype = record.changeType;
     const atype = record.assignmentType;
 
-    if (atype === 'bus_pilot') return narrativePilot(prev, next, plate, ctype);
-    if (atype === 'bus_monitora') return narrativeMonitora(prev, next, plate, ctype);
-    if (atype === 'bus_school' || atype === 'bus_corporation') return narrativeClient(prev, next, plate, ctype, atype, record.routeNumber);
-    if (atype === 'bus_plate') return narrativePlate(prev, next, ctype);
+    if (atype === 'bus_pilot') {
+        return narrativePilot(prev, next, plate, ctype);
+    }
+    if (atype === 'bus_monitora') {
+        return narrativeMonitora(prev, next, plate, ctype);
+    }
+    if (atype === 'bus_school' || atype === 'bus_corporation') {
+        return narrativeClient(prev, next, plate, ctype, atype, record.routeNumber);
+    }
+    if (atype === 'bus_plate') {
+        return narrativePlate(prev, next, ctype);
+    }
     return '';
 };
 
@@ -210,7 +258,9 @@ const CHANGE_SUMMARY_MAP = {
     },
     bus_plate: (prev, next, rec) => {
         const formatBus = (bp, rn) => {
-            if (!bp) return null;
+            if (!bp) {
+                return null;
+            }
             return rn ? `${bp} (Ruta ${rn})` : bp;
         };
         return {
@@ -226,7 +276,9 @@ const computeChangeSummary = (record) => {
     const prev = safeParseJson(record.previousValue);
     const next = safeParseJson(record.newValue);
     const handler = CHANGE_SUMMARY_MAP[record.assignmentType];
-    if (!handler) return { subject: '\u2014', fromText: null, toText: null };
+    if (!handler) {
+        return { subject: '\u2014', fromText: null, toText: null };
+    }
     return handler(prev, next, record);
 };
 
@@ -257,13 +309,15 @@ const renderReassignmentDetail = (fromText, toText) => (
 );
 
 const renderChangeDetailCell = (ctype, fromText, toText) => {
-    if (ctype === 'reassignment') return renderReassignmentDetail(fromText, toText);
-    if (ctype === 'assignment') return (
+    if (ctype === 'reassignment') {
+        return renderReassignmentDetail(fromText, toText);
+    }
+    if (ctype === 'assignment') {return (
         <Typography variant="body2" sx={{ color: 'success.dark', fontWeight: 'medium' }}>{toText || '—'}</Typography>
-    );
-    if (ctype === 'unassignment') return (
+    );}
+    if (ctype === 'unassignment') {return (
         <Typography variant="body2" sx={{ color: 'error.main', textDecoration: 'line-through' }}>{fromText || '—'}</Typography>
-    );
+    );}
     return <Typography variant="body2" color="text.secondary">—</Typography>;
 };
 
@@ -316,12 +370,24 @@ const BusAssignmentHistoryPage = () => {
                 assignmentType: ['bus_plate', 'bus_pilot', 'bus_monitora', 'bus_school', 'bus_corporation'].join(','),
             };
 
-            if (changeTypeFilter) params.changeType = changeTypeFilter;
-            if (busId) params.busId = busId;
-            if (schoolId) params.schoolId = schoolId;
-            if (corporationId) params.corporationId = corporationId;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+            if (changeTypeFilter) {
+                params.changeType = changeTypeFilter;
+            }
+            if (busId) {
+                params.busId = busId;
+            }
+            if (schoolId) {
+                params.schoolId = schoolId;
+            }
+            if (corporationId) {
+                params.corporationId = corporationId;
+            }
+            if (startDate) {
+                params.startDate = startDate;
+            }
+            if (endDate) {
+                params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+            }
 
             const response = await api.get('/assignment-history', {
                 params,
@@ -343,11 +409,21 @@ const BusAssignmentHistoryPage = () => {
             ...getCicloEscolarFilterParams(selectedCicloEscolar),
             assignmentType: ['bus_plate', 'bus_pilot', 'bus_monitora', 'bus_school', 'bus_corporation'].join(','),
         };
-        if (busId) params.busId = busId;
-        if (schoolId) params.schoolId = schoolId;
-        if (corporationId) params.corporationId = corporationId;
-        if (startDate) params.startDate = startDate;
-        if (endDate) params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+        if (busId) {
+            params.busId = busId;
+        }
+        if (schoolId) {
+            params.schoolId = schoolId;
+        }
+        if (corporationId) {
+            params.corporationId = corporationId;
+        }
+        if (startDate) {
+            params.startDate = startDate;
+        }
+        if (endDate) {
+            params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+        }
         return params;
     }, [selectedCicloEscolar, busId, schoolId, corporationId, startDate, endDate]);
 
@@ -424,7 +500,9 @@ const BusAssignmentHistoryPage = () => {
                     {stats.byChangeType.map((item) => {
                         const ct = item.changeType;
                         const cfg = STATS_CONFIG[ct];
-                        if (!cfg || Number(item.count) === 0) return null;
+                        if (!cfg || Number(item.count) === 0) {
+                            return null;
+                        }
                         return (
                             <Chip key={ct} icon={<span>{cfg.icon}</span>} label={`${Number(item.count)} ${cfg.label}`} color={cfg.color} size="small" variant="outlined" />
                         );

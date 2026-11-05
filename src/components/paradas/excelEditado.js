@@ -85,9 +85,15 @@ export function interpretarExcelEditado({ filas, payload, asignaciones = {}, ign
         const franjaTxt = normalizarTexto(franja).toUpperCase();
         const rutaTxt = normalizarTexto(ruta);
         const notaTxt = normalizarTexto(nota);
-        if (franjaTxt.length > MAX_FRANJA) r.errores.push({ numero, mensaje: `${quien}: la franja "${franjaTxt.slice(0, 20)}…" no es válida; quedó vacía para que la corrijas en el editor.` });
-        if (rutaTxt.length > MAX_RUTA) r.errores.push({ numero, mensaje: `${quien}: la ruta "${rutaTxt.slice(0, 20)}…" no es válida; quedó vacía para que la corrijas en el editor.` });
-        if (notaTxt.length > MAX_NOTA) r.errores.push({ numero, mensaje: `${quien}: la nota supera ${MAX_NOTA} caracteres; se recortó.` });
+        if (franjaTxt.length > MAX_FRANJA) {
+            r.errores.push({ numero, mensaje: `${quien}: la franja "${franjaTxt.slice(0, 20)}…" no es válida; quedó vacía para que la corrijas en el editor.` });
+        }
+        if (rutaTxt.length > MAX_RUTA) {
+            r.errores.push({ numero, mensaje: `${quien}: la ruta "${rutaTxt.slice(0, 20)}…" no es válida; quedó vacía para que la corrijas en el editor.` });
+        }
+        if (notaTxt.length > MAX_NOTA) {
+            r.errores.push({ numero, mensaje: `${quien}: la nota supera ${MAX_NOTA} caracteres; se recortó.` });
+        }
         const parada = {
             franja: franjaTxt.length > MAX_FRANJA ? '' : franjaTxt,
             routeNumber: rutaTxt.length > MAX_RUTA ? '' : rutaTxt,
@@ -106,8 +112,12 @@ export function interpretarExcelEditado({ filas, payload, asignaciones = {}, ign
         students: fam.students.map((est) => {
             const delExcel = nuevas.get(est.studentId) || [];
             const cambio = !paradasIguales(delExcel, est.paradas);
-            if (cambio) cambiados.push(ref({ fam, est }));
-            if (cambio && !delExcel.length) sinParadas.push(ref({ fam, est }));
+            if (cambio) {
+                cambiados.push(ref({ fam, est }));
+            }
+            if (cambio && !delExcel.length) {
+                sinParadas.push(ref({ fam, est }));
+            }
             return {
                 studentId: est.studentId,
                 fullName: est.fullName,

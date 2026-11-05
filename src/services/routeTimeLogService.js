@@ -57,7 +57,9 @@ export const getAllRouteTimeLogs = async (filters = {}, perPage = 1000) => {
             }
 
             // total puede venir en data.total
-            if (total === null) total = data.total ?? null;
+            if (total === null) {
+                total = data.total ?? null;
+            }
 
             // si no hay total, usar heurística por length < perPage
             const fetchedCount = pageItems.length;

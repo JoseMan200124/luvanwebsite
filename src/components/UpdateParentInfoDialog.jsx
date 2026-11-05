@@ -69,7 +69,9 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            return;
+        }
 
         // Populate from initialData when dialog opens
         setSchoolId(initialData?.schoolId || '');
@@ -236,7 +238,9 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
         }
     };
 
-    if (!open) return null;
+    if (!open) {
+        return null;
+    }
 
     return (
         <Dialog open={open} onClose={() => onClose?.()} fullWidth maxWidth="md">

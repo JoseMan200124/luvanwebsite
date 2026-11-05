@@ -81,8 +81,12 @@ export const formatPercent = (v) => (v === null || v === undefined ? 'N/A' : `${
 export const typesWithData = (byType) => FUEL_TYPES.filter((t) => Number(byType?.[t.key]?.gallons) > 0);
 
 export const clientTagLabel = (client) => {
-    if (client.clientType === 'corporation') return 'Corporación';
-    if (client.clientType === 'none') return 'Sin cliente';
+    if (client.clientType === 'corporation') {
+        return 'Corporación';
+    }
+    if (client.clientType === 'none') {
+        return 'Sin cliente';
+    }
     return client.cicloEscolarAnio ? String(client.cicloEscolarAnio) : '—';
 };
 

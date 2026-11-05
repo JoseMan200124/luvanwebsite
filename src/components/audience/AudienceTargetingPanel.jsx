@@ -32,18 +32,28 @@ const ACCORDION_SX = {
 // `grades` y `routeNumbers` llegan como array de strings o de objetos { name },
 // según cómo se hayan guardado. Ambos formatos conviven en la base.
 const toName = (item) => {
-    if (item === null || item === undefined) return '';
-    if (typeof item === 'object') return String(item.name || '').trim();
+    if (item === null || item === undefined) {
+        return '';
+    }
+    if (typeof item === 'object') {
+        return String(item.name || '').trim();
+    }
     return String(item).trim();
 };
 
 const parseArray = (value) => {
-    if (!value) return [];
-    if (Array.isArray(value)) return value.map(toName).filter(Boolean);
+    if (!value) {
+        return [];
+    }
+    if (Array.isArray(value)) {
+        return value.map(toName).filter(Boolean);
+    }
     if (typeof value === 'string' && value.trim()) {
         try {
             const parsed = JSON.parse(value);
-            if (Array.isArray(parsed)) return parsed.map(toName).filter(Boolean);
+            if (Array.isArray(parsed)) {
+                return parsed.map(toName).filter(Boolean);
+            }
         } catch (e) {
             // cae al split por comas
         }
@@ -55,7 +65,9 @@ const parseArray = (value) => {
 // `levelGrades` puede llegar como objeto o como string JSON según la capa que
 // sirva el colegio.
 const parseObject = (value) => {
-    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return value;
+    }
     if (typeof value === 'string' && value.trim()) {
         try {
             const parsed = JSON.parse(value);
@@ -138,7 +150,9 @@ const ScopeToggle = ({ label, options, value, onChange, error = false, helper })
             size="small"
             fullWidth
             value={value}
-            onChange={(_, next) => { if (next) onChange(next); }}
+            onChange={(_, next) => { if (next) {
+                onChange(next);
+            } }}
             sx={{
                 '& .MuiToggleButton-root': { textTransform: 'none', py: 0.5 },
                 '& .Mui-selected': {
@@ -197,16 +211,22 @@ const SchoolScopeCard = ({
                     routeNumbers: entry.routeNumbers,
                     cicloEscolarId,
                 });
-                if (reqId !== reqIdRef.current) return;
+                if (reqId !== reqIdRef.current) {
+                    return;
+                }
                 setScheduleCodes(
                     Object.keys(counts || {}).filter((code) => Number(counts[code] || 0) > 0)
                 );
             } catch (err) {
-                if (reqId !== reqIdRef.current) return;
+                if (reqId !== reqIdRef.current) {
+                    return;
+                }
                 console.error('[AudienceTargetingPanel] Error cargando horarios:', err);
                 setScheduleCodes([]);
             } finally {
-                if (reqId === reqIdRef.current) setLoadingCounts(false);
+                if (reqId === reqIdRef.current) {
+                    setLoadingCounts(false);
+                }
             }
         };
         load();
@@ -226,26 +246,46 @@ const SchoolScopeCard = ({
     };
     const handleScheduleMode = (next) => {
         onModeChange(school.id, 'schedule', next);
-        if (next === 'all') setField('scheduleCodes', []);
+        if (next === 'all') {
+            setField('scheduleCodes', []);
+        }
     };
     const handleAcademicMode = (next) => {
         onModeChange(school.id, 'academic', next);
         let a = audience;
-        if (next !== 'level') a = setSchoolField(a, school.id, 'levelIds', []);
-        if (next !== 'grade') a = setSchoolField(a, school.id, 'grades', []);
+        if (next !== 'level') {
+            a = setSchoolField(a, school.id, 'levelIds', []);
+        }
+        if (next !== 'grade') {
+            a = setSchoolField(a, school.id, 'grades', []);
+        }
         onChange(a);
     };
 
     const summaryParts = [];
-    if (routeMode === 'all') summaryParts.push('todas las rutas');
-    else if (routeMode === 'some') summaryParts.push(`${entry.routeNumbers.length} ruta(s)`);
-    if (wantSchedule) {
-        if (scheduleMode === 'all') summaryParts.push('todos los horarios');
-        else if (scheduleMode === 'some') summaryParts.push(`horario ${entry.scheduleCodes.join('/') || '—'}`);
+    if (routeMode === 'all') {
+        summaryParts.push('todas las rutas');
     }
-    if (academicMode === 'all') summaryParts.push('todo el colegio');
-    else if (academicMode === 'level') summaryParts.push(`${entry.levelIds.length} nivel(es)`);
-    else if (academicMode === 'grade') summaryParts.push(`${entry.grades.length} grado(s)`);
+    else if (routeMode === 'some') {
+        summaryParts.push(`${entry.routeNumbers.length} ruta(s)`);
+    }
+    if (wantSchedule) {
+        if (scheduleMode === 'all') {
+            summaryParts.push('todos los horarios');
+        }
+        else if (scheduleMode === 'some') {
+            summaryParts.push(`horario ${entry.scheduleCodes.join('/') || '—'}`);
+        }
+    }
+    if (academicMode === 'all') {
+        summaryParts.push('todo el colegio');
+    }
+    else if (academicMode === 'level') {
+        summaryParts.push(`${entry.levelIds.length} nivel(es)`);
+    }
+    else if (academicMode === 'grade') {
+        summaryParts.push(`${entry.grades.length} grado(s)`);
+    }
     const summary = complete
         ? (summaryParts.join(' · ') || 'Configurado')
         : '⚠ incompleto';
@@ -396,7 +436,9 @@ const AudienceTargetingPanel = ({
     const [globalModes, setGlobalModes] = useState({ schedule: null, academic: null });
 
     useEffect(() => {
-        if (!loadedAudience) return;
+        if (!loadedAudience) {
+            return;
+        }
         const derived = deriveAudienceModes(loadedAudience);
         setScopeMode(derived.scopeMode);
         setSchoolsChoice(derived.schoolsChoice);
@@ -422,8 +464,12 @@ const AudienceTargetingPanel = ({
     useEffect(() => {
         let active = true;
         listEducationLevels()
-            .then((data) => { if (active) setLevels(data); })
-            .catch(() => { if (active) setLevels([]); });
+            .then((data) => { if (active) {
+                setLevels(data);
+            } })
+            .catch(() => { if (active) {
+                setLevels([]);
+            } });
         return () => { active = false; };
     }, []);
 
@@ -441,7 +487,9 @@ const AudienceTargetingPanel = ({
         const seen = new Set();
         schools.forEach((school) => {
             (school.schedules || []).forEach((schedule) => {
-                if (schedule?.code) seen.add(schedule.code);
+                if (schedule?.code) {
+                    seen.add(schedule.code);
+                }
             });
         });
         return [...seen].map((code) => ({ value: code, label: code }));
@@ -454,7 +502,9 @@ const AudienceTargetingPanel = ({
             let changed = false;
             const next = { ...prev };
             selectedSchoolIds.forEach((id) => {
-                if (next[id]) return;
+                if (next[id]) {
+                    return;
+                }
                 const e = getSchoolEntry(value, id);
                 next[id] = {
                     route: e.routeNumbers.length > 0 ? 'some' : null,
@@ -476,10 +526,14 @@ const AudienceTargetingPanel = ({
 
         if (hasRoutes) {
             const routeOk = m.route === 'all' || (m.route === 'some' && e.routeNumbers.length > 0);
-            if (!routeOk) return false;
+            if (!routeOk) {
+                return false;
+            }
             if (m.route === 'some' && padreSelected) {
                 const schedOk = m.schedule === 'all' || (m.schedule === 'some' && e.scheduleCodes.length > 0);
-                if (!schedOk) return false;
+                if (!schedOk) {
+                    return false;
+                }
             }
         }
         return m.academic === 'all'
@@ -516,11 +570,15 @@ const AudienceTargetingPanel = ({
 
     const handleGlobalScheduleMode = (next) => {
         setGlobalModes((m) => ({ ...m, schedule: next }));
-        if (next === 'all') onChange({ ...value, scheduleCodes: [] });
+        if (next === 'all') {
+            onChange({ ...value, scheduleCodes: [] });
+        }
     };
     const handleGlobalAcademicMode = (next) => {
         setGlobalModes((m) => ({ ...m, academic: next }));
-        if (next !== 'level') onChange({ ...value, levelIds: [] });
+        if (next !== 'level') {
+            onChange({ ...value, levelIds: [] });
+        }
     };
     const handleSchoolsChoice = (next) => {
         setSchoolsChoice(next);
@@ -547,7 +605,9 @@ const AudienceTargetingPanel = ({
             setPreview(localPreview);
             setPreviewLoading(false);
             setPreviewError('');
-            if (onPreviewChange) onPreviewChange(localPreview);
+            if (onPreviewChange) {
+                onPreviewChange(localPreview);
+            }
             return undefined;
         }
 
@@ -569,17 +629,27 @@ const AudienceTargetingPanel = ({
             setPreviewError('');
             try {
                 const data = await previewAudience({ audience: value, cicloEscolarId });
-                if (reqId !== previewReqId.current) return;
+                if (reqId !== previewReqId.current) {
+                    return;
+                }
                 setPreview(data);
-                if (onPreviewChange) onPreviewChange(data);
+                if (onPreviewChange) {
+                    onPreviewChange(data);
+                }
             } catch (err) {
-                if (reqId !== previewReqId.current) return;
+                if (reqId !== previewReqId.current) {
+                    return;
+                }
                 console.error('[AudienceTargetingPanel] Error cargando vista previa:', err);
                 setPreview(null);
                 setPreviewError('No se pudo calcular la vista previa de destinatarios.');
-                if (onPreviewChange) onPreviewChange(null);
+                if (onPreviewChange) {
+                    onPreviewChange(null);
+                }
             } finally {
-                if (reqId === previewReqId.current) setPreviewLoading(false);
+                if (reqId === previewReqId.current) {
+                    setPreviewLoading(false);
+                }
             }
         };
 
@@ -591,8 +661,12 @@ const AudienceTargetingPanel = ({
     const counts = preview?.counts || EMPTY_COUNTS;
 
     let scopeRulesMode = 'schools';
-    if (byFamilies) scopeRulesMode = 'families';
-    else if (schoolsChoice === 'all') scopeRulesMode = 'all';
+    if (byFamilies) {
+        scopeRulesMode = 'families';
+    }
+    else if (schoolsChoice === 'all') {
+        scopeRulesMode = 'all';
+    }
 
     let scopeHeadline;
     if (byFamilies) {
@@ -685,7 +759,9 @@ const AudienceTargetingPanel = ({
                         size="small"
                         value={scopeMode}
                         onChange={(_, next) => {
-                            if (!next || next === scopeMode) return;
+                            if (!next || next === scopeMode) {
+                                return;
+                            }
                             setScopeMode(next);
                             onChange(next === 'families'
                                 ? { ...value, scope: [], scheduleCodes: [], levelIds: [], roles: [], userIds: [] }

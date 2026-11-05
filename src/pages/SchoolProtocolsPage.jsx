@@ -319,7 +319,9 @@ const SchoolProtocolsPage = () => {
     };
 
     const handleDelete = async () => {
-        if (!protocolToDelete) return;
+        if (!protocolToDelete) {
+            return;
+        }
 
         try {
             await api.delete(`/protocols/${protocolToDelete.uuid}`);

@@ -171,7 +171,9 @@ const RequestsPage = () => {
 
     const normalizeStatus = (status) => {
         const normalized = String(status || '').toLowerCase();
-        if (normalized === 'approved') return 'completed';
+        if (normalized === 'approved') {
+            return 'completed';
+        }
         return normalized;
     };
 
@@ -207,8 +209,12 @@ const RequestsPage = () => {
     const fetchStatistics = useCallback(async () => {
         try {
             const params = { ...scopeParams };
-            if (filters.startDate) params.startDate = filters.startDate;
-            if (filters.endDate) params.endDate = filters.endDate;
+            if (filters.startDate) {
+                params.startDate = filters.startDate;
+            }
+            if (filters.endDate) {
+                params.endDate = filters.endDate;
+            }
             const stats = await getRequestStatistics(params);
             setStatistics(stats);
         } catch (err) {
@@ -279,7 +285,9 @@ const RequestsPage = () => {
     const handleOpenDeleteModal = (request) => { setRequestToDelete(request); setDeleteModalOpen(true); };
 
     const handleConfirmDelete = async () => {
-        if (!requestToDelete) return;
+        if (!requestToDelete) {
+            return;
+        }
         try {
             await deleteRequest(requestToDelete.id);
             setDeleteModalOpen(false);
@@ -300,7 +308,9 @@ const RequestsPage = () => {
     };
 
     const handleConfirmStatusChange = async () => {
-        if (!selectedRequest) return;
+        if (!selectedRequest) {
+            return;
+        }
         if (!newStatus) {
             return;
         }
@@ -315,7 +325,9 @@ const RequestsPage = () => {
         }
 
         const payload = { status: newStatus };
-        if (statusNotes) payload.reviewNotes = statusNotes;
+        if (statusNotes) {
+            payload.reviewNotes = statusNotes;
+        }
 
         try {
             await updateRequestStatus(selectedRequest.id, payload);
@@ -329,10 +341,14 @@ const RequestsPage = () => {
     };
 
     const handleConfirmFinalStatus = async () => {
-        if (!pendingStatusPayload) return;
+        if (!pendingStatusPayload) {
+            return;
+        }
         try {
             const payload = { status: pendingStatusPayload.status };
-            if (pendingStatusPayload.notes) payload.reviewNotes = pendingStatusPayload.notes;
+            if (pendingStatusPayload.notes) {
+                payload.reviewNotes = pendingStatusPayload.notes;
+            }
             await updateRequestStatus(pendingStatusPayload.id, payload);
             setStatusConfirmOpen(false);
             setPendingStatusPayload(null);
@@ -413,7 +429,9 @@ const RequestsPage = () => {
     const getRequestTypeLabel = (requestType) => {
         const normalized = String(requestType || '').toLowerCase().trim();
         const directMeta = REQUEST_TYPE_META[normalized];
-        if (directMeta?.label) return directMeta.label;
+        if (directMeta?.label) {
+            return directMeta.label;
+        }
 
         const normalizedKey = normalized
             .replace(/-/g, '_')
@@ -460,15 +478,23 @@ const RequestsPage = () => {
     };
 
     const getClientLabel = (request) => {
-        if (!request) return null;
-        if (request.corporation?.name) return request.corporation.name;
-        if (request.school?.name) return request.school.name;
+        if (!request) {
+            return null;
+        }
+        if (request.corporation?.name) {
+            return request.corporation.name;
+        }
+        if (request.school?.name) {
+            return request.school.name;
+        }
         return null;
     };
 
     const getClientChip = (request) => {
         const label = getClientLabel(request);
-        if (!label) return null;
+        if (!label) {
+            return null;
+        }
 
         return (
             <Chip
@@ -491,20 +517,32 @@ const RequestsPage = () => {
 
     // Try to extract a status value from a variety of metadata shapes
     const extractStatusFromMetadata = (meta) => {
-        if (!meta) return null;
+        if (!meta) {
+            return null;
+        }
         // direct known keys
         const direct = meta?.status || meta?.newStatus || meta?.statusCode || meta?.to || meta?.new_status || meta?.new_status_code;
-        if (direct) return direct;
+        if (direct) {
+            return direct;
+        }
 
         // check common nested shapes
-        if (meta.change && (meta.change.to || meta.change.new)) return meta.change.to || meta.change.new;
-        if (meta.changes?.status && (meta.changes.status.to || meta.changes.status.new)) return meta.changes.status.to || meta.changes.status.new;
-        if (meta.details && (meta.details.status || meta.details.newStatus)) return meta.details.status || meta.details.newStatus;
+        if (meta.change && (meta.change.to || meta.change.new)) {
+            return meta.change.to || meta.change.new;
+        }
+        if (meta.changes?.status && (meta.changes.status.to || meta.changes.status.new)) {
+            return meta.changes.status.to || meta.changes.status.new;
+        }
+        if (meta.details && (meta.details.status || meta.details.newStatus)) {
+            return meta.details.status || meta.details.newStatus;
+        }
 
         // recursive shallow scan for string values that look like a status
         const candidates = [];
         const scan = (obj, depth = 0) => {
-            if (!obj || depth > 3) return;
+            if (!obj || depth > 3) {
+                return;
+            }
             if (typeof obj === 'string' || typeof obj === 'number') {
                 candidates.push(String(obj));
                 return;
@@ -516,20 +554,28 @@ const RequestsPage = () => {
             if (typeof obj === 'object') {
                 for (const k of Object.keys(obj)) {
                     const v = obj[k];
-                    if (typeof v === 'string' || typeof v === 'number') candidates.push(String(v));
-                    else if (typeof v === 'object') scan(v, depth + 1);
+                    if (typeof v === 'string' || typeof v === 'number') {
+                        candidates.push(String(v));
+                    }
+                    else if (typeof v === 'object') {
+                        scan(v, depth + 1);
+                    }
                 }
             }
         };
 
         scan(meta, 0);
-        if (candidates.length === 0) return null;
+        if (candidates.length === 0) {
+            return null;
+        }
 
         // try to find one candidate that matches known keywords
         const join = candidates.join(' ').toLowerCase();
         const keywords = ['pending','pendiente','in_review','in review','en revisi','approved','aprob','rejected','rechaz','completed','completad','cancelled','cancelad'];
         for (const kw of keywords) {
-            if (join.includes(kw)) return kw;
+            if (join.includes(kw)) {
+                return kw;
+            }
         }
 
         // fallback to first candidate
@@ -537,7 +583,9 @@ const RequestsPage = () => {
     };
 
     const normalizeEventStatus = (s) => {
-        if (!s) return null;
+        if (!s) {
+            return null;
+        }
         const low = String(s).toLowerCase().trim();
         const map = {
             'pending': 'pending', 'pendiente': 'pending',
@@ -548,19 +596,35 @@ const RequestsPage = () => {
             'cancelled': 'cancelled', 'cancelado': 'cancelled', 'cancelada': 'cancelled', 'cancelad': 'cancelled'
         };
         // direct key
-        if (map[low]) return map[low];
-        if (['pending','in_review','approved','rejected','completed','cancelled'].includes(low)) return low;
+        if (map[low]) {
+            return map[low];
+        }
+        if (['pending','in_review','approved','rejected','completed','cancelled'].includes(low)) {
+            return low;
+        }
         return null;
     };
 
     const getEventTitle = (ev) => {
         const action = String(ev?.action || '').toLowerCase();
-        if (action === 'created') return 'Creación';
-        if (action === 'status_updated') return 'Estado actualizado';
-        if (action === 'cancelled') return 'Solicitud cancelada';
-        if (action === 'assigned') return 'Solicitud asignada';
-        if (action === 'completed') return 'Solicitud completada';
-        if (action === 'commented') return 'Comentario agregado';
+        if (action === 'created') {
+            return 'Creación';
+        }
+        if (action === 'status_updated') {
+            return 'Estado actualizado';
+        }
+        if (action === 'cancelled') {
+            return 'Solicitud cancelada';
+        }
+        if (action === 'assigned') {
+            return 'Solicitud asignada';
+        }
+        if (action === 'completed') {
+            return 'Solicitud completada';
+        }
+        if (action === 'commented') {
+            return 'Comentario agregado';
+        }
         return 'Actualización';
     };
 
@@ -581,12 +645,24 @@ const RequestsPage = () => {
             let resolved = normalizeEventStatus(rawFromMeta);
             if (!resolved) {
                 const notesLower = notes.toLowerCase();
-                if (/pending|pendiente/.test(notesLower)) resolved = 'pending';
-                else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesLower)) resolved = 'in_review';
-                else if (/approved|aproba/.test(notesLower)) resolved = 'completed';
-                else if (/rejected|rechazad/.test(notesLower)) resolved = 'rejected';
-                else if (/completed|completad/.test(notesLower)) resolved = 'completed';
-                else if (/cancelled|cancelad/.test(notesLower)) resolved = 'cancelled';
+                if (/pending|pendiente/.test(notesLower)) {
+                    resolved = 'pending';
+                }
+                else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesLower)) {
+                    resolved = 'in_review';
+                }
+                else if (/approved|aproba/.test(notesLower)) {
+                    resolved = 'completed';
+                }
+                else if (/rejected|rechazad/.test(notesLower)) {
+                    resolved = 'rejected';
+                }
+                else if (/completed|completad/.test(notesLower)) {
+                    resolved = 'completed';
+                }
+                else if (/cancelled|cancelad/.test(notesLower)) {
+                    resolved = 'cancelled';
+                }
             }
 
             mainText = resolved ? `Estado actualizado: ${getSafeStatusLabel(resolved)}` : 'Estado actualizado';
@@ -594,11 +670,15 @@ const RequestsPage = () => {
             mainText = 'La solicitud fue cancelada';
         } else {
             // For unrecognized actions, prefer to show notes alone if they exist
-            if (notes) return String(notes);
+            if (notes) {
+                return String(notes);
+            }
             mainText = 'Actualización registrada';
         }
 
-        if (!notes) return mainText;
+        if (!notes) {
+            return mainText;
+        }
 
         return (
             <>
@@ -610,11 +690,15 @@ const RequestsPage = () => {
     };
 
     const formatLastUpdateNote = (ev) => {
-        if (!ev) return null;
+        if (!ev) {
+            return null;
+        }
 
         const action = String(ev?.action || '').toLowerCase();
         const rawNote = String(ev.notes || ev.metadata?.note || '').trim();
-        if (!rawNote) return null;
+        if (!rawNote) {
+            return null;
+        }
 
         if (action === 'created') {
             const requestType = ev?.metadata?.requestType || selectedRequest?.requestType;
@@ -625,16 +709,22 @@ const RequestsPage = () => {
     };
 
     const getLastUpdateEvent = () => {
-        if (!requestEvents || requestEvents.length === 0) return null;
+        if (!requestEvents || requestEvents.length === 0) {
+            return null;
+        }
         const sorted = [...requestEvents].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const statusEv = sorted.find(ev => String(ev?.action || '').toLowerCase() === 'status_updated' && (ev.notes || ev.metadata?.note));
-        if (statusEv) return statusEv;
+        if (statusEv) {
+            return statusEv;
+        }
         const anyNotes = sorted.find(ev => ev.notes || ev.metadata?.note);
         return anyNotes || null;
     };
 
     const getStatusModalMessage = (status) => {
-        if (!status) return null;
+        if (!status) {
+            return null;
+        }
         const label = getSafeStatusLabel(status);
         const normalized = normalizeStatus(status);
         if (normalized !== 'rejected' && normalized !== 'completed') {
@@ -990,7 +1080,9 @@ const RequestsPage = () => {
                                 {/* Bloque separado 'Última actualización' (alineado con Información general) */}
                                 {(() => {
                                     const ev = getLastUpdateEvent();
-                                    if (!ev) return null;
+                                    if (!ev) {
+                                        return null;
+                                    }
                                     const note = formatLastUpdateNote(ev);
                                     const author = ev.actor?.name || ev.actor?.fullName || ev.actor?.email || null;
                                     return (
@@ -1012,14 +1104,28 @@ const RequestsPage = () => {
                                                     const statusFromMeta = ev.metadata?.status || ev.metadata?.newStatus || ev.metadata?.statusCode;
                                                     const notesText = String(ev.notes || '').toLowerCase();
                                                     let notesMatch = null;
-                                                    if (/pending|pendiente/.test(notesText)) notesMatch = 'pending';
-                                                    else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesText)) notesMatch = 'in_review';
-                                                    else if (/approved|aprobad[oa]|aprobado|aprobada/.test(notesText)) notesMatch = 'approved';
-                                                    else if (/rejected|rechazad[oa]|rechazado|rechazada/.test(notesText)) notesMatch = 'rejected';
-                                                    else if (/completed|completad[oa]|completado|completada/.test(notesText)) notesMatch = 'completed';
-                                                    else if (/cancelled|cancelad[oa]|cancelado|cancelada/.test(notesText)) notesMatch = 'cancelled';
+                                                    if (/pending|pendiente/.test(notesText)) {
+                                                        notesMatch = 'pending';
+                                                    }
+                                                    else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesText)) {
+                                                        notesMatch = 'in_review';
+                                                    }
+                                                    else if (/approved|aprobad[oa]|aprobado|aprobada/.test(notesText)) {
+                                                        notesMatch = 'approved';
+                                                    }
+                                                    else if (/rejected|rechazad[oa]|rechazado|rechazada/.test(notesText)) {
+                                                        notesMatch = 'rejected';
+                                                    }
+                                                    else if (/completed|completad[oa]|completado|completada/.test(notesText)) {
+                                                        notesMatch = 'completed';
+                                                    }
+                                                    else if (/cancelled|cancelad[oa]|cancelado|cancelada/.test(notesText)) {
+                                                        notesMatch = 'cancelled';
+                                                    }
                                                     const statusResolved = statusFromMeta || notesMatch || null;
-                                                    if (!statusResolved) return null;
+                                                    if (!statusResolved) {
+                                                        return null;
+                                                    }
                                                     return <Box sx={{ ml: 0.5 }}>{getStatusChip(statusResolved)}</Box>;
                                                 })()}
                                             </Box>
@@ -1207,7 +1313,9 @@ const RequestsPage = () => {
 
                         {newStatus && (() => {
                             const msg = getStatusModalMessage(newStatus);
-                            if (!msg) return null;
+                            if (!msg) {
+                                return null;
+                            }
                             const final = isFinalStatus(newStatus);
                             return (
                                 <Box sx={{ p: 2, borderRadius: 2, backgroundColor: final ? '#FFF4E5' : '#F5F8FF', border: final ? '1px solid #FFD59A' : '1px solid #DCE7F5' }}>

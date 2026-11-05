@@ -95,26 +95,38 @@ export async function leerExcel(archivo) {
         throw new ErrorArchivo('NO_ES_EXCEL', 'No se pudo leer el archivo: debe ser un .xlsx descargado de la plataforma.');
     }
     const meta = wb.getWorksheet(HOJA_META);
-    if (!meta) throw new ErrorArchivo('SIN_META', 'Este archivo no es un punto de guardado de paradas (le falta la parte interna). Descárgalo de nuevo desde la plataforma.');
+    if (!meta) {
+        throw new ErrorArchivo('SIN_META', 'Este archivo no es un punto de guardado de paradas (le falta la parte interna). Descárgalo de nuevo desde la plataforma.');
+    }
 
     const kv = {};
     meta.eachRow((row) => { kv[String(valorCelda(row.getCell(1).value))] = valorCelda(row.getCell(2).value); });
     const n = Number(kv.trozos);
-    if (!Number.isInteger(n) || n < 1) throw new ErrorArchivo('TRUNCADO', DANADO);
+    if (!Number.isInteger(n) || n < 1) {
+        throw new ErrorArchivo('TRUNCADO', DANADO);
+    }
     const partes = [];
     for (let i = 1; i <= n; i += 1) {
         const t = kv[`bloque_${i}`];
-        if (typeof t !== 'string' || !t) throw new ErrorArchivo('TRUNCADO', DANADO);
+        if (typeof t !== 'string' || !t) {
+            throw new ErrorArchivo('TRUNCADO', DANADO);
+        }
         partes.push(t);
     }
 
     const hp = wb.getWorksheet(HOJA_PARADAS);
-    if (!hp) throw new ErrorArchivo('SIN_PARADAS', 'Falta la hoja "Paradas" del archivo.');
+    if (!hp) {
+        throw new ErrorArchivo('SIN_PARADAS', 'Falta la hoja "Paradas" del archivo.');
+    }
     const filas = [];
     hp.eachRow((row, numero) => {
-        if (numero === 1) return;
+        if (numero === 1) {
+            return;
+        }
         const celdas = COLUMNAS_PARADAS.map((_, i) => valorCelda(row.getCell(i + 1).value));
-        if (celdas.every(c => c === '' || c == null)) return;
+        if (celdas.every(c => c === '' || c == null)) {
+            return;
+        }
         filas.push({ numero, celdas });
     });
 

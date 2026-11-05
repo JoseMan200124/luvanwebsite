@@ -112,7 +112,9 @@ const NotificationsMenu = ({ authToken }) => {
 
     // Helper: ensure links to SchoolPaymentsPage use the cycle tied to the notification/payment.
     const normalizeCycleInLink = (rawLink, source = {}) => {
-        if (!rawLink || typeof rawLink !== 'string') return rawLink;
+        if (!rawLink || typeof rawLink !== 'string') {
+            return rawLink;
+        }
         const { cicloEscolarId } = resolveNotificationCycle(source);
         try {
             const base = window.location.origin;
@@ -135,7 +137,9 @@ const NotificationsMenu = ({ authToken }) => {
         } catch (e) {
             // Best-effort string replace
             try {
-                if (!cicloEscolarId) return rawLink;
+                if (!cicloEscolarId) {
+                    return rawLink;
+                }
                 return rawLink.replace(/\/admin\/escuelas\/\d{4}\/(\d+)(\/[^?]*)?/, `/admin/escuelas/ciclo/${cicloEscolarId}/$1$2`);
             } catch (_) {
                 return rawLink;
@@ -177,7 +181,9 @@ const NotificationsMenu = ({ authToken }) => {
     // 2) Cargar notificaciones con paginación
     // ==============================
     const fetchNotifications = useCallback(async (pageNum = 0, append = false) => {
-        if (loading) return;
+        if (loading) {
+            return;
+        }
         
         try {
             setLoading(true);
@@ -296,7 +302,9 @@ const NotificationsMenu = ({ authToken }) => {
     const [currentToast, setCurrentToast] = useState(null);
 
     const handleToastClose = (event, reason) => {
-        if (reason === 'clickaway') return;
+        if (reason === 'clickaway') {
+            return;
+        }
         setCurrentToast(null);
     };
 
@@ -334,7 +342,9 @@ const NotificationsMenu = ({ authToken }) => {
     // 4) Scroll infinito - cargar más notificaciones
     // ==============================
     const handleScroll = useCallback(() => {
-        if (!scrollContainerRef.current || loading || !hasMore) return;
+        if (!scrollContainerRef.current || loading || !hasMore) {
+            return;
+        }
         
         const container = scrollContainerRef.current;
         const scrollTop = container.scrollTop;
@@ -399,7 +409,9 @@ const NotificationsMenu = ({ authToken }) => {
     // 9) Efecto para cargar contador y escuchar socket
     // ==============================
     useEffect(() => {
-        if (!authToken) return;
+        if (!authToken) {
+            return;
+        }
 
         // Cargar conteo inicial
         fetchUnreadCount();
@@ -727,8 +739,12 @@ const NotificationsMenu = ({ authToken }) => {
                                 
                                 const u = new URL(link, base);
                                 u.searchParams.set('openRegister', 'true');
-                                if (previewNotification.receipt.id) u.searchParams.set('receiptId', previewNotification.receipt.id);
-                                if (previewNotification.receipt.userId) u.searchParams.set('userId', previewNotification.receipt.userId);
+                                if (previewNotification.receipt.id) {
+                                    u.searchParams.set('receiptId', previewNotification.receipt.id);
+                                }
+                                if (previewNotification.receipt.userId) {
+                                    u.searchParams.set('userId', previewNotification.receipt.userId);
+                                }
                                 
                                 const state = previewNotification.paymentReceiptId;
 

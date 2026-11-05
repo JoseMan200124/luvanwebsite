@@ -89,24 +89,34 @@ const toNumber = (value) => {
 const formatMoney = (value) => `Q${toNumber(value).toFixed(2)}`;
 
 const formatDate = (value) => {
-    if (!value) return 'N/A';
+    if (!value) {
+        return 'N/A';
+    }
 
     const datePart = String(value).split('T')[0];
     const parts = datePart.split('-');
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
 
     const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return 'N/A';
+    if (Number.isNaN(parsed.getTime())) {
+        return 'N/A';
+    }
     return parsed.toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
 const formatPeriodName = (period, fallback) => {
     const match = /^(\d{4})-(\d{2})$/.exec(String(period || ''));
-    if (!match) return fallback || period || 'Período';
+    if (!match) {
+        return fallback || period || 'Período';
+    }
 
     const monthIndex = Number(match[2]) - 1;
     const monthName = SPANISH_MONTHS[monthIndex];
-    if (!monthName) return fallback || period || 'Período';
+    if (!monthName) {
+        return fallback || period || 'Período';
+    }
 
     return `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} ${match[1]}`;
 };
@@ -149,17 +159,29 @@ const getStatusMeta = (status, hasPendingReceipt = false) => {
 };
 
 const getMetricToneStyles = (tone) => {
-    if (tone === 'danger') return { background: '#FDEDEC', color: '#D32F2F' };
-    if (tone === 'info') return { background: '#EAF1FF', color: '#2563EB' };
-    if (tone === 'warning') return { background: '#FFF4E6', color: '#B45309' };
+    if (tone === 'danger') {
+        return { background: '#FDEDEC', color: '#D32F2F' };
+    }
+    if (tone === 'info') {
+        return { background: '#EAF1FF', color: '#2563EB' };
+    }
+    if (tone === 'warning') {
+        return { background: '#FFF4E6', color: '#B45309' };
+    }
     return { background: '#E7F5EF', color: PRIMARY_COLOR };
 };
 
 const getOperationLabel = (operation, source) => {
     const src = String(source || '').toUpperCase();
-    if (src === 'AUTO_DEBIT') return 'Débito automático';
-    if (src === 'CREDIT_AUTO') return 'Crédito automático';
-    if (src === 'FULL_DISCOUNT') return 'Descuento completo';
+    if (src === 'AUTO_DEBIT') {
+        return 'Débito automático';
+    }
+    if (src === 'CREDIT_AUTO') {
+        return 'Crédito automático';
+    }
+    if (src === 'FULL_DISCOUNT') {
+        return 'Descuento completo';
+    }
 
     const type = String(operation || '').toUpperCase();
     const labels = {
@@ -222,11 +244,17 @@ const buildPaymentPeriods = (payment) => {
     const byKey = new Map();
 
     sources.forEach((source) => {
-        if (!Array.isArray(source)) return;
+        if (!Array.isArray(source)) {
+            return;
+        }
         source.forEach((period) => {
-            if (!period) return;
+            if (!period) {
+                return;
+            }
             const key = period.id || period.period || `${period.dueDate || ''}-${period.amountDue || ''}`;
-            if (!key) return;
+            if (!key) {
+                return;
+            }
             const previous = byKey.get(key) || {};
             byKey.set(key, {
                 ...previous,
@@ -618,7 +646,9 @@ const UploadReceiptDialog = ({ open, onClose, file, preview, uploadLoading, isMo
 const ReceiptViewerDialog = ({ receipt, onClose }) => {
     const open = !!receipt;
     const openInNewTab = () => {
-        if (receipt?.fileUrl) window.open(receipt.fileUrl, '_blank', 'noopener,noreferrer');
+        if (receipt?.fileUrl) {
+            window.open(receipt.fileUrl, '_blank', 'noopener,noreferrer');
+        }
     };
 
     return (
@@ -756,7 +786,9 @@ const ParentPaymentPage = () => {
     }), [isMobile]);
 
     useEffect(() => () => {
-        if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+        if (preview?.startsWith('blob:')) {
+            URL.revokeObjectURL(preview);
+        }
     }, [preview]);
 
     const clearSelectedFile = useCallback(() => {
@@ -776,7 +808,9 @@ const ParentPaymentPage = () => {
             return;
         }
 
-        if (silent) setRefreshing(true);
+        if (silent) {
+            setRefreshing(true);
+        }
         else setPageLoading(true);
 
         const unwrap = (result) => (result.status === 'fulfilled' ? result.value : null);
@@ -791,7 +825,9 @@ const ParentPaymentPage = () => {
                 api.get(`/enrollment-payments/by-user/${userId}`, { signal }),
             ]);
 
-            if (signal?.aborted) return;
+            if (signal?.aborted) {
+                return;
+            }
 
             const routeData = unwrap(routeRes)?.data?.data || null;
             const schoolHasContracts = routeData?.schoolHasContracts === true;
@@ -847,7 +883,9 @@ const ParentPaymentPage = () => {
 
     const handleSelect = (event) => {
         const selected = event.target.files?.[0];
-        if (!selected) return;
+        if (!selected) {
+            return;
+        }
 
         if (!['image/jpeg', 'image/png'].includes(selected.type)) {
             setSnackbar({ open: true, msg: 'El archivo debe ser una imagen JPG o PNG.', sev: 'warning' });
@@ -861,13 +899,17 @@ const ParentPaymentPage = () => {
     };
 
     const handleCloseUploadDialog = () => {
-        if (uploadLoading) return;
+        if (uploadLoading) {
+            return;
+        }
         clearSelectedFile();
         setUploadDialogOpen(false);
     };
 
     const handleOpenUploadDialog = () => {
-        if (uploadDisabled) return;
+        if (uploadDisabled) {
+            return;
+        }
         setUploadDialogOpen(true);
     };
 
@@ -1017,9 +1059,15 @@ const ParentPaymentPage = () => {
     );
 
     const renderActiveTab = () => {
-        if (activeTab === 'periodos') return renderPeriodsTab();
-        if (activeTab === 'historial') return renderHistoryTab();
-        if (activeTab === 'boletas') return renderReceiptsTab();
+        if (activeTab === 'periodos') {
+            return renderPeriodsTab();
+        }
+        if (activeTab === 'historial') {
+            return renderHistoryTab();
+        }
+        if (activeTab === 'boletas') {
+            return renderReceiptsTab();
+        }
         return renderSummaryTab();
     };
 

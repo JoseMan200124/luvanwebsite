@@ -230,7 +230,9 @@ const SchoolUsersPage = () => {
     };
 
     const translateServiceStatus = (status) => {
-        if (!status) return '';
+        if (!status) {
+            return '';
+        }
         switch ((status || '').toString()) {
             case 'ACTIVE': return 'Activo';
             case 'PAUSED': return 'Pausado';
@@ -321,7 +323,9 @@ const SchoolUsersPage = () => {
             const routeSummary = {};
             parentsWithRoutes.forEach(user => {
                 const fd = user.FamilyDetail || {};
-                if (!fd.Students || fd.Students.length === 0) return;
+                if (!fd.Students || fd.Students.length === 0) {
+                    return;
+                }
                 fd.Students.forEach(student => {
                     const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
                     const familySlots = Array.isArray(fd.ScheduleSlots) ? fd.ScheduleSlots.filter(s => !s.studentId || Number(s.studentId) === Number(student.id)) : [];
@@ -332,9 +336,13 @@ const SchoolUsersPage = () => {
                         if (slot?.routeNumber != null && String(slot.routeNumber).trim() !== '') {
                             routeNumber = String(slot.routeNumber);
                         }
-                        if (!routeNumber) routeNumber = 'Sin Ruta';
+                        if (!routeNumber) {
+                            routeNumber = 'Sin Ruta';
+                        }
                         const period = resolveScheduleCodeFromSlot(slot, SCHEDULE_CODES);
-                        if (!period) return;
+                        if (!period) {
+                            return;
+                        }
                         studentRoutePeriodSet.add(`${routeNumber}::${period}`);
                     });
                     studentRoutePeriodSet.forEach(k => {
@@ -353,22 +361,34 @@ const SchoolUsersPage = () => {
             let maxStudents = 0;
             parentsWithRoutes.forEach(user => {
                 const fd = user.FamilyDetail || {};
-                if (!fd.Students || fd.Students.length === 0) return;
+                if (!fd.Students || fd.Students.length === 0) {
+                    return;
+                }
                 const hasStudentWithRoute = fd.Students.some(student => {
                     const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
-                    if (studentSlots.length > 0) return studentSlots.some(slotHasScheduleData);
-                    if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) return fd.ScheduleSlots.some(slotHasScheduleData);
+                    if (studentSlots.length > 0) {
+                        return studentSlots.some(slotHasScheduleData);
+                    }
+                    if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
+                        return fd.ScheduleSlots.some(slotHasScheduleData);
+                    }
                     return false;
                 });
-                if (hasStudentWithRoute && fd.Students.length > maxStudents) maxStudents = fd.Students.length;
+                if (hasStudentWithRoute && fd.Students.length > maxStudents) {
+                    maxStudents = fd.Students.length;
+                }
             });
 
             // familiesWithRoutes: filter parents that have at least one student with schedule slots
             const familiesWithRoutes = parentsWithRoutes.filter(user => {
                 const fd = user.FamilyDetail || {};
-                if (!fd.Students || fd.Students.length === 0) return false;
+                if (!fd.Students || fd.Students.length === 0) {
+                    return false;
+                }
                 if (Array.isArray(fd.ScheduleSlots) && fd.ScheduleSlots.length > 0) {
-                    if (fd.ScheduleSlots.some(slotHasScheduleData)) return true;
+                    if (fd.ScheduleSlots.some(slotHasScheduleData)) {
+                        return true;
+                    }
                 }
                 return fd.Students.some(student => {
                     const studentSlots = Array.isArray(student.ScheduleSlots) ? student.ScheduleSlots : [];
@@ -422,29 +442,51 @@ const SchoolUsersPage = () => {
                             const slotsToUse = studentSlots.length > 0 ? studentSlots : familySlots;
                             slotsToUse.forEach(slot => {
                                 let slotDays = [];
-                                if (Array.isArray(slot.days)) slotDays = slot.days;
+                                if (Array.isArray(slot.days)) {
+                                    slotDays = slot.days;
+                                }
                                 else if (typeof slot.days === 'string') {
-                                    try { const parsed = JSON.parse(slot.days); if (Array.isArray(parsed)) slotDays = parsed; else slotDays = [slot.days]; } catch (e) { slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days]; }
-                                } else if (slot.days) slotDays = [slot.days];
+                                    try { const parsed = JSON.parse(slot.days); if (Array.isArray(parsed)) {
+                                        slotDays = parsed;
+                                    } else slotDays = [slot.days]; } catch (e) { slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days]; }
+                                } else if (slot.days) {
+                                    slotDays = [slot.days];
+                                }
                                 const normalizedDays = slotDays.map(d => d ? d.toString().toLowerCase() : '').filter(Boolean);
-                                if (!normalizedDays.includes(day.key)) return;
+                                if (!normalizedDays.includes(day.key)) {
+                                    return;
+                                }
                                 const displayTime = (slot.time || slot.schoolSchedule || slot.timeSlot || '').toString();
                                 const note = slot.note || '';
                                 let routeLabel = '';
-                                if (slot?.routeNumber != null && String(slot.routeNumber).trim() !== '') routeLabel = String(slot.routeNumber);
+                                if (slot?.routeNumber != null && String(slot.routeNumber).trim() !== '') {
+                                    routeLabel = String(slot.routeNumber);
+                                }
                                 const period = resolveScheduleCodeFromSlot(slot, SCHEDULE_CODES);
-                                if (!period) return;
-                                if (!dataForDay[`hora${period}`]) dataForDay[`hora${period}`] = displayTime;
-                                if (!dataForDay[`ruta${period}`]) dataForDay[`ruta${period}`] = routeLabel;
-                                if (!dataForDay[`parada${period}`]) dataForDay[`parada${period}`] = note;
+                                if (!period) {
+                                    return;
+                                }
+                                if (!dataForDay[`hora${period}`]) {
+                                    dataForDay[`hora${period}`] = displayTime;
+                                }
+                                if (!dataForDay[`ruta${period}`]) {
+                                    dataForDay[`ruta${period}`] = routeLabel;
+                                }
+                                if (!dataForDay[`parada${period}`]) {
+                                    dataForDay[`parada${period}`] = note;
+                                }
                             });
                         }
 
                         // push per-period fields for this day
                         const parseRouteNumber = (r) => {
-                            if (r == null) return null;
+                            if (r == null) {
+                                return null;
+                            }
                             const s = String(r).trim();
-                            if (s === '') return null;
+                            if (s === '') {
+                                return null;
+                            }
                             // Try integer first, then float
                             const n = Number(s);
                             return Number.isFinite(n) ? n : null;
@@ -482,7 +524,9 @@ const SchoolUsersPage = () => {
                         if (rowNumber > 1) {
                             const cell = row.getCell(index + 1);
                             const cellLength = String(cell.value || "").length;
-                            if (cellLength > maxWidth) maxWidth = cellLength;
+                            if (cellLength > maxWidth) {
+                                maxWidth = cellLength;
+                            }
                         }
                     });
                     column.width = Math.min(Math.max(maxWidth, 10), 50);
@@ -504,7 +548,9 @@ const SchoolUsersPage = () => {
                     sheet.autoFilter = filterRange;
                     for (let i = 0; i < maxColumns; i++) {
                         const columnLetter = getColumnLetter(i + 1);
-                        try { const column = sheet.getColumn(columnLetter); if (column) column.filterButton = true; } catch (error) { break; }
+                        try { const column = sheet.getColumn(columnLetter); if (column) {
+                            column.filterButton = true;
+                        } } catch (error) { break; }
                     }
                 }
 
@@ -542,7 +588,9 @@ const SchoolUsersPage = () => {
             parents.forEach(u => {
                 const fd = u.FamilyDetail || {};
                 const cnt = Array.isArray(fd.Students) ? fd.Students.length : 0;
-                if (cnt > maxStudents) maxStudents = cnt;
+                if (cnt > maxStudents) {
+                    maxStudents = cnt;
+                }
             });
 
             const workbook = new ExcelJS.Workbook();
@@ -585,7 +633,9 @@ const SchoolUsersPage = () => {
             });
 
             sheet.eachRow((row, rowIndex) => {
-                if (rowIndex === 1) return;
+                if (rowIndex === 1) {
+                    return;
+                }
                 const isEven = rowIndex % 2 === 0;
                 row.eachCell((cell) => {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
@@ -717,8 +767,12 @@ const SchoolUsersPage = () => {
 
     const handleRouteTypePick = (nextValue) => {
         const trimmed = String(nextValue || '').trim();
-        if (!selectedUser?.id) return;
-        if (!trimmed) return;
+        if (!selectedUser?.id) {
+            return;
+        }
+        if (!trimmed) {
+            return;
+        }
         setRouteTypeDraft(nextValue);
         setOpenRouteTypeModal(true);
     };
@@ -730,7 +784,9 @@ const SchoolUsersPage = () => {
     };
 
     const handleAddStudent = () => {
-        if (!newStudent.fullName) return;
+        if (!newStudent.fullName) {
+            return;
+        }
         setFamilyDetail(prev => ({
             ...prev,
             students: [...prev.students, newStudent]
@@ -764,16 +820,22 @@ const SchoolUsersPage = () => {
 
     // Prefer FamilyDetail-level updatedAt (for the selected school + ciclo) over global User.updatedAt
     const getFamilyUpdatedAt = useCallback((user) => {
-        if (!user) return null;
+        if (!user) {
+            return null;
+        }
         const fd = user.FamilyDetail || user.familyDetail || null;
-        if (!fd) return null;
+        if (!fd) {
+            return null;
+        }
 
         const resolveUpdated = (obj) => obj?.updatedAt || obj?.updated_at || obj?.updatedOn || obj?.modifiedAt || obj?.updated || null;
 
         // If multiple family detail records are present, try to match by schoolId and cicloEscolarId
         if (Array.isArray(fd)) {
             const matched = fd.find(item => {
-                if (!item) return false;
+                if (!item) {
+                    return false;
+                }
                 const sid = item.schoolId ?? item.SchoolId ?? item.school?.id ?? item.colegioId ?? null;
                 const cid = item.cicloEscolarId ?? item.CicloEscolarId ?? item.cicloId ?? item.cicloEscolar?.id ?? null;
                 const schoolMatches = schoolId ? String(sid) === String(schoolId) : true;
@@ -789,15 +851,21 @@ const SchoolUsersPage = () => {
 
     // Prefer FamilyDetail-level createdAt (for the selected school + ciclo)
     const getFamilyCreatedAt = useCallback((user) => {
-        if (!user) return null;
+        if (!user) {
+            return null;
+        }
         const fd = user.FamilyDetail || user.familyDetail || null;
-        if (!fd) return null;
+        if (!fd) {
+            return null;
+        }
 
         const resolveCreated = (obj) => obj?.createdAt || obj?.created_at || obj?.createdOn || obj?.created || null;
 
         if (Array.isArray(fd)) {
             const matched = fd.find(item => {
-                if (!item) return false;
+                if (!item) {
+                    return false;
+                }
                 const sid = item.schoolId ?? item.SchoolId ?? item.school?.id ?? item.colegioId ?? null;
                 const cid = item.cicloEscolarId ?? item.CicloEscolarId ?? item.cicloId ?? item.cicloEscolar?.id ?? null;
                 const schoolMatches = schoolId ? String(sid) === String(schoolId) : true;
@@ -816,13 +884,17 @@ const SchoolUsersPage = () => {
 
         users.forEach((user) => {
             const lastName = normalizeKey(user.FamilyDetail?.familyLastName || '');
-            if (!lastName) return;
+            if (!lastName) {
+                return;
+            }
             familyLastNameCounts.set(lastName, (familyLastNameCounts.get(lastName) || 0) + 1);
         });
 
         return new Map(users.map((user) => {
             const familyDetail = user.FamilyDetail;
-            if (!familyDetail) return [user.id, '-'];
+            if (!familyDetail) {
+                return [user.id, '-'];
+            }
 
             // Nuevo: basado en FamilyDetail.createdAt del ciclo seleccionado
             try {
@@ -830,7 +902,9 @@ const SchoolUsersPage = () => {
                 if (famCreated) {
                     const createdAtMs = new Date(famCreated).getTime();
                     const diffDays = Number.isFinite(createdAtMs) ? (now - createdAtMs) / (1000 * 60 * 60 * 24) : Infinity;
-                    if (diffDays <= 21) return [user.id, 'Nuevo'];
+                    if (diffDays <= 21) {
+                        return [user.id, 'Nuevo'];
+                    }
                 }
             } catch (e) {
                 console.error('Error parsing createdAt for user', user.id, e);
@@ -849,7 +923,9 @@ const SchoolUsersPage = () => {
                     const diffDaysUpd = Number.isFinite(updatedAtMs) ? (now - updatedAtMs) / (1000 * 60 * 60 * 24) : Infinity;
                     const famCreated = getFamilyCreatedAt(user);
                     const createdAtMs = famCreated ? new Date(famCreated).getTime() : null;
-                    if (diffDaysUpd <= 7 && (!createdAtMs || updatedAtMs > createdAtMs)) return [user.id, 'Actualizado'];
+                    if (diffDaysUpd <= 7 && (!createdAtMs || updatedAtMs > createdAtMs)) {
+                        return [user.id, 'Actualizado'];
+                    }
                 }
             } catch (e) {
                 console.error('Error parsing updatedAt for user', user.id, e);
@@ -891,7 +967,9 @@ const SchoolUsersPage = () => {
                     students = [];
                 }
             }
-            if (!Array.isArray(students)) students = [];
+            if (!Array.isArray(students)) {
+                students = [];
+            }
             // Filter out falsy entries
             return students.filter(s => s && (typeof s === 'object' || String(s).trim() !== ''));
         } catch (e) {
@@ -901,11 +979,19 @@ const SchoolUsersPage = () => {
     };
 
     const getStudentsCount = (user) => {
-        if (!user) return 0;
+        if (!user) {
+            return 0;
+        }
         const arr = getStudentsArray(user);
-        if (Array.isArray(arr) && arr.length > 0) return arr.length;
-        if (typeof user.studentsCount === 'number') return user.studentsCount;
-        if (user.studentsCount && !Number.isNaN(Number(user.studentsCount))) return Number(user.studentsCount);
+        if (Array.isArray(arr) && arr.length > 0) {
+            return arr.length;
+        }
+        if (typeof user.studentsCount === 'number') {
+            return user.studentsCount;
+        }
+        if (user.studentsCount && !Number.isNaN(Number(user.studentsCount))) {
+            return Number(user.studentsCount);
+        }
         return 0;
     };
 
@@ -918,11 +1004,15 @@ const SchoolUsersPage = () => {
             const fd = user?.FamilyDetail || user?.familyDetail || {};
             // If the family itself has schedule slots, consider everyone assigned
             const familySlots = fd?.ScheduleSlots || fd?.scheduleSlots;
-            if (Array.isArray(familySlots) && familySlots.length > 0) return 'all';
+            if (Array.isArray(familySlots) && familySlots.length > 0) {
+                return 'all';
+            }
 
             const students = getStudentsArray(user);
             const total = Array.isArray(students) ? students.length : 0;
-            if (total === 0) return 'none';
+            if (total === 0) {
+                return 'none';
+            }
 
             const assigned = students.filter(s => {
                 // try several common property names
@@ -936,8 +1026,12 @@ const SchoolUsersPage = () => {
                 return Array.isArray(slots) && slots.length > 0;
             }).length;
 
-            if (assigned === 0) return 'none';
-            if (assigned === total) return 'all';
+            if (assigned === 0) {
+                return 'none';
+            }
+            if (assigned === total) {
+                return 'all';
+            }
             return 'some';
         } catch (e) {
             console.error('Error determining bus assignment status for user', user.id, e);
@@ -994,7 +1088,9 @@ const SchoolUsersPage = () => {
                 if (!Array.isArray(students)) {
                     try { students = JSON.parse(students || '[]'); } catch (e) { students = []; }
                 }
-                if (!Array.isArray(students)) students = [];
+                if (!Array.isArray(students)) {
+                    students = [];
+                }
                 students = students.filter(s => s && (typeof s === 'object' || String(s).trim() !== ''));
                 const fdClean = { ...fdRaw, Students: students };
                 const studentsCount = students.length || (u.studentsCount ? Number(u.studentsCount) : 0);
@@ -1027,7 +1123,9 @@ const SchoolUsersPage = () => {
     }, [auth.token, schoolId, fetchUsers, fetchContracts, fetchSchools]);
 
     const refreshPageData = useCallback(async () => {
-        if (!auth.token || !schoolId) return;
+        if (!auth.token || !schoolId) {
+            return;
+        }
         await Promise.all([
             fetchUsers(),
             fetchContracts(),
@@ -1045,7 +1143,9 @@ const SchoolUsersPage = () => {
         // Filtrar por búsqueda (case-insensitive y sin acentos). Soporta búsqueda por varias palabras.
         if (searchQuery) {
             const normalize = (str) => {
-                if (!str) return '';
+                if (!str) {
+                    return '';
+                }
                 try {
                     return str
                         .toString()
@@ -1234,13 +1334,17 @@ const SchoolUsersPage = () => {
 
     // Activation handlers (moved out so they are accessible from the table)
     const handleActivateClick = (user) => {
-        if (!user) return;
+        if (!user) {
+            return;
+        }
         setSelectedUser(user);
         setOpenServiceStatusModal(true);
     };
 
     const handleSuspendClick = (user) => {
-        if (!user) return;
+        if (!user) {
+            return;
+        }
         setSelectedUser(user);
         setOpenServiceStatusModal(true);
     };
@@ -1253,7 +1357,9 @@ const SchoolUsersPage = () => {
 
     const handleDeleteClick = (userOrId) => {
         // Accept either user object or id
-        if (!userOrId) return;
+        if (!userOrId) {
+            return;
+        }
         if (typeof userOrId === 'object') {
                 setSelectedUser(userOrId);
         } else {
@@ -1270,7 +1376,9 @@ const SchoolUsersPage = () => {
     };
 
     const handleConfirmDelete = async () => {
-        if (!selectedUser?.id) return;
+        if (!selectedUser?.id) {
+            return;
+        }
         const schoolIdToUse = currentSchool?.id || schoolId || stateSchool?.id;
         if (!schoolIdToUse || !stateCicloEscolarId) {
             setSnackbar({ open: true, message: 'No se pudo resolver el colegio y ciclo escolar para eliminar al usuario.', severity: 'error' });
@@ -1428,9 +1536,13 @@ const SchoolUsersPage = () => {
                     .sort((a, b) => {
                         const ai = a.id ?? Number.POSITIVE_INFINITY;
                         const bi = b.id ?? Number.POSITIVE_INFINITY;
-                        if (ai !== bi) return ai - bi;
+                        if (ai !== bi) {
+                            return ai - bi;
+                        }
                         const byName = a.fullName.localeCompare(b.fullName);
-                        if (byName !== 0) return byName;
+                        if (byName !== 0) {
+                            return byName;
+                        }
                         return a.grade.localeCompare(b.grade);
                     });
 
@@ -1531,7 +1643,9 @@ const SchoolUsersPage = () => {
         } catch (err) {
             // Centralized duplicate-email handler: it shows the snackbar and returns true if handled
             try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) return;
+                if (showDuplicateEmailFromError(err, setSnackbar)) {
+                    return;
+                }
             } catch (e) {
                 // fallthrough to generic handling
             }
@@ -1655,18 +1769,32 @@ const SchoolUsersPage = () => {
         // Normalizar grades del colegio gestionado como en availableGrades
         const getManagedSchoolGrades = () => {
             let sch = currentSchool;
-            if (!sch && schoolId && Array.isArray(schools)) sch = schools.find(s => String(s.id) === String(schoolId));
-            if (!sch && Array.isArray(schools) && schools.length > 0) sch = schools[0];
+            if (!sch && schoolId && Array.isArray(schools)) {
+                sch = schools.find(s => String(s.id) === String(schoolId));
+            }
+            if (!sch && Array.isArray(schools) && schools.length > 0) {
+                sch = schools[0];
+            }
             const gradesRaw = sch?.grades;
-            if (!gradesRaw) return [];
+            if (!gradesRaw) {
+                return [];
+            }
             let parsed = [];
             if (typeof gradesRaw === 'string') {
                 try { parsed = JSON.parse(gradesRaw); } catch (e) { parsed = gradesRaw.split(',').map(x => x.trim()).filter(Boolean).map(name => ({ name })); }
-            } else if (Array.isArray(gradesRaw)) parsed = gradesRaw; else return [];
+            } else if (Array.isArray(gradesRaw)) {
+                parsed = gradesRaw;
+            } else return [];
             return parsed.map(g => {
-                if (!g) return '';
-                if (typeof g === 'string') return g;
-                if (typeof g === 'object') return g.name ?? g.label ?? JSON.stringify(g);
+                if (!g) {
+                    return '';
+                }
+                if (typeof g === 'string') {
+                    return g;
+                }
+                if (typeof g === 'object') {
+                    return g.name ?? g.label ?? JSON.stringify(g);
+                }
                 return String(g);
             }).filter(Boolean);
         };
@@ -1741,13 +1869,19 @@ const SchoolUsersPage = () => {
 
     // Con familias sin guardar, cerrar el dialogo pide confirmacion: cancelar descarta toda la carga.
     const handleRequestCloseBulkDialog = () => {
-        if (bulkSaving || bulkCompleting) return;
-        if (bulkHasDrafts || bulkPendingFamilies.length > 0) setBulkConfirmCancelOpen(true);
+        if (bulkSaving || bulkCompleting) {
+            return;
+        }
+        if (bulkHasDrafts || bulkPendingFamilies.length > 0) {
+            setBulkConfirmCancelOpen(true);
+        }
         else closeBulkDialog();
     };
 
     const handleBulkUpload = async () => {
-        if (!bulkFile) return;
+        if (!bulkFile) {
+            return;
+        }
         if (!canCreateUsersInManagedSchool) {
             setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
             return;
@@ -1759,7 +1893,9 @@ const SchoolUsersPage = () => {
             formData.append('file', bulkFile);
             // Adjuntar el colegio gestionado para que el backend pueda enlazar los padres automáticamente
             const schoolToAttach = currentSchool?.id || schoolId || '';
-            if (schoolToAttach) formData.append('schoolId', String(schoolToAttach));
+            if (schoolToAttach) {
+                formData.append('schoolId', String(schoolToAttach));
+            }
 
             // El backend solo analiza el archivo: no guarda nada hasta confirmar con "Guardar".
             const response = await api.post('/parents/bulk-upload', formData, {
@@ -1825,7 +1961,9 @@ const SchoolUsersPage = () => {
                 steps: family.steps.filter(step => step.status === 'failed' && (step.step !== 'welcomeEmail' || canResetPassword)).map(step => step.step)
             }))
             .filter(item => item.steps.length > 0);
-        if (items.length === 0) return;
+        if (items.length === 0) {
+            return;
+        }
 
         setBulkCompleting(true);
         try {
@@ -1843,13 +1981,17 @@ const SchoolUsersPage = () => {
             setBulkPendingFamilies(prev => prev
                 .map(family => {
                     const results = resultsByEmail.get(String(family.correo || '').trim().toLowerCase());
-                    if (!results) return family;
+                    if (!results) {
+                        return family;
+                    }
                     return {
                         ...family,
                         steps: family.steps
                             .map(step => {
                                 const result = results.find(item => item.step === step.step);
-                                if (!result) return step;
+                                if (!result) {
+                                    return step;
+                                }
                                 return result.status === 'ok' ? null : { ...step, status: result.status, message: result.message || null };
                             })
                             .filter(Boolean)
@@ -1857,7 +1999,9 @@ const SchoolUsersPage = () => {
                 })
                 .filter(family => family.steps.length > 0));
 
-            resultsByEmail.forEach(results => results.forEach(result => { if (result.status === 'ok') completedCount += 1; }));
+            resultsByEmail.forEach(results => results.forEach(result => { if (result.status === 'ok') {
+                completedCount += 1;
+            } }));
             const totalAsked = items.reduce((total, item) => total + item.steps.length, 0);
             setSnackbar({
                 open: true,
@@ -1866,7 +2010,9 @@ const SchoolUsersPage = () => {
                     : `${completedCount} de ${totalAsked} paso(s) completado(s). Revisa los que siguen pendientes.`,
                 severity: completedCount === totalAsked ? 'success' : 'warning'
             });
-            if (completedCount > 0) fetchUsers();
+            if (completedCount > 0) {
+                fetchUsers();
+            }
         } catch (err) {
             console.error('Error completing bulk pending steps:', err);
             setSnackbar({
@@ -1880,7 +2026,9 @@ const SchoolUsersPage = () => {
     };
 
     const handleSaveBulkDrafts = async () => {
-        if (bulkIncludedDrafts.length === 0 || bulkUnresolvedCount > 0) return;
+        if (bulkIncludedDrafts.length === 0 || bulkUnresolvedCount > 0) {
+            return;
+        }
 
         const schoolToAttach = currentSchool?.id || schoolId || '';
         if (!schoolToAttach) {
@@ -1931,8 +2079,12 @@ const SchoolUsersPage = () => {
                 setBulkSaveProgress({ done: Math.min(start + BULK_COMMIT_CHUNK_SIZE, draftsToSave.length), total: draftsToSave.length });
             }
 
-            if (successCount > 0) fetchUsers();
-            if (pendingFamilies.length > 0) setBulkPendingFamilies(prev => [...prev, ...pendingFamilies]);
+            if (successCount > 0) {
+                fetchUsers();
+            }
+            if (pendingFamilies.length > 0) {
+                setBulkPendingFamilies(prev => [...prev, ...pendingFamilies]);
+            }
 
             if (!blockedMessage && failedByKey.size === 0 && uncertainKeys.size === 0 && pendingFamilies.length === 0) {
                 const skippedCount = bulkDrafts.filter(draft => draft.skip).length;
@@ -1969,7 +2121,9 @@ const SchoolUsersPage = () => {
             const reconcileDraft = (draft) => {
                 const failed = failedByKey.get(draft._key);
                 const uncertain = uncertainKeys.has(draft._key);
-                if (!failed && !uncertain) return draft; // omitida, o no llegó a enviarse
+                if (!failed && !uncertain) {
+                    return draft;
+                } // omitida, o no llegó a enviarse
                 const fresh = rechecked.get(draft._key);
                 let next = { ...draft, hadIssues: true, ...(fresh ? { existing: fresh.existing, otherSchool: fresh.otherSchool } : {}) };
                 if (failed) {
@@ -1997,8 +2151,12 @@ const SchoolUsersPage = () => {
             setBulkDrafts(prev => prev.filter(draft => !savedKeys.has(draft._key)).map(reconcileDraft));
 
             const parts = [`${successCount} familia(s) guardada(s).`];
-            if (pendingFamilies.length > 0) parts.push(`${pendingFamilies.length} con pasos por completar (pagos o correo): revísalas arriba.`);
-            if (failedByKey.size > 0) parts.push(`${failedByKey.size} rechazada(s): corrígelas para reenviarlas.`);
+            if (pendingFamilies.length > 0) {
+                parts.push(`${pendingFamilies.length} con pasos por completar (pagos o correo): revísalas arriba.`);
+            }
+            if (failedByKey.size > 0) {
+                parts.push(`${failedByKey.size} rechazada(s): corrígelas para reenviarlas.`);
+            }
             if (uncertainKeys.size > 0) {
                 parts.push(`${uncertainKeys.size} con resultado incierto por una interrupción${recheckFailed ? ' (no se pudieron verificar)' : ` (${alreadySavedCount} ya figuran guardadas)`}.`);
             }
@@ -2040,7 +2198,9 @@ const SchoolUsersPage = () => {
         }
 
         // fallback to currentSchool
-        if (!sch && currentSchool) sch = currentSchool;
+        if (!sch && currentSchool) {
+            sch = currentSchool;
+        }
 
         // fallback to schoolId param
         if (!sch && schoolId && Array.isArray(schools)) {
@@ -2048,7 +2208,9 @@ const SchoolUsersPage = () => {
         }
 
         const gradesRaw = sch?.grades;
-        if (!gradesRaw) return [];
+        if (!gradesRaw) {
+            return [];
+        }
 
         let parsed = [];
         if (typeof gradesRaw === 'string') {
@@ -2068,9 +2230,15 @@ const SchoolUsersPage = () => {
         // Normalize to array of strings
         return parsed
             .map(g => {
-                if (!g) return '';
-                if (typeof g === 'string') return g;
-                if (typeof g === 'object') return g.name ?? g.label ?? JSON.stringify(g);
+                if (!g) {
+                    return '';
+                }
+                if (typeof g === 'string') {
+                    return g;
+                }
+                if (typeof g === 'object') {
+                    return g.name ?? g.label ?? JSON.stringify(g);
+                }
                 return String(g);
             })
             .filter(Boolean);
@@ -2078,7 +2246,9 @@ const SchoolUsersPage = () => {
 
     // apply sorting to filteredUsers before pagination
     const sortedUsers = useMemo(() => {
-        if (!sortBy) return filteredUsers;
+        if (!sortBy) {
+            return filteredUsers;
+        }
         const copy = filteredUsers.slice();
         copy.sort((a, b) => {
             let va = '';
@@ -2159,7 +2329,9 @@ const SchoolUsersPage = () => {
         const normalizedEmail = String(email || '').trim().toLowerCase();
         const schoolToAttach = currentSchool?.id || schoolId || '';
         const current = bulkDraftsRef.current.find(draft => draft._key === key);
-        if (!current || !schoolToAttach) return;
+        if (!current || !schoolToAttach) {
+            return;
+        }
 
         let existing = null;
         let otherSchool = null;
@@ -2183,7 +2355,9 @@ const SchoolUsersPage = () => {
         }
 
         setBulkDrafts(prev => prev.map(draft => {
-            if (draft._key !== key || String(draft.correo || '').trim().toLowerCase() !== normalizedEmail) return draft;
+            if (draft._key !== key || String(draft.correo || '').trim().toLowerCase() !== normalizedEmail) {
+                return draft;
+            }
             return { ...draft, existing, otherSchool };
         }));
     }, [auth.token, currentSchool?.id, schoolId]);
@@ -2198,9 +2372,13 @@ const SchoolUsersPage = () => {
     const handleBulkDraftEmailBlur = useCallback((key, email) => {
         const normalizedEmail = String(email || '').trim().toLowerCase();
         const current = bulkDraftsRef.current.find(draft => draft._key === key);
-        if (!current) return;
+        if (!current) {
+            return;
+        }
         const lastLookedUp = key in lookedUpBulkEmails.current ? lookedUpBulkEmails.current[key] : current.analyzedCorreo;
-        if (normalizedEmail === lastLookedUp) return;
+        if (normalizedEmail === lastLookedUp) {
+            return;
+        }
         lookedUpBulkEmails.current[key] = normalizedEmail;
         refreshBulkDraftAccount(key, normalizedEmail);
     }, [refreshBulkDraftAccount]);
@@ -2608,9 +2786,13 @@ const SchoolUsersPage = () => {
                                                     <Typography variant="body2">
                                                         {(() => {
                                                             const famCreated = getFamilyCreatedAt(user);
-                                                            if (!famCreated) return '-';
+                                                            if (!famCreated) {
+                                                                return '-';
+                                                            }
                                                             const d = new Date(famCreated);
-                                                            if (Number.isNaN(d.getTime())) return '-';
+                                                            if (Number.isNaN(d.getTime())) {
+                                                                return '-';
+                                                            }
                                                             const dd = String(d.getDate()).padStart(2, '0');
                                                             const mm = String(d.getMonth() + 1).padStart(2, '0');
                                                             const yyyy = d.getFullYear();
@@ -2623,7 +2805,9 @@ const SchoolUsersPage = () => {
                                                         {(() => {
                                                             const famUpdated = getFamilyUpdatedAt(user);
                                                             const d = new Date(famUpdated || user.updatedAt || user.createdAt);
-                                                            if (Number.isNaN(d.getTime())) return '-';
+                                                            if (Number.isNaN(d.getTime())) {
+                                                                return '-';
+                                                            }
                                                             const dd = String(d.getDate()).padStart(2, '0');
                                                             const mm = String(d.getMonth() + 1).padStart(2, '0');
                                                             const yyyy = d.getFullYear();
@@ -2669,12 +2853,12 @@ const SchoolUsersPage = () => {
                                                                             size="small"
                                                                             onClick={() => handleAssignBuses(user)}
                                                                             sx={(theme) => {
-                                                                                if (s === 'all') return {
+                                                                                if (s === 'all') {return {
                                                                                     bgcolor: theme.palette.success.main,
                                                                                     color: theme.palette.common.white,
                                                                                     borderRadius: 1,
                                                                                     '&:hover': { bgcolor: theme.palette.success.dark }
-                                                                                };
+                                                                                };}
                                                                                 // s === 'some'
                                                                                 return {
                                                                                     bgcolor: theme.palette.warning.main,

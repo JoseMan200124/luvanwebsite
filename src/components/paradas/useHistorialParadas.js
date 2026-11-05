@@ -7,20 +7,26 @@ import { historialInicial, historialReducer } from './paradasHistorial';
 
 export default function useHistorialParadas(reducerBase, estadoInicial) {
     const ref = useRef(null);
-    if (ref.current === null) ref.current = historialInicial(estadoInicial);
+    if (ref.current === null) {
+        ref.current = historialInicial(estadoInicial);
+    }
     const [, redibujar] = useState(0);
 
     const despachar = useCallback((accion) => {
         const previo = ref.current;
         ref.current = historialReducer(previo, { tipo: 'aplicar', accion, ahora: Date.now() }, reducerBase);
-        if (ref.current !== previo) redibujar(n => n + 1);
+        if (ref.current !== previo) {
+            redibujar(n => n + 1);
+        }
     }, [reducerBase]);
 
     /** Devuelve { antes, despues } si hubo cambio (para que el editor reenvíe las familias tocadas), o null. */
     const moverEnHistorial = useCallback((tipo) => {
         const previo = ref.current;
         ref.current = historialReducer(previo, { tipo });
-        if (ref.current === previo) return null;
+        if (ref.current === previo) {
+            return null;
+        }
         redibujar(n => n + 1);
         return { antes: previo.presente, despues: ref.current.presente };
     }, []);

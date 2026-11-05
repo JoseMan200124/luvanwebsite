@@ -15,7 +15,9 @@ const PermissionDeniedAlert = ({ error, action = 'acceder a este recurso' }) => 
         : error?.message || `No tienes permisos para ${action}`;
     const requiredPermission = error?.requiredPermission;
 
-    if (!isPermissionError && !error) return null;
+    if (!isPermissionError && !error) {
+        return null;
+    }
 
     return (
         <Box sx={{ p: 3 }}>

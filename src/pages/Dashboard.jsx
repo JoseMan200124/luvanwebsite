@@ -52,10 +52,18 @@ const Dashboard = () => {
     // Construye el query string según los filtros aplicados
     const buildQueryString = () => {
         const queryParams = new URLSearchParams();
-        if (filters.colegio) queryParams.append('colegio', filters.colegio);
-        if (filters.mes) queryParams.append('mes', filters.mes);
-        if (filters.fechaInicio) queryParams.append('fechaInicio', filters.fechaInicio);
-        if (filters.fechaFin) queryParams.append('fechaFin', filters.fechaFin);
+        if (filters.colegio) {
+            queryParams.append('colegio', filters.colegio);
+        }
+        if (filters.mes) {
+            queryParams.append('mes', filters.mes);
+        }
+        if (filters.fechaInicio) {
+            queryParams.append('fechaInicio', filters.fechaInicio);
+        }
+        if (filters.fechaFin) {
+            queryParams.append('fechaFin', filters.fechaFin);
+        }
 
         return queryParams.toString() ? `?${queryParams.toString()}` : '';
     };
@@ -106,7 +114,9 @@ const Dashboard = () => {
     // Función para generar PDF del reporte
     const generatePDF = () => {
         const input = reportRef.current;
-        if (!input) return;
+        if (!input) {
+            return;
+        }
 
         html2canvas(input, { scale: 2 }).then((canvas) => {
             const imgData = canvas.toDataURL('image/png');

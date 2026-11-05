@@ -254,8 +254,12 @@ const FuelRecordsPage = () => {
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
     const getBusClientId = (bus, type) => {
-        if (type === 'school') return bus.schoolId ?? bus.school?.id;
-        if (type === 'corp') return bus.corporationId ?? bus.corporation?.id;
+        if (type === 'school') {
+            return bus.schoolId ?? bus.school?.id;
+        }
+        if (type === 'corp') {
+            return bus.corporationId ?? bus.corporation?.id;
+        }
         return null;
     };
 
@@ -358,20 +362,42 @@ const FuelRecordsPage = () => {
 
             if (selectedClient) {
                 const { type, id } = selectedClient;
-                if (type === 'school') filters.schoolId = id;
-                if (type === 'corp') filters.corporationId = id;
+                if (type === 'school') {
+                    filters.schoolId = id;
+                }
+                if (type === 'corp') {
+                    filters.corporationId = id;
+                }
             }
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedFuelingReason) filters.fuelingReason = selectedFuelingReason;
-            if (selectedFuelType) filters.fuelType = selectedFuelType;
-            if (selectedFuelType) filters.fuelType = selectedFuelType;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedFuelingReason) {
+                filters.fuelingReason = selectedFuelingReason;
+            }
+            if (selectedFuelType) {
+                filters.fuelType = selectedFuelType;
+            }
+            if (selectedFuelType) {
+                filters.fuelType = selectedFuelType;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             // Ordenamiento
-            if (orderBy) filters.orderBy = orderBy;
-            if (order) filters.order = order;
+            if (orderBy) {
+                filters.orderBy = orderBy;
+            }
+            if (order) {
+                filters.order = order;
+            }
 
             // DEBUG: log filters being sent to backend
             // eslint-disable-next-line no-console
@@ -427,13 +453,25 @@ const FuelRecordsPage = () => {
 
             if (selectedClient) {
                     const { type, id } = selectedClient || {};
-                    if (type === 'school') filters.schoolId = id;
-                    if (type === 'corp') filters.corporationId = id;
+                    if (type === 'school') {
+                        filters.schoolId = id;
+                    }
+                    if (type === 'corp') {
+                        filters.corporationId = id;
+                    }
                 }
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const response = await getFuelStatistics(filters);
             
@@ -542,15 +580,31 @@ const FuelRecordsPage = () => {
 
             if (selectedClient) {
                 const { type, id } = selectedClient;
-                if (type === 'school') filters.schoolId = id;
-                if (type === 'corp') filters.corporationId = id;
+                if (type === 'school') {
+                    filters.schoolId = id;
+                }
+                if (type === 'corp') {
+                    filters.corporationId = id;
+                }
             }
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedFuelingReason) filters.fuelingReason = selectedFuelingReason;
-            if (selectedFuelType) filters.fuelType = selectedFuelType;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedFuelingReason) {
+                filters.fuelingReason = selectedFuelingReason;
+            }
+            if (selectedFuelType) {
+                filters.fuelType = selectedFuelType;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const response = await exportFuelRecordsExcel(filters);
             const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -640,7 +694,9 @@ const FuelRecordsPage = () => {
     };
 
     const handleOpenEdit = (record) => {
-        if (!record?.canEdit) return;
+        if (!record?.canEdit) {
+            return;
+        }
         setSelectedRecord(record);
         setEditSchools([]);
         setEditCorporations([]);
@@ -765,7 +821,9 @@ const FuelRecordsPage = () => {
     };
 
     const handleConfirmDelete = async () => {
-        if (!deleteId) return;
+        if (!deleteId) {
+            return;
+        }
         try {
             setDeleting(true);
             const response = await deleteFuelRecord(deleteId);
@@ -825,7 +883,9 @@ const FuelRecordsPage = () => {
                 return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
             });
             const hasCurrentBus = currentOptions.some((option) => String(option.id) === selectedRecordBusId || option.plate === selectedRecordBusPlate);
-            if (hasCurrentBus) return currentOptions;
+            if (hasCurrentBus) {
+                return currentOptions;
+            }
             return [
                 { label: selectedRecordBusPlate, id: selectedRecordBusId, plate: selectedRecordBusPlate },
                 ...currentOptions,
@@ -911,8 +971,12 @@ const FuelRecordsPage = () => {
         // Map client to schoolId or corporationId
         if (createForm.client) {
             const { type, id } = createForm.client || {};
-            if (type === 'school') payload.schoolId = Number(id);
-            if (type === 'corp') payload.corporationId = Number(id);
+            if (type === 'school') {
+                payload.schoolId = Number(id);
+            }
+            if (type === 'corp') {
+                payload.corporationId = Number(id);
+            }
         }
 
         try {

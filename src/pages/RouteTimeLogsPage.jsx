@@ -127,12 +127,16 @@ const RouteTimeLogsPage = () => {
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
     const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
+        if (isSpecificCicloEscolarSelected) {
+            return [];
+        }
         const map = new Map();
         schools.forEach((s) => {
             const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
             const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
+            if (!map.has(key)) {
+                map.set(key, []);
+            }
             map.get(key).push(s);
         });
         return Array.from(map.entries())
@@ -204,21 +208,41 @@ const RouteTimeLogsPage = () => {
             };
 
             // Añadir ordenamiento solicitado al servidor
-            if (orderBy) filters.sortBy = orderBy;
-            if (order) filters.order = order;
+            if (orderBy) {
+                filters.sortBy = orderBy;
+            }
+            if (order) {
+                filters.order = order;
+            }
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedSchedule) filters.schedule = String(selectedSchedule).trim().toUpperCase();
-            if (selectedDay) filters.day = selectedDay;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedSchool) {
+                filters.schoolId = selectedSchool;
+            }
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedSchedule) {
+                filters.schedule = String(selectedSchedule).trim().toUpperCase();
+            }
+            if (selectedDay) {
+                filters.day = selectedDay;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const data = await getRouteTimeLogs(filters);
 
             // Si llegó otra request más reciente, ignorar esta respuesta
-            if (requestSeq !== timeLogsRequestSeqRef.current) return;
+            if (requestSeq !== timeLogsRequestSeqRef.current) {
+                return;
+            }
 
             const logsList = data.timeLogs || data.data || [];
             setTimeLogs(logsList);
@@ -299,7 +323,9 @@ const RouteTimeLogsPage = () => {
     };
 
     const handleConfirmDelete = async () => {
-        if (!deleteId) return;
+        if (!deleteId) {
+            return;
+        }
         try {
             await deleteRouteTimeLog(deleteId);
             // refresh list
@@ -350,7 +376,9 @@ const RouteTimeLogsPage = () => {
     };
 
     const formatDuration = (minutes) => {
-        if (!minutes) return 'N/A';
+        if (!minutes) {
+            return 'N/A';
+        }
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
@@ -367,13 +395,27 @@ const RouteTimeLogsPage = () => {
             const filters = {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedSchedule) filters.schedule = String(selectedSchedule).trim().toUpperCase();
-            if (selectedDay) filters.day = selectedDay;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedSchool) {
+                filters.schoolId = selectedSchool;
+            }
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedSchedule) {
+                filters.schedule = String(selectedSchedule).trim().toUpperCase();
+            }
+            if (selectedDay) {
+                filters.day = selectedDay;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const all = await getAllRouteTimeLogs(filters, 1000);
 
@@ -622,7 +664,9 @@ const RouteTimeLogsPage = () => {
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
                                         const na = Number(a);
                                         const nb = Number(b);
-                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+                                            return na - nb;
+                                        }
                                         return String(a).localeCompare(String(b));
                                     }).map((route) => (
                                         <MenuItem key={route} value={route}>

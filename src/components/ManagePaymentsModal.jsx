@@ -136,7 +136,9 @@ function getTransactionAppliedPeriods(h) {
             ];
         }
 
-        if (results.length > 0) return results;
+        if (results.length > 0) {
+            return results;
+        }
     }
 
     // CREDITO manual (no CREDIT_AUTO): ver si hay ledger que indique consumo de crédito
@@ -157,9 +159,13 @@ function getTransactionAppliedPeriods(h) {
 
 /** Nombre legible para un período YYYY-MM */
 function formatPeriodLabel(period) {
-    if (!period) return '';
+    if (!period) {
+        return '';
+    }
     const parts = String(period).split('-');
-    if (parts.length < 2) return period;
+    if (parts.length < 2) {
+        return period;
+    }
     const monthNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     const m = Number.parseInt(parts[1], 10) - 1;
     const monthLabel = monthNames[m] || parts[1];
@@ -168,9 +174,13 @@ function formatPeriodLabel(period) {
 
 /** Nombre completo del mes */
 function formatPeriodFullLabel(period) {
-    if (!period) return '';
+    if (!period) {
+        return '';
+    }
     const parts = String(period).split('-');
-    if (parts.length < 2) return period;
+    if (parts.length < 2) {
+        return period;
+    }
     const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const m = Number.parseInt(parts[1], 10) - 1;
     const monthLabel = monthNames[m] || parts[1];
@@ -193,7 +203,9 @@ function buildTransactionExplanation(h, allHistories = []) {
     if (type === 'TARIFA' && source === 'MANUAL') {
         lines.push(`💳 Pago manual registrado el ${date}.`);
         lines.push(`   • Monto total recibido: ${fmt(amount)}`);
-        if (receipt !== '—') lines.push(`   • N° de boleta: ${receipt}`);
+        if (receipt !== '—') {
+            lines.push(`   • N° de boleta: ${receipt}`);
+        }
 
         // Buscar ledger entries para ver distribución
         const lePayment = Array.isArray(h.ledgerEntries)
@@ -301,7 +313,9 @@ function buildTransactionExplanation(h, allHistories = []) {
         if (h.extraordinaryDiscount > 0) {
             lines.push(`   • Descuento/exoneración aplicado: ${fmt(h.extraordinaryDiscount)}`);
         }
-        if (receipt !== '—') lines.push(`   • N° de boleta: ${receipt}`);
+        if (receipt !== '—') {
+            lines.push(`   • N° de boleta: ${receipt}`);
+        }
     }
 
     else {
@@ -374,13 +388,17 @@ const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes, onOpenExp
                 {/* Botón detalle */}
                 {(() => {
                     const hasDetails = getTransactionAppliedPeriods(history).length > 0 || (history.ledgerEntries && history.ledgerEntries.length > 0);
-                    if (!hasDetails) return null;
+                    if (!hasDetails) {
+                        return null;
+                    }
                     return (
                         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                             <MuiIconButton
                                 size="small"
                                 onClick={() => {
-                                    if (onOpenExplanation) onOpenExplanation(history);
+                                    if (onOpenExplanation) {
+                                        onOpenExplanation(history);
+                                    }
                                 }}
                                 title="Ver detalle de esta transacción"
                                 sx={{
@@ -486,7 +504,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [histOrder, setHistOrder] = useState('desc'); // 'asc' | 'desc'
 
     // module-level cache (persists across renders)
-    if (!global.__paymentHistCache) global.__paymentHistCache = new Map();
+    if (!global.__paymentHistCache) {
+        global.__paymentHistCache = new Map();
+    }
     const histCacheRef = React.useRef(global.__paymentHistCache);
 
     const handleHistRequestSort = (property) => {
@@ -496,7 +516,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     };
 
     const sortedHistories = React.useMemo(() => {
-        if (!Array.isArray(histories)) return [];
+        if (!Array.isArray(histories)) {
+            return [];
+        }
         const arr = [...histories];
         const cmp = (a, b) => {
             const dir = histOrder === 'asc' ? 1 : -1;
@@ -555,7 +577,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const boletaMonthOptions = React.useMemo(() => {
         const setMonths = new Set();
         const pushDate = (d) => {
-            if (!d) return;
+            if (!d) {
+                return;
+            }
             try {
                 const m = moment.parseZone(d).format('YYYY-MM');
                 setMonths.add(m);
@@ -567,10 +591,14 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     }, [uploadedReceipts]);
 
     const filteredUploadedReceipts = React.useMemo(() => {
-        if (!boletaMonth) return uploadedReceipts || [];
+        if (!boletaMonth) {
+            return uploadedReceipts || [];
+        }
         return (uploadedReceipts || []).filter(r => {
             const d = getReceiptDisplayDateValue(r);
-            if (!d) return false;
+            if (!d) {
+                return false;
+            }
             return moment.parseZone(d).format('YYYY-MM') === boletaMonth;
         });
     }, [uploadedReceipts, boletaMonth]);
@@ -676,7 +704,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     // Excel export removed; function deleted per request
 
     const fetchReceiptsForUser = async (userId) => {
-        if (!userId || !hasPermission('padres-ver-boletas')) return [];
+        if (!userId || !hasPermission('padres-ver-boletas')) {
+            return [];
+        }
         setUploadedReceiptsLoading(true);
         try {
             const res = await api.get(`/parents/${userId}/receipts`);
@@ -734,7 +764,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                 // clear all cache entries for this paymentId
                 const prefix = `${paymentId}:`;
                 for (const k of Array.from(histCacheRef.current.keys())) {
-                    if (k.startsWith(prefix)) histCacheRef.current.delete(k);
+                    if (k.startsWith(prefix)) {
+                        histCacheRef.current.delete(k);
+                    }
                 }
             }
         } catch (err) {
@@ -765,7 +797,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     };
 
     const handleToggleInvoiceRow = (row) => {
-        if (isDeleted) return;
+        if (isDeleted) {
+            return;
+        }
         const newVal = !row.requiresInvoice;
         // Optimistically update UI
         setHistories((prev) => prev.map(h => (h.id === row.id ? { ...h, requiresInvoice: newVal } : h)));
@@ -776,7 +810,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             if (paymentId) {
                 const prefix = `${paymentId}:`;
                 for (const k of Array.from(histCacheRef.current.keys())) {
-                    if (k.startsWith(prefix)) histCacheRef.current.delete(k);
+                    if (k.startsWith(prefix)) {
+                        histCacheRef.current.delete(k);
+                    }
                 }
             }
         } catch (err) {
@@ -809,7 +845,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
     // Receipts dialog UI helpers
     const downloadFile = (url, filename) => {
-        if (!url) return;
+        if (!url) {
+            return;
+        }
         const a = document.createElement('a');
         a.href = url;
         a.download = filename || '';
@@ -837,7 +875,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             if (paymentId) {
                 const prefix = `${paymentId}:`;
                 for (const k of Array.from(histCacheRef.current.keys())) {
-                    if (k.startsWith(prefix)) histCacheRef.current.delete(k);
+                    if (k.startsWith(prefix)) {
+                        histCacheRef.current.delete(k);
+                    }
                 }
             }
         } catch (err) {
@@ -850,7 +890,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const parsedPercent = discountType === 'percentage'
         ? (() => {
             const p = discountValue;
-            if (p === null || typeof p === 'undefined' || String(p).trim() === '') return null;
+            if (p === null || typeof p === 'undefined' || String(p).trim() === '') {
+                return null;
+            }
             const n = Number(p);
             return Number.isFinite(n) ? n : null;
           })()
@@ -873,7 +915,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const handleConfirmGlobalFreezeAction = async () => {
         if (globalFreezeDialogMode === 'freeze') {
             const reason = globalFreezeReason.trim();
-            if (!reason) return;
+            if (!reason) {
+                return;
+            }
             try {
                 const currentDate = await dateService.getCurrentDate();
                 handleAction('freezeGlobalPenalty', {
@@ -1022,7 +1066,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                                     }}
                                                 />
                                                 <Button variant="outlined" size="small" onClick={() => {
-                                                    if (isDeleted) return;
+                                                    if (isDeleted) {
+                                                        return;
+                                                    }
                                                     setOpenDiscountModal(true);
                                                 }} disabled={isDeleted}>Aplicar</Button>
                                             </Box>
@@ -1035,8 +1081,12 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', gap: 1, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: { xs: 'flex-start', sm: 'flex-end' }, flexDirection: { xs: 'column', sm: 'row' } }}>
                             {/* Muestran el estado de la familia: sin la llave se ven pero no se pueden cambiar */}
-                            <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); if (!isDeleted) onAction('toggleAutoDebit', { payment, value: e.target.checked }); }} disabled={isDeleted || !hasPermission('activar-debito-automatico')} />} label="Débito Automático" />
-                            <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); if (!isDeleted) onAction('toggleRequiresInvoice', { payment, value: e.target.checked }); }} disabled={isDeleted || !hasPermission('pagos-toggle-factura')} />} label="Factura" />
+                            <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); if (!isDeleted) {
+                                onAction('toggleAutoDebit', { payment, value: e.target.checked });
+                            } }} disabled={isDeleted || !hasPermission('activar-debito-automatico')} />} label="Débito Automático" />
+                            <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); if (!isDeleted) {
+                                onAction('toggleRequiresInvoice', { payment, value: e.target.checked });
+                            } }} disabled={isDeleted || !hasPermission('pagos-toggle-factura')} />} label="Factura" />
                         </Box>
                         {/* Download button removed per request */}
                     </Grid>
@@ -1044,7 +1094,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
 
                 <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
                     <PermissionGuard permission="padres-ver-boletas">
-                        <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) handleAction('receipts'); }} disabled={isDeleted}>Boletas</Button>
+                        <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) {
+                            handleAction('receipts');
+                        } }} disabled={isDeleted}>Boletas</Button>
                     </PermissionGuard>
                     {hasPermission(isGlobalPenaltyFrozen ? 'mora-descongelar' : 'mora-congelar') && (
                         <Button
@@ -1052,7 +1104,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             color={isGlobalPenaltyFrozen ? "success" : "primary"}
                             startIcon={isGlobalPenaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
                             onClick={() => {
-                                if (isDeleted) return;
+                                if (isDeleted) {
+                                    return;
+                                }
                                 handleOpenGlobalFreezeDialog(isGlobalPenaltyFrozen ? 'unfreeze' : 'freeze');
                             }}
                             disabled={isDeleted}
@@ -1063,7 +1117,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     {/* State changes handled elsewhere; action buttons removed */}
                     {/* Delete/Revert payment */}
                     <PermissionGuard permission="pagos-revertir-ultimo">
-                        <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) setOpenDeleteDialog(true); }} disabled={isDeleted}>Revertir pago</Button>
+                        <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) {
+                            setOpenDeleteDialog(true);
+                        } }} disabled={isDeleted}>Revertir pago</Button>
                     </PermissionGuard>
                 </Box>
 
@@ -1128,7 +1184,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         <Button onClick={() => { setOpenExonerateDialog(false); setExonerateAmount(''); }}>Cancelar</Button>
                         <Button variant="contained" onClick={() => {
                             const amt = Number(exonerateAmount || 0);
-                            if (!amt || Number.isNaN(amt) || amt <= 0) return;
+                            if (!amt || Number.isNaN(amt) || amt <= 0) {
+                                return;
+                            }
                             handleAction('exoneratePenalty', { exonerateAmount: amt });
                             setOpenExonerateDialog(false);
                             setExonerateAmount('');
@@ -1196,7 +1254,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 const id = (localPayment || payment)?.id;
                                 if (id) {
                                     const res = await api.get(`/payments/${id}`);
-                                    if (res?.data) setLocalPayment(res.data.payment || res.data);
+                                    if (res?.data) {
+                                        setLocalPayment(res.data.payment || res.data);
+                                    }
                                 }
                             } catch (err) {
                                 console.error('Error fetching updated payment after applying discount', err);

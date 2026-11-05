@@ -138,10 +138,14 @@ const LandingPage = () => {
     }, [isMobileMenuOpen]);
 
     useEffect(() => {
-        if (!isMobileMenuOpen) return undefined;
+        if (!isMobileMenuOpen) {
+            return undefined;
+        }
 
         const onKeyDown = (event) => {
-            if (event.key === 'Escape') setIsMobileMenuOpen(false);
+            if (event.key === 'Escape') {
+                setIsMobileMenuOpen(false);
+            }
         };
 
         window.addEventListener('keydown', onKeyDown);
@@ -150,12 +154,16 @@ const LandingPage = () => {
 
     useEffect(() => {
         const root = rootRef.current;
-        if (!root || typeof IntersectionObserver === 'undefined') return undefined;
+        if (!root || typeof IntersectionObserver === 'undefined') {
+            return undefined;
+        }
 
         const revealObserver = new IntersectionObserver(
             (entries) => {
                 entries.forEach((entry, index) => {
-                    if (!entry.isIntersecting) return;
+                    if (!entry.isIntersecting) {
+                        return;
+                    }
                     window.setTimeout(() => entry.target.classList.add('in'), index * 40);
                     revealObserver.unobserve(entry.target);
                 });
@@ -166,7 +174,9 @@ const LandingPage = () => {
         const counterObserver = new IntersectionObserver(
             (entries) => {
                 entries.forEach((entry) => {
-                    if (!entry.isIntersecting) return;
+                    if (!entry.isIntersecting) {
+                        return;
+                    }
                     const counter = entry.target;
                     const target = Number(counter.dataset.to || 0);
                     const startedAt = performance.now();
@@ -174,7 +184,9 @@ const LandingPage = () => {
                     const step = (time) => {
                         const progress = Math.min(1, (time - startedAt) / 1100);
                         counter.textContent = String(Math.round((1 - Math.pow(1 - progress, 3)) * target));
-                        if (progress < 1) window.requestAnimationFrame(step);
+                        if (progress < 1) {
+                            window.requestAnimationFrame(step);
+                        }
                     };
 
                     window.requestAnimationFrame(step);
@@ -203,7 +215,9 @@ const LandingPage = () => {
         const subject = String(form.get('subject') || '').trim();
         const message = String(form.get('message') || '').trim();
 
-        if (!name || !email || !subject || !message) return;
+        if (!name || !email || !subject || !message) {
+            return;
+        }
 
         const messageText = `Hola Transportes Luvan!\n\n*Nombre:* ${name}\n*Correo:* ${email}\n*Asunto:* ${subject}\n*Mensaje:* ${message}`;
         window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(messageText)}`, '_blank', 'noopener,noreferrer');

@@ -59,19 +59,27 @@ import api from '../utils/axiosConfig';
 const fmt = (v) => `Q${Number(v || 0).toFixed(2)}`;
 
 const formatDate = (d) => {
-    if (!d) return '—';
+    if (!d) {
+        return '—';
+    }
     try { return moment.parseZone(d).format('DD/MM/YYYY HH:mm'); } catch (e) { return String(d); }
 };
 
 const formatDateShort = (d) => {
-    if (!d) return '—';
+    if (!d) {
+        return '—';
+    }
     try { return moment.parseZone(d).format('DD/MM/YY'); } catch (e) { return String(d); }
 };
 
 const formatPeriodLabel = (period) => {
-    if (!period) return '';
+    if (!period) {
+        return '';
+    }
     const parts = String(period).split('-');
-    if (parts.length < 2) return period;
+    if (parts.length < 2) {
+        return period;
+    }
     const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     const m = Number.parseInt(parts[1], 10) - 1;
     const monthLabel = monthNames[m] || parts[1];
@@ -169,7 +177,9 @@ const BREAKDOWN_MONEY_FIELDS = [
 function firstNumeric(meta, keys) {
     for (const key of keys) {
         const val = Number(meta?.[key]);
-        if (Number.isFinite(val) && val > 0.01) return val;
+        if (Number.isFinite(val) && val > 0.01) {
+            return val;
+        }
     }
     return 0;
 }
@@ -205,7 +215,9 @@ const EventBreakdownPanel = ({ event }) => {
     const [open, setOpen] = useState(false);
     const { moneyRows, periods, changes, configPeriods, hasBreakdown } = getEventBreakdown(event);
 
-    if (!hasBreakdown) return null;
+    if (!hasBreakdown) {
+        return null;
+    }
 
     const isContext = !isMoneyEvent(event);
     const label = isContext ? 'Detalle del cambio' : 'Desglose de aplicación';
@@ -335,7 +347,9 @@ const BalanceChips = ({ event }) => {
         ? { before: Number(meta.enrollmentAmountDueBefore || 0), after: Number(meta.enrollmentAmountDueAfter || 0) }
         : null;
 
-    if (!hasBalance && !hasPenalty && !hasCredit && !enrollmentShift) return null;
+    if (!hasBalance && !hasPenalty && !hasCredit && !enrollmentShift) {
+        return null;
+    }
 
     return (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -564,7 +578,9 @@ const TimelineEventMobile = ({ event }) => {
 const PeriodBreakdownTable = ({ periods }) => {
     const [open, setOpen] = useState(false);
 
-    if (!periods || periods.length === 0) return null;
+    if (!periods || periods.length === 0) {
+        return null;
+    }
 
     return (
         <Box sx={{ mt: 2 }}>
@@ -692,7 +708,9 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
     const [categories, setCategories] = useState(ALL_CATEGORY_KEYS);
 
     const fetchFlow = useCallback(async (page, limit, order, activeCategories) => {
-        if (!paymentId) return;
+        if (!paymentId) {
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -720,12 +738,18 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
     // fechas, que es un filtro local sobre la página cargada.
     const eventsFiltered = useMemo(() => {
         const events = flowData?.timeline?.events || [];
-        if (!dateFrom && !dateTo) return events;
+        if (!dateFrom && !dateTo) {
+            return events;
+        }
 
         return events.filter((event) => {
             const at = new Date(event.occurredAt || 0).getTime();
-            if (dateFrom && at < new Date(dateFrom).getTime()) return false;
-            if (dateTo && at > new Date(`${dateTo}T23:59:59`).getTime()) return false;
+            if (dateFrom && at < new Date(dateFrom).getTime()) {
+                return false;
+            }
+            if (dateTo && at > new Date(`${dateTo}T23:59:59`).getTime()) {
+                return false;
+            }
             return true;
         });
     }, [flowData?.timeline?.events, dateFrom, dateTo]);

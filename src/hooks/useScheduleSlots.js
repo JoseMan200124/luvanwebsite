@@ -21,7 +21,9 @@ export default function useScheduleSlots() {
       if (typeof days === 'string') {
         try { days = JSON.parse(days); } catch (e) { days = []; }
       }
-      if (!Array.isArray(days)) days = [];
+      if (!Array.isArray(days)) {
+          days = [];
+      }
       return { ...(slot || {}), days };
     });
     return slots;
@@ -56,9 +58,15 @@ export default function useScheduleSlots() {
 
   const fetchRoutesByTime = useCallback(async (schoolId, time, code = null) => {
     const params = [];
-    if (code) params.push(`code=${encodeURIComponent(code)}`);
-    if (time) params.push(`time=${encodeURIComponent(time)}`);
-    if (params.length === 0) return [];
+    if (code) {
+        params.push(`code=${encodeURIComponent(code)}`);
+    }
+    if (time) {
+        params.push(`time=${encodeURIComponent(time)}`);
+    }
+    if (params.length === 0) {
+        return [];
+    }
     const res = await axios.get(`/schools/${schoolId}/routes-by-schedule?${params.join('&')}`);
     return res.data.routes || [];
   }, []);

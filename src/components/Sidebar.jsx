@@ -92,7 +92,9 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     const hoverTimer = useRef(null);
 
     const handleMenuClick = idx => {
-        if (!isOpen) return;
+        if (!isOpen) {
+            return;
+        }
         setOpenMenus(prev => ({ ...prev, [idx]: !prev[idx] }));
     };
 
@@ -102,10 +104,14 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     };
 
     const handleLinkClick = () => {
-        if (window.innerWidth < 768) toggleSidebar();
+        if (window.innerWidth < 768) {
+            toggleSidebar();
+        }
     };
 
-    if (!auth?.user) return null;
+    if (!auth?.user) {
+        return null;
+    }
 
     const user = { name: auth.user.name, role: auth.user.role, avatar: userImage };
 
@@ -122,7 +128,9 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
     // Calcula la posición vertical del pop-up
     const getPopoutPosition = (element) => {
-        if (!element) return HEADER_OFFSET;
+        if (!element) {
+            return HEADER_OFFSET;
+        }
         const rect = element.getBoundingClientRect();
         // position relative to viewport top; popY should be rect.top
         return Math.max(8, Math.floor(rect.top));
@@ -195,8 +203,12 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
                             if (hasSubs) {
                                 visibleSubmodules = module.submodules.filter((sm) => {
-                                    if (!permissions[sm.key]) return false;
-                                    if (!isInvitado) return true;
+                                    if (!permissions[sm.key]) {
+                                        return false;
+                                    }
+                                    if (!isInvitado) {
+                                        return true;
+                                    }
                                     return invitedClientAllowedSubmodules.includes(sm.key);
                                 });
 
@@ -205,7 +217,9 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                                 canAccessModule = !!permissions[module.key];
                             }
 
-                            if (!canAccessModule) return null;
+                            if (!canAccessModule) {
+                                return null;
+                            }
                             
                             const isOpenMenu = openMenus[idx];
 

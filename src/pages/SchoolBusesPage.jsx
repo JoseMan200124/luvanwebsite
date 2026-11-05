@@ -110,13 +110,19 @@ const SchoolBusesPage = () => {
         || 'anterior';
 
     const formatTransferUserOutcome = (assignment, userKey) => {
-        if (assignment.currentAssignment) return 'Sin cambios';
+        if (assignment.currentAssignment) {
+            return 'Sin cambios';
+        }
 
         const user = assignment[userKey];
-        if (!user?.id) return 'Sin asignar';
+        if (!user?.id) {
+            return 'Sin asignar';
+        }
 
         const userName = user.name || user.email || `ID:${user.id}`;
-        if (user.willBeAssigned) return userName;
+        if (user.willBeAssigned) {
+            return userName;
+        }
 
         return `${userName} -> Sin asignar`;
     };
@@ -129,7 +135,9 @@ const SchoolBusesPage = () => {
     };
 
     const fetchSchoolData = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         try {
             const resp = await api.get(`/schools/${schoolId}`, {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -152,7 +160,9 @@ const SchoolBusesPage = () => {
     }, [auth.token, schoolId]);
 
     const fetchBuses = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         try {
             const resp = await api.get('/buses/simple', {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -188,7 +198,9 @@ const SchoolBusesPage = () => {
     }, [auth.token, schoolId]);
 
     const fetchSchoolSchedules = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         try {
             const schedules = await getSchoolSchedules(schoolId);
             setSchoolScheduleCodes(getScheduleCodesFromSchool(schedules));
@@ -198,8 +210,12 @@ const SchoolBusesPage = () => {
             (Array.isArray(schedules) ? schedules : []).forEach((s) => {
                 const code = s?.code ? String(s.code).toUpperCase() : null;
                 const time = Array.isArray(s?.times) ? s.times[0] : null;
-                if (code && time && time !== 'N/A') timesByCode[code] = time;
-                if (code && s?.name) namesByCode[code] = s.name;
+                if (code && time && time !== 'N/A') {
+                    timesByCode[code] = time;
+                }
+                if (code && s?.name) {
+                    namesByCode[code] = s.name;
+                }
             });
             setSchoolScheduleTimes(timesByCode);
             setSchoolScheduleNames(namesByCode);
@@ -212,7 +228,9 @@ const SchoolBusesPage = () => {
     }, [schoolId]);
 
     const fetchPilots = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         try {
             const cycleParam = currentSchoolCycleId ? `&cicloEscolarId=${encodeURIComponent(currentSchoolCycleId)}` : '';
             const url = `/users/pilots?schoolId=${schoolId}${cycleParam}`;
@@ -228,7 +246,9 @@ const SchoolBusesPage = () => {
     }, [auth.token, schoolId, currentSchoolCycleId]);
 
     const fetchMonitors = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         try {
             const cycleParam = currentSchoolCycleId ? `&cicloEscolarId=${encodeURIComponent(currentSchoolCycleId)}` : '';
             const url = `/users/monitors?schoolId=${schoolId}${cycleParam}`;
@@ -244,7 +264,9 @@ const SchoolBusesPage = () => {
     }, [auth.token, schoolId, currentSchoolCycleId]);
 
     const fetchRouteAssignments = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         try {
             const cycleParam = currentSchoolCycleId ? `&cicloEscolarId=${encodeURIComponent(currentSchoolCycleId)}` : '';
             const response = await api.get(`/route-assignments?schoolId=${schoolId}${cycleParam}`, {
@@ -298,8 +320,12 @@ const SchoolBusesPage = () => {
         setPreviousCycleTransfer(prev => ({ ...prev, loading: true }));
         try {
             const params = new URLSearchParams();
-            if (currentSchoolCycleId) params.set('cicloEscolarId', currentSchoolCycleId);
-            if (schoolRouteNumbers.length > 0) params.set('routeNumbers', schoolRouteNumbers.join(','));
+            if (currentSchoolCycleId) {
+                params.set('cicloEscolarId', currentSchoolCycleId);
+            }
+            if (schoolRouteNumbers.length > 0) {
+                params.set('routeNumbers', schoolRouteNumbers.join(','));
+            }
             const query = params.toString() ? `?${params.toString()}` : '';
             const response = await api.get(`/buses/school/${schoolId}/previous-cycle-assignments${query}`, {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -358,7 +384,9 @@ const SchoolBusesPage = () => {
     const handleRoutePilotChange = (routeNumber, pilotId) => {
         if (!pilotId) {
             const confirmed = window.confirm(`Confirma desasignar piloto de la Ruta ${routeNumber}.`);
-            if (!confirmed) return;
+            if (!confirmed) {
+                return;
+            }
         }
 
         setRoutePilotAssignments(prev => ({
@@ -375,7 +403,9 @@ const SchoolBusesPage = () => {
     const handleRouteMonitorChange = (routeNumber, monitorId) => {
         if (!monitorId) {
             const confirmed = window.confirm(`Confirma desasignar monitora de la Ruta ${routeNumber}.`);
-            if (!confirmed) return;
+            if (!confirmed) {
+                return;
+            }
         }
 
         setRouteMonitorAssignments(prev => ({
@@ -411,7 +441,9 @@ const SchoolBusesPage = () => {
                 const hasValue = Boolean(entry.routeStartMaxTime || entry.routeEndMarginMinutes) || (isAM
                     ? Boolean(entry.boardingTime || entry.firstStopTime || entry.schoolArrivalTime)
                     : Boolean(entry.schoolDepartureMaxTime || entry.firstStopMarginMinutes));
-                if (!hasValue) return null;
+                if (!hasValue) {
+                    return null;
+                }
 
                 return {
                     code,
@@ -430,7 +462,9 @@ const SchoolBusesPage = () => {
     // Guarda los horarios de UNA ruta de inmediato, sin tocar placa/piloto/monitora ni depender
     // del botón "Guardar Asignaciones" general.
     const handleSaveScheduleModal = async () => {
-        if (!scheduleModalRoute) return;
+        if (!scheduleModalRoute) {
+            return;
+        }
         setSavingSchedule(true);
         try {
             await api.post('/route-assignments/schedules', {
@@ -507,7 +541,9 @@ const SchoolBusesPage = () => {
     };
 
     const handleTransferPreviousCycleAssignments = async () => {
-        if (!schoolId || previousCycleTransfer.transferring) return;
+        if (!schoolId || previousCycleTransfer.transferring) {
+            return;
+        }
 
         setTransferPreviewOpen(false);
         setPreviousCycleTransfer(prev => ({ ...prev, transferring: true }));
@@ -553,7 +589,9 @@ const SchoolBusesPage = () => {
     };
 
     const handleRefresh = async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         setLoading(true);
         try {
             await Promise.all([fetchSchoolData(), fetchSchoolSchedules(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()]);
@@ -646,12 +684,16 @@ const SchoolBusesPage = () => {
 
     const getBusInfo = (busId) => {
         const bus = buses.find(b => b.id === Number.parseInt(busId, 10));
-        if (!bus) return 'Bus no encontrado';
+        if (!bus) {
+            return 'Bus no encontrado';
+        }
         return `${bus.plate} (Cap: ${bus.capacity || 'N/A'})`;
     };
 
     const getBusOccupiedByLabel = (bus) => {
-        if (!bus) return null;
+        if (!bus) {
+            return null;
+        }
         const currentSchoolIdNum = Number.parseInt(schoolId, 10);
         if (bus.schoolId && bus.schoolId !== currentSchoolIdNum) {
             return `Asignado a: ${bus.school?.name || `colegio ID ${bus.schoolId}`}`;

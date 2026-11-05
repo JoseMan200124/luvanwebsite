@@ -20,10 +20,14 @@ import { getScheduleColor, getScheduleLabel } from '../utils/scheduleConfig';
 
 // Formatea "HH:mm" (24h) a "h:mm AM/PM" para mostrar la hora de clase del colegio de forma legible.
 function formatTime12h(hhmm) {
-    if (!hhmm) return '';
+    if (!hhmm) {
+        return '';
+    }
     const [hoursStr, minutesStr] = String(hhmm).split(':');
     const hours = Number.parseInt(hoursStr, 10);
-    if (Number.isNaN(hours)) return hhmm;
+    if (Number.isNaN(hours)) {
+        return hhmm;
+    }
     const period = hours >= 12 ? 'PM' : 'AM';
     const hours12 = hours % 12 === 0 ? 12 : hours % 12;
     return `${hours12}:${minutesStr} ${period}`;
@@ -62,7 +66,9 @@ export default function ScheduleThresholdsDialog({
 
     const sortedCodes = useMemo(() => {
         const timeToMinutes = (hhmm) => {
-            if (!hhmm) return Infinity;
+            if (!hhmm) {
+                return Infinity;
+            }
             const [h, m] = hhmm.split(':').map(Number);
             return h * 60 + m;
         };
@@ -134,7 +140,9 @@ export default function ScheduleThresholdsDialog({
                             ))}
                         </Tabs>
                         {sortedCodes.map((code, index) => {
-                    if (index !== activeTab) return null;
+                    if (index !== activeTab) {
+                        return null;
+                    }
                     const entry = thresholds[code] || {};
                     const isAM = code === 'AM';
                     return (

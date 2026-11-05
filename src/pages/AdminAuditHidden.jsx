@@ -95,7 +95,9 @@ const createEmptyFilters = () => ({
 const buildParams = (filters, page, pageSize) => {
     const params = { page, pageSize };
     Object.entries(filters).forEach(([key, value]) => {
-        if (value) params[key] = value;
+        if (value) {
+            params[key] = value;
+        }
     });
     return params;
 };
@@ -103,8 +105,12 @@ const buildParams = (filters, page, pageSize) => {
 const countActiveFilters = (filters) => Object.values(filters).filter(Boolean).length;
 
 const stringifyValue = (value, pretty = false) => {
-    if (value == null || value === '') return '';
-    if (typeof value === 'string') return value;
+    if (value == null || value === '') {
+        return '';
+    }
+    if (typeof value === 'string') {
+        return value;
+    }
     return JSON.stringify(value, null, pretty ? 2 : 0);
 };
 
@@ -112,28 +118,46 @@ const getAuditId = (row) => row.id || (Array.isArray(row._ids) ? row._ids[0] : u
 
 const getActionColor = (action = '') => {
     const normalized = String(action).toUpperCase();
-    if (normalized.includes('DELETE') || normalized.includes('REMOVE')) return 'error';
-    if (normalized.includes('CREATE') || normalized.includes('INSERT')) return 'success';
-    if (normalized.includes('UPDATE') || normalized.includes('PATCH')) return 'warning';
-    if (normalized.includes('LOGIN') || normalized.includes('EXPORT')) return 'info';
+    if (normalized.includes('DELETE') || normalized.includes('REMOVE')) {
+        return 'error';
+    }
+    if (normalized.includes('CREATE') || normalized.includes('INSERT')) {
+        return 'success';
+    }
+    if (normalized.includes('UPDATE') || normalized.includes('PATCH')) {
+        return 'warning';
+    }
+    if (normalized.includes('LOGIN') || normalized.includes('EXPORT')) {
+        return 'info';
+    }
     return 'default';
 };
 
 const getRowAccentColor = (action) => {
     const color = getActionColor(action);
-    if (color === 'error') return '#ef4444';
-    if (color === 'warning') return '#f59e0b';
+    if (color === 'error') {
+        return '#ef4444';
+    }
+    if (color === 'warning') {
+        return '#f59e0b';
+    }
     return '#d8dee6';
 };
 
 const getFilterStatusLabel = (activeCount) => {
-    if (activeCount === 0) return 'Sin filtros aplicados';
-    if (activeCount === 1) return '1 activo';
+    if (activeCount === 0) {
+        return 'Sin filtros aplicados';
+    }
+    if (activeCount === 1) {
+        return '1 activo';
+    }
     return `${activeCount} activos`;
 };
 
 const getComparisonStatusLabel = ({ changed, total }) => {
-    if (total === 0) return 'Listo para comparar';
+    if (total === 0) {
+        return 'Listo para comparar';
+    }
     const diffLabel = changed === 1 ? '1 diferencia' : `${changed} diferencias`;
     const lineLabel = total === 1 ? '1 línea' : `${total} líneas`;
     return `${diffLabel} de ${lineLabel}`;
@@ -153,7 +177,9 @@ const getComparisonChipProps = (type) => {
 };
 
 const getComparisonCellBackground = (type, side) => {
-    if (type === 'same') return '#ffffff';
+    if (type === 'same') {
+        return '#ffffff';
+    }
     return side === 'a' ? '#fff7f7' : '#f0fdf4';
 };
 
@@ -226,7 +252,9 @@ const StatTile = React.memo(function StatTile({ label, value, detail, tone = 'de
 });
 
 const DiffText = React.memo(function DiffText({ parts, side }) {
-    if (!parts) return null;
+    if (!parts) {
+        return null;
+    }
     const highlight = side === 'a' ? '#fecaca' : '#bbf7d0';
 
     return (
@@ -306,7 +334,9 @@ export default function AdminAuditHidden() {
     }, [cmpRows]);
 
     const fetchData = useCallback(async (targetPage = page, targetPageSize = pageSize, activeFilters = appliedFilters) => {
-        if (abortRef.current) abortRef.current.abort();
+        if (abortRef.current) {
+            abortRef.current.abort();
+        }
         const controller = new AbortController();
         abortRef.current = controller;
         setLoading(true);
@@ -319,7 +349,9 @@ export default function AdminAuditHidden() {
             setItems(data.items || []);
             setTotal(data.total || 0);
         } catch (err) {
-            if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
+            if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
+                return;
+            }
             console.error(err);
             setError(err?.response?.data?.message || err?.message || 'Error al cargar auditoría.');
         } finally {
@@ -376,8 +408,12 @@ export default function AdminAuditHidden() {
 
     const normalizeForCompare = (value) => {
         let normalized = value == null ? '' : String(value);
-        if (optIgnoreWs) normalized = normalized.replaceAll(/\s+/g, '');
-        if (optIgnoreCase) normalized = normalized.toLowerCase();
+        if (optIgnoreWs) {
+            normalized = normalized.replaceAll(/\s+/g, '');
+        }
+        if (optIgnoreCase) {
+            normalized = normalized.toLowerCase();
+        }
         return normalized;
     };
 
@@ -437,7 +473,9 @@ export default function AdminAuditHidden() {
     const downloadCsv = async () => {
         const params = new URLSearchParams();
         Object.entries(appliedFilters).forEach(([key, value]) => {
-            if (value) params.set(key, value);
+            if (value) {
+                params.set(key, value);
+            }
         });
 
         const baseURL = api.defaults.baseURL?.replace(/\/$/, '') || '';
@@ -464,7 +502,9 @@ export default function AdminAuditHidden() {
     };
 
     const deleteOne = async (id) => {
-        if (!id || !globalThis.confirm('¿Eliminar este log?')) return;
+        if (!id || !globalThis.confirm('¿Eliminar este log?')) {
+            return;
+        }
         try {
             await api.delete(`/audit/${id}`);
             fetchData(page, pageSize, appliedFilters);
@@ -477,11 +517,15 @@ export default function AdminAuditHidden() {
         const message = activeFilterCount > 0
             ? '¿Eliminar todos los logs que coinciden con los filtros aplicados? Esta acción es irreversible.'
             : 'No hay filtros aplicados. ¿Eliminar todos los logs de auditoría? Esta acción es irreversible.';
-        if (!globalThis.confirm(message)) return;
+        if (!globalThis.confirm(message)) {
+            return;
+        }
 
         const body = {};
         Object.entries(appliedFilters).forEach(([key, value]) => {
-            if (value) body[key] = value;
+            if (value) {
+                body[key] = value;
+            }
         });
 
         try {
@@ -495,7 +539,9 @@ export default function AdminAuditHidden() {
     };
 
     const deleteGroup = async (ids) => {
-        if (!ids?.length || !globalThis.confirm(`¿Eliminar los ${ids.length} logs de este grupo?`)) return;
+        if (!ids?.length || !globalThis.confirm(`¿Eliminar los ${ids.length} logs de este grupo?`)) {
+            return;
+        }
         try {
             await api.post('/audit/delete-by-ids', { ids });
             fetchData(page, pageSize, appliedFilters);

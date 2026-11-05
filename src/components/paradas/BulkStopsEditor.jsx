@@ -69,7 +69,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     const soloLectura = fase !== 'editor';
 
     const perderBloqueo = useCallback((datos) => {
-        if (ignorarPerdida.current) return;
+        if (ignorarPerdida.current) {
+            return;
+        }
         setLockToken(null);
         setSelector(null);
         setPerdido(datos?.borradorExiste === false
@@ -113,9 +115,13 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         return () => {
             const yaCerrado = cerradoRef.current;
             cerradoRef.current = true;
-            if (yaCerrado) return;
+            if (yaCerrado) {
+                return;
+            }
             const { schoolId: sid, lockToken: token, forzar } = salidaRef.current;
-            if (!token) return;
+            if (!token) {
+                return;
+            }
             forzar().catch(() => {}).finally(() => liberarAlCerrar(sid, token));
         };
     }, []);
@@ -129,7 +135,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
 
     // Deshacer/rehacer cambian familias sin pasar por despachar: se reenvían (o se quitan) las que difieren.
     const sincronizarHistorial = useCallback((resultado) => {
-        if (!resultado) return;
+        if (!resultado) {
+            return;
+        }
         const { sucias, quitadas } = cambiosParaGuardar(resultado.antes, resultado.despues);
         sucias.forEach(marcarSucia);
         quitadas.forEach(marcarQuitada);
@@ -216,8 +224,12 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             await fn();
         } catch (e) {
             const code = codigoError(e);
-            if (code === 'BLOQUEADO' || code === 'BORRADOR_EN_EDICION' || code === 'BORRADOR_PROCESADO') await recargarConAviso(e);
-            else if (code === 'LOCK_LOST') perderBloqueo(e.response.data);
+            if (code === 'BLOQUEADO' || code === 'BORRADOR_EN_EDICION' || code === 'BORRADOR_PROCESADO') {
+                await recargarConAviso(e);
+            }
+            else if (code === 'LOCK_LOST') {
+                perderBloqueo(e.response.data);
+            }
             else setAviso({ severity: 'error', texto: mensajeError(e, 'No se pudo completar la acción.') });
         } finally {
             setOcupado(false);
@@ -251,7 +263,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
 
     const abierto = useRef(false);
     useEffect(() => {
-        if (!open || !schoolId || abierto.current) return;
+        if (!open || !schoolId || abierto.current) {
+            return;
+        }
         abierto.current = true; // StrictMode (dev) corre el efecto dos veces: serían dos tomarBloqueo en paralelo
         liberarBloqueoPrevio(schoolId).then(() => cargar()); // tras F5 el bloqueo anterior de esta pestaña sigue puesto
     }, [open, schoolId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -266,7 +280,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
         despacharBase({ tipo: 'cargar', familias: fams });
         setSelector(null);
         setFase('editor');
-        if (snap.excluidas.length) setAviso({ severity: 'warning', texto: `${snap.excluidas.length} familia(s) ya no pertenecen al colegio y no se agregaron.` });
+        if (snap.excluidas.length) {
+            setAviso({ severity: 'warning', texto: `${snap.excluidas.length} familia(s) ya no pertenecen al colegio y no se agregaron.` });
+        }
     });
 
     const agregarFamilias = sel => conManejo(async () => {
@@ -278,16 +294,22 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     const liberarYCerrar = useCallback(async () => {
         cerradoRef.current = true; // cerrar() ya guardó o el usuario eligió descartar: el desmontaje no envía nada
         detener();
-        if (lockToken) await paradasService.liberar(schoolId, lockToken).catch(() => {});
+        if (lockToken) {
+            await paradasService.liberar(schoolId, lockToken).catch(() => {});
+        }
         setLockToken(null);
         onClose();
     }, [schoolId, lockToken, onClose, detener]);
 
     const cerrar = useCallback(async () => {
-        if (ocupado || fase === 'procesando' || descargaObligatoria) return; // hay una acción a medias: cerrar dejaría su bloqueo huérfano
+        if (ocupado || fase === 'procesando' || descargaObligatoria) {
+            return;
+        } // hay una acción a medias: cerrar dejaría su bloqueo huérfano
         setOcupado(true);
         try {
-            if (lockToken && fase === 'editor') await autoguardado.forzar();
+            if (lockToken && fase === 'editor') {
+                await autoguardado.forzar();
+            }
             await liberarYCerrar();
         } catch (e) {
             setConfirmacion({
@@ -395,7 +417,9 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             await paradasService.guardarFamilias(schoolId, { lockToken: token, familias: rec.map(paraGuardar), reemplazar: true, importadoEditado: editado });
             await leerBorrador();
         } catch (e) {
-            if (tomado) await liberarSilencioso(token);
+            if (tomado) {
+                await liberarSilencioso(token);
+            }
             else reanudar();
             throw e;
         }
@@ -453,10 +477,16 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
             ignorarPerdida.current = false;
             setFase('editor');
             reanudar();
-            if (code === 'CONFLICTO') await marcarConflictos(d.estudiantes || []);
-            else if (code === 'FUERA_DE_SCOPE') quitarFueraDeScopeRef.current(d);
+            if (code === 'CONFLICTO') {
+                await marcarConflictos(d.estudiantes || []);
+            }
+            else if (code === 'FUERA_DE_SCOPE') {
+                quitarFueraDeScopeRef.current(d);
+            }
             else if (code === 'SIN_PARADAS_SIN_CONFIRMAR') { setAviso({ severity: 'warning', texto: d.message }); setDialogoProcesar(true); }
-            else if (code === 'LOCK_LOST') perderBloqueo(d);
+            else if (code === 'LOCK_LOST') {
+                perderBloqueo(d);
+            }
             else setAviso({ severity: 'error', texto: mensajeError(e, 'No se pudo procesar. El borrador quedó igual; puedes reintentar.') });
         } finally {
             setOcupado(false);
@@ -478,13 +508,19 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
     const atajoRef = useRef(null);
     atajoRef.current = { deshacer, rehacer, bloqueado: ocupado || hayDialogoAbierto };
     useEffect(() => {
-        if (fase !== 'editor') return undefined;
+        if (fase !== 'editor') {
+            return undefined;
+        }
         const alTeclear = (e) => {
-            if (!(e.ctrlKey || e.metaKey) || e.altKey || atajoRef.current.bloqueado) return;
+            if (!(e.ctrlKey || e.metaKey) || e.altKey || atajoRef.current.bloqueado) {
+                return;
+            }
             const t = e.target;
             const enTexto = t && (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT'
                 || (t.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(t.type)));
-            if (enTexto) return;
+            if (enTexto) {
+                return;
+            }
             const k = e.key.toLowerCase();
             if (k === 'z' && !e.shiftKey) { e.preventDefault(); atajoRef.current.deshacer(); }
             else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); atajoRef.current.rehacer(); }
@@ -651,14 +687,18 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                 open={!!cargaArchivo}
                 schoolId={schoolId}
                 reemplaza={cargaArchivo?.reemplaza}
-                onCancelar={() => { setCargaArchivo(null); if (fase === 'seleccion') setSelector('inicio'); }}
+                onCancelar={() => { setCargaArchivo(null); if (fase === 'seleccion') {
+                    setSelector('inicio');
+                } }}
                 onCargado={aplicarArchivo}
             />
             <DescargarEstadoActualDialog open={descargaActual} schoolId={schoolId} onCerrar={() => setDescargaActual(false)} onAviso={setAviso} />
             <Snackbar
                 open={fase === 'editor' && !!ultimo?.destructiva && ultimo.version !== avisoDeshacerCerrado}
                 autoHideDuration={8000}
-                onClose={(_, motivo) => { if (motivo !== 'clickaway') setAvisoDeshacerCerrado(ultimo?.version || 0); }}
+                onClose={(_, motivo) => { if (motivo !== 'clickaway') {
+                    setAvisoDeshacerCerrado(ultimo?.version || 0);
+                } }}
                 message={ultimo?.etiqueta}
                 action={<Button color="secondary" size="small" startIcon={<Undo />} onClick={() => { setAvisoDeshacerCerrado(ultimo?.version || 0); deshacer(); }}>Deshacer</Button>}
             />

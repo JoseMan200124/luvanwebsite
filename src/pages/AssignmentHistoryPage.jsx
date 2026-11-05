@@ -34,15 +34,21 @@ import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getI
 moment.tz.setDefault('America/Guatemala');
 
 const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) return '—';
+    if (!dateString) {
+        return '—';
+    }
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
 };
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
 
 const safeParseJson = (v) => {
-    if (!v) return {};
-    if (typeof v === 'object') return v;
+    if (!v) {
+        return {};
+    }
+    if (typeof v === 'object') {
+        return v;
+    }
     try {
         const parsed = JSON.parse(v);
         return typeof parsed === 'object' && parsed !== null ? parsed : {};
@@ -53,16 +59,22 @@ const safeParseJson = (v) => {
 
 /** "Colegio X — Ruta 5" or just the client name, or just "Ruta 5" */
 const clientRouteLabel = (o) => {
-    if (!o || Object.keys(o).length === 0) return null;
+    if (!o || Object.keys(o).length === 0) {
+        return null;
+    }
     const client = o.schoolName || o.corporationName || null;
     const route = o.routeNumber ? `Ruta ${o.routeNumber}` : null;
-    if (client && route) return `${client} \u2014 ${route}`;
+    if (client && route) {
+        return `${client} \u2014 ${route}`;
+    }
     return client || route || null;
 };
 
 /** "Ruta 5 (Colegio X)" */
 const routeLabel = (o) => {
-    if (!o?.routeNumber) return null;
+    if (!o?.routeNumber) {
+        return null;
+    }
     const suffix = o.schoolName || o.corporationName || '';
     const base = `Ruta ${o.routeNumber}`;
     return suffix ? `${base} (${suffix})` : base;
@@ -192,7 +204,9 @@ const computeChangeSummary = (record) => {
     const prev = safeParseJson(record.previousValue);
     const next = safeParseJson(record.newValue);
     const handler = CHANGE_SUMMARY_MAP[record.assignmentType];
-    if (!handler) return { subject: '\u2014', fromText: null, toText: null };
+    if (!handler) {
+        return { subject: '\u2014', fromText: null, toText: null };
+    }
     return handler(prev, next, record);
 };
 
@@ -317,13 +331,27 @@ const AssignmentHistoryPage = () => {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar)
             };
 
-            if (assignmentType) params.assignmentType = assignmentType;
-            if (busId) params.busId = busId;
-            if (userId) params.userId = userId;
-            if (schoolId) params.schoolId = schoolId;
-            if (corporationId) params.corporationId = corporationId;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = endDate;
+            if (assignmentType) {
+                params.assignmentType = assignmentType;
+            }
+            if (busId) {
+                params.busId = busId;
+            }
+            if (userId) {
+                params.userId = userId;
+            }
+            if (schoolId) {
+                params.schoolId = schoolId;
+            }
+            if (corporationId) {
+                params.corporationId = corporationId;
+            }
+            if (startDate) {
+                params.startDate = startDate;
+            }
+            if (endDate) {
+                params.endDate = endDate;
+            }
 
             const response = await api.get('/assignment-history', {
                 params,

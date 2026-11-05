@@ -130,7 +130,9 @@ const CiclosEscolaresPage = () => {
     };
 
     const handleSetDefault = async (cicloEscolar) => {
-        if (!cicloEscolar?.id || cicloEscolar.predeterminado) return;
+        if (!cicloEscolar?.id || cicloEscolar.predeterminado) {
+            return;
+        }
         setSaving(true);
         try {
             const data = await setDefaultCicloEscolar(cicloEscolar.id);

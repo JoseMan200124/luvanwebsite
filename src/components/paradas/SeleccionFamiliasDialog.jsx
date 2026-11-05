@@ -21,7 +21,9 @@ export default function SeleccionFamiliasDialog({
     const [todasDelFiltro, setTodasDelFiltro] = useState(false);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            return;
+        }
         setCargando(true); setError(null); setSeleccion(new Set()); setTodasDelFiltro(false); setBusqueda('');
         paradasService.familias(schoolId)
             .then(r => setFamilias(r.familias))
@@ -41,7 +43,9 @@ export default function SeleccionFamiliasDialog({
 
     const alternar = (id) => {
         setTodasDelFiltro(false);
-        setSeleccion((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+        setSeleccion((s) => { const n = new Set(s); if (n.has(id)) {
+            n.delete(id);
+        } else n.add(id); return n; });
     };
     const seleccionarVisibles = () => {
         setSeleccion(new Set(visibles.map(f => f.familyDetailId)));

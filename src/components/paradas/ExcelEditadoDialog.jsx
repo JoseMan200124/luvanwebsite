@@ -18,7 +18,9 @@ const RIESGOS = [
 ];
 
 export function ResumenExcel({ resumen, onCerrar }) {
-    if (!resumen) return null;
+    if (!resumen) {
+        return null;
+    }
     return (
         <Alert severity="warning" onClose={onCerrar} sx={{ mb: 2 }}>
             <Typography fontWeight={600}>Resultado de la carga del Excel editado</Typography>

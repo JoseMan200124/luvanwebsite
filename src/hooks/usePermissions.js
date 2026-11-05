@@ -14,24 +14,36 @@ const usePermissions = () => {
     // If PermissionsContext is available, prefer it (single source of truth)
     if (permCtx && typeof permCtx.hasPermission === 'function') {
         const hasPermission = (permissionKey) => {
-            if (!permCtx.permissions || !permissionKey) return false;
+            if (!permCtx.permissions || !permissionKey) {
+                return false;
+            }
             return !!permCtx.permissions[permissionKey];
         };
 
         const hasAnyPermission = (permissionKeys) => {
-            if (!Array.isArray(permissionKeys) || permissionKeys.length === 0) return false;
+            if (!Array.isArray(permissionKeys) || permissionKeys.length === 0) {
+                return false;
+            }
             return permissionKeys.some(key => hasPermission(key));
         };
 
         const hasAllPermissions = (permissionKeys) => {
-            if (!Array.isArray(permissionKeys) || permissionKeys.length === 0) return false;
+            if (!Array.isArray(permissionKeys) || permissionKeys.length === 0) {
+                return false;
+            }
             return permissionKeys.every(key => hasPermission(key));
         };
 
         const hasRole = (roles) => {
-            if (!auth.user?.role) return false;
-            if (typeof roles === 'string') return auth.user.role === roles;
-            if (Array.isArray(roles)) return roles.includes(auth.user.role);
+            if (!auth.user?.role) {
+                return false;
+            }
+            if (typeof roles === 'string') {
+                return auth.user.role === roles;
+            }
+            if (Array.isArray(roles)) {
+                return roles.includes(auth.user.role);
+            }
             return false;
         };
 

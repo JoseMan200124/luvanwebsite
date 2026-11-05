@@ -111,7 +111,9 @@ const MobileValue = styled(Typography)`
 
 // Helper para saber si un usuario es "nuevo" (basado en fecha de creación)
 function isUserNew(user) {
-    if (!user?.createdAt) return false;
+    if (!user?.createdAt) {
+        return false;
+    }
     const createdAt = new Date(user.createdAt);
     const now = new Date();
     const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
@@ -121,14 +123,24 @@ function isUserNew(user) {
 function descendingComparator(a, b, orderBy) {
     const aValue = getFieldValue(a, orderBy);
     const bValue = getFieldValue(b, orderBy);
-    if (aValue == null && bValue == null) return 0;
-    if (aValue == null) return 1;
-    if (bValue == null) return -1;
+    if (aValue == null && bValue == null) {
+        return 0;
+    }
+    if (aValue == null) {
+        return 1;
+    }
+    if (bValue == null) {
+        return -1;
+    }
     if (typeof aValue === 'string' && typeof bValue === 'string') {
         return bValue.localeCompare(aValue);
     }
-    if (bValue < aValue) return -1;
-    if (bValue > aValue) return 1;
+    if (bValue < aValue) {
+        return -1;
+    }
+    if (bValue > aValue) {
+        return 1;
+    }
     return 0;
 }
 function getComparator(order, orderBy) {
@@ -141,7 +153,9 @@ function stableSort(array, comparator) {
     const stabilizedThis = array.map((el, index) => [el, index]);
     stabilizedThis.sort((a, b) => {
         const order = comparator(a[0], b[0]);
-        if (order !== 0) return order;
+        if (order !== 0) {
+            return order;
+        }
         return a[1] - b[1];
     });
     return stabilizedThis.map((el) => el[0]);
@@ -236,9 +250,13 @@ const RolesManagementPage = () => {
     const rolesWithoutSchoolOrCorp = new Set(['administrador', 'supervisor', 'auxiliar', 'mecanica']);
 
     const roleDisablesSchoolOrCorp = (roleId) => {
-        if (!roleId) return false;
+        if (!roleId) {
+            return false;
+        }
         const r = roleOptions.find(ro => Number(ro.id) === Number(roleId));
-        if (!r?.name) return false;
+        if (!r?.name) {
+            return false;
+        }
         return rolesWithoutSchoolOrCorp.has(String(r.name).toLowerCase());
     };
 
@@ -324,10 +342,18 @@ const RolesManagementPage = () => {
                 page,
                 limit: rowsPerPage
             };
-            if (searchQuery) params.search = searchQuery;
-            if (roleFilter) params.roleId = roleFilter;
-            if (clientFilter?.type === 'Colegio') params.schoolId = clientFilter.id;
-            if (clientFilter?.type === 'Corporación') params.corporationId = clientFilter.id;
+            if (searchQuery) {
+                params.search = searchQuery;
+            }
+            if (roleFilter) {
+                params.roleId = roleFilter;
+            }
+            if (clientFilter?.type === 'Colegio') {
+                params.schoolId = clientFilter.id;
+            }
+            if (clientFilter?.type === 'Corporación') {
+                params.corporationId = clientFilter.id;
+            }
 
             const response = await api.get('/users/non-parents', { params, skipSchoolCycleContext: true });
             const data = response.data || {};
@@ -384,7 +410,9 @@ const RolesManagementPage = () => {
             for (const school of latestResp.data.schools || []) {
                 const key = normalizeSchoolName(school.name);
                 const current = canonicalByName.get(key);
-                if (!current || Number(school.id) > Number(current.id)) canonicalByName.set(key, school);
+                if (!current || Number(school.id) > Number(current.id)) {
+                    canonicalByName.set(key, school);
+                }
             }
             setAssignableSchools(
                 [...canonicalByName.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)))
@@ -395,7 +423,9 @@ const RolesManagementPage = () => {
             const canonicalBySchoolId = new Map();
             for (const school of allResp.data.schools || []) {
                 const canonical = canonicalByName.get(normalizeSchoolName(school.name));
-                if (canonical) canonicalBySchoolId.set(Number(school.id), Number(canonical.id));
+                if (canonical) {
+                    canonicalBySchoolId.set(Number(school.id), Number(canonical.id));
+                }
             }
             setCanonicalSchoolIdById(canonicalBySchoolId);
         } catch (err) {
@@ -585,7 +615,9 @@ const RolesManagementPage = () => {
                     fullName: selectedUser?.monitoraFullName || selectedUser?.name || '',
                     phoneNumber: selectedUser?.phoneNumber || ''
                 };
-                if (selectedUser?.school) payload.monitoraDetail.schoolId = Number(selectedUser.school);
+                if (selectedUser?.school) {
+                    payload.monitoraDetail.schoolId = Number(selectedUser.school);
+                }
             }
 
             // Crear o actualizar (no envíes id en POST)
@@ -608,7 +640,9 @@ const RolesManagementPage = () => {
             handleDialogClose();
         } catch (err) {
             try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) return;
+                if (showDuplicateEmailFromError(err, setSnackbar)) {
+                    return;
+                }
             } catch (e) {
                 // ignore and fallback to generic handling
             }
@@ -640,9 +674,13 @@ const RolesManagementPage = () => {
         const matchesSearch =
             (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (u.email || '').toLowerCase().includes(searchQuery.toLowerCase());
-        if (!matchesSearch) return false;
+        if (!matchesSearch) {
+            return false;
+        }
         if (roleFilter) {
-            if (Number(u.roleId) !== Number(roleFilter)) return false;
+            if (Number(u.roleId) !== Number(roleFilter)) {
+                return false;
+            }
         }
         if (clientFilter) {
             const cType = clientFilter.type;
@@ -652,7 +690,9 @@ const RolesManagementPage = () => {
             } else if (cType === 'Sin afiliación') {
                 const hasSchool = !!(u.school) || (Array.isArray(u.attachedAuxiliarSchools) && u.attachedAuxiliarSchools.length > 0) || (Array.isArray(u.attachedSupervisorSchools) && u.attachedSupervisorSchools.length > 0);
                 const hasCorp = !!(u.corporationId || u.corporation) || (Array.isArray(u.attachedSupervisorCorporations) && u.attachedSupervisorCorporations.length > 0) || (Array.isArray(u.attachedAuxiliarCorporations) && u.attachedAuxiliarCorporations.length > 0);
-                if (hasSchool || hasCorp) return false;
+                if (hasSchool || hasCorp) {
+                    return false;
+                }
             } else {
                 const cId = Number(clientFilter.id);
                 if (cType === 'Colegio') {
@@ -713,7 +753,9 @@ const RolesManagementPage = () => {
     };
 
     const handleUploadBulk = async () => {
-        if (!bulkFile) return;
+        if (!bulkFile) {
+            return;
+        }
         setBulkLoading(true);
         setBulkResults(null);
         const formData = new FormData();
@@ -785,7 +827,9 @@ const RolesManagementPage = () => {
                 const usersBatch = batchResp.data.users || [];
                 allUsers = allUsers.concat(usersBatch);
                 fetched += usersBatch.length;
-                if (usersBatch.length === 0) break;
+                if (usersBatch.length === 0) {
+                    break;
+                }
             }
 
             // Filtrar según categoría seleccionada
@@ -841,9 +885,15 @@ const RolesManagementPage = () => {
                     let ids = [];
                     if (Array.isArray(possibleRelations) && possibleRelations.length > 0) {
                         ids = possibleRelations.map(x => {
-                            if (!x) return null;
-                            if (typeof x === 'number') return x;
-                            if (typeof x === 'object') return x.monitoraId ?? x.monitora?.id ?? x.id ?? null;
+                            if (!x) {
+                                return null;
+                            }
+                            if (typeof x === 'number') {
+                                return x;
+                            }
+                            if (typeof x === 'object') {
+                                return x.monitoraId ?? x.monitora?.id ?? x.id ?? null;
+                            }
                             return null;
                         }).filter(Boolean);
                     }
@@ -878,7 +928,9 @@ const RolesManagementPage = () => {
                 data.slice(1).forEach(row => {
                     if (row[headerIndex] !== undefined) {
                         const cellLength = String(row[headerIndex] || "").length;
-                        if (cellLength > maxWidth) maxWidth = cellLength;
+                        if (cellLength > maxWidth) {
+                            maxWidth = cellLength;
+                        }
                     }
                 });
                 return { wch: Math.min(Math.max(maxWidth, 10), 50) };
@@ -1092,7 +1144,9 @@ const RolesManagementPage = () => {
                         size="small"
                         value={searchInput}
                         onChange={(e) => setSearchInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleApplySearch(); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') {
+                            handleApplySearch();
+                        } }}
                         sx={{ width: '100%', maxWidth: '300px' }}
                     />
                     <Button variant="contained" size="small" onClick={() => handleApplySearch()}>Buscar</Button>
@@ -1125,10 +1179,18 @@ const RolesManagementPage = () => {
                         sx={{ width: 320 }}
                         options={clientOptions}
                         groupBy={(option) => {
-                            if (!option) return '';
-                            if (option.type === 'Todos' || option.type === 'Sin afiliación') return 'Opciones';
-                            if (option.type === 'Colegio') return 'Colegios';
-                            if (option.type === 'Corporación') return 'Corporaciones';
+                            if (!option) {
+                                return '';
+                            }
+                            if (option.type === 'Todos' || option.type === 'Sin afiliación') {
+                                return 'Opciones';
+                            }
+                            if (option.type === 'Colegio') {
+                                return 'Colegios';
+                            }
+                            if (option.type === 'Corporación') {
+                                return 'Corporaciones';
+                            }
                             return '';
                         }}
                         getOptionLabel={(option) => option.label}
@@ -1637,9 +1699,9 @@ const RolesManagementPage = () => {
                                             : [];
                                         const allLinkedPilots = [...schoolPilots, ...corpPilots];
                                         
-                                        if (allLinkedPilots.length === 0) return (
+                                        if (allLinkedPilots.length === 0) {return (
                                             <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay pilotos asignados.</Typography>
-                                        );
+                                        );}
                                         
                                         // Remove duplicates by ID
                                         const uniquePilots = allLinkedPilots.filter((p, idx, arr) => 
@@ -1713,7 +1775,9 @@ const RolesManagementPage = () => {
                                         const schoolMonitoras = selectedAuxiliarSchools.length > 0
                                             ? allMonitoras.filter(m => {
                                                 const schoolId = Number(m.school);
-                                                if (!schoolId) return false;
+                                                if (!schoolId) {
+                                                    return false;
+                                                }
                                                 return selectedAuxiliarSchools.includes(canonicalSchoolIdById.get(schoolId) ?? schoolId);
                                             })
                                             : [];
@@ -1722,9 +1786,9 @@ const RolesManagementPage = () => {
                                             : [];
                                         const allLinkedMonitoras = [...schoolMonitoras, ...corpMonitoras];
                                         
-                                        if (allLinkedMonitoras.length === 0) return (
+                                        if (allLinkedMonitoras.length === 0) {return (
                                             <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay monitoras asignadas.</Typography>
-                                        );
+                                        );}
                                         
                                         // Remove duplicates by ID
                                         const uniqueMonitoras = allLinkedMonitoras.filter((m, idx, arr) => 

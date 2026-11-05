@@ -57,10 +57,14 @@ const formatPercentOrNA = (value) => (value === null || value === undefined)
     ? 'N/A'
     : `${Number(value).toFixed(1)}%`;
 const formatTrend = (value) => {
-    if (value === null || value === undefined) return 'N/A';
+    if (value === null || value === undefined) {
+        return 'N/A';
+    }
     const num = Number(value);
     // Avoid misleading percentages when denominator is tiny
-    if (num > 500 || num < -99) return '—';
+    if (num > 500 || num < -99) {
+        return '—';
+    }
     const sign = num >= 0 ? '+' : '';
     return `${sign}${num.toFixed(1)}%`;
 };
@@ -125,12 +129,22 @@ const METRIC_GROUPS = [
 const METRIC_COLUMNS = METRIC_GROUPS.flatMap(g => g.columns);
 
 const formatMetric = (metrics, col, basis) => {
-    if (!metrics) return 'N/A';
+    if (!metrics) {
+        return 'N/A';
+    }
     let raw = metrics[col.key];
-    if (col.basis) raw = basisValue(raw, basis);
-    if (col.type === 'percent') return formatPercentOrNA(raw);
-    if (col.type === 'trend') return formatTrend(raw);
-    if (col.type === 'int') return (raw === null || raw === undefined) ? 'N/A' : String(raw);
+    if (col.basis) {
+        raw = basisValue(raw, basis);
+    }
+    if (col.type === 'percent') {
+        return formatPercentOrNA(raw);
+    }
+    if (col.type === 'trend') {
+        return formatTrend(raw);
+    }
+    if (col.type === 'int') {
+        return (raw === null || raw === undefined) ? 'N/A' : String(raw);
+    }
     return formatMoneyOrNA(raw);
 };
 
@@ -267,10 +281,16 @@ const IncomeStatisticsTab = () => {
 
     // Helper to extract raw sortable value from a colegio row for a given column key
     const getSortValue = (colegio, colKey) => {
-        if (colKey === 'schoolName') return (colegio.schoolName || '').toLowerCase();
-        if (colKey === 'cicloEscolarAnio') return colegio.cicloEscolarAnio || 0;
+        if (colKey === 'schoolName') {
+            return (colegio.schoolName || '').toLowerCase();
+        }
+        if (colKey === 'cicloEscolarAnio') {
+            return colegio.cicloEscolarAnio || 0;
+        }
         const colDef = METRIC_COLUMNS.find(c => c.key === colKey);
-        if (!colDef) return 0;
+        if (!colDef) {
+            return 0;
+        }
         const raw = colegio.metrics?.[colKey];
         if (colDef.basis) {
             const val = (raw && typeof raw === 'object') ? raw[metricsBasis] : null;
@@ -318,7 +338,9 @@ const IncomeStatisticsTab = () => {
             return;
         }
         setExpandedSchoolId(schoolId);
-        if (breakdownCache[schoolId] || !result) return;
+        if (breakdownCache[schoolId] || !result) {
+            return;
+        }
         setBreakdownLoading(schoolId);
         try {
             const res = await api.get('/financial-statistics/breakdown', { params: { schoolId, from: result.from, to: result.to } });
@@ -351,7 +373,9 @@ const IncomeStatisticsTab = () => {
         for (const s of schools) {
             const year = s?.cicloEscolar?.anio || s?.cicloEscolarId || 0;
             const label = s?.cicloEscolar?.label || s?.cicloEscolar?.nombre || `Ciclo ${s?.cicloEscolarId || '?'}`;
-            if (!map[year]) map[year] = { label, schools: [] };
+            if (!map[year]) {
+                map[year] = { label, schools: [] };
+            }
             map[year].schools.push(s);
         }
         return Object.entries(map)
@@ -384,7 +408,9 @@ const IncomeStatisticsTab = () => {
     // Genera el PDF dibujando el reporte directamente con jsPDF/autoTable
     // (no es una captura de pantalla): incluye TODOS los colegios filtrados, no solo la página visible en UI.
     const generatePDF = () => {
-        if (!result) return;
+        if (!result) {
+            return;
+        }
         const now = moment();
         const fileName = `estadisticas_financieras_${now.format('YYYY_MM_DD_HH_mm')}.pdf`.toLowerCase();
 
@@ -520,7 +546,9 @@ const IncomeStatisticsTab = () => {
         const trendColIndexes = new Set();
         visibleColumns.forEach((col, i) => {
             columnStyles[i + 2] = { halign: 'right' };
-            if (col.type === 'trend') trendColIndexes.add(i + 2);
+            if (col.type === 'trend') {
+                trendColIndexes.add(i + 2);
+            }
         });
 
         const isTotalRow = (rowIndex) => totales && body.length > 0 && rowIndex === body.length - 1;
@@ -535,7 +563,9 @@ const IncomeStatisticsTab = () => {
             alternateRowStyles: { fillColor: [247, 247, 248] },
             columnStyles,
             didParseCell: (data) => {
-                if (data.section !== 'body') return;
+                if (data.section !== 'body') {
+                    return;
+                }
                 if (trendColIndexes.has(data.column.index)) {
                     const txt = String(data.cell.raw || '');
                     if (txt !== 'N/A' && txt !== '—') {
@@ -584,10 +614,16 @@ const IncomeStatisticsTab = () => {
         return [...rows].sort((a, b) => {
             const valA = getSortValue(a, sortBy);
             const valB = getSortValue(b, sortBy);
-            if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-            if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+            if (valA < valB) {
+                return sortDir === 'asc' ? -1 : 1;
+            }
+            if (valA > valB) {
+                return sortDir === 'asc' ? 1 : -1;
+            }
             const nameCmp = (a.schoolName || '').localeCompare(b.schoolName || '');
-            if (nameCmp !== 0) return nameCmp;
+            if (nameCmp !== 0) {
+                return nameCmp;
+            }
             return (a.cicloEscolarAnio || 0) - (b.cicloEscolarAnio || 0);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -606,7 +642,9 @@ const IncomeStatisticsTab = () => {
     const totalCols = visibleColumns.length + 2 + (canExpandBreakdown ? 1 : 0); // + Colegio + Ciclo (+ Expandir)
 
     const sortArrow = (colKey) => {
-        if (sortBy !== colKey) return null;
+        if (sortBy !== colKey) {
+            return null;
+        }
         return sortDir === 'asc' ? ' ▲' : ' ▼';
     };
 
@@ -657,7 +695,9 @@ const IncomeStatisticsTab = () => {
                         onChange={handleSchoolSelectChange}
                         sx={{ bgcolor: '#fff', borderRadius: 1 }}
                         renderValue={(selected) => {
-                            if (selected.includes('__ALL__') || selected.length === 0) return 'Todos los colegios';
+                            if (selected.includes('__ALL__') || selected.length === 0) {
+                                return 'Todos los colegios';
+                            }
                             return selected.map(id => {
                                 const s = schools.find(sch => String(sch.id) === id);
                                 return s ? s.name : id;
@@ -714,7 +754,9 @@ const IncomeStatisticsTab = () => {
                         size="small"
                         exclusive
                         value={metricsBasis}
-                        onChange={(e, v) => { if (v) setMetricsBasis(v); }}
+                        onChange={(e, v) => { if (v) {
+                            setMetricsBasis(v);
+                        } }}
                     >
                         <ToggleButton value="caja">Caja</ToggleButton>
                         <ToggleButton value="devengado">Devengado</ToggleButton>

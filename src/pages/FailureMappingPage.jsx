@@ -241,10 +241,18 @@ const FailureMappingPage = () => {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedCorporation) filters.corporationId = selectedCorporation;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
+            if (selectedSchool) {
+                filters.schoolId = selectedSchool;
+            }
+            if (selectedCorporation) {
+                filters.corporationId = selectedCorporation;
+            }
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
             if (selectedTipoFalla) {
                 if (selectedTipoFalla === NO_FAILURES_FILTER_VALUE) {
                     filters.noFallas = true;
@@ -252,10 +260,18 @@ const FailureMappingPage = () => {
                     filters.tipoFalla = selectedTipoFalla;
                 }
             }
-            if (selectedTipo) filters.tipo = selectedTipo;
-            if (selectedOperacional !== '') filters.fueOperacional = selectedOperacional;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedTipo) {
+                filters.tipo = selectedTipo;
+            }
+            if (selectedOperacional !== '') {
+                filters.fueOperacional = selectedOperacional;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
             filters.orderBy = orderBy;
             filters.order = order;
 
@@ -313,7 +329,9 @@ const FailureMappingPage = () => {
     };
 
     const handlePdfAddConfirm = () => {
-        if (!pdfAddLabel.trim()) return;
+        if (!pdfAddLabel.trim()) {
+            return;
+        }
         if (pdfAddMode === 'section') {
             setPdfExtraSections(prev => [...prev, { label: pdfAddLabel.trim(), items: [] }]);
         } else if (pdfAddMode === 'indicator' && Number.isInteger(pdfAddTargetSection)) {
@@ -341,7 +359,9 @@ const FailureMappingPage = () => {
 
     const handlePdfRemoveIndicator = (sectionIndex, indicatorIndex) => {
         setPdfExtraSections(prev => prev.map((s, i) => {
-            if (i !== sectionIndex) return s;
+            if (i !== sectionIndex) {
+                return s;
+            }
             const nextItems = (s.items || []).filter((_, j) => j !== indicatorIndex);
             return { ...s, items: nextItems };
         }));
@@ -349,7 +369,9 @@ const FailureMappingPage = () => {
 
     const handlePdfRemoveSection = (sectionIndex) => {
         // Prevent removing the two default sections (indices 0 and 1)
-        if (sectionIndex === 0 || sectionIndex === 1) return;
+        if (sectionIndex === 0 || sectionIndex === 1) {
+            return;
+        }
         setPdfExtraSections(prev => prev.filter((_, i) => i !== sectionIndex));
     };
 
@@ -371,7 +393,9 @@ const FailureMappingPage = () => {
     };
 
     useEffect(() => {
-        if (pdfModalOpen) fetchPdfModalSchools(pdfModalCicloEscolar);
+        if (pdfModalOpen) {
+            fetchPdfModalSchools(pdfModalCicloEscolar);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfModalCicloEscolar, pdfModalOpen]);
 
@@ -389,9 +413,15 @@ const FailureMappingPage = () => {
             const filters = {
                 month: pdfModalMonth.format('YYYY-MM'),
             };
-            if (pdfModalSchoolId) filters.schoolId = pdfModalSchoolId;
-            if (pdfModalCorporationId) filters.corporationId = pdfModalCorporationId;
-            if (Array.isArray(pdfExtraSections) && pdfExtraSections.length > 0) filters.extraIndicators = JSON.stringify(pdfExtraSections);
+            if (pdfModalSchoolId) {
+                filters.schoolId = pdfModalSchoolId;
+            }
+            if (pdfModalCorporationId) {
+                filters.corporationId = pdfModalCorporationId;
+            }
+            if (Array.isArray(pdfExtraSections) && pdfExtraSections.length > 0) {
+                filters.extraIndicators = JSON.stringify(pdfExtraSections);
+            }
 
             const resp = await api.get('/reports/bus-incidents/pdf', { params: filters, responseType: 'blob' });
             const contentType = String(resp.headers['content-type'] || '').toLowerCase();
@@ -474,7 +504,9 @@ const FailureMappingPage = () => {
     };
 
     const handleSaveFecha = async () => {
-        if (!selectedIncident || !fechaValue) return;
+        if (!selectedIncident || !fechaValue) {
+            return;
+        }
         setSavingFecha(true);
         try {
             await updateFailureMapping(selectedIncident.id, { fecha: fechaValue.toISOString() });
@@ -495,7 +527,9 @@ const FailureMappingPage = () => {
     };
 
     const handleSaveDescription = async () => {
-        if (!selectedIncident) return;
+        if (!selectedIncident) {
+            return;
+        }
         setSavingDescription(true);
         try {
             await updateFailureMapping(selectedIncident.id, { descripcion: descriptionValue });
@@ -745,7 +779,9 @@ const FailureMappingPage = () => {
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
                                         const na = Number(a);
                                         const nb = Number(b);
-                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+                                            return na - nb;
+                                        }
                                         return String(a).localeCompare(String(b));
                                     }).map((route) => (
                                         <MenuItem key={route} value={route}>
@@ -1398,7 +1434,9 @@ const FailureMappingPage = () => {
                                                                     onChange={(e) => {
                                                                         const v = e.target.value;
                                                                         setPdfExtraSections(prev => prev.map((s, i) => {
-                                                                            if (i !== sIdx) return s;
+                                                                            if (i !== sIdx) {
+                                                                                return s;
+                                                                            }
                                                                             const next = { ...s, items: (s.items || []).map((x, j) => j === idx ? ({ ...x, value: v }) : x) };
                                                                             return next;
                                                                         }));

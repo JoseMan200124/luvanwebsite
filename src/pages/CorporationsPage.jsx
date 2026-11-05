@@ -133,7 +133,9 @@ const StyledAccordionSummary = styled(AccordionSummary)`
 
 // Función para convertir tiempo de 24h a 12h con AM/PM
 const formatTime12Hour = (time24) => {
-    if (!time24) return '';
+    if (!time24) {
+        return '';
+    }
     const [hours, minutes] = time24.split(':');
     const hour = Number.parseInt(hours, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -203,7 +205,9 @@ const CorporationsPage = () => {
             const params = { fiscalYear: selectedFiscalYear };
             try {
                 const roleId = Number(auth.user?.roleId || 0);
-                if (roleId && ![1, 2, 10].includes(roleId)) params.assignedOnly = true; // 10 = Mecanica (ve todos los clientes)
+                if (roleId && ![1, 2, 10].includes(roleId)) {
+                    params.assignedOnly = true;
+                } // 10 = Mecanica (ve todos los clientes)
             } catch (e) { /* ignore */ }
 
             const response = await api.get('/corporations', {
@@ -584,7 +588,9 @@ const CorporationsPage = () => {
     };
 
     const handleUpdateCorporation = async () => {
-        if (!selectedCorporation) return;
+        if (!selectedCorporation) {
+            return;
+        }
         
         try {
             const payload = {
@@ -627,7 +633,9 @@ const CorporationsPage = () => {
     };
 
     const handleDeleteCorporation = async () => {
-        if (!selectedCorporation) return;
+        if (!selectedCorporation) {
+            return;
+        }
         
         try {
             await api.delete(`/corporations/${selectedCorporation.id}`, {
@@ -888,11 +896,15 @@ const CorporationsPage = () => {
                                                     entryTime: scheduleObj.entryTime,
                                                     exitTime: scheduleObj.exitTime
                                                 };
-                                                if (idxByName === -1) curr.push(cleaned); 
+                                                if (idxByName === -1) {
+                                                    curr.push(cleaned);
+                                                } 
                                                 else curr[idxByName] = cleaned;
                                             }
                                         } else {
-                                            if (idxByName !== -1) curr.splice(idxByName, 1);
+                                            if (idxByName !== -1) {
+                                                curr.splice(idxByName, 1);
+                                            }
                                         }
                                         
                                         arr[i] = { routeNumber: String(rn), schedules: curr };

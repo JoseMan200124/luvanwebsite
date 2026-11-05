@@ -45,11 +45,17 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     const [prefillExtraFields, setPrefillExtraFields] = useState(null);
 
     const getExtraValue = (fieldName) => {
-        if (!formExtraValues) return '';
-        if (formExtraValues[fieldName] !== undefined) return formExtraValues[fieldName];
+        if (!formExtraValues) {
+            return '';
+        }
+        if (formExtraValues[fieldName] !== undefined) {
+            return formExtraValues[fieldName];
+        }
         const target = String(fieldName || '').trim().toLowerCase();
         for (const k of Object.keys(formExtraValues)) {
-            if (String(k || '').trim().toLowerCase() === target) return formExtraValues[k];
+            if (String(k || '').trim().toLowerCase() === target) {
+                return formExtraValues[k];
+            }
         }
         return '';
     };
@@ -71,19 +77,27 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
 
     // Formato 24h -> 12h con AM/PM (ej: "14:30" -> "2:30 PM")
     const formatTime12Hour = (time24) => {
-        if (!time24) return '';
+        if (!time24) {
+            return '';
+        }
         const parts = String(time24).split(':');
-        if (parts.length < 2) return time24;
+        if (parts.length < 2) {
+            return time24;
+        }
         const hours = Number.parseInt(parts[0], 10);
         const minutes = parts[1];
-        if (Number.isNaN(hours)) return time24;
+        if (Number.isNaN(hours)) {
+            return time24;
+        }
         const ampm = hours >= 12 ? 'PM' : 'AM';
         const hour12 = hours % 12 || 12;
         return `${hour12}:${minutes} ${ampm}`;
     };
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            return;
+        }
         // populate from initialData when dialog opens
         setCorporationId(initialData?.corporation?.id || '');
         setFirstName(initialData?.colaboradorDetail?.firstName || '');
@@ -123,12 +137,16 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
 
             if (response.data?.corporation) {
                 const corp = response.data.corporation;
-                if (Array.isArray(corp.schedules)) setSchedules(corp.schedules);
+                if (Array.isArray(corp.schedules)) {
+                    setSchedules(corp.schedules);
+                }
                 else if (corp.schedules && typeof corp.schedules === 'string') {
                     try { setSchedules(JSON.parse(corp.schedules)); } catch { setSchedules([]); }
                 }
 
-                if (Array.isArray(corp.extraEnrollmentFields)) setExtraFields(corp.extraEnrollmentFields);
+                if (Array.isArray(corp.extraEnrollmentFields)) {
+                    setExtraFields(corp.extraEnrollmentFields);
+                }
                 else if (corp.extraEnrollmentFields && typeof corp.extraEnrollmentFields === 'string') {
                     try { setExtraFields(JSON.parse(corp.extraEnrollmentFields)); } catch { setExtraFields([]); }
                 }
@@ -140,10 +158,14 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
                     const defs = Array.isArray(corp.extraEnrollmentFields) ? corp.extraEnrollmentFields : (corp.extraEnrollmentFields && typeof corp.extraEnrollmentFields === 'string' ? (() => { try { return JSON.parse(corp.extraEnrollmentFields); } catch { return []; } })() : []);
 
                     const findKey = (obj, target) => {
-                        if (!obj) return null;
+                        if (!obj) {
+                            return null;
+                        }
                         const t = String(target || '').trim().toLowerCase();
                         for (const k of Object.keys(obj)) {
-                            if (String(k || '').trim().toLowerCase() === t) return k;
+                            if (String(k || '').trim().toLowerCase() === t) {
+                                return k;
+                            }
                         }
                         return null;
                     };
@@ -158,7 +180,9 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
                                 const lname = String(fname).toLowerCase();
                                 if (lname.includes('depart') || lname.includes('zona') || lname.includes('sector')) {
                                     const syn = findKey(prefillObj, 'department') || findKey(prefillObj, 'zoneOrSector') || findKey(prefillObj, 'zona') || findKey(prefillObj, 'zone');
-                                    if (syn) mapped[fname] = prefillObj[syn];
+                                    if (syn) {
+                                        mapped[fname] = prefillObj[syn];
+                                    }
                                 }
                             }
                         });
@@ -168,7 +192,9 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
 
                     if (Object.keys(mapped).length === 0) {
                         const depKey = findKey(prefillObj, 'department') || findKey(prefillObj, 'zoneOrSector') || findKey(prefillObj, 'zona');
-                        if (depKey) mapped['Departamento'] = prefillObj[depKey];
+                        if (depKey) {
+                            mapped['Departamento'] = prefillObj[depKey];
+                        }
                     }
 
                     setFormExtraValues(prev => ({ ...mapped, ...prev }));
@@ -232,7 +258,9 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
         }
     };
 
-    if (!open) return null;
+    if (!open) {
+        return null;
+    }
 
     return (
         <Dialog open={open} onClose={() => onClose?.()} fullWidth maxWidth="md">

@@ -4,7 +4,9 @@ import { Alert, Box, ButtonBase, Collapse, Typography } from '@mui/material';
 import { ExpandLess, ExpandMore } from '@mui/icons-material';
 
 const cycleLabelFor = (schools, cicloEscolarId) => {
-    if (!cicloEscolarId) return null;
+    if (!cicloEscolarId) {
+        return null;
+    }
     const match = schools.find((school) => Number(school.cicloEscolarId) === Number(cicloEscolarId));
     const cycle = match?.cicloEscolar;
     return cycle?.label || cycle?.nombre || `#${cicloEscolarId}`;
@@ -48,7 +50,9 @@ const ScopeRules = ({ mode, schools = [], cicloEscolarId = null, cycleLocked = f
     const [expanded, setExpanded] = useState(false);
 
     const buildRules = RULES_BY_MODE[mode];
-    if (!buildRules) return null;
+    if (!buildRules) {
+        return null;
+    }
 
     const rules = buildRules({ cycle: cycleLabelFor(schools, cicloEscolarId), cycleLocked });
     return (

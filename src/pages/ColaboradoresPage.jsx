@@ -121,7 +121,9 @@ const StyledAccordion = styled(Accordion)`
 
 // Función para convertir tiempo de 24h a 12h con AM/PM
 const formatTime12Hour = (time24) => {
-    if (!time24) return '';
+    if (!time24) {
+        return '';
+    }
     const [hours, minutes] = time24.split(':');
     const hour = Number.parseInt(hours, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -131,7 +133,9 @@ const formatTime12Hour = (time24) => {
 
 // Traduce el estado de servicio canónico a su etiqueta en español usada en el sistema
 const translateServiceStatus = (status) => {
-    if (!status) return '';
+    if (!status) {
+        return '';
+    }
     switch ((status || '').toString()) {
         case 'ACTIVE': return 'Activo';
         case 'PAUSED': return 'Pausado';
@@ -317,9 +321,13 @@ const ColaboradoresPage = () => {
 
     // Funciones auxiliares para determinar el estado de los colaboradores
     const isColaboradorNew = (colaborador) => {
-        if (!colaborador.ColaboradorDetail) return false;
+        if (!colaborador.ColaboradorDetail) {
+            return false;
+        }
         const cd = colaborador.ColaboradorDetail;
-        if (!cd.createdAt) return false;
+        if (!cd.createdAt) {
+            return false;
+        }
         const since = new Date();
         since.setDate(since.getDate() - 21);
         return new Date(cd.createdAt) >= since;
@@ -327,7 +335,9 @@ const ColaboradoresPage = () => {
 
     const isColaboradorDuplicated = (colaborador, allColaboradores) => {
         const email = normalizeKey(colaborador.email);
-        if (!email) return false;
+        if (!email) {
+            return false;
+        }
         const count = allColaboradores.filter(
             e => e.email && normalizeKey(e.email) === email
         ).length;
@@ -336,15 +346,23 @@ const ColaboradoresPage = () => {
 
     const getColaboradorStatus = useCallback((colaborador) => {
         // If colaborador has explicit state flag (DB uses 0/1), consider 0 as Inactivo
-        if (colaborador && (colaborador.state === 0 || colaborador.state === '0' || colaborador.state === false)) return 'Inactivo';
-        if (isColaboradorNew(colaborador)) return 'Nuevo';
-        if (isColaboradorDuplicated(colaborador, colaboradores)) return 'Duplicado';
+        if (colaborador && (colaborador.state === 0 || colaborador.state === '0' || colaborador.state === false)) {
+            return 'Inactivo';
+        }
+        if (isColaboradorNew(colaborador)) {
+            return 'Nuevo';
+        }
+        if (isColaboradorDuplicated(colaborador, colaboradores)) {
+            return 'Duplicado';
+        }
         if (colaborador.ColaboradorDetail?.updatedAt && colaborador.ColaboradorDetail.createdAt) {
             const updated = new Date(colaborador.ColaboradorDetail.updatedAt);
             const created = new Date(colaborador.ColaboradorDetail.createdAt);
             const since = new Date();
             since.setDate(since.getDate() - 7);
-            if (updated > created && updated >= since) return 'Actualizado';
+            if (updated > created && updated >= since) {
+                return 'Actualizado';
+            }
         }
         return 'Activo';
     }, [colaboradores]);
@@ -373,10 +391,14 @@ const ColaboradoresPage = () => {
             if (!Array.isArray(arr)) {
                 try { arr = JSON.parse(arr || '[]'); } catch (e) { arr = []; }
             }
-            if (!Array.isArray(arr) || arr.length === 0) return 'none';
+            if (!Array.isArray(arr) || arr.length === 0) {
+                return 'none';
+            }
 
             const assignedCount = arr.filter(s => {
-                if (!s) return false;
+                if (!s) {
+                    return false;
+                }
                 const hasRoute = s.route || s.routeId || s.routeNumber || s.route_num;
                 const hasStop = s.stop || s.stopId || s.stopName || s.parada || s.paradaId;
                 return Boolean(hasRoute) || Boolean(hasStop);
@@ -389,7 +411,9 @@ const ColaboradoresPage = () => {
     };
 
     const fetchCorporationData = useCallback(async () => {
-        if (!corporationId || corporationData) return;
+        if (!corporationId || corporationData) {
+            return;
+        }
         
         try {
             const response = await api.get(`/corporations/${corporationId}`, {
@@ -448,7 +472,9 @@ const ColaboradoresPage = () => {
     }, [auth.token, corporationId, corporationData]);
 
     const fetchColaboradores = useCallback(async () => {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         
         setLoading(true);
         try {
@@ -604,7 +630,9 @@ const ColaboradoresPage = () => {
         let scheduleIndex = -1;
         if (colaborador.ColaboradorDetail?.selectedSchedule !== undefined && colaborador.ColaboradorDetail?.selectedSchedule !== null) {
             scheduleIndex = Number(colaborador.ColaboradorDetail.selectedSchedule);
-            if (Number.isNaN(scheduleIndex)) scheduleIndex = -1;
+            if (Number.isNaN(scheduleIndex)) {
+                scheduleIndex = -1;
+            }
         }
         
         setColaboradorForm({
@@ -698,7 +726,9 @@ const ColaboradoresPage = () => {
     };
 
     const handleServiceStatusClick = (colaborador) => {
-        if (!colaborador) return;
+        if (!colaborador) {
+            return;
+        }
         setSelectedColaborador(colaborador);
         setOpenServiceStatusModal(true);
     };
@@ -773,7 +803,9 @@ const ColaboradoresPage = () => {
             fetchColaboradores();
         } catch (err) {
             try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) return;
+                if (showDuplicateEmailFromError(err, setSnackbar)) {
+                    return;
+                }
             } catch (e) {
                 // fallthrough to generic handling
             }
@@ -788,7 +820,9 @@ const ColaboradoresPage = () => {
     };
 
     const handleUpdateColaborador = async () => {
-        if (!selectedColaborador) return;
+        if (!selectedColaborador) {
+            return;
+        }
         
         try {
             const payload = {
@@ -843,7 +877,9 @@ const ColaboradoresPage = () => {
     };
 
     const handleDeleteColaborador = async () => {
-        if (!selectedColaborador) return;
+        if (!selectedColaborador) {
+            return;
+        }
         
         try {
             await api.delete(`/users/${selectedColaborador.id}`, {
@@ -871,7 +907,9 @@ const ColaboradoresPage = () => {
     };
 
     const handleToggleState = async () => {
-        if (!selectedColaborador) return;
+        if (!selectedColaborador) {
+            return;
+        }
         
         // Determinar el nuevo estado (opuesto al actual)
         const currentState = Number(selectedColaborador.state);
@@ -1478,9 +1516,13 @@ const ColaboradoresPage = () => {
             ];
 
             const parseRouteNumber = (r) => {
-                if (r == null) return null;
+                if (r == null) {
+                    return null;
+                }
                 const s = String(r).trim();
-                if (s === '') return null;
+                if (s === '') {
+                    return null;
+                }
                 const n = Number(s);
                 return Number.isFinite(n) ? n : null;
             };
@@ -1502,16 +1544,22 @@ const ColaboradoresPage = () => {
                     const slots = Array.isArray(col.ScheduleSlots) ? col.ScheduleSlots : [];
                     return slots.some(slot => {
                         let slotDays = [];
-                        if (Array.isArray(slot.days)) slotDays = slot.days;
+                        if (Array.isArray(slot.days)) {
+                            slotDays = slot.days;
+                        }
                         else if (typeof slot.days === 'string') {
                             try {
                                 const parsed = JSON.parse(slot.days);
-                                if (Array.isArray(parsed)) slotDays = parsed;
+                                if (Array.isArray(parsed)) {
+                                    slotDays = parsed;
+                                }
                                 else slotDays = [slot.days];
                             } catch (e) {
                                 slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days];
                             }
-                        } else if (slot.days) slotDays = [slot.days];
+                        } else if (slot.days) {
+                            slotDays = [slot.days];
+                        }
 
                         const normalizedDays = slotDays.map(d => d ? d.toString().toLowerCase() : '').filter(Boolean);
                         return normalizedDays.includes(day.key);
@@ -1533,16 +1581,22 @@ const ColaboradoresPage = () => {
                     // Filtrar slots por día
                     const daySlotsFiltered = slots.filter(slot => {
                         let slotDays = [];
-                        if (Array.isArray(slot.days)) slotDays = slot.days;
+                        if (Array.isArray(slot.days)) {
+                            slotDays = slot.days;
+                        }
                         else if (typeof slot.days === 'string') {
                             try {
                                 const parsed = JSON.parse(slot.days);
-                                if (Array.isArray(parsed)) slotDays = parsed;
+                                if (Array.isArray(parsed)) {
+                                    slotDays = parsed;
+                                }
                                 else slotDays = [slot.days];
                             } catch (e) {
                                 slotDays = slot.days.split ? slot.days.split(',').map(x => x.trim()) : [slot.days];
                             }
-                        } else if (slot.days) slotDays = [slot.days];
+                        } else if (slot.days) {
+                            slotDays = [slot.days];
+                        }
 
                         const normalizedDays = slotDays.map(d => d ? d.toString().toLowerCase() : '').filter(Boolean);
                         return normalizedDays.includes(day.key);
@@ -1593,7 +1647,9 @@ const ColaboradoresPage = () => {
                         if (rowNumber > 1) {
                             const cell = row.getCell(index + 1);
                             const cellLength = String(cell.value || '').length;
-                            if (cellLength > maxWidth) maxWidth = cellLength;
+                            if (cellLength > maxWidth) {
+                                maxWidth = cellLength;
+                            }
                         }
                     });
                     column.width = Math.min(Math.max(maxWidth, 10), 50);
@@ -1645,7 +1701,9 @@ const ColaboradoresPage = () => {
 
     // Aplicar ordenamiento a los colaboradores filtrados antes de paginar
     const sortedColaboradores = (() => {
-        if (!sortBy) return filteredColaboradores;
+        if (!sortBy) {
+            return filteredColaboradores;
+        }
         const copy = filteredColaboradores.slice();
         copy.sort((a, b) => {
             let va = '';
@@ -2187,10 +2245,18 @@ const ColaboradoresPage = () => {
                                     onClick={async () => {
                                         const upper = (downloadChoice || '').toString().toUpperCase();
                                         const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
-                                        if (downloadChoice === 'new') await handleDownloadNewColaboradores();
-                                        else if (downloadChoice === 'all') await handleDownloadAllColaboradores();
-                                        else if (downloadChoice === 'report') await handleDownloadRouteReport();
-                                        else if (serviceStates.includes(upper)) await handleDownloadByServiceStatusColaboradores(upper);
+                                        if (downloadChoice === 'new') {
+                                            await handleDownloadNewColaboradores();
+                                        }
+                                        else if (downloadChoice === 'all') {
+                                            await handleDownloadAllColaboradores();
+                                        }
+                                        else if (downloadChoice === 'report') {
+                                            await handleDownloadRouteReport();
+                                        }
+                                        else if (serviceStates.includes(upper)) {
+                                            await handleDownloadByServiceStatusColaboradores(upper);
+                                        }
                                         setOpenDownloadDialog(false);
                                     }}
                                 >
@@ -2271,10 +2337,18 @@ const ColaboradoresPage = () => {
                                                 <TableCell align="center">
                                                     {(() => {
                                                         const svc = colaborador.colaboradorServiceStatus?.status;
-                                                        if (svc === 'ACTIVE') return <Chip label="Activo" size="small" color="success" />;
-                                                        if (svc === 'PAUSED') return <Chip label="Pausado" size="small" color="warning" />;
-                                                        if (svc === 'SUSPENDED') return <Chip label="Suspendido" size="small" color="error" />;
-                                                        if (svc === 'INACTIVE') return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
+                                                        if (svc === 'ACTIVE') {
+                                                            return <Chip label="Activo" size="small" color="success" />;
+                                                        }
+                                                        if (svc === 'PAUSED') {
+                                                            return <Chip label="Pausado" size="small" color="warning" />;
+                                                        }
+                                                        if (svc === 'SUSPENDED') {
+                                                            return <Chip label="Suspendido" size="small" color="error" />;
+                                                        }
+                                                        if (svc === 'INACTIVE') {
+                                                            return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
+                                                        }
                                                         return <Chip label="-" size="small" />;
                                                     })()}
                                                 </TableCell>

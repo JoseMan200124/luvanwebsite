@@ -34,7 +34,9 @@ export const resizeStudents = (students, count) => {
 
 export const formFromPrefill = (prefill, extraFieldDefs = []) => {
     const base = emptyFamilyForm();
-    if (!prefill) return base;
+    if (!prefill) {
+        return base;
+    }
 
     const allowedExtraKeys = new Set(extraFieldDefs.map((field) => field?.fieldName).filter(Boolean));
     const extraFields = Object.fromEntries(
@@ -88,8 +90,12 @@ export const buildFamilyPayload = (form) => ({
 });
 
 export const parseArrayField = (value) => {
-    if (Array.isArray(value)) return value;
-    if (typeof value !== 'string' || !value.trim()) return [];
+    if (Array.isArray(value)) {
+        return value;
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+        return [];
+    }
     try {
         const parsed = JSON.parse(value);
         return Array.isArray(parsed) ? parsed : [];
@@ -99,7 +105,9 @@ export const parseArrayField = (value) => {
 };
 
 export const getGradeName = (grade) => {
-    if (typeof grade === 'string') return grade;
+    if (typeof grade === 'string') {
+        return grade;
+    }
     return String(grade?.name || grade?.label || grade?.value || '').trim();
 };
 

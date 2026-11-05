@@ -216,10 +216,18 @@ const BusIncidentsPage = () => {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedCorporation) filters.corporationId = selectedCorporation;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
+            if (selectedSchool) {
+                filters.schoolId = selectedSchool;
+            }
+            if (selectedCorporation) {
+                filters.corporationId = selectedCorporation;
+            }
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
             if (selectedTipoFalla) {
                 if (selectedTipoFalla === NO_FAILURES_FILTER_VALUE) {
                     filters.noFallas = true;
@@ -227,9 +235,15 @@ const BusIncidentsPage = () => {
                     filters.tipoFalla = selectedTipoFalla;
                 }
             }
-            if (selectedTipo) filters.tipo = selectedTipo;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedTipo) {
+                filters.tipo = selectedTipo;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
             filters.orderBy = orderBy;
             filters.order = order;
 
@@ -263,7 +277,9 @@ const BusIncidentsPage = () => {
                         byTipoFalla[tipoFalla] = (byTipoFalla[tipoFalla] || 0) + 1;
                         byTipo[tipo] = (byTipo[tipo] || 0) + 1;
 
-                        if (incident.routeAffected) withRouteAffected++;
+                        if (incident.routeAffected) {
+                            withRouteAffected++;
+                        }
                     });
 
                     setStatistics({
@@ -341,7 +357,9 @@ const BusIncidentsPage = () => {
     };
 
     const handleSaveFecha = async () => {
-        if (!selectedIncident || !fechaValue) return;
+        if (!selectedIncident || !fechaValue) {
+            return;
+        }
         setSavingFecha(true);
         try {
             await updateBusIncident(selectedIncident.id, { fecha: fechaValue.toISOString() });
@@ -362,7 +380,9 @@ const BusIncidentsPage = () => {
     };
 
     const handleSaveDescription = async () => {
-        if (!selectedIncident) return;
+        if (!selectedIncident) {
+            return;
+        }
         setSavingDescription(true);
         try {
             await updateBusIncident(selectedIncident.id, { descripcion: descriptionValue });
@@ -579,7 +599,9 @@ const BusIncidentsPage = () => {
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
                                         const na = Number(a);
                                         const nb = Number(b);
-                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+                                            return na - nb;
+                                        }
                                         return String(a).localeCompare(String(b));
                                     }).map((route) => (
                                         <MenuItem key={route} value={route}>

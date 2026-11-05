@@ -29,7 +29,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   const [assignEditing, setAssignEditing] = useState(null); // { slotId, day } when editing
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        return undefined;
+    }
     const mediaQuery = window.matchMedia('(max-width: 600px)');
     const handleChange = (event) => setIsMobileViewport(event.matches);
     setIsMobileViewport(mediaQuery.matches);
@@ -38,7 +40,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+        return;
+    }
     (async () => {
       setLoading(true);
       try {
@@ -73,7 +77,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
 
   // Helper: parse a stored schoolSchedule string like "07:15 AM" or "07:15" into { time, code }
   function parseSchoolScheduleString(s) {
-    if (!s) return { time: null, code: null };
+    if (!s) {
+        return { time: null, code: null };
+    }
     const str = String(s).trim();
     const timeMatch = str.match(/(\d{1,2}:\d{2})/);
     const time = timeMatch ? timeMatch[1] : null;
@@ -83,40 +89,56 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       const after = str.slice(str.indexOf(time) + time.length).trim().toUpperCase();
       const candidateCodes = Array.from(new Set((schoolSchedules || [])
         .map((entry) => {
-          if (!entry || typeof entry === 'string') return null;
+          if (!entry || typeof entry === 'string') {
+              return null;
+          }
           return entry.code ? String(entry.code).trim().toUpperCase() : null;
         })
         .filter(Boolean)))
         .sort((a, b) => b.length - a.length);
       const found = candidateCodes.find((c) => new RegExp(`\\b${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(after));
-      if (found) code = found;
+      if (found) {
+          code = found;
+      }
     }
     return { time, code };
   }
 
   function getScheduleTime(entry) {
-    if (!entry) return '';
-    if (typeof entry === 'string') return String(entry).trim();
+    if (!entry) {
+        return '';
+    }
+    if (typeof entry === 'string') {
+        return String(entry).trim();
+    }
     const times = Array.isArray(entry.times) ? entry.times : (entry.times ? [entry.times] : []);
     return times[0] ? String(times[0]).trim() : '';
   }
 
   function getScheduleCode(entry) {
-    if (!entry || typeof entry === 'string' || !entry.code) return '';
+    if (!entry || typeof entry === 'string' || !entry.code) {
+        return '';
+    }
     return String(entry.code).trim().toUpperCase();
   }
 
   function buildScheduleSelectValue(entry) {
     const time = getScheduleTime(entry);
     const code = getScheduleCode(entry);
-    if (!time) return '';
+    if (!time) {
+        return '';
+    }
     return `${code || 'NO_CODE'}::${time}`;
   }
 
   function parseScheduleSelectValue(value) {
-    if (!value) return { code: null, time: '' };
+    if (!value) {
+        return { code: null, time: '' };
+    }
     const sep = String(value).indexOf('::');
-    if (sep === -1) return { code: null, time: String(value).trim() };
+    if (sep === -1) {
+        return { code: null, time: String(value).trim() };
+    }
     const rawCode = String(value).slice(0, sep).trim();
     const time = String(value).slice(sep + 2).trim();
     const code = rawCode && rawCode !== 'NO_CODE' ? rawCode.toUpperCase() : null;
@@ -124,7 +146,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   }
 
   function findScheduleBySelectValue(value, list) {
-    if (!value || !Array.isArray(list)) return null;
+    if (!value || !Array.isArray(list)) {
+        return null;
+    }
     const parsed = parseScheduleSelectValue(value);
     if (parsed.code) {
       const exact = list.find((s) => {
@@ -132,7 +156,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
         const time = getScheduleTime(s);
         return code === parsed.code && time === parsed.time;
       });
-      if (exact) return exact;
+      if (exact) {
+          return exact;
+      }
     }
     return list.find((s) => getScheduleTime(s) === parsed.time) || null;
   }
@@ -141,7 +167,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
 
   // Validate assignment before save: time format and conflicts with existing slots
   function validateAssign({ time, days }, editing) {
-  if (!Array.isArray(days) || days.length === 0) return { ok: false, message: 'Selecciona al menos un día.' };
+  if (!Array.isArray(days) || days.length === 0) {
+      return { ok: false, message: 'Selecciona al menos un día.' };
+  }
 
   // Conflict check removed: allow same time on the same day
   return { ok: true };
@@ -165,7 +193,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
     if (studentArg) {
       targetStudent = typeof studentArg === 'object' ? studentArg : { id: studentArg };
     }
-    if (!targetStudent && slot?.studentId) targetStudent = { id: slot.studentId };
+    if (!targetStudent && slot?.studentId) {
+        targetStudent = { id: slot.studentId };
+    }
     // if first arg is a student object
     if (slot?.id && slot.fullName && !day) {
       // called as openAssignPopup(student)
@@ -197,8 +227,12 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       const matchedFromStore = (Array.isArray(schoolSchedules) ? schoolSchedules : []).find((s) => {
         const code = getScheduleCode(s);
         const time = getScheduleTime(s);
-        if (!time || time !== ssTime) return false;
-        if (parsedSS.code) return code === parsedSS.code;
+        if (!time || time !== ssTime) {
+            return false;
+        }
+        if (parsedSS.code) {
+            return code === parsedSS.code;
+        }
         return true;
       });
       setAssignForm({
@@ -254,7 +288,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       return { ...f, schoolSchedule: selectedValue, days: filteredDays };
     });
     console.log('[StudentScheduleModal] schedule selected=', selectedValue, 'time=', timeVal);
-    if (!timeVal) return setAssignRoutesOptions([]);
+    if (!timeVal) {
+        return setAssignRoutesOptions([]);
+    }
     try {
       const r = await loadRoutesByTime(schoolId, null, codeVal || null);
       setAssignRoutesOptions(r || []);
@@ -268,13 +304,19 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   async function saveAssignedRoute() {
   const resolvedStudent = (assignEditing?.studentId) || assignTargetStudentId || studentId || (students?.[0]?.id);
   console.log('[StudentScheduleModal] saveAssignedRoute called. resolvedStudent=', resolvedStudent, 'assignEditing=', assignEditing, 'assignForm=', assignForm);
-    if (!resolvedStudent) return alert('Selecciona o proporciona un alumno antes de guardar');
+    if (!resolvedStudent) {
+        return alert('Selecciona o proporciona un alumno antes de guardar');
+    }
     // validate
   const { schoolSchedule, routeId, paradaTime, note: noteText, days } = assignForm;
-    if (!schoolSchedule || !paradaTime || !days || days.length === 0) return alert('Completa todos los campos');
+    if (!schoolSchedule || !paradaTime || !days || days.length === 0) {
+        return alert('Completa todos los campos');
+    }
   // validate time format and conflicts
   const validation = validateAssign({ time: paradaTime, days }, assignEditing);
-  if (!validation.ok) return alert(validation.message);
+  if (!validation.ok) {
+      return alert(validation.message);
+  }
     // Build schoolSchedule string including selected dynamic code when possible
     const selectedSchedule = parseScheduleSelectValue(schoolSchedule);
     const matchedSchedule = findScheduleBySelectValue(schoolSchedule, schoolSchedules || []);
@@ -354,9 +396,13 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       const targetStudent = (typeof targetStudentIdParam !== 'undefined' && targetStudentIdParam !== null)
         ? targetStudentIdParam
         : (assignTargetStudentId || studentId || (students?.[0]?.id));
-      if (!targetStudent) return;
+      if (!targetStudent) {
+          return;
+      }
       const slot = (slotsMap[targetStudent] || []).find(s => s.id === slotId);
-      if (!slot) return;
+      if (!slot) {
+          return;
+      }
       const currentDays = Array.isArray(slot.days) ? slot.days : [];
       if (currentDays.length <= 1) {
         // delete entire row
@@ -423,7 +469,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   // Remove all slots for a given student
   async function removeAllSlotsForStudent(targetStudentId) {
     try {
-      if (!targetStudentId) return;
+      if (!targetStudentId) {
+          return;
+      }
       const studentSlots = Array.isArray(slotsMap[targetStudentId]) ? slotsMap[targetStudentId] : [];
       // Delete sequentially to avoid server overload; handle 404 by skipping
       for (const s of studentSlots) {
@@ -449,7 +497,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
 
   
 
-  if (!open) return null;
+  if (!open) {
+      return null;
+  }
 
   // week constant no longer used; grid renders only mon-fri
   const DAYS = ['monday','tuesday','wednesday','thursday','friday'];
@@ -498,10 +548,14 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                         try {
                           const parsed = typeof s.note === 'string' ? JSON.parse(s.note) : s.note;
                           const sch = parsed?.schoolSchedule;
-                          if (sch) return s.time <= sch ? 'entrada' : 'salida';
+                          if (sch) {
+                              return s.time <= sch ? 'entrada' : 'salida';
+                          }
                         } catch (e) {}
                         // fallback by time of day
-                        if (s.time && s.time < '12:00') return 'entrada';
+                        if (s.time && s.time < '12:00') {
+                            return 'entrada';
+                        }
                         return 'salida';
                       }
 
@@ -650,9 +704,13 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                 <h3 style={{ marginTop: 0 }}>Confirmar eliminación</h3>
                 <div style={{ marginTop: 8 }}>¿Estás seguro que deseas eliminar esta parada?</div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                  <button type='button' onClick={() => { if (confirmLoading) return; setConfirmDeleteOpen(false); setConfirmTarget({ slotId: null, day: null, studentId: null }); }} style={{ padding: '8px 12px', borderRadius: 6 }}>Cancelar</button>
+                  <button type='button' onClick={() => { if (confirmLoading) {
+                      return;
+                  } setConfirmDeleteOpen(false); setConfirmTarget({ slotId: null, day: null, studentId: null }); }} style={{ padding: '8px 12px', borderRadius: 6 }}>Cancelar</button>
                   <button type='button' onClick={async () => {
-                    if (confirmLoading) return;
+                    if (confirmLoading) {
+                        return;
+                    }
                     setConfirmLoading(true);
                     try {
                       await removeSlotForDay(confirmTarget.slotId, confirmTarget.day, confirmTarget.studentId);
@@ -686,7 +744,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
                   <button
                     type='button'
-                    onClick={() => { if (confirmDeleteAllLoading) return; setConfirmDeleteAllOpen(false); setConfirmDeleteAllStudentId(null); }}
+                    onClick={() => { if (confirmDeleteAllLoading) {
+                        return;
+                    } setConfirmDeleteAllOpen(false); setConfirmDeleteAllStudentId(null); }}
                     style={{ padding: '8px 12px', borderRadius: 6 }}
                     disabled={confirmDeleteAllLoading}
                   >
@@ -695,7 +755,9 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                   <button
                     type='button'
                     onClick={async () => {
-                      if (confirmDeleteAllLoading) return;
+                      if (confirmDeleteAllLoading) {
+                          return;
+                      }
                       setConfirmDeleteAllLoading(true);
                       try {
                         await removeAllSlotsForStudent(confirmDeleteAllStudentId);

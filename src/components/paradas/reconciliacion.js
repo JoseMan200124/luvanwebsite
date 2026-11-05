@@ -70,7 +70,9 @@ export const hayNovedades = (resumen) => Boolean(resumen) && (
 
 /** Resolver un conflicto. Reversible dentro de la sesión (supuesto 5 del plan de implementación). */
 export function aplicarEleccion(est, eleccion) {
-    if (!est.conflicto) return est;
+    if (!est.conflicto) {
+        return est;
+    }
     const conflicto = { ...est.conflicto, eleccion };
     if (eleccion === 'actual') {
         return { ...est, paradas: est.conflicto.paradasActual, baseHash: est.conflicto.baseHashActual, touched: false, editadoEnExcel: false, conflicto };

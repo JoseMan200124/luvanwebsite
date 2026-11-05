@@ -78,14 +78,24 @@ const MobileValue = styled(Typography)`
 function descendingComparator(a, b, orderBy) {
     const aValue = getFieldValue(a, orderBy);
     const bValue = getFieldValue(b, orderBy);
-    if (aValue == null && bValue == null) return 0;
-    if (aValue == null) return 1;
-    if (bValue == null) return -1;
+    if (aValue == null && bValue == null) {
+        return 0;
+    }
+    if (aValue == null) {
+        return 1;
+    }
+    if (bValue == null) {
+        return -1;
+    }
     if (typeof aValue === 'string' && typeof bValue === 'string') {
         return bValue.localeCompare(aValue);
     }
-    if (bValue < aValue) return -1;
-    if (bValue > aValue) return 1;
+    if (bValue < aValue) {
+        return -1;
+    }
+    if (bValue > aValue) {
+        return 1;
+    }
     return 0;
 }
 
@@ -99,7 +109,9 @@ function stableSort(array, comparator) {
     const stabilizedThis = array.map((el, index) => [el, index]);
     stabilizedThis.sort((a, b) => {
         const order = comparator(a[0], b[0]);
-        if (order !== 0) return order;
+        if (order !== 0) {
+            return order;
+        }
         return a[1] - b[1];
     });
     return stabilizedThis.map((el) => el[0]);

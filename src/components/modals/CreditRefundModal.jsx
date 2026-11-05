@@ -111,23 +111,31 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
     }, [reset, onClose]);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            return;
+        }
         let cancelled = false;
         setLoading(true);
         setLoadError('');
         api.get('/payments/v2/credit-refunds/candidates', { params: buildPaymentParams ? buildPaymentParams() : { schoolId, cicloEscolarId } })
             .then((res) => {
-                if (cancelled) return;
+                if (cancelled) {
+                    return;
+                }
                 const data = res?.data || {};
                 setCicloEscolar(data.cicloEscolar || null);
                 setFamilies(Array.isArray(data.families) ? data.families : []);
             })
             .catch((err) => {
-                if (cancelled) return;
+                if (cancelled) {
+                    return;
+                }
                 setLoadError(err?.response?.data?.error || 'Error al cargar las familias con crédito a favor');
             })
             .finally(() => {
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             });
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,7 +143,9 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
 
     const filteredFamilies = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return families;
+        if (!q) {
+            return families;
+        }
         return families.filter((f) => (f.familyLastName || '').toLowerCase().includes(q));
     }, [families, search]);
 
@@ -257,7 +267,9 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
             : null;
         reset();
         onClose?.();
-        if (onApplied) onApplied(message);
+        if (onApplied) {
+            onApplied(message);
+        }
     };
 
     const totalCreditBalance = families.reduce((sum, f) => sum + Number(f.creditBalance || 0), 0);

@@ -73,9 +73,13 @@ const RouteColaboradoresModal = ({
     };
 
     const parseTimeToMinutes = (timeStr) => {
-        if (!timeStr) return null;
+        if (!timeStr) {
+            return null;
+        }
         const m = timeStr.match(/(\d{1,2}):(\d{2})/);
-        if (!m) return null;
+        if (!m) {
+            return null;
+        }
         const hh = Number.parseInt(m[1], 10);
         const mm = Number.parseInt(m[2], 10);
         return hh * 60 + mm;
@@ -127,7 +131,9 @@ const RouteColaboradoresModal = ({
 
     // Sort colaboradores
     const sortedColaboradores = [...filteredColaboradores].sort((a, b) => {
-        if (!sortBy) return 0;
+        if (!sortBy) {
+            return 0;
+        }
         
         let valA = '';
         let valB = '';
@@ -144,9 +150,15 @@ const RouteColaboradoresModal = ({
             case 'stopTime':
                 const minsA = parseTimeToMinutes(a.stopTime);
                 const minsB = parseTimeToMinutes(b.stopTime);
-                if (minsA === null && minsB === null) return 0;
-                if (minsA === null) return sortOrder === 'asc' ? 1 : -1;
-                if (minsB === null) return sortOrder === 'asc' ? -1 : 1;
+                if (minsA === null && minsB === null) {
+                    return 0;
+                }
+                if (minsA === null) {
+                    return sortOrder === 'asc' ? 1 : -1;
+                }
+                if (minsB === null) {
+                    return sortOrder === 'asc' ? -1 : 1;
+                }
                 return sortOrder === 'asc' ? minsA - minsB : minsB - minsA;
             case 'note':
                 valA = a.note || '';

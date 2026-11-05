@@ -46,8 +46,12 @@ const RequestsStatisticsTab = () => {
         setError('');
         try {
             const params = { ...getCicloEscolarFilterParams(cicloEscolar) };
-            if (dates.startDate) params.startDate = dates.startDate;
-            if (dates.endDate) params.endDate = dates.endDate;
+            if (dates.startDate) {
+                params.startDate = dates.startDate;
+            }
+            if (dates.endDate) {
+                params.endDate = dates.endDate;
+            }
             setStatistics(await getRequestStatistics(params));
         } catch (err) {
             console.error('Error fetching statistics', err);

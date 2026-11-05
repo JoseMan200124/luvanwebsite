@@ -31,7 +31,9 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
 
     // Modo edición: precargar con el envío programado.
     useEffect(() => {
-        if (!open || !editing) return;
+        if (!open || !editing) {
+            return;
+        }
         setAudience(editing.audience || EMPTY_AUDIENCE);
         setSubject(editing.content?.subject || '');
         setMessage(editing.content?.body || '');
@@ -91,21 +93,29 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
             formData.append('body', message);
             formData.append('audience', JSON.stringify(audience));
             formData.append('sendEmail', sendEmail ? 'true' : 'false');
-            if (file) formData.append('file', file);
+            if (file) {
+                formData.append('file', file);
+            }
 
             let successMessage;
             if (editing) {
                 formData.append('schedule', JSON.stringify(buildSchedulePayload(schedule)));
-                if (removeAttachment && !file) formData.append('removeAttachment', 'true');
+                if (removeAttachment && !file) {
+                    formData.append('removeAttachment', 'true');
+                }
                 await updateScheduledSend(editing.uuid, formData);
                 successMessage = 'Envío programado actualizado.';
             } else if (isScheduled) {
-                if (cicloEscolarId) formData.append('cicloEscolarId', String(cicloEscolarId));
+                if (cicloEscolarId) {
+                    formData.append('cicloEscolarId', String(cicloEscolarId));
+                }
                 formData.append('schedule', JSON.stringify(buildSchedulePayload(schedule)));
                 await createScheduledCircular(formData);
                 successMessage = `Circular programada: ${describeSchedule(buildSchedulePayload(schedule))}.`;
             } else {
-                if (cicloEscolarId) formData.append('cicloEscolarId', String(cicloEscolarId));
+                if (cicloEscolarId) {
+                    formData.append('cicloEscolarId', String(cicloEscolarId));
+                }
                 formData.append('useSmtp', true);
                 // Push SIEMPRE; el correo es opcional.
                 formData.append('sendPush', 'true');
@@ -116,7 +126,9 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
             }
 
             setSnackbar({ open: true, message: successMessage, severity: 'success' });
-            if (onSuccess) onSuccess(successMessage);
+            if (onSuccess) {
+                onSuccess(successMessage);
+            }
             resetAndClose();
         } catch (error) {
             console.error('Error al enviar circular:', error);
@@ -128,8 +140,12 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
     };
 
     let submitLabel = 'Enviar Circular';
-    if (editing) submitLabel = 'Guardar cambios';
-    else if (isScheduled) submitLabel = 'Programar Circular';
+    if (editing) {
+        submitLabel = 'Guardar cambios';
+    }
+    else if (isScheduled) {
+        submitLabel = 'Programar Circular';
+    }
 
     return (
         <>

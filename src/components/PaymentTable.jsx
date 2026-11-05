@@ -65,7 +65,9 @@ const getPaymentViewModel = (payment = {}) => {
                 const pct = Number(pctRaw) * 100;
                 // Round to maximum 2 decimal places to avoid long floats
                 const rounded = Math.round(pct * 100) / 100;
-                if (Number.isInteger(rounded)) return `${rounded}%`;
+                if (Number.isInteger(rounded)) {
+                    return `${rounded}%`;
+                }
                 return `${rounded}%`;
             }
             return `Q ${Number(family.specialFee || family.discount || 0).toFixed(2)}`;
@@ -135,7 +137,9 @@ const PaymentActions = React.memo(({ payment, isDeleted, onRegisterClick, onRece
             {onRegisterClick && (
                 <IconButton
                     title={isDeleted ? 'Acción no disponible (familia eliminada)' : 'Registrar Pago'}
-                    onClick={() => { if (!isDeleted) onRegisterClick(payment); }}
+                    onClick={() => { if (!isDeleted) {
+                        onRegisterClick(payment);
+                    } }}
                     disabled={isDeleted}
                 >
                     <PaymentIcon />
@@ -144,7 +148,9 @@ const PaymentActions = React.memo(({ payment, isDeleted, onRegisterClick, onRece
             {onNotas && (
                 <IconButton
                     title={isDeleted ? 'Acción no disponible (familia eliminada)' : 'Notas'}
-                    onClick={() => { if (!isDeleted) onNotas(payment); }}
+                    onClick={() => { if (!isDeleted) {
+                        onNotas(payment);
+                    } }}
                     disabled={isDeleted}
                 >
                     <NoteAltIcon />

@@ -70,17 +70,23 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
     };
 
     const parseTimeToMinutes = (timeStr) => {
-        if (!timeStr) return null;
+        if (!timeStr) {
+            return null;
+        }
         // accept formats like '07:15' or '7:15 AM' or '07:15 AM'
         const m = timeStr.match(/(\d{1,2}):(\d{2})/);
-        if (!m) return null;
+        if (!m) {
+            return null;
+        }
         const hh = Number.parseInt(m[1], 10);
         const mm = Number.parseInt(m[2], 10);
         return hh * 60 + mm;
     };
 
     const fetchStudents = useCallback(async () => {
-        if (!routeNumber || !scheduleCode || !schoolId) return;
+        if (!routeNumber || !scheduleCode || !schoolId) {
+            return;
+        }
         
         setLoading(true);
         setError(null);
@@ -143,11 +149,21 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
         const time = (s.horarioParada || '').toString().toLowerCase();
         const note = (s.notaParada || '').toString().toLowerCase();
 
-        if (filters.lastName && !last.includes(filters.lastName.toLowerCase())) return false;
-        if (filters.studentName && !name.includes(filters.studentName.toLowerCase())) return false;
-        if (filters.grade && !grade.includes(filters.grade.toLowerCase())) return false;
-        if (filters.stopTime && !time.includes(filters.stopTime.toLowerCase())) return false;
-        if (filters.note && !note.includes(filters.note.toLowerCase())) return false;
+        if (filters.lastName && !last.includes(filters.lastName.toLowerCase())) {
+            return false;
+        }
+        if (filters.studentName && !name.includes(filters.studentName.toLowerCase())) {
+            return false;
+        }
+        if (filters.grade && !grade.includes(filters.grade.toLowerCase())) {
+            return false;
+        }
+        if (filters.stopTime && !time.includes(filters.stopTime.toLowerCase())) {
+            return false;
+        }
+        if (filters.note && !note.includes(filters.note.toLowerCase())) {
+            return false;
+        }
         return true;
     }) : [];
 
@@ -176,14 +192,22 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
                     vb = (b.horarioParada || '').toString().toLowerCase();
                 } else {
                     // numeric compare
-                    if (ta === null) return sortOrder === 'asc' ? -1 : 1;
-                    if (tb === null) return sortOrder === 'asc' ? 1 : -1;
+                    if (ta === null) {
+                        return sortOrder === 'asc' ? -1 : 1;
+                    }
+                    if (tb === null) {
+                        return sortOrder === 'asc' ? 1 : -1;
+                    }
                     return sortOrder === 'asc' ? ta - tb : tb - ta;
                 }
             }
 
-            if (va < vb) return sortOrder === 'asc' ? -1 : 1;
-            if (va > vb) return sortOrder === 'asc' ? 1 : -1;
+            if (va < vb) {
+                return sortOrder === 'asc' ? -1 : 1;
+            }
+            if (va > vb) {
+                return sortOrder === 'asc' ? 1 : -1;
+            }
             return 0;
         });
     }
