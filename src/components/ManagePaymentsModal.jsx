@@ -201,8 +201,7 @@ function buildTransactionExplanation(h, allHistories = []) {
     const fmt = (v) => `Q${Number(v || 0).toFixed(2)}`;
 
     if (type === 'TARIFA' && source === 'MANUAL') {
-        lines.push(`💳 Pago manual registrado el ${date}.`);
-        lines.push(`   • Monto total recibido: ${fmt(amount)}`);
+        lines.push(`💳 Pago manual registrado el ${date}.`, `   • Monto total recibido: ${fmt(amount)}`);
         if (receipt !== '—') {
             lines.push(`   • N° de boleta: ${receipt}`);
         }
@@ -214,8 +213,7 @@ function buildTransactionExplanation(h, allHistories = []) {
             ? h.ledgerEntries.find(le => String(le.operation || '').toUpperCase() === 'OVERPAYMENT') : null;
 
         if (lePayment || leOverpay) {
-            lines.push('');
-            lines.push('📊 Distribución del pago:');
+            lines.push('', '📊 Distribución del pago:');
 
             const appliedToBalance = lePayment
                 ? Number(lePayment.metadata?.amountToBalance || (lePayment.balanceDueBefore - lePayment.balanceDueAfter) || 0)
@@ -238,8 +236,7 @@ function buildTransactionExplanation(h, allHistories = []) {
             }
         } else {
             // Sin ledger: mostrar nota genérica
-            lines.push('');
-            lines.push('ℹ️ No hay datos de distribución disponibles para este pago.');
+            lines.push('', 'ℹ️ No hay datos de distribución disponibles para este pago.');
         }
     }
 
@@ -248,17 +245,18 @@ function buildTransactionExplanation(h, allHistories = []) {
         const periodLabel = period ? formatPeriodFullLabel(period) : 'un período';
         const creditApplied = Number(meta.creditApplied || h.amountPaid || 0);
 
-        lines.push(`🔄 Aplicación automática de crédito.`);
-        lines.push(`   • Crédito aplicado: ${fmt(creditApplied)}`);
-        lines.push(`   • Destino: tarifa de ${periodLabel}`);
+        lines.push(
+            `🔄 Aplicación automática de crédito.`,
+            `   • Crédito aplicado: ${fmt(creditApplied)}`,
+            `   • Destino: tarifa de ${periodLabel}`
+        );
 
         // Buscar origen del crédito (sourceTxIds)
         const sourceTxIds = Array.isArray(meta.sourceTxIds) ? meta.sourceTxIds : [];
         if (sourceTxIds.length > 0 && Array.isArray(allHistories)) {
             const sourceTxs = allHistories.filter(t => sourceTxIds.includes(t.id));
             if (sourceTxs.length > 0) {
-                lines.push('');
-                lines.push('📎 Este crédito proviene de:');
+                lines.push('', '📎 Este crédito proviene de:');
                 sourceTxs.forEach(stx => {
                     const stxDate = stx.lastPaymentDate ? moment.parseZone(stx.lastPaymentDate).format('DD/MM/YYYY') : '—';
                     const stxAmt = Number(stx.amountPaid || 0);
@@ -270,8 +268,7 @@ function buildTransactionExplanation(h, allHistories = []) {
         // Si hay creditAllocations, mostrar
         const allocations = Array.isArray(meta.creditAllocations) ? meta.creditAllocations : [];
         if (allocations.length > 0) {
-            lines.push('');
-            lines.push('📋 Asignaciones de crédito:');
+            lines.push('', '📋 Asignaciones de crédito:');
             allocations.forEach(al => {
                 const alPeriod = formatPeriodFullLabel(al.period);
                 const alAmt = Number(al.amount || 0);
@@ -281,16 +278,16 @@ function buildTransactionExplanation(h, allHistories = []) {
         }
 
         // Explicación del contexto: cuánto cubrió vs cuánto faltó
-        lines.push('');
-        lines.push('💡 El crédito disponible se aplica automáticamente al generar');
-        lines.push('   la factura mensual. Si el crédito no cubre la tarifa completa,');
-        lines.push('   el saldo restante queda pendiente hasta el siguiente pago.');
+        lines.push(
+            '',
+            '💡 El crédito disponible se aplica automáticamente al generar',
+            '   la factura mensual. Si el crédito no cubre la tarifa completa,',
+            '   el saldo restante queda pendiente hasta el siguiente pago.'
+        );
     }
 
     else if (type === 'CREDITO' && source !== 'CREDIT_AUTO') {
-        lines.push(`🔄 Transacción de crédito.`);
-        lines.push(`   • Monto: ${fmt(amount)}`);
-        lines.push(`   • Fecha: ${date}`);
+        lines.push(`🔄 Transacción de crédito.`, `   • Monto: ${fmt(amount)}`, `   • Fecha: ${date}`);
 
         const leEntries = Array.isArray(h.ledgerEntries) ? h.ledgerEntries : [];
         const creditLe = leEntries.find(le => String(le.operation || '').toUpperCase() === 'CREDIT_PAYMENT');
@@ -298,8 +295,7 @@ function buildTransactionExplanation(h, allHistories = []) {
             const leMeta = creditLe.metadata || {};
             const targetPeriod = leMeta.period || meta.period || '';
             const targetLabel = targetPeriod ? formatPeriodFullLabel(targetPeriod) : 'tarifa';
-            lines.push('');
-            lines.push(`   📌 Aplicado a: ${targetLabel}`);
+            lines.push('', `   📌 Aplicado a: ${targetLabel}`);
             if (creditLe.creditBalanceBefore !== undefined) {
                 lines.push(`      Crédito antes: ${fmt(creditLe.creditBalanceBefore)} → después: ${fmt(creditLe.creditBalanceAfter)}`);
             }
@@ -307,8 +303,7 @@ function buildTransactionExplanation(h, allHistories = []) {
     }
 
     else if (type === 'MORA') {
-        lines.push(`⚠️ Pago de mora registrado el ${date}.`);
-        lines.push(`   • Monto: ${fmt(amount)}`);
+        lines.push(`⚠️ Pago de mora registrado el ${date}.`, `   • Monto: ${fmt(amount)}`);
 
         if (h.extraordinaryDiscount > 0) {
             lines.push(`   • Descuento/exoneración aplicado: ${fmt(h.extraordinaryDiscount)}`);
@@ -319,9 +314,11 @@ function buildTransactionExplanation(h, allHistories = []) {
     }
 
     else {
-        lines.push(`📄 Transacción de tipo "${type}".`);
-        lines.push(`   • Monto: ${fmt(amount)}`);
-        lines.push(`   • Fecha: ${date}`);
+        lines.push(
+            `📄 Transacción de tipo "${type}".`,
+            `   • Monto: ${fmt(amount)}`,
+            `   • Fecha: ${date}`
+        );
     }
 
     // Siempre mostrar estado del crédito/balance después de esta transacción
@@ -332,11 +329,13 @@ function buildTransactionExplanation(h, allHistories = []) {
         const hasCreditChange = Number(lastLe.creditBalanceAfter || 0) !== Number(lastLe.creditBalanceBefore || 0);
         const hasPenaltyChange = Number(lastLe.penaltyDueAfter || 0) !== Number(lastLe.penaltyDueBefore || 0);
         if (hasBalanceChange || hasCreditChange || hasPenaltyChange) {
-            lines.push('');
-            lines.push('📈 Estado financiero después de esta transacción:');
-            lines.push(`   • Saldo de tarifa: ${fmt(lastLe.balanceDueAfter)}`);
-            lines.push(`   • Crédito disponible: ${fmt(lastLe.creditBalanceAfter)}`);
-            lines.push(`   • Mora pendiente: ${fmt(lastLe.penaltyDueAfter)}`);
+            lines.push(
+                '',
+                '📈 Estado financiero después de esta transacción:',
+                `   • Saldo de tarifa: ${fmt(lastLe.balanceDueAfter)}`,
+                `   • Crédito disponible: ${fmt(lastLe.creditBalanceAfter)}`,
+                `   • Mora pendiente: ${fmt(lastLe.penaltyDueAfter)}`
+            );
         }
     }
 

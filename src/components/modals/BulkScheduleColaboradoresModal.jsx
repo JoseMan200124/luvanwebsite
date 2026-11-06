@@ -58,14 +58,16 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
       const WEEKDAYS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
       const headers = ['Correo', 'Número Empleado', 'Horario'];
       for (const d of WEEKDAYS) {
-        headers.push(`${d} - Hora Entrada`);
-        headers.push(`${d} - Hora Parada Entrada`);
-        headers.push(`${d} - Ruta Entrada`);
-        headers.push(`${d} - Nota Parada Entrada`);
-        headers.push(`${d} - Hora Salida`);
-        headers.push(`${d} - Hora Parada Salida`);
-        headers.push(`${d} - Ruta Salida`);
-        headers.push(`${d} - Nota Parada Salida`);
+        headers.push(
+            `${d} - Hora Entrada`,
+            `${d} - Hora Parada Entrada`,
+            `${d} - Ruta Entrada`,
+            `${d} - Nota Parada Entrada`,
+            `${d} - Hora Salida`,
+            `${d} - Hora Parada Salida`,
+            `${d} - Ruta Salida`,
+            `${d} - Nota Parada Salida`
+        );
       }
       sheet.addRow(headers);
 
