@@ -199,8 +199,6 @@ const ColaboradoresPage = () => {
     const [circularMessage, setCircularMessage] = useState('');
     const [circularLoading, setCircularLoading] = useState(false);
     
-    // Estado para reporte de paradas
-    const [stopReportLoading, setStopReportLoading] = useState(false);
     
     // Estado de la corporación
     const [corporationData, setCorporationData] = useState(location.state?.corporation || null);
@@ -1331,7 +1329,6 @@ const ColaboradoresPage = () => {
             return;
         }
 
-        setStopReportLoading(true);
         try {
             // Usar endpoint del backend que filtra por activos
             const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'active' } });
@@ -1344,7 +1341,6 @@ const ColaboradoresPage = () => {
 
             if (colaboradoresWithRoutes.length === 0) {
                 setSnackbar({ open: true, message: 'No hay colaboradores con paradas asignadas para generar el reporte.', severity: 'warning' });
-                setStopReportLoading(false);
                 return;
             }
 
@@ -1562,8 +1558,6 @@ const ColaboradoresPage = () => {
         } catch (error) {
             console.error('[handleDownloadRouteReport] Error:', error);
             setSnackbar({ open: true, message: 'Error al descargar el reporte de paradas', severity: 'error' });
-        } finally {
-            setStopReportLoading(false);
         }
     };
 

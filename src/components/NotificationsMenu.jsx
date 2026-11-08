@@ -703,9 +703,6 @@ const NotificationsMenu = ({ authToken }) => {
                     <Button variant="contained" onClick={async () => {
                         // when user chooses to register a payment, navigate to page with openRegister=true
                         try {
-                            const rec = previewNotification.receipt;
-                            
-                            
                             // Build URL from notification.link if available, else construct
                             let link = previewNotification.link;
                             

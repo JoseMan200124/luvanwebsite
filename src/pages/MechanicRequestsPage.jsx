@@ -4,7 +4,7 @@
  * Página de gestión de solicitudes de mecánica
  */
 
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Typography,
@@ -50,7 +50,6 @@ import {
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import moment from 'moment-timezone';
-import { AuthContext } from '../context/AuthProvider';
 import {
     getAllMechanicRequests,
     getMechanicRequestById,
@@ -81,9 +80,6 @@ const StatsCard = styled(Card)`
 `;
 
 const MechanicRequestsPage = () => {
-    const { auth } = useContext(AuthContext);
-    const userRole = auth?.user?.role || auth?.user?.Role?.name;
-
     // Estados para datos
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -497,14 +493,6 @@ const MechanicRequestsPage = () => {
         }
         return moment(date).tz('America/Guatemala').format('DD/MM/YYYY');
     };
-
-    // Columnas ordenables
-    const sortableColumns = [
-        { id: 'fechaSolicitud', label: 'Fecha' },
-        { id: 'tipoTrabajo', label: 'Tipo de Trabajo' },
-        { id: 'estado', label: 'Estado' },
-        { id: 'urgente', label: 'Urgente' }
-    ];
 
     return (
         <PageContainer>

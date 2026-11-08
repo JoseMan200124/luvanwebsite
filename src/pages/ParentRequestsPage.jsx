@@ -1,5 +1,5 @@
 // src/pages/ParentRequestsPage.jsx
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -15,9 +15,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
-  Grid,
-  IconButton,
   Paper,
   Stack,
   Typography,
@@ -28,7 +25,6 @@ import {
   Description as DescriptionIcon,
   ArrowBack as ArrowBackIcon,
   ChevronRight as ChevronRightIcon,
-  AccessTime as AccessTimeIcon,
   Refresh as RefreshIcon,
   Cancel as CancelIcon,
   Schedule as ScheduleIcon,
@@ -38,7 +34,6 @@ import {
 import { styled } from 'twin.macro';
 import moment from 'moment-timezone';
 import ParentNavbar from '../components/ParentNavbar';
-import { AuthContext } from '../context/AuthProvider';
 import { getMyRequests, getRequestById, getRequestEvents, REQUEST_TYPE_META } from '../services/requestService';
 
 const PageShell = styled(Box)`
@@ -338,13 +333,11 @@ const getEventDetailText = (event, selectedRequest) => {
 };
 
 const ParentRequestsPage = () => {
-  const { auth } = useContext(AuthContext);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [requests, setRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [requestEvents, setRequestEvents] = useState([]);
@@ -368,9 +361,7 @@ const ParentRequestsPage = () => {
   }, [loadRequests]);
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
     await loadRequests();
-    setRefreshing(false);
   }, [loadRequests]);
 
   const openDetail = async (request) => {
@@ -447,7 +438,6 @@ const ParentRequestsPage = () => {
               ) : (
                 requestCards.map((request) => {
                   const status = getStatusMeta(request.status);
-                  const typeLabel = getRequestTypeLabel(request.requestType);
                   return (
                     <SectionCard key={request.id} elevation={2} sx={{ cursor: 'pointer' }} onClick={() => openDetail(request)}>
                       <CardContent>

@@ -1,5 +1,4 @@
 // src/components/PermissionGuard.jsx
-import React from 'react';
 import PropTypes from 'prop-types';
 import usePermissions from '../hooks/usePermissions';
 

@@ -38,9 +38,6 @@ import {
 import {
   Edit as EditIcon,
   Description as DescriptionIcon,
-  CloudUpload as CloudUploadIcon,
-  MenuBook as MenuBookIcon,
-  Info as InfoIcon,
   Call as CallIcon,
   Email as EmailIcon,
   WhatsApp as WhatsAppIcon,
@@ -48,8 +45,6 @@ import {
   ExpandMore as ExpandMoreIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
-  Notifications as NotificationsIcon,
-  DocumentScanner,
   CreditCard as CreditCardIcon,
   AttachEmail,
 } from '@mui/icons-material';
@@ -68,14 +63,6 @@ import html2canvas from 'html2canvas';
 // ---------- Estilos ----------
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
 const LoaderBox   = styled(MuiBox)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
-const DayCol      = styled(MuiBox)`
-  min-width:190px;
-
-  @media (max-width: 600px) {
-    min-width: 100%;
-    width: 100%;
-  }
-`;
 
 // ---------- Utilidades ----------
 const toArray = (v) => (Array.isArray(v) ? v : []);
@@ -287,8 +274,6 @@ const ParentDashboardPage = () => {
     setServiceStatus(auth?.user?.serviceStatus || '');
   }, [auth?.user?.serviceStatus]);
 
-  const lastRefreshRef = useRef(0);
-
   const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({ open: false, sev: 'success', msg: '' });
 
@@ -308,7 +293,6 @@ const ParentDashboardPage = () => {
 
   // Estado para ver contrato firmado embebido
   const [viewFilledOpen, setViewFilledOpen] = useState(false);
-  const [viewFilledUuid, setViewFilledUuid] = useState('');
   const [viewFilledData, setViewFilledData] = useState(null);
   const [viewFilledLoading, setViewFilledLoading] = useState(false);
 
@@ -593,7 +577,6 @@ const ParentDashboardPage = () => {
         return;
     }
     const uuid = filled.uuid;
-    setViewFilledUuid(uuid);
     setViewFilledLoading(true);
     setViewFilledOpen(true);
     setViewFilledData(null);
@@ -877,7 +860,7 @@ const ParentDashboardPage = () => {
 
     try {
       setSubmittingSignature(true);
-      const res = await api.post(`/contracts/share/${signingContract.uuid}`, payload);
+      await api.post(`/contracts/share/${signingContract.uuid}`, payload);
       setSnackbar({ open: true, sev: 'success', msg: 'Contrato firmado y guardado correctamente.' });
       // refresh lists: remove from contractsList and reload filledContractsList
       // simple approach: refetch dialog data

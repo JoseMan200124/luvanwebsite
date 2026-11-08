@@ -279,10 +279,6 @@ const BusEmergenciesPage = () => {
         setPage(0);
     };
 
-    const handleRefresh = () => {
-        fetchEmergencies();
-    };
-
     const handleViewDetails = async (emergencyId) => {
         setLoadingDetails(true);
         setDetailsOpen(true);

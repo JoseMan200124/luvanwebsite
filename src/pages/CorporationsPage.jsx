@@ -19,7 +19,6 @@ import {
     DialogActions,
     DialogContentText,
     TextField,
-    Chip,
     Paper,
     Accordion,
     AccordionSummary,

@@ -31,9 +31,7 @@ import {
 import {
   Close as CloseIcon,
   GetApp as DownloadIcon,
-  ExpandLess as ExpandLessIcon,
   ExpandMore as ExpandMoreIcon,
-  Refresh as RefreshIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import TableSortLabel from '@mui/material/TableSortLabel';
@@ -298,10 +296,6 @@ const CircularHistoryPage = () => {
   useEffect(() => {
     fetchSchools();
   }, [fetchSchools]);
-
-  const handleRefresh = async () => {
-    await fetchRows();
-  };
 
   const handleCycleChange = (value) => {
     setSelectedCicloEscolar(value);
