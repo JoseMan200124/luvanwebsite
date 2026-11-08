@@ -128,8 +128,7 @@ export function generateCorporateRouteOccupancyPDF(data = [], meta = {}) {
     // Build dynamic header based on schedules
     const headerRow = ['Ruta'];
     schedules.forEach(sched => {
-      headerRow.push(`${sched.name} - Entrada`);
-      headerRow.push(`${sched.name} - Salida`);
+      headerRow.push(`${sched.name} - Entrada`, `${sched.name} - Salida`);
     });
     headerRow.push('Total');
 
@@ -144,8 +143,7 @@ export function generateCorporateRouteOccupancyPDF(data = [], meta = {}) {
         const schedData = route.schedules?.[idx] || { entrada: 0, salida: 0 };
         const entrada = Number(schedData.entrada) || 0;
         const salida = Number(schedData.salida) || 0;
-        row.push(entrada);
-        row.push(salida);
+        row.push(entrada, salida);
         routeTotal += entrada + salida;
       });
 
@@ -167,8 +165,7 @@ export function generateCorporateRouteOccupancyPDF(data = [], meta = {}) {
         totalSalida += Number(schedData.salida) || 0;
       });
 
-      totalsRow.push(totalEntrada);
-      totalsRow.push(totalSalida);
+      totalsRow.push(totalEntrada, totalSalida);
       grandTotal += totalEntrada + totalSalida;
     });
 

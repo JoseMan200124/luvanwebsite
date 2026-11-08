@@ -16,7 +16,9 @@ const WRITE_METHODS = new Set(['post', 'put', 'patch']);
 const SCHOOL_CONTEXT_ROLE_IDS = new Set([3, 8]);
 
 const getTokenRoleId = (token) => {
-    if (!token) return null;
+    if (!token) {
+        return null;
+    }
     try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         return payload?.roleId ?? null;
@@ -94,7 +96,9 @@ const CYCLE_OVERRIDE_KEYS = new Set(['allCycles', 'cicloEscolarId', 'ciclo_escol
 const SCHOOL_OVERRIDE_KEYS = new Set(['schoolId', 'school_id']);
 
 const hasOverrideInParams = (params, overrideKeys) => {
-    if (!params || typeof params !== 'object') return false;
+    if (!params || typeof params !== 'object') {
+        return false;
+    }
     if (params instanceof URLSearchParams) {
         return Array.from(overrideKeys).some((key) => params.has(key));
     }
@@ -104,23 +108,37 @@ const hasOverrideInParams = (params, overrideKeys) => {
 
 const hasOverrideInUrl = (url = '', overrideKeys) => {
     const queryIndex = String(url).indexOf('?');
-    if (queryIndex === -1) return false;
+    if (queryIndex === -1) {
+        return false;
+    }
 
     const searchParams = new URLSearchParams(String(url).slice(queryIndex + 1));
     return Array.from(overrideKeys).some((key) => searchParams.has(key));
 };
 
 const hasExplicitCycleOverride = (config) => {
-    if (hasOverrideInUrl(config.url || '', CYCLE_OVERRIDE_KEYS)) return true;
-    if (hasOverrideInParams(config.params, CYCLE_OVERRIDE_KEYS)) return true;
-    if (isJsonBody(config.data) && hasOverrideInParams(config.data, CYCLE_OVERRIDE_KEYS)) return true;
+    if (hasOverrideInUrl(config.url || '', CYCLE_OVERRIDE_KEYS)) {
+        return true;
+    }
+    if (hasOverrideInParams(config.params, CYCLE_OVERRIDE_KEYS)) {
+        return true;
+    }
+    if (isJsonBody(config.data) && hasOverrideInParams(config.data, CYCLE_OVERRIDE_KEYS)) {
+        return true;
+    }
     return false;
 };
 
 const hasExplicitSchoolOverride = (config) => {
-    if (hasOverrideInUrl(config.url || '', SCHOOL_OVERRIDE_KEYS)) return true;
-    if (hasOverrideInParams(config.params, SCHOOL_OVERRIDE_KEYS)) return true;
-    if (isJsonBody(config.data) && hasOverrideInParams(config.data, SCHOOL_OVERRIDE_KEYS)) return true;
+    if (hasOverrideInUrl(config.url || '', SCHOOL_OVERRIDE_KEYS)) {
+        return true;
+    }
+    if (hasOverrideInParams(config.params, SCHOOL_OVERRIDE_KEYS)) {
+        return true;
+    }
+    if (isJsonBody(config.data) && hasOverrideInParams(config.data, SCHOOL_OVERRIDE_KEYS)) {
+        return true;
+    }
     return false;
 };
 
@@ -154,14 +172,18 @@ const injectSchoolParams = (config, cycleContext) => {
 };
 
 const injectCycleBody = (config, cycleContext) => {
-    if (!isJsonBody(config.data)) return;
+    if (!isJsonBody(config.data)) {
+        return;
+    }
     if (cycleContext.selectedCicloEscolarId && !('cicloEscolarId' in config.data)) {
         config.data.cicloEscolarId = cycleContext.selectedCicloEscolarId;
     }
 };
 
 const injectSchoolBody = (config, cycleContext) => {
-    if (!isJsonBody(config.data)) return;
+    if (!isJsonBody(config.data)) {
+        return;
+    }
     if (cycleContext.selectedSchoolId && !('schoolId' in config.data)) {
         config.data.schoolId = cycleContext.selectedSchoolId;
     }
@@ -177,9 +199,13 @@ const applyRequestConfig = (config) => {
         config.headers.Authorization = `Bearer ${cycleContext.token}`;
     }
 
-    if (config.skipSchoolCycleContext) return config;
+    if (config.skipSchoolCycleContext) {
+        return config;
+    }
 
-    if (!shouldInjectCycleContext(url)) return config;
+    if (!shouldInjectCycleContext(url)) {
+        return config;
+    }
 
     if (!hasExplicitCycleOverride(config)) {
         injectCycleHeaders(config, cycleContext);
@@ -215,8 +241,12 @@ let failedQueue = [];
 
 const processQueue = (error, token = null) => {
     failedQueue.forEach(prom => {
-        if (error) prom.reject(error);
-        else prom.resolve(token);
+        if (error) {
+            prom.reject(error);
+        }
+        else {
+            prom.resolve(token);
+        }
     });
     failedQueue = [];
 };
@@ -250,7 +280,9 @@ const waitForRefresh = (originalRequest) => (
 
 const refreshAuthToken = async () => {
     const refreshToken = localStorage.getItem('refreshToken');
-    if (!refreshToken) return null;
+    if (!refreshToken) {
+        return null;
+    }
 
     const response = await axios.post(`${api.defaults.baseURL.replace('/api', '')}/api/auth/refresh`, { refreshToken });
     const { token, refreshToken: newRefresh } = response.data;
@@ -266,17 +298,23 @@ const handleUnauthorizedResponse = async (error) => {
     const originalRequest = error.config;
     const errorMessage = error.response?.data?.message || '';
 
-    if (!originalRequest) throw error;
+    if (!originalRequest) {
+        throw error;
+    }
 
     // Un 401 del login son credenciales incorrectas, no un token vencido: no refrescar
-    if (originalRequest.url === '/auth/login') throw error;
+    if (originalRequest.url === '/auth/login') {
+        throw error;
+    }
 
     if (isSessionInvalidatedMessage(errorMessage)) {
         dispatchSessionInvalidated(errorMessage);
         throw error;
     }
 
-    if (originalRequest._retry) throw error;
+    if (originalRequest._retry) {
+        throw error;
+    }
     originalRequest._retry = true;
 
     if (isRefreshing) {
@@ -286,7 +324,9 @@ const handleUnauthorizedResponse = async (error) => {
     isRefreshing = true;
     try {
         const token = await refreshAuthToken();
-        if (!token) throw error;
+        if (!token) {
+            throw error;
+        }
         processQueue(null, token);
         originalRequest.headers.Authorization = `Bearer ${token}`;
         return api(originalRequest);

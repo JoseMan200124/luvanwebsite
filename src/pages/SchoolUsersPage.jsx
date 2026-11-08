@@ -406,12 +406,13 @@ const SchoolUsersPage = () => {
                 const sheet = workbook.addWorksheet(day.label);
                 const headers = ["Apellido Familia", "Tipo Ruta", "Dirección Principal", "Dirección Alterna"];
                 for (let i = 1; i <= maxStudents; i++) {
-                    headers.push(`Estudiante ${i} - Nombre`);
-                    headers.push(`Estudiante ${i} - Grado`);
+                    headers.push(`Estudiante ${i} - Nombre`, `Estudiante ${i} - Grado`);
                     for (const code of SCHEDULE_CODES) {
-                        headers.push(`Estudiante ${i} - Hora ${code}`);
-                        headers.push(`Estudiante ${i} - Ruta ${code}`);
-                        headers.push(`Estudiante ${i} - Nota Parada ${code}`);
+                        headers.push(
+                            `Estudiante ${i} - Hora ${code}`,
+                            `Estudiante ${i} - Ruta ${code}`,
+                            `Estudiante ${i} - Nota Parada ${code}`
+                        );
                     }
                 }
                 headers.push(...contactCols);
@@ -422,14 +423,18 @@ const SchoolUsersPage = () => {
                 familiesWithRoutes.forEach((user, familyIndex) => {
                     const fd = user.FamilyDetail || {};
                     const row = [];
-                    row.push(fd.familyLastName || '');
-                    row.push(fd.routeType || '');
-                    row.push(fd.mainAddress || '');
-                    row.push(fd.alternativeAddress || '');
+                    row.push(
+                        fd.familyLastName || '',
+                        fd.routeType || '',
+                        fd.mainAddress || '',
+                        fd.alternativeAddress || ''
+                    );
                     for (let i = 0; i < maxStudents; i++) {
                         const student = (fd.Students?.[i]) ? fd.Students[i] : null;
-                        row.push(student ? (student.fullName || '') : '');
-                        row.push(student ? (student.grade || '') : '');
+                        row.push(
+                            student ? (student.fullName || '') : '',
+                            student ? (student.grade || '') : ''
+                        );
 
                         // prepare day-specific defaults
                         const defaultPer = {};
@@ -495,9 +500,11 @@ const SchoolUsersPage = () => {
                         };
 
                         for (const code of SCHEDULE_CODES) {
-                            row.push(dataForDay[`hora${code}`]);
-                            row.push(parseRouteNumber(dataForDay[`ruta${code}`]));
-                            row.push(dataForDay[`parada${code}`]);
+                            row.push(
+                                dataForDay[`hora${code}`],
+                                parseRouteNumber(dataForDay[`ruta${code}`]),
+                                dataForDay[`parada${code}`]
+                            );
                         }
                     }
 
@@ -505,13 +512,15 @@ const SchoolUsersPage = () => {
                     const motherPhone = (fd.motherCellphone?.trim()) || '';
                     const fatherName = (fd.fatherName?.trim()) || '';
                     const fatherPhone = (fd.fatherCellphone?.trim()) || '';
-                    row.push(translateServiceStatus(user.familyServiceStatus?.status || user.serviceStatus || ''));
-                    row.push(user.name || '');
-                    row.push(user.email || '');
-                    row.push(motherName);
-                    row.push(motherPhone);
-                    row.push(fatherName);
-                    row.push(fatherPhone);
+                    row.push(
+                        translateServiceStatus(user.familyServiceStatus?.status || user.serviceStatus || ''),
+                        user.name || '',
+                        user.email || '',
+                        motherName,
+                        motherPhone,
+                        fatherName,
+                        fatherPhone
+                    );
 
                     const rowObj = sheet.addRow(row);
                     const isEven = (familyIndex + 1) % 2 === 0;
@@ -621,8 +630,10 @@ const SchoolUsersPage = () => {
 
             const studentCols = [];
             for (let i = 1; i <= maxStudents; i++) {
-                studentCols.push({ header: `Estudiante ${i} - Nombre`, key: `est_${i}_nombre` });
-                studentCols.push({ header: `Estudiante ${i} - Grado`, key: `est_${i}_grado` });
+                studentCols.push(
+                    { header: `Estudiante ${i} - Nombre`, key: `est_${i}_nombre` },
+                    { header: `Estudiante ${i} - Grado`, key: `est_${i}_grado` }
+                );
             }
 
             const finalColumns = baseHeaders.concat(studentCols);
@@ -662,29 +673,33 @@ const SchoolUsersPage = () => {
                 const fd = u.FamilyDetail || {};
                 const row = [];
                 const statusText = u.status || (u.state === 0 ? 'Inactivo' : 'Activo');
-                row.push(fd.familyLastName || '');
-                row.push(statusText);
-                row.push(translateServiceStatus(u.familyServiceStatus?.status || u.serviceStatus || ''));
-                row.push(u.name || '');
-                row.push(u.email || '');
-                row.push(fd.motherName || '');
-                row.push(fd.motherCellphone || '');
-                row.push(fd.motherEmail || '');
-                row.push(fd.fatherName || '');
-                row.push(fd.fatherCellphone || '');
-                row.push(fd.fatherEmail || '');
-                row.push(fd.mainAddress || '');
-                row.push(fd.alternativeAddress || '');
-                row.push(fd.zoneOrSector || '');
-                row.push(fd.routeType || '');
-                row.push(fd.emergencyContact || '');
-                row.push(fd.emergencyRelationship || '');
-                row.push(fd.emergencyPhone || '');
+                row.push(
+                    fd.familyLastName || '',
+                    statusText,
+                    translateServiceStatus(u.familyServiceStatus?.status || u.serviceStatus || ''),
+                    u.name || '',
+                    u.email || '',
+                    fd.motherName || '',
+                    fd.motherCellphone || '',
+                    fd.motherEmail || '',
+                    fd.fatherName || '',
+                    fd.fatherCellphone || '',
+                    fd.fatherEmail || '',
+                    fd.mainAddress || '',
+                    fd.alternativeAddress || '',
+                    fd.zoneOrSector || '',
+                    fd.routeType || '',
+                    fd.emergencyContact || '',
+                    fd.emergencyRelationship || '',
+                    fd.emergencyPhone || ''
+                );
 
                 for (let i = 0; i < maxStudents; i++) {
                     const student = Array.isArray(fd.Students) && fd.Students[i] ? fd.Students[i] : null;
-                    row.push(student ? (student.fullName || '') : '');
-                    row.push(student ? (student.grade || '') : '');
+                    row.push(
+                        student ? (student.fullName || '') : '',
+                        student ? (student.grade || '') : ''
+                    );
                 }
 
                 const added = sheet.addRow(row);
@@ -1807,9 +1822,7 @@ const SchoolUsersPage = () => {
         const wsListasData = [["Grados"]];
         if (managedGrades.length === 0) {
             // fallback: include a few common grades to avoid empty list
-            wsListasData.push(["Primero Básico"]);
-            wsListasData.push(["Segundo"]);
-            wsListasData.push(["Tercero"]);
+            wsListasData.push(["Primero Básico"], ["Segundo"], ["Tercero"]);
         } else {
             managedGrades.forEach(g => wsListasData.push([g]));
         }
