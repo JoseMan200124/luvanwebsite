@@ -173,14 +173,9 @@ const SchoolPaymentsPage = () => {
     // client-side pagination state (we fetch all data once and paginate locally)
     const [page, setPage] = useState(0); // UI page (0-based)
     const [rowsPerPage, setRowsPerPage] = useState(25);
-    const [totalPayments, setTotalPayments] = useState(0);
     // Total families authoritative (includes active + inactive). Fetched independently
     // so it doesn't change when table filters/switches are toggled.
     const [totalFamiliesCount, setTotalFamiliesCount] = useState(null);
-    const [totalPaidCount, setTotalPaidCount] = useState(0);
-    const [totalMoraCount, setTotalMoraCount] = useState(0);
-    const [totalPendingCount, setTotalPendingCount] = useState(0);
-    const [totalInactiveCount, setTotalInactiveCount] = useState(0);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     // Loading indicator for initial data fetch
     const [loading, setLoading] = useState(true);
@@ -424,18 +419,6 @@ const SchoolPaymentsPage = () => {
 
             setPaymentsAll(arr);
             setFiltered(arr);
-            setTotalPayments(total || (Array.isArray(arr) ? arr.length : 0));
-            
-            // IMPORTANTE: Excluir usuarios inactivos de los conteos de PAGADO/PENDIENTE/MORA
-            const isUserActive = (pmt) => Number(pmt.User?.state) !== 0;
-            const activePayments = arr.filter(isUserActive);
-            const inactivePayments = arr.filter(pmt => !isUserActive(pmt));
-            
-            const paidPayments = activePayments.filter(pmt => ((pmt.finalStatus || '').toUpperCase() === 'CONFIRMADO'));
-            setTotalPaidCount(typeof res.data.totalPaidCount === 'number' ? res.data.totalPaidCount : paidPayments.length);
-            setTotalPendingCount(typeof res.data.totalPendingCount === 'number' ? res.data.totalPendingCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PENDIENTE').length);
-            setTotalMoraCount(typeof res.data.totalMoraCount === 'number' ? res.data.totalMoraCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'MORA').length);
-            setTotalInactiveCount(typeof res.data.totalInactiveCount === 'number' ? res.data.totalInactiveCount : inactivePayments.length);
             // Do not reset pagination here; preserve current page.
             // Page resets are handled only when filters/search change.
         } catch (err) {
@@ -716,7 +699,6 @@ const SchoolPaymentsPage = () => {
                 return true;
             });
             setFiltered(arr);
-            setTotalPayments(Array.isArray(arr) ? arr.length : 0);
 
             // Clamp current page if results shrink after refresh
             const total = Array.isArray(arr) ? arr.length : 0;
@@ -1019,10 +1001,6 @@ const SchoolPaymentsPage = () => {
         }
     }, []);
 
-    const [openReceiptDialog, setOpenReceiptDialog] = useState(false);
-    const [receiptTarget, setReceiptTarget] = useState(null);
-    const [receiptNumberDraft, setReceiptNumberDraft] = useState('');
-    
     // Pay Penalty dialog states
     const [openPayPenaltyDialog, setOpenPayPenaltyDialog] = useState(false);
     const [payPenaltyAmount, setPayPenaltyAmount] = useState('');
@@ -1060,11 +1038,6 @@ const SchoolPaymentsPage = () => {
     const [openNotesDialog, setOpenNotesDialog] = useState(false);
     const [notesTarget, setNotesTarget] = useState(null);
     const [notesDraft, setNotesDraft] = useState('');
-
-    const [openEmailDialog, setOpenEmailDialog] = useState(false);
-    const [emailTarget, setEmailTarget] = useState(null);
-    const [emailSubject, setEmailSubject] = useState('');
-    const [emailMessage, setEmailMessage] = useState('');
 
     // Diálogo para auto débito
     const [openAutoDebitDialog, setOpenAutoDebitDialog] = useState(false);
@@ -1352,48 +1325,6 @@ const SchoolPaymentsPage = () => {
             console.error(err);
             const errorMsg = err?.response?.data?.error || 'Error registrando pago';
             setSnackbar({ open: true, message: errorMsg, severity: 'error' });
-        }
-    };
-
-    const handleOpenReceipt = useCallback(async (payment) => {
-        setReceiptTarget(payment);
-        setReceiptNumberDraft(payment.receiptNumber || '');
-        setOpenReceiptDialog(true);
-    }, []);
-    const handleSaveReceipt = async () => {
-        if (!receiptTarget) {
-            return;
-        }
-        try {
-            await api.put(`/payments/${receiptTarget.id}/receipt-number`, { receiptNumber: receiptNumberDraft });
-            setSnackbar({ open: true, message: 'Número de recibo actualizado', severity: 'success' });
-            setOpenReceiptDialog(false);
-            // Invalidate cache for this user so modal will fetch fresh histories
-            invalidatePaymentHistCacheForUser(receiptTarget?.User?.id || receiptTarget?.userId);
-            fetchAllPayments(statusFilter, search);
-        } catch (err) {
-            console.error(err);
-            setSnackbar({ open: true, message: 'Error actualizando recibo', severity: 'error' });
-        }
-    };
-
-    const handleOpenEmail = useCallback((payment) => {
-        setEmailTarget(payment);
-        setEmailSubject('');
-        setEmailMessage('');
-        setOpenEmailDialog(true);
-    }, []);
-    const handleSendEmail = async () => {
-        if (!emailTarget) {
-            return;
-        }
-        try {
-            await api.post(`/payments/${emailTarget.id}/sendEmail`, { subject: emailSubject, message: emailMessage });
-            setSnackbar({ open: true, message: 'Correo enviado', severity: 'success' });
-            setOpenEmailDialog(false);
-        } catch (err) {
-            console.error(err);
-            setSnackbar({ open: true, message: 'Error al enviar correo', severity: 'error' });
         }
     };
 
@@ -1793,10 +1724,6 @@ const SchoolPaymentsPage = () => {
 
             // Start the periods table below both summary + children tables
 
-            // Helpers for new sections
-            const monthNamesUpper = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-            const monthAbbrLower = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-
             const ensureSpace = (requiredHeight) => {
                 const bottomMargin = 40;
                 if (cursorY + requiredHeight > pageHeight - bottomMargin) {
@@ -1919,7 +1846,6 @@ const SchoolPaymentsPage = () => {
             const schoolName = (periodsPayment?.School?.name || periodsPayment?.school?.name || familyPayment?.School?.name || familyPayment?.school?.name || 'Transporte Luvan').toString();
             const cicloLabel = (periodsPayment?.CicloEscolar?.label || periodsPayment?.cicloEscolar?.label || periodsPayment?.CicloEscolar?.nombre || periodsPayment?.cicloEscolar?.nombre || '').toString();
 
-            const computedStatus = (familyPayment?.finalStatus || (Number(totals?.penaltyDue || 0) > 0 ? 'MORA' : 'PENDIENTE'));
             ensureSpace(76);
             doc.setFontSize(11);
             doc.setFont(undefined, 'bold');
@@ -2135,7 +2061,6 @@ const SchoolPaymentsPage = () => {
                 } else {
                     bodyRows = periodAlloc.map(p => {
                         const fecha = formatTransactionDate(p.paidAt || p.dueDate || p.period);
-                        const tarifaV = Number(p.originalAmount || 0);
                         const descV = Number(p.discountApplied || 0);
                         const montoRaw = Number(p.amountPaid || 0) > 0 ? Number(p.amountPaid || 0) : Number(p.appliedSim || 0);
                         const boleta = (p.receiptNumber) ? String(p.receiptNumber) : '-';
@@ -3269,17 +3194,6 @@ const SchoolPaymentsPage = () => {
         }
     }, [paymentsAll, exportByStateServiceStatus, school, schoolId]);
 
-    // Legacy discount-save flow removed.
-    // The new retroactive discount flow is applied via POST /payments/v2/:id/apply-family-discount.
-    const handleSaveDiscount = async (payment) => {
-        try {
-            invalidatePaymentHistCacheForUser(payment?.User?.id || payment?.userId);
-            fetchAllPayments(statusFilter, search);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
     // Derived values for the Register Payment dialog summary
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
     
@@ -3400,9 +3314,6 @@ const SchoolPaymentsPage = () => {
         return Number(registerPaymentTarget?.specialDiscount || 0);
     })();
     
-    // netMonthlyFee = monthlyFee - specialDiscount (lo que realmente debe pagar mensualmente)
-    const dialogNetMonthlyFee = Number(registerPaymentTarget?.netMonthlyFee || 0);
-    
     // Cantidad de estudiantes
     const studentCount = Number(
         registerPaymentTarget?.studentCount ||
@@ -3411,8 +3322,6 @@ const SchoolPaymentsPage = () => {
         1
     ) || 1;
 
-    const dialogBaseFee = studentCount > 0 ? dialogMonthlyFee / studentCount : dialogMonthlyFee;
-    
     // Tipo de ruta
     const routeType = registerPaymentTarget?.User?.FamilyDetail?.routeType || 'N/A';
     
@@ -5644,23 +5553,6 @@ const SchoolPaymentsPage = () => {
                             </DialogActions>
                         </Dialog>
 
-                        {/* Dialog: Editar Número de Recibo */}
-                        <Dialog open={openReceiptDialog} onClose={() => setOpenReceiptDialog(false)} fullWidth maxWidth="sm">
-                            <DialogTitle>Editar Número de Recibo</DialogTitle>
-                            <DialogContent>
-                                <TextField
-                                    label="Número de recibo"
-                                    fullWidth
-                                    value={receiptNumberDraft}
-                                    onChange={(e) => setReceiptNumberDraft(e.target.value)}
-                                />
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenReceiptDialog(false)}>Cancelar</Button>
-                                <Button variant="contained" onClick={handleSaveReceipt}>Guardar</Button>
-                            </DialogActions>
-                        </Dialog>
-
                         {/* Dialog: Notas */}
                         <Dialog open={openNotesDialog} onClose={handleCloseNotes} fullWidth maxWidth="sm">
                             <DialogTitle>Editar Notas</DialogTitle>
@@ -5679,32 +5571,6 @@ const SchoolPaymentsPage = () => {
                                 {hasPermission('pagos-v2-actualizar-notas') && (
                                     <Button variant="contained" onClick={handleSaveNotes}>Guardar</Button>
                                 )}
-                            </DialogActions>
-                        </Dialog>
-
-                        {/* Dialog: Enviar Email */}
-                        <Dialog open={openEmailDialog} onClose={() => setOpenEmailDialog(false)} fullWidth maxWidth="sm">
-                            <DialogTitle>Enviar Correo</DialogTitle>
-                            <DialogContent>
-                                <TextField
-                                    label="Asunto"
-                                    fullWidth
-                                    value={emailSubject}
-                                    onChange={(e) => setEmailSubject(e.target.value)}
-                                    sx={{ mb: 2 }}
-                                />
-                                <TextField
-                                    label="Mensaje"
-                                    fullWidth
-                                    multiline
-                                    minRows={4}
-                                    value={emailMessage}
-                                    onChange={(e) => setEmailMessage(e.target.value)}
-                                />
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenEmailDialog(false)}>Cancelar</Button>
-                                <Button variant="contained" onClick={handleSendEmail} disabled={!emailSubject && !emailMessage}>Enviar</Button>
                             </DialogActions>
                         </Dialog>
 

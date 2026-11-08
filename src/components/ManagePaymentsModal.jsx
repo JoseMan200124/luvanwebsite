@@ -157,21 +157,6 @@ function getTransactionAppliedPeriods(h) {
     return [];
 }
 
-/** Nombre legible para un período YYYY-MM */
-function formatPeriodLabel(period) {
-    if (!period) {
-        return '';
-    }
-    const parts = String(period).split('-');
-    if (parts.length < 2) {
-        return period;
-    }
-    const monthNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    const m = Number.parseInt(parts[1], 10) - 1;
-    const monthLabel = monthNames[m] || parts[1];
-    return `${monthLabel} ${parts[0]}`;
-}
-
 /** Nombre completo del mes */
 function formatPeriodFullLabel(period) {
     if (!period) {
@@ -452,7 +437,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const isDeleted = finalStatus === 'ELIMINADO' || !!family.deleted;
     const activePayment = localPayment || payment || {};
     const isGlobalPenaltyFrozen = !!activePayment.penaltyGlobalFrozen;
-    const frozenPenaltyPeriodsCount = Number(activePayment.frozenPenaltyPeriodsCount || 0);
 
     const [autoDebit, setAutoDebit] = useState(!!family.autoDebit || false);
     const [requiresInvoice, setRequiresInvoice] = useState(!!family.requiresInvoice || false);

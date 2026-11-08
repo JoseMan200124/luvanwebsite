@@ -121,7 +121,6 @@ const SchoolUsersPage = () => {
     // El mensaje a familia manda correo y/o notificación: basta una de las dos
     // llaves para abrir el diálogo, y cada canal se decide adentro.
     const puedeEnviarMensajeFamilia = hasAnyPermission(['mail-enviar-familia', 'notificaciones-crear']);
-    const puedeListarContratos = hasPermission('contratos-listar');
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
@@ -831,8 +830,6 @@ const SchoolUsersPage = () => {
         });
     }, []);
     const [scheduleSchoolId, setScheduleSchoolId] = useState(null);
-    // selectedUserForContract removed; use selectedUser when needed for sending contracts
-    const [contracts, setContracts] = useState([]);
     const [schools, setSchools] = useState([]);
 
     // Prefer FamilyDetail-level updatedAt (for the selected school + ciclo) over global User.updatedAt
@@ -1059,19 +1056,6 @@ const SchoolUsersPage = () => {
         const countStudents = (list) => (Array.isArray(list) ? list.reduce((acc, u) => acc + getStudentsCount(u), 0) : 0);
 
     // Cargar datos adicionales
-    const fetchContracts = useCallback(async () => {
-        if (!puedeListarContratos) { setContracts([]); return; }
-        try {
-            const response = await api.get('/contracts', {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setContracts(response.data || []);
-        } catch (err) {
-            console.error('Error fetching contracts:', err);
-            setContracts([]); // Asegurar que siempre sea un array
-        }
-    }, [auth.token, puedeListarContratos]);
-
     const fetchSchools = useCallback(async () => {
         try {
             const response = await api.get('/schools', {
@@ -1132,12 +1116,11 @@ const SchoolUsersPage = () => {
     useEffect(() => {
         if (auth.token && schoolId) {
             fetchUsers();
-            fetchContracts();
             fetchSchools();
             fetchAllPilots();
             fetchAllMonitoras();
         }
-    }, [auth.token, schoolId, fetchUsers, fetchContracts, fetchSchools]);
+    }, [auth.token, schoolId, fetchUsers, fetchSchools]);
 
     const refreshPageData = useCallback(async () => {
         if (!auth.token || !schoolId) {
@@ -1145,12 +1128,11 @@ const SchoolUsersPage = () => {
         }
         await Promise.all([
             fetchUsers(),
-            fetchContracts(),
             fetchSchools(),
             fetchAllPilots(),
             fetchAllMonitoras(),
         ]);
-    }, [auth.token, schoolId, fetchUsers, fetchContracts, fetchSchools]);
+    }, [auth.token, schoolId, fetchUsers, fetchSchools]);
 
     useRegisterPageRefresh(refreshPageData, [auth.token, schoolId, refreshPageData]);
 

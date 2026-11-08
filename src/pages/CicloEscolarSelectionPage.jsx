@@ -276,11 +276,6 @@ const CicloEscolarSelectionPage = () => {
     const [schoolYearStart, setSchoolYearStart] = useState('');
     const [schoolYearEnd, setSchoolYearEnd] = useState('');
     
-    // Estados para limpieza de mora
-    const [clearPeriod, setClearPeriod] = useState('CURRENT');
-    const [customClearPeriod, setCustomClearPeriod] = useState('');
-    const [clearReason, setClearReason] = useState('');
-    const [clearingPenalty, setClearingPenalty] = useState(false);
     // Quick modal para limpieza (período actual fijo)
     const [openQuickClear, setOpenQuickClear] = useState(false);
     const [quickClearReason, setQuickClearReason] = useState('');
@@ -320,7 +315,6 @@ const CicloEscolarSelectionPage = () => {
         .filter(Boolean);
 
     const selectedCicloEscolar = ciclosEscolares.find((cicloEscolar) => String(cicloEscolar.id) === String(selectedCicloEscolarId));
-    const defaultCicloEscolar = ciclosEscolares.find((cicloEscolar) => cicloEscolar.predeterminado && cicloEscolar.activo) || ciclosEscolares.find((cicloEscolar) => cicloEscolar.predeterminado) || null;
     const selectedCycleYear = selectedCicloEscolar?.anio ? String(selectedCicloEscolar.anio) : '';
     const enabledCiclosEscolares = ciclosEscolares.filter((cicloEscolar) => cicloEscolar.activo);
     const selectableCiclosEscolares = enabledCiclosEscolares.length > 0 ? enabledCiclosEscolares : ciclosEscolares;
@@ -477,17 +471,6 @@ const CicloEscolarSelectionPage = () => {
         setSchoolYearEnd(source.schoolYearEnd || '');
         setNewGradeName('');
         setDraftEnrollmentTiers([]);
-    };
-
-    const isPreviousCycleSchool = (school) => {
-        const cycleStatus = String(school?.cycleStatus || '').trim().toUpperCase();
-        if (cycleStatus === 'ARCHIVED') {
-            return true;
-        }
-
-        const selectedYear = Number(selectedCicloEscolar?.anio || selectedCycleYear || 0);
-        const defaultYear = Number(defaultCicloEscolar?.anio || 0);
-        return selectedYear > 0 && defaultYear > 0 && selectedYear < defaultYear;
     };
 
     const fetchCiclosEscolares = useCallback(async () => {
@@ -1076,16 +1059,6 @@ const CicloEscolarSelectionPage = () => {
         }));
     };
 
-    const handleTimeChange = (e, scheduleIndex, timeIndex) => {
-        const { value } = e.target;
-        setSchoolSchedules((prev) => {
-            const clone = [...prev];
-            // Only allow one time entry per schedule. If empty, set to 'N/A'
-            clone[scheduleIndex].times = [value ? value : 'N/A'];
-            return clone;
-        });
-    };
-
     const DAY_OPTIONS = [
         { key: 'monday', label: 'Lun' },
         { key: 'tuesday', label: 'Mar' },
@@ -1126,10 +1099,6 @@ const CicloEscolarSelectionPage = () => {
     };
 
     // Funciones para grados
-    const handleAddGrade = () => {
-        setSchoolGrades((prev) => [...prev, { name: '' }]);
-    };
-
     const pruneLevelGradesTo = (validNames) => {
         const allowed = new Set(validNames);
         setSchoolLevelGrades((prev) => {
@@ -1163,15 +1132,6 @@ const CicloEscolarSelectionPage = () => {
                     .filter(Boolean)
             );
             return newArr;
-        });
-    };
-
-    const handleGradeChange = (e, gradeIndex) => {
-        const { value } = e.target;
-        setSchoolGrades((prev) => {
-            const clone = [...prev];
-            clone[gradeIndex].name = value;
-            return clone;
         });
     };
 
@@ -1567,80 +1527,6 @@ const CicloEscolarSelectionPage = () => {
                 clearPenalty: billingStart === 'CURRENT_MONTH' && clearPenalty
             }
         });
-    };
-
-    // Función para limpiar mora
-    const handleClearPenalty = async () => {
-        if (!selectedSchool) {
-            return;
-        }
-        
-        if (!clearReason.trim()) {
-            setSnackbar({
-                open: true,
-                message: 'Debe ingresar un motivo para la limpieza de mora',
-                severity: 'warning'
-            });
-            return;
-        }
-        
-        // Determinar período a limpiar
-        let periodToClean = clearPeriod;
-        if (clearPeriod === 'CUSTOM') {
-            if (!customClearPeriod) {
-                setSnackbar({
-                    open: true,
-                    message: 'Debe seleccionar un período personalizado',
-                    severity: 'warning'
-                });
-                return;
-            }
-            periodToClean = customClearPeriod;
-        } else if (clearPeriod === 'CURRENT') {
-            // Usar período actual (formato YYYY-MM)
-            const now = new Date();
-            periodToClean = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        }
-        
-        const confirmMessage = clearPeriod === 'ALL'
-            ? `¿Está seguro de limpiar TODA la mora acumulada del colegio "${selectedSchool.name}"?\n\nMotivo: ${clearReason}`
-            : `¿Está seguro de limpiar la mora del período ${periodToClean} del colegio "${selectedSchool.name}"?\n\nMotivo: ${clearReason}`;
-        
-        if (!window.confirm(confirmMessage)) {
-            return;
-        }
-        
-        setClearingPenalty(true);
-        
-        try {
-            const response = await api.post('/payments/penalties/clear', {
-                schoolId: selectedSchool.id,
-                cicloEscolarId: selectedCicloEscolarId || null,
-                period: periodToClean,
-                reason: clearReason
-            });
-            
-            setSnackbar({
-                open: true,
-                message: response.data.message || 'Mora limpiada exitosamente',
-                severity: 'success'
-            });
-            
-            // Limpiar campos
-            setClearPeriod('CURRENT');
-            setCustomClearPeriod('');
-            setClearReason('');
-            
-        } catch (err) {
-            console.error('Error al limpiar mora:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al limpiar la mora',
-                severity: 'error'
-            });
-        } finally {
-            setClearingPenalty(false);
-        }
     };
 
     const renderSchoolStatusChips = (school) => {
