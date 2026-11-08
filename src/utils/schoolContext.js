@@ -158,16 +158,3 @@ export const getSchoolContextLabel = (context) => {
         || (normalized.cicloEscolarYear ? `Ciclo ${normalized.cicloEscolarYear}` : 'Ciclo escolar');
     return `${schoolLabel} - ${cycleLabel}`;
 };
-
-export const findMatchingStoredContext = (contexts = []) => {
-    const stored = getStoredSchoolContext();
-    if (!stored?.schoolId || !stored?.cicloEscolarId) {
-        return null;
-    }
-
-    return contexts.find((context) => {
-        const normalized = normalizeSchoolContext(context);
-        return normalized.schoolId === stored.schoolId
-            && normalized.cicloEscolarId === stored.cicloEscolarId;
-    }) || null;
-};

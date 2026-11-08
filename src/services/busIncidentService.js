@@ -65,23 +65,6 @@ export const updateBusIncident = async (id, payload = {}) => {
 };
 
 /**
- * Obtener estadísticas de incidentes
- * @param {Object} filters - Filtros para las estadísticas
- */
-export const getBusIncidentStatistics = async (filters = {}) => {
-    const params = new URLSearchParams();
-    
-    Object.keys(filters).forEach(key => {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            params.append(key, filters[key]);
-        }
-    });
-
-    const response = await api.get(`/bus-incidents/statistics?${params.toString()}`);
-    return response.data;
-};
-
-/**
  * Obtener todos los incidentes (para export/descarga) sin paginación (intenta traer muchos)
  * @param {Object} filters - Filtros para la consulta
  */

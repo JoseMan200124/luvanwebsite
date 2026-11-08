@@ -14,7 +14,7 @@ export const DIA_KEYS = DIAS.map(d => d.key);
 export const MAX_NOTA = 255;
 export const MAX_FRANJA = 20; // mismos límites que validarEstructura del backend
 export const MAX_RUTA = 50;
-export const MAX_DESVIO_MIN = 180;
+const MAX_DESVIO_MIN = 180;
 export const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** Minúsculas sin tildes: búsquedas por nombre (listas, selector) y base de normalizarClave del Excel. */
 export const sinTildes = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

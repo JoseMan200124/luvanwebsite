@@ -20,7 +20,3 @@ export function normalizeKey(str) {
             .toLowerCase();
     }
 }
-
-export default {
-    normalizeKey
-};

@@ -31,7 +31,7 @@ export const PAYMENT_STATUS_OPTIONS = [
     { value: 'PARCIAL',    label: 'Pago Parcial' },
 ];
 
-export const EMPTY_PADRE_FILTERS = {
+const EMPTY_PADRE_FILTERS = {
     routeTypes: [],
     serviceStatuses: [],
     paymentStatuses: [],
@@ -175,13 +175,4 @@ export const validateAudience = (audience) => {
     }
 
     return { valid: true, message: null };
-};
-
-/**
- * True cuando el alcance del colegio es únicamente "familias sin ruta":
- * en ese caso el horario no aplica, porque no hay ruta a la que pertenezca.
- */
-export const isScheduleNotApplicable = (audience, schoolId) => {
-    const entry = getSchoolEntry(audience, schoolId);
-    return entry.routeNumbers.length === 0 && audience.padreFilters?.includeNoRoute === true;
 };

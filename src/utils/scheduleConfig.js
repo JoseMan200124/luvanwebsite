@@ -22,7 +22,7 @@ export const SCHEDULE_LABELS = {
  * MUI color mappings for schedule codes.
  * Custom codes get 'default' if not explicitly mapped.
  */
-export const SCHEDULE_COLORS = {
+const SCHEDULE_COLORS = {
     AM: 'primary',
     MD: 'secondary',
     PM: 'warning',
@@ -32,7 +32,7 @@ export const SCHEDULE_COLORS = {
 /**
  * MUI palette mappings for route occupancy table cells (background colors).
  */
-export const SCHEDULE_BG_COLORS = {
+const SCHEDULE_BG_COLORS = {
     AM: 'primary.light',
     MD: 'warning.light',
     PM: 'success.light',
@@ -130,14 +130,6 @@ export function ensureSchedules(schedules, codes = DEFAULT_SCHEDULE_CODES) {
     });
 
     return existing;
-}
-
-/**
- * Build route type options dynamically from schedule codes.
- * Returns ["Completa", "Media AM", "Media MD", ...] etc.
- */
-export function getRouteTypeOptions(scheduleCodes = DEFAULT_SCHEDULE_CODES) {
-    return ['Completa', ...scheduleCodes.map(c => `Media ${c}`)];
 }
 
 /**

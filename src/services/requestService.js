@@ -27,11 +27,6 @@ export const getRequestEvents = async (id) => {
     return res.data?.events || [];
 };
 
-export const createServiceCancellation = async (data) => {
-    const res = await api.post(`${API_URL}/service-cancellation`, data);
-    return res.data;
-};
-
 export const updateRequestStatus = async (id, data) => {
     const res = await api.patch(`${API_URL}/${id}/status`, data);
     return res.data;
@@ -42,24 +37,9 @@ export const deleteRequest = async (id) => {
     return res.data;
 };
 
-export const cancelRequest = async (id) => {
-    const res = await api.post(`${API_URL}/${id}/cancel`);
-    return res.data;
-};
-
 export const getRequestStatistics = async (params = {}) => {
     const res = await api.get(`${API_URL}/statistics`, { params });
     return res.data;
-};
-
-export const getSchoolsList = async (params = {}) => {
-    const res = await api.get('/schools', { params });
-    return res.data?.schools || res.data || [];
-};
-
-export const getCorporationsList = async (params = {}) => {
-    const res = await api.get('/corporations', { params });
-    return res.data?.corporations || res.data || [];
 };
 
 export const REQUEST_TYPE_META = {
@@ -79,24 +59,4 @@ export const REQUEST_STATES = {
     approved: 'Approved',
     rejected: 'Rejected',
     completed: 'Completed'
-};
-
-export const STATE_COLORS = {
-    pending: 'warning',
-    in_review: 'info',
-    approved: 'success',
-    rejected: 'error',
-    completed: 'success'
-};
-
-export default {
-    getAllRequests,
-    getRequestById,
-    getMyRequests,
-    getRequestEvents,
-    createServiceCancellation,
-    updateRequestStatus,
-    deleteRequest,
-    getRequestStatistics
-    , getSchoolsList, getCorporationsList
 };

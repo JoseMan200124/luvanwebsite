@@ -15,33 +15,6 @@ export const sendManualNotification = async (payload) => {
 };
 
 /**
- * Send a push notification to a single user.
- * @param {{ userId: number, title: string, message: string, schoolId?: number, cicloEscolarId?: number }} payload
- */
-export const sendDirectUserNotification = async (payload) => {
-    const { userId, title, message, schoolId, cicloEscolarId } = payload || {};
-    const res = await api.post('/notifications', {
-        type: 'manual',
-        sendPush: true,
-        title,
-        message,
-        cicloEscolarId: cicloEscolarId ? Number(cicloEscolarId) : null,
-        metadata: {
-            source: 'direct-user-notification-service',
-            channel: 'push',
-            targetUserId: Number(userId),
-            schoolId: schoolId ? Number(schoolId) : null,
-            cicloEscolarId: cicloEscolarId ? Number(cicloEscolarId) : null,
-        },
-        targetingCriteria: {
-            userIds: [Number(userId)],
-            ...(cicloEscolarId ? { cicloEscolarId: Number(cicloEscolarId) } : {}),
-        },
-    });
-    return res.data;
-};
-
-/**
  * Lista paginada del historial de notificaciones manuales enviadas (admin).
  * @param {{ page?: number, pageSize?: number, q?: string, startDate?: string, endDate?: string,
  *           cicloEscolarId?: number|string, allCycles?: boolean, sortBy?: string, sortDirection?: string }} params

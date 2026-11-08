@@ -33,5 +33,3 @@ export function showDuplicateEmailFromError(err, setSnackbar, opts = {}) {
         return false;
     }
 }
-
-export default showDuplicateEmailFromError;

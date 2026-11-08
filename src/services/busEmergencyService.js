@@ -45,20 +45,3 @@ export const deleteBusEmergency = async (id) => {
     const response = await api.delete(`/bus-emergencies/${id}`);
     return response.data;
 };
-
-/**
- * Obtener estadísticas de emergencias
- * @param {Object} filters - Filtros para las estadísticas
- */
-export const getBusEmergencyStatistics = async (filters = {}) => {
-    const params = new URLSearchParams();
-    
-    Object.keys(filters).forEach(key => {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            params.append(key, filters[key]);
-        }
-    });
-
-    const response = await api.get(`/bus-emergencies/statistics?${params.toString()}`);
-    return response.data;
-};
