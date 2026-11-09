@@ -52,7 +52,9 @@ const drawKpiRow = (pdf, kpis, y, pageWidth) => {
 };
 
 export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, rangeLabel }) => {
-    if (!result) return;
+    if (!result) {
+        return;
+    }
     const now = moment();
     const pdf = new jsPDF('l', 'mm', 'a3');
     const pageWidth = pdf.internal.pageSize.getWidth();
@@ -108,7 +110,9 @@ export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, range
         pdf.text(title, MARGIN_X, y);
 
         const numericColumns = {};
-        head.forEach((_, i) => { if (i > 0) numericColumns[i] = { halign: 'right' }; });
+        head.forEach((_, i) => { if (i > 0) {
+            numericColumns[i] = { halign: 'right' };
+        } });
 
         autoTable(pdf, {
             startY: y + 2,
@@ -120,9 +124,13 @@ export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, range
             alternateRowStyles: { fillColor: [247, 247, 248] },
             columnStyles: numericColumns,
             didParseCell: (data) => {
-                if (data.section !== 'body' || !highlightRow) return;
+                if (data.section !== 'body' || !highlightRow) {
+                    return;
+                }
                 const style = highlightRow(data.row.index);
-                if (style) Object.assign(data.cell.styles, style);
+                if (style) {
+                    Object.assign(data.cell.styles, style);
+                }
             },
             didDrawPage: (data) => {
                 if (data.pageNumber > 1) {

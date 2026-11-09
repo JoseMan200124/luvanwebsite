@@ -122,15 +122,25 @@ function descendingComparator(a, b, orderBy) {
     const aValue = getFieldValue(a, orderBy);
     const bValue = getFieldValue(b, orderBy);
 
-    if (aValue == null && bValue == null) return 0;
-    if (aValue == null) return 1;
-    if (bValue == null) return -1;
+    if (aValue == null && bValue == null) {
+        return 0;
+    }
+    if (aValue == null) {
+        return 1;
+    }
+    if (bValue == null) {
+        return -1;
+    }
 
     if (typeof aValue === 'string' && typeof bValue === 'string') {
         return bValue.localeCompare(aValue);
     }
-    if (bValue < aValue) return -1;
-    if (bValue > aValue) return 1;
+    if (bValue < aValue) {
+        return -1;
+    }
+    if (bValue > aValue) {
+        return 1;
+    }
     return 0;
 }
 
@@ -144,7 +154,9 @@ function stableSort(array, comparator) {
     const stabilizedThis = array.map((el, index) => [el, index]);
     stabilizedThis.sort((a, b) => {
         const order = comparator(a[0], b[0]);
-        if (order !== 0) return order;
+        if (order !== 0) {
+            return order;
+        }
         return a[1] - b[1];
     });
     return stabilizedThis.map((el) => el[0]);
@@ -167,13 +179,21 @@ function getFieldValue(bus, field) {
 
 // Devuelve una cadena representando la asignación del bus (colegio/corporación y número de ruta)
 function getAssignmentText(bus) {
-    if (!bus) return 'Sin asignar';
+    if (!bus) {
+        return 'Sin asignar';
+    }
     const schoolName =
         bus.school?.name || bus.corporation?.name || '';
     const routeNumber = bus.routeNumber || bus.route || bus.route_num || '';
-    if (!schoolName && !routeNumber) return 'Sin asignar';
-    if (schoolName && routeNumber) return `${schoolName} — Ruta ${routeNumber}`;
-    if (schoolName) return schoolName;
+    if (!schoolName && !routeNumber) {
+        return 'Sin asignar';
+    }
+    if (schoolName && routeNumber) {
+        return `${schoolName} — Ruta ${routeNumber}`;
+    }
+    if (schoolName) {
+        return schoolName;
+    }
     return `Ruta ${routeNumber}`;
 }
 /* =================== Fin código para ordenamiento =================== */
@@ -353,7 +373,7 @@ const BusesManagementPage = () => {
 
         // Append newly selected files to existing ones so they don't disappear from the list
         setSelectedBus((prev) => {
-            const existing = prev && prev.files ? Array.from(prev.files) : [];
+            const existing = prev?.files ? Array.from(prev.files) : [];
             // Convert FileList to array and filter duplicates by name+size
             const newFiles = Array.from(files).filter((nf) => {
                 return !existing.some((ef) => ef.name === nf.name && ef.size === nf.size);
@@ -379,13 +399,15 @@ const BusesManagementPage = () => {
     const confirmRemoveFile = async () => {
         const file = deleteTarget;
         const index = deleteTargetIndex;
-        if (!file) return;
+        if (!file) {
+            return;
+        }
         setDeleteLoading(true);
 
         // If file has an id, it's already on the server
-        if (file && file.id) {
+        if (file?.id) {
             // backend expects a busId in the route: DELETE /buses/:busId/files/:fileId
-            if (!selectedBus || !selectedBus.id) {
+            if (!selectedBus?.id) {
                 setSnackbar({ open: true, message: 'No se pudo determinar el bus para eliminar el archivo.', severity: 'error' });
                 setDeleteLoading(false);
                 setOpenDeleteDialog(false);
@@ -413,13 +435,17 @@ const BusesManagementPage = () => {
 
         // Remove locally (works for both existing and newly added files)
         setSelectedBus((prev) => {
-            if (!prev) return prev;
+            if (!prev) {
+                return prev;
+            }
             const filesArr = prev.files ? Array.from(prev.files) : [];
             if (typeof index === 'number') {
                 filesArr.splice(index, 1);
             } else {
                 const idx = filesArr.findIndex((f) => f === file || (f.id && file.id && file.id === f.id));
-                if (idx !== -1) filesArr.splice(idx, 1);
+                if (idx !== -1) {
+                    filesArr.splice(idx, 1);
+                }
             }
             return { ...prev, files: filesArr };
         });
@@ -532,8 +558,12 @@ const BusesManagementPage = () => {
 
                 const combined = [];
                 const pushIfValid = (item, type) => {
-                    if (!item) return;
-                    if (item.deleted) return;
+                    if (!item) {
+                        return;
+                    }
+                    if (item.deleted) {
+                        return;
+                    }
                     const id = item.id || item._id || item.value || item.uuid || item.name;
                     const name = item.name || item.nombre || item.label || String(id);
                     const cicloLabel = type === 'corporation'
@@ -548,7 +578,9 @@ const BusesManagementPage = () => {
                 // Secciones en orden alfabético (igual que el resto de selectores de cliente).
                 combined.sort((a, b) => {
                     const cmp = a.cicloLabel.localeCompare(b.cicloLabel, 'es');
-                    if (cmp !== 0) return cmp;
+                    if (cmp !== 0) {
+                        return cmp;
+                    }
                     return a.name.localeCompare(b.name, 'es');
                 });
 
@@ -563,22 +595,32 @@ const BusesManagementPage = () => {
 
     const filteredBuses = buses.filter((bus) => {
         const q = searchQuery.toLowerCase();
-        const inPlate = bus.plate && bus.plate.toLowerCase().includes(q);
-        const inDesc = bus.description && bus.description.toLowerCase().includes(q);
-        if (!(inPlate || inDesc)) return false;
+        const inPlate = bus.plate?.toLowerCase().includes(q);
+        const inDesc = bus.description?.toLowerCase().includes(q);
+        if (!(inPlate || inDesc)) {
+            return false;
+        }
 
         // Client filter (match both id and type)
         if (clientFilter) {
             if (clientFilter.type === 'school') {
                 const s = bus.school;
-                if (!s) return false;
+                if (!s) {
+                    return false;
+                }
                 const sid = s.id || s._id;
-                if (String(sid) !== String(clientFilter.id)) return false;
+                if (String(sid) !== String(clientFilter.id)) {
+                    return false;
+                }
             } else if (clientFilter.type === 'corporation') {
                 const c = bus.corporation;
-                if (!c) return false;
+                if (!c) {
+                    return false;
+                }
                 const cid = c.id || c._id;
-                if (String(cid) !== String(clientFilter.id)) return false;
+                if (String(cid) !== String(clientFilter.id)) {
+                    return false;
+                }
             } else {
                 return false;
             }
@@ -586,13 +628,23 @@ const BusesManagementPage = () => {
 
         // availability: consider a bus 'assigned' if it has school/corporation or route
         const assigned = Boolean(bus.school || bus.corporation || bus.routeNumber || bus.route || bus.route_num);
-        if (availabilityFilter === 'assigned' && !assigned) return false;
-        if (availabilityFilter === 'unassigned' && assigned) return false;
+        if (availabilityFilter === 'assigned' && !assigned) {
+            return false;
+        }
+        if (availabilityFilter === 'unassigned' && assigned) {
+            return false;
+        }
 
         // state filter
-        if (inWorkshopFilter === 'in' && !bus.inWorkshop) return false;
-        if (inWorkshopFilter === 'out' && (bus.inWorkshop || bus.decommissioned)) return false;
-        if (inWorkshopFilter === 'decommissioned' && !bus.decommissioned) return false;
+        if (inWorkshopFilter === 'in' && !bus.inWorkshop) {
+            return false;
+        }
+        if (inWorkshopFilter === 'out' && (bus.inWorkshop || bus.decommissioned)) {
+            return false;
+        }
+        if (inWorkshopFilter === 'decommissioned' && !bus.decommissioned) {
+            return false;
+        }
 
         return true;
     });
@@ -603,7 +655,7 @@ const BusesManagementPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -635,7 +687,9 @@ const BusesManagementPage = () => {
     };
 
     const handleUploadBulk = async () => {
-        if (!bulkFile) return;
+        if (!bulkFile) {
+            return;
+        }
         setBulkLoading(true);
         setBulkResults(null);
 
@@ -749,7 +803,9 @@ const BusesManagementPage = () => {
                             setPage(0);
                         }}
                         isOptionEqualToValue={(option, value) => {
-                            if (!value) return false;
+                            if (!value) {
+                                return false;
+                            }
                             return String(option.id) === String(value.id) && option.type === value.type;
                         }}
                         sx={{ minWidth: 160, width: 220 }}
@@ -1115,7 +1171,7 @@ const BusesManagementPage = () => {
             {/* Diálogo para crear/editar un bus */}
             <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
                 <DialogTitle>
-                    {selectedBus && selectedBus.id ? 'Editar Bus' : 'Añadir Bus'}
+                    {selectedBus?.id ? 'Editar Bus' : 'Añadir Bus'}
                 </DialogTitle>
                 <DialogContent>
                     <TextField
@@ -1209,7 +1265,7 @@ const BusesManagementPage = () => {
                         </Button>
                     </label>
 
-                    {selectedBus && selectedBus.files && selectedBus.files.length > 0 && (
+                    {selectedBus?.files && selectedBus.files.length > 0 && (
                         <List sx={{ mt: 2 }}>
                             {[...selectedBus.files].map((file, index) => {
                                 const isServerFile = !!file.id;
@@ -1254,9 +1310,9 @@ const BusesManagementPage = () => {
                     <Button onClick={handleDialogClose} color="primary">
                         Cancelar
                     </Button>
-                    {hasPermission(selectedBus && selectedBus.id ? 'buses-editar' : 'buses-crear') && (
+                    {hasPermission(selectedBus?.id ? 'buses-editar' : 'buses-crear') && (
                         <Button onClick={handleSave} color="primary" variant="contained">
-                            {selectedBus && selectedBus.id ? 'Guardar Cambios' : 'Crear Bus'}
+                            {selectedBus?.id ? 'Guardar Cambios' : 'Crear Bus'}
                         </Button>
                     )}
                 </DialogActions>

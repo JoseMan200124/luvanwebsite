@@ -104,7 +104,7 @@ function PaymentHistorySection({ refresh = 0 }) {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0); // al cambiar el tamaño, volvemos a la página 0
     };
 
@@ -179,15 +179,15 @@ function PaymentHistorySection({ refresh = 0 }) {
                     h.finalStatus || '',
                     h.nextPaymentDate ? moment(h.nextPaymentDate).format('DD/MM/YYYY') : '',
                     h.lastPaymentDate ? moment(h.lastPaymentDate).format('DD/MM/YYYY') : '',
-                    parseFloat(h.montoTotal).toFixed(2),
-                    parseFloat(h.leftover).toFixed(2),
-                    parseFloat(h.accumulatedPenalty).toFixed(2),
-                    parseFloat(h.totalDue).toFixed(2),
-                    parseFloat(h.creditBalance).toFixed(2),
-                    parseFloat(h.familyDiscount || 0).toFixed(2),
+                    Number.parseFloat(h.montoTotal).toFixed(2),
+                    Number.parseFloat(h.leftover).toFixed(2),
+                    Number.parseFloat(h.accumulatedPenalty).toFixed(2),
+                    Number.parseFloat(h.totalDue).toFixed(2),
+                    Number.parseFloat(h.creditBalance).toFixed(2),
+                    Number.parseFloat(h.familyDiscount || 0).toFixed(2),
                     h.bankAccountNumber || '',
                     h.requiresInvoice ? 'Sí' : 'No',
-                    parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)
+                    Number.parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)
                 ]);
             });
 
@@ -305,22 +305,22 @@ function PaymentHistorySection({ refresh = 0 }) {
                                                 : '—'}
                                         </TableCell>
                                         <TableCell>
-                                            {parseFloat(h.montoTotal).toFixed(2)}
+                                            {Number.parseFloat(h.montoTotal).toFixed(2)}
                                         </TableCell>
                                         <TableCell>
-                                            {parseFloat(h.leftover).toFixed(2)}
+                                            {Number.parseFloat(h.leftover).toFixed(2)}
                                         </TableCell>
                                         <TableCell>
-                                            {parseFloat(h.accumulatedPenalty).toFixed(2)}
+                                            {Number.parseFloat(h.accumulatedPenalty).toFixed(2)}
                                         </TableCell>
                                         <TableCell>
-                                            {parseFloat(h.totalDue).toFixed(2)}
+                                            {Number.parseFloat(h.totalDue).toFixed(2)}
                                         </TableCell>
                                         <TableCell>
-                                            {parseFloat(h.creditBalance).toFixed(2)}
+                                            {Number.parseFloat(h.creditBalance).toFixed(2)}
                                         </TableCell>
                                         <TableCell>
-                                            {parseFloat(h.familyDiscount || 0).toFixed(2)}
+                                            {Number.parseFloat(h.familyDiscount || 0).toFixed(2)}
                                         </TableCell>
                                         <TableCell>
                                             {h.bankAccountNumber || ''}
@@ -329,7 +329,7 @@ function PaymentHistorySection({ refresh = 0 }) {
                                             {h.requiresInvoice ? 'Sí' : 'No'}
                                         </TableCell>
                                         <TableCell>
-                                            {parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)}
+                                            {Number.parseFloat(h.exoneratedPenaltyAmount || 0).toFixed(2)}
                                         </TableCell>
                                     </TableRow>
                                 ))}

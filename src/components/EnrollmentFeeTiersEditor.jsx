@@ -42,7 +42,9 @@ export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraft
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     const loadTiers = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         setLoading(true);
         try {
             const { data } = await api.get(`/schools/${schoolId}/enrollment-fee-config`);
@@ -62,13 +64,17 @@ export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraft
     }, [schoolId]);
 
     useEffect(() => {
-        if (!isDraft) loadTiers();
+        if (!isDraft) {
+            loadTiers();
+        }
     }, [isDraft, loadTiers]);
 
     // En modo borrador (colegio aún no creado) no hay endpoint contra qué guardar;
     // se reporta el estado al formulario padre para persistirlo tras crear el colegio.
     useEffect(() => {
-        if (isDraft) onDraftTiersChange?.(tiers);
+        if (isDraft) {
+            onDraftTiersChange?.(tiers);
+        }
     }, [isDraft, tiers, onDraftTiersChange]);
 
     const handleAddRow = () => setTiers((prev) => [...prev, emptyTierRow()]);

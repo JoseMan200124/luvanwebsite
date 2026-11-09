@@ -27,7 +27,9 @@ function tariffOverrideSummary(overrides = {}) {
 
 function findMoraIncludedCaseForDeletedAutoCredit(payment, txBefore, transactionId) {
     const deletedTx = (txBefore || []).find(tx => String(tx.id) === String(transactionId));
-    if (deletedTx?.type !== 'CREDITO' || deletedTx?.source !== 'CREDIT_AUTO') return null;
+    if (deletedTx?.type !== 'CREDITO' || deletedTx?.source !== 'CREDIT_AUTO') {
+        return null;
+    }
     const cases = (payment?.anomalies || [])
         .filter(item => item.code === 'MORA_PAID_AS_TARIFF')
         .flatMap(item => item.data?.cases || []);
@@ -41,26 +43,48 @@ const SEV = {
 };
 
 function fmtVal(v) {
-    if (v === null || v === undefined) return '—';
-    if (typeof v === 'boolean') return v ? 'true' : 'false';
-    if (Array.isArray(v) || (typeof v === 'object')) return JSON.stringify(v);
+    if (v === null || v === undefined) {
+        return '—';
+    }
+    if (typeof v === 'boolean') {
+        return v ? 'true' : 'false';
+    }
+    if (Array.isArray(v) || (typeof v === 'object')) {
+        return JSON.stringify(v);
+    }
     return String(v);
 }
 
 function parseInputValue(s) {
     const t = (s || '').trim();
-    if (t === '') return '';
-    if (t === 'true') return true;
-    if (t === 'false') return false;
-    if (t === 'null') return null;
-    if (!Number.isNaN(Number(t)) && /^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+    if (t === '') {
+        return '';
+    }
+    if (t === 'true') {
+        return true;
+    }
+    if (t === 'false') {
+        return false;
+    }
+    if (t === 'null') {
+        return null;
+    }
+    if (!Number.isNaN(Number(t)) && /^-?\d+(\.\d+)?$/.test(t)) {
+        return Number(t);
+    }
     return t;
 }
 
 function isEqualLoose(a, b) {
-    if (a === b) return true;
-    if (a === null || a === undefined) return b === null || b === undefined || b === '';
-    if (b === null || b === undefined) return a === null || a === undefined || a === '';
+    if (a === b) {
+        return true;
+    }
+    if (a === null || a === undefined) {
+        return b === null || b === undefined || b === '';
+    }
+    if (b === null || b === undefined) {
+        return a === null || a === undefined || a === '';
+    }
     if (typeof a === 'number' || typeof b === 'number') {
         return Number(a) === Number(b);
     }
@@ -82,7 +106,9 @@ function downloadJson(obj, filename) {
 function applyOverrides(target, overrides) {
     const out = { ...target };
     Object.keys(overrides || {}).forEach(k => {
-        if (overrides[k] !== '' && overrides[k] !== undefined) out[k] = overrides[k];
+        if (overrides[k] !== '' && overrides[k] !== undefined) {
+            out[k] = overrides[k];
+        }
     });
     return out;
 }
@@ -118,14 +144,20 @@ function autoCreditAmount(row) {
 }
 
 function autoCreditPeriod(row) {
-    if (row?.period) return row.period;
+    if (row?.period) {
+        return row.period;
+    }
     const match = /per[ií]odo\s+(\d{4}-\d{2})/i.exec(String(row?.notes || ''));
     return match?.[1] || null;
 }
 
 function areEquivalentAutoCreditRows(savedRow, syntheticRow) {
-    if (autoCreditDate(savedRow) !== autoCreditDate(syntheticRow)) return false;
-    if (autoCreditAmount(savedRow) !== autoCreditAmount(syntheticRow)) return false;
+    if (autoCreditDate(savedRow) !== autoCreditDate(syntheticRow)) {
+        return false;
+    }
+    if (autoCreditAmount(savedRow) !== autoCreditAmount(syntheticRow)) {
+        return false;
+    }
 
     const savedPeriod = autoCreditPeriod(savedRow);
     const syntheticPeriod = autoCreditPeriod(syntheticRow);
@@ -138,11 +170,15 @@ function findEquivalentAutoCreditRows(beforeRows, afterRows, deleteIds) {
     const afterIds = new Set();
 
     (afterRows || []).forEach(afterRow => {
-        if (!isSyntheticAutoCredit(afterRow)) return;
+        if (!isSyntheticAutoCredit(afterRow)) {
+            return;
+        }
         const matchedBeforeRow = beforeCandidates.find(beforeRow => (
             !beforeIds.has(beforeRow.id) && areEquivalentAutoCreditRows(beforeRow, afterRow)
         ));
-        if (!matchedBeforeRow) return;
+        if (!matchedBeforeRow) {
+            return;
+        }
         beforeIds.add(matchedBeforeRow.id);
         afterIds.add(afterRow.id);
     });
@@ -225,7 +261,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         setTab(0);
         const init = {};
         (payment?.anomalies || []).forEach(a => {
-            if (a.askApply) init[a.code] = true;
+            if (a.askApply) {
+                init[a.code] = true;
+            }
         });
         setAnomalyDecisions(init);
     }, [payment?.paymentId, payment?.ctxHash]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -294,7 +332,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         };
     }, [expected.transactionsToUpdate, txBefore, txAfter]);
 
-    if (!payment) return null;
+    if (!payment) {
+        return null;
+    }
 
     const handlePaymentEdit = (field, value) => {
         setEditPayment(prev => ({ ...prev, [field]: parseInputValue(value) }));
@@ -315,7 +355,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
             } else {
-                if (onReplaceRow) onReplaceRow(fresh);
+                if (onReplaceRow) {
+                    onReplaceRow(fresh);
+                }
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
@@ -329,10 +371,16 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     };
 
     const handleCreditAutoDecisionChange = async (decisionKey, noAplica) => {
-        if (!decisionKey) return;
+        if (!decisionKey) {
+            return;
+        }
         const next = { ...creditAutoDecisions };
-        if (noAplica) next[decisionKey] = false;
-        else delete next[decisionKey];
+        if (noAplica) {
+            next[decisionKey] = false;
+        }
+        else {
+            delete next[decisionKey];
+        }
         setCreditAutoDecisions(next);
         setRefreshing(true);
         try {
@@ -341,7 +389,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
             } else {
-                if (onReplaceRow) onReplaceRow(fresh);
+                if (onReplaceRow) {
+                    onReplaceRow(fresh);
+                }
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
@@ -356,8 +406,12 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
 
     const handleLateStartDecisionChange = async (period, waive) => {
         const next = { ...lateStartDecisions };
-        if (waive) next[period] = false;
-        else delete next[period];
+        if (waive) {
+            next[period] = false;
+        }
+        else {
+            delete next[period];
+        }
         setLateStartDecisions(next);
         setRefreshing(true);
         try {
@@ -366,7 +420,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
             } else {
-                if (onReplaceRow) onReplaceRow(fresh);
+                if (onReplaceRow) {
+                    onReplaceRow(fresh);
+                }
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
@@ -380,10 +436,16 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     };
 
     const handleMoraPaidAsTariffDecisionChange = async (caseKey, applies) => {
-        if (!caseKey) return;
+        if (!caseKey) {
+            return;
+        }
         const next = { ...moraPaidAsTariffDecisions };
-        if (applies) next[caseKey] = true;
-        else delete next[caseKey];
+        if (applies) {
+            next[caseKey] = true;
+        }
+        else {
+            delete next[caseKey];
+        }
         setMoraPaidAsTariffDecisions(next);
         setRefreshing(true);
         try {
@@ -392,7 +454,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
             } else {
-                if (onReplaceRow) onReplaceRow(fresh);
+                if (onReplaceRow) {
+                    onReplaceRow(fresh);
+                }
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
@@ -423,7 +487,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
             } else {
-                if (onReplaceRow) onReplaceRow(fresh);
+                if (onReplaceRow) {
+                    onReplaceRow(fresh);
+                }
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
@@ -474,10 +540,16 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     };
 
     const handleManualDeleteTransactionChange = async (transactionId, shouldDelete) => {
-        if (!transactionId) return;
+        if (!transactionId) {
+            return;
+        }
         const next = { ...manualDeleteTransactionIds };
-        if (shouldDelete) next[transactionId] = true;
-        else delete next[transactionId];
+        if (shouldDelete) {
+            next[transactionId] = true;
+        }
+        else {
+            delete next[transactionId];
+        }
         let nextMoraPaidAsTariffDecisions = moraPaidAsTariffDecisions;
         if (shouldDelete) {
             const matchingCase = findMoraIncludedCaseForDeletedAutoCredit(payment, txBefore, transactionId);
@@ -503,7 +575,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             if (!fresh) {
                 setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
             } else {
-                if (onReplaceRow) onReplaceRow(fresh);
+                if (onReplaceRow) {
+                    onReplaceRow(fresh);
+                }
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
@@ -521,14 +595,18 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         try {
             const payloadPayment = {};
             Object.keys(editPayment).forEach(k => {
-                if (editPayment[k] !== '') payloadPayment[k] = editPayment[k];
+                if (editPayment[k] !== '') {
+                    payloadPayment[k] = editPayment[k];
+                }
             });
 
             const payloadPeriods = Object.keys(editPeriods).map(period => {
                 const fields = editPeriods[period] || {};
                 const cleaned = { period };
                 Object.keys(fields).forEach(k => {
-                    if (fields[k] !== '') cleaned[k] = fields[k];
+                    if (fields[k] !== '') {
+                        cleaned[k] = fields[k];
+                    }
                 });
                 return cleaned;
             }).filter(p => Object.keys(p).length > 1);
@@ -542,7 +620,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 ledgerAfter.forEach((l, i) => {
                     // Por defecto se conserva (si no está en ledgerKeep o está como true)
                     const keep = ledgerKeep[i] !== false;
-                    if (!keep) return; // saltar entradas marcadas para eliminar
+                    if (!keep) {
+                        return;
+                    } // saltar entradas marcadas para eliminar
                     const edit = ledgerEditData[i];
                     manualLedgerEntries.push(edit ? { ...l, ...edit } : l);
                 });
@@ -567,7 +647,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/apply', body);
             setAppliedResult(data);
             setSnackbar({ open: true, severity: 'success', message: 'Cambios aplicados correctamente.' });
-            if (onApplied) onApplied(payment.paymentId, data);
+            if (onApplied) {
+                onApplied(payment.paymentId, data);
+            }
         } catch (err) {
             const status = err?.response?.status;
             const data = err?.response?.data;
@@ -577,7 +659,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                     severity: 'warning',
                     message: data?.message || 'Los datos cambiaron desde la simulación.',
                     action: (
-                        <Button color="inherit" size="small" onClick={() => { setSnackbar(s => ({ ...s, open: false })); if (onCtxChanged) onCtxChanged(); }}>
+                        <Button color="inherit" size="small" onClick={() => { setSnackbar(s => ({ ...s, open: false })); if (onCtxChanged) {
+                            onCtxChanged();
+                        } }}>
                             Volver a simular
                         </Button>
                     )
@@ -591,7 +675,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     };
 
     const handleDownloadResult = () => {
-        if (!appliedResult) return;
+        if (!appliedResult) {
+            return;
+        }
         const ts = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
         downloadJson(appliedResult, `apply-payment-${payment.paymentId}-${ts}.json`);
     };
@@ -599,7 +685,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     // Boletas
     const openReceipts = async () => {
         setReceiptsOpen(true);
-        if (!payment.userId) return;
+        if (!payment.userId) {
+            return;
+        }
         setReceiptsLoading(true);
         try {
             const { data } = await api.get(`/parents/${payment.userId}/receipts`);
@@ -613,7 +701,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
 
     const openSchoolDetails = async () => {
         setSchoolOpen(true);
-        if (!payment.schoolId) return;
+        if (!payment.schoolId) {
+            return;
+        }
         setSchoolLoading(true);
         try {
             const { data } = await api.get(`/schools/${payment.schoolId}`);
@@ -1256,7 +1346,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                                 // Guardar los datos editados
                                                 const clean = {};
                                                 Object.entries(ledgerEditDialogData).forEach(([k, v]) => {
-                                                    if (v !== '' && v !== undefined) clean[k] = v;
+                                                    if (v !== '' && v !== undefined) {
+                                                        clean[k] = v;
+                                                    }
                                                 });
                                                 setLedgerEditData(prev => ({ ...prev, [idx]: clean }));
                                                 setLedgerEditDialogIndex(null);
@@ -1535,8 +1627,8 @@ function TxTable({ rows, markIds, updateIds, markFn, markStyle, creditAutoDecisi
             </TableHead>
             <TableBody>
                 {sorted.map((row, index) => {
-                    const marked = (markIds && markIds.has(row.id)) || (markFn && markFn(row));
-                    const updated = updateIds && updateIds.has(row.id);
+                    const marked = (markIds?.has(row.id)) || (markFn?.(row));
+                    const updated = updateIds?.has(row.id);
                     const fecha = row.date || row.realPaymentDate || '—';
                     const display = getTransactionDisplay(row);
                     const canSkipCreditAuto = row.synthetic && row.type === 'CREDIT_AUTO_TARIFF' && row.decisionKey && row.canSkipCreditAuto;
@@ -1651,8 +1743,12 @@ function LedgerActionTable({ rows, keepMap, editData, onToggleKeep, onEdit }) {
 
                     // Determinar bgcolor: rojo si se elimina, amarillo si se edita
                     let bgcolor;
-                    if (!keep) bgcolor = '#ffebee';
-                    else if (hasEdit) bgcolor = '#fff8e1';
+                    if (!keep) {
+                        bgcolor = '#ffebee';
+                    }
+                    else if (hasEdit) {
+                        bgcolor = '#fff8e1';
+                    }
 
                     return (
                         <TableRow key={`l-${i}`} sx={{ bgcolor, opacity: keep ? 1 : 0.6 }}>

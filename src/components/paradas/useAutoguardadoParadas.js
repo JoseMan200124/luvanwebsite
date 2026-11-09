@@ -27,9 +27,15 @@ export default function useAutoguardadoParadas({ schoolId, lockToken, familiaPor
     }, []);
 
     const enviar = useCallback(async () => {
-        if (detenido.current || !cfg.current.lockToken) return undefined;
-        if (enVuelo.current) return enVuelo.current;
-        if (!pendiente()) return undefined;
+        if (detenido.current || !cfg.current.lockToken) {
+            return undefined;
+        }
+        if (enVuelo.current) {
+            return enVuelo.current;
+        }
+        if (!pendiente()) {
+            return undefined;
+        }
 
         const ids = [...sucias.current];
         const fuera = [...quitadas.current];
@@ -54,8 +60,12 @@ export default function useAutoguardadoParadas({ schoolId, lockToken, familiaPor
                     throw err;
                 }
                 // Reencolar sin pisar lo que se ensució después (el siguiente PUT lee el estado actual).
-                ids.forEach((id) => { if (!quitadas.current.has(id)) sucias.current.add(id); });
-                fuera.forEach((id) => { if (!sucias.current.has(id)) quitadas.current.add(id); });
+                ids.forEach((id) => { if (!quitadas.current.has(id)) {
+                    sucias.current.add(id);
+                } });
+                fuera.forEach((id) => { if (!sucias.current.has(id)) {
+                    quitadas.current.add(id);
+                } });
                 if (code === 'FUERA_DE_SCOPE') {
                     cfg.current.onFueraDeScope?.(err.response.data); // el editor los quita con aviso y los marca
                     setEstado(e => ({ ...e, tipo: 'pendiente', mensaje: null }));
@@ -74,7 +84,9 @@ export default function useAutoguardadoParadas({ schoolId, lockToken, familiaPor
                                 ? (err.response.data?.message || 'No se pudo guardar; se reintenta solo.')
                                 : `${err.response.data?.message || 'No se pudo guardar.'} Los cambios no se guardarán hasta resolverlo.`,
                     }));
-                    if (transitorio) programar(sinRed ? 5000 : 10000);
+                    if (transitorio) {
+                        programar(sinRed ? 5000 : 10000);
+                    }
                 }
                 throw err;
             } finally {
@@ -82,7 +94,9 @@ export default function useAutoguardadoParadas({ schoolId, lockToken, familiaPor
             }
         })();
         enVuelo.current = promesa;
-        promesa.then(() => { if (pendiente()) programar(DEBOUNCE_MS); }, () => {});
+        promesa.then(() => { if (pendiente()) {
+            programar(DEBOUNCE_MS);
+        } }, () => {});
         return promesa;
     }, [programar, pendiente]);
     enviarRef.current = enviar;
@@ -105,18 +119,26 @@ export default function useAutoguardadoParadas({ schoolId, lockToken, familiaPor
     const forzar = useCallback(async () => {
         clearTimeout(temporizador.current);
         for (let intento = 0; intento < 5; intento += 1) {
-            if (enVuelo.current) await enVuelo.current;
-            if (!pendiente()) return;
+            if (enVuelo.current) {
+                await enVuelo.current;
+            }
+            if (!pendiente()) {
+                return;
+            }
             await enviar();
         }
-        if (pendiente() || enVuelo.current) throw new Error('No se pudieron guardar todos los cambios.');
+        if (pendiente() || enVuelo.current) {
+            throw new Error('No se pudieron guardar todos los cambios.');
+        }
     }, [enviar, pendiente]);
 
     const detener = useCallback(() => { detenido.current = true; clearTimeout(temporizador.current); }, []);
     const reanudar = useCallback(() => {
         detenido.current = false;
         setEstado(e => ({ ...e, tipo: pendiente() ? 'pendiente' : 'guardado' }));
-        if (pendiente()) programar(DEBOUNCE_MS);
+        if (pendiente()) {
+            programar(DEBOUNCE_MS);
+        }
     }, [programar, pendiente]);
 
     // Token nuevo (tomar control, reabrir): el autoguardado vuelve a correr. Sin token (bloqueo
@@ -129,7 +151,9 @@ export default function useAutoguardadoParadas({ schoolId, lockToken, familiaPor
     }, [lockToken]);
 
     useEffect(() => {
-        const alOcultar = () => { if (document.visibilityState === 'hidden') enviar().catch(() => {}); };
+        const alOcultar = () => { if (document.visibilityState === 'hidden') {
+            enviar().catch(() => {});
+        } };
         document.addEventListener('visibilitychange', alOcultar);
         return () => {
             document.removeEventListener('visibilitychange', alOcultar);

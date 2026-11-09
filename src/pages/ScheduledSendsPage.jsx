@@ -50,7 +50,9 @@ const itemTitle = (item) => (item.kind === 'circular' ? item.content?.subject : 
 // Mismo procesamiento de colegios que CicloEscolarSelectionPage (grades llega como string JSON).
 const normalizeSchools = (raw) => (Array.isArray(raw) ? raw : []).map((school) => {
     let grades = [];
-    if (Array.isArray(school.grades)) grades = school.grades;
+    if (Array.isArray(school.grades)) {
+        grades = school.grades;
+    }
     else if (typeof school.grades === 'string' && school.grades.trim()) {
         try { grades = JSON.parse(school.grades); } catch { grades = []; }
     }

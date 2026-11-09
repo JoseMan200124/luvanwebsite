@@ -82,7 +82,9 @@ const ContractViewer = () => {
 
     // Genera PDF con datos (firmas + inputs)
     const handleGeneratePDF = async () => {
-        if (!contract) return;
+        if (!contract) {
+            return;
+        }
 
         let filledContent = contract.content;
 

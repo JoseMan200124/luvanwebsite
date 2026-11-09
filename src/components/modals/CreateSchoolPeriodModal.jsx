@@ -31,7 +31,7 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
 
     const handleClose = () => {
         reset();
-        onClose && onClose();
+        onClose?.();
     };
 
     const handleCreate = async () => {
@@ -42,11 +42,19 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
         const payload = { period };
         // Enviar la tarifa base; las fechas de facturación se establecen en backend (fecha de creación).
         payload.originalAmount = Number(originalAmount);
-        if (dueDateEnd) payload.dueDateEnd = dueDateEnd.format('YYYY-MM-DD');
-        if (schoolId) payload.schoolId = schoolId;
+        if (dueDateEnd) {
+            payload.dueDateEnd = dueDateEnd.format('YYYY-MM-DD');
+        }
+        if (schoolId) {
+            payload.schoolId = schoolId;
+        }
         // Indica en la UI que este periodo no debe acumular mora (backend debe interpretar si aplica)
-        if (noAccruePenalty) payload.noAccruePenalty = true;
-        if (applyFamilyDiscounts) payload.applyFamilyDiscounts = true;
+        if (noAccruePenalty) {
+            payload.noAccruePenalty = true;
+        }
+        if (applyFamilyDiscounts) {
+            payload.applyFamilyDiscounts = true;
+        }
 
         setLoading(true);
         setError('');
@@ -58,10 +66,12 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
 
             if (created && created > 0) {
                 const successMessage = `Período creado correctamente (familias afectadas: ${created})`;
-                if (onCreated) onCreated(successMessage);
+                if (onCreated) {
+                    onCreated(successMessage);
+                }
                 setTimeout(() => {
                     reset();
-                    onClose && onClose();
+                    onClose?.();
                 }, 900);
             } else {
                 // Mensaje simple y auto-dismiss cuando no se creó ningún período

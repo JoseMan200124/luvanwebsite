@@ -27,7 +27,9 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
     const [successMessage, setSuccessMessage] = useState('');
 
     useEffect(() => {
-        if (!open || !editing) return;
+        if (!open || !editing) {
+            return;
+        }
         setAudience(editing.audience || EMPTY_AUDIENCE);
         setTitle(editing.content?.title || '');
         setMessage(editing.content?.message || '');
@@ -41,7 +43,9 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
     const remaining = MAX_MESSAGE_LENGTH - message.length;
 
     const handleClose = () => {
-        if (loading) return;
+        if (loading) {
+            return;
+        }
         setAudience(EMPTY_AUDIENCE);
         setPreview(null);
         setTitle('');
@@ -86,7 +90,9 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
                 text = '¡Notificación enviada correctamente!';
             }
             setSuccessMessage(text);
-            if (onSuccess) onSuccess(text);
+            if (onSuccess) {
+                onSuccess(text);
+            }
             setTimeout(handleClose, 1500);
         } catch (err) {
             setError(err?.response?.data?.message || 'Error al guardar la notificación.');
@@ -96,8 +102,12 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
     };
 
     let submitLabel = 'Enviar Notificación';
-    if (editing) submitLabel = 'Guardar cambios';
-    else if (isScheduled) submitLabel = 'Programar Notificación';
+    if (editing) {
+        submitLabel = 'Guardar cambios';
+    }
+    else if (isScheduled) {
+        submitLabel = 'Programar Notificación';
+    }
 
     return (
         <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>

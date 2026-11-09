@@ -73,12 +73,16 @@ moment.tz.setDefault('America/Guatemala');
 // Funciones de formateo
 // -------------
 const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) return '—';
+    if (!dateString) {
+        return '—';
+    }
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
 };
 
 const formatGuatemalaDate = (dateString) => {
-    if (!dateString) return '—';
+    if (!dateString) {
+        return '—';
+    }
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY');
 };
 
@@ -164,15 +168,25 @@ function descendingComparator(a, b, orderBy, type) {
     const aValue = getFieldValue(a, orderBy, type);
     const bValue = getFieldValue(b, orderBy, type);
 
-    if (aValue == null && bValue == null) return 0;
-    if (aValue == null) return 1;
-    if (bValue == null) return -1;
+    if (aValue == null && bValue == null) {
+        return 0;
+    }
+    if (aValue == null) {
+        return 1;
+    }
+    if (bValue == null) {
+        return -1;
+    }
 
     if (typeof aValue === 'string' && typeof bValue === 'string') {
         return bValue.localeCompare(aValue);
     }
-    if (bValue < aValue) return -1;
-    if (bValue > aValue) return 1;
+    if (bValue < aValue) {
+        return -1;
+    }
+    if (bValue > aValue) {
+        return 1;
+    }
     return 0;
 }
 
@@ -186,7 +200,9 @@ function stableSort(array, comparator) {
     const stabilizedThis = array.map((el, index) => [el, index]);
     stabilizedThis.sort((a, b) => {
         const order = comparator(a[0], b[0]);
-        if (order !== 0) return order;
+        if (order !== 0) {
+            return order;
+        }
         return a[1] - b[1];
     });
     return stabilizedThis.map((el) => el[0]);
@@ -366,7 +382,9 @@ const ActivityLogPage = () => {
 
     useEffect(() => {
         fetchAllData();
-        if (puedeVerAnalisisPagos) fetchPaymentsAnalysis();
+        if (puedeVerAnalisisPagos) {
+            fetchPaymentsAnalysis();
+        }
         // eslint-disable-next-line
     }, []);
 
@@ -421,7 +439,9 @@ const ActivityLogPage = () => {
 
     // Llama a fetchPayments cuando cambian filtros, orden o paginación
     useEffect(() => {
-        if (puedeVerPagos) fetchPayments();
+        if (puedeVerPagos) {
+            fetchPayments();
+        }
         // eslint-disable-next-line
     }, [payPage, payRowsPerPage, payOrder, payOrderBy, payDateFrom, payDateTo, payBalanceMin, payBalanceMax]);
 
@@ -568,15 +588,21 @@ const ActivityLogPage = () => {
     const filteredBuses = buses.filter((b) => {
         if (busPilotFilter) {
             const pilotName = b?.pilot?.name?.toLowerCase() || '';
-            if (!pilotName.includes(busPilotFilter.toLowerCase())) return false;
+            if (!pilotName.includes(busPilotFilter.toLowerCase())) {
+                return false;
+            }
         }
         if (busMonitoraFilter) {
             const monitoraName = b?.monitora?.name?.toLowerCase() || '';
-            if (!monitoraName.includes(busMonitoraFilter.toLowerCase())) return false;
+            if (!monitoraName.includes(busMonitoraFilter.toLowerCase())) {
+                return false;
+            }
         }
         if (busDescriptionFilter) {
             const desc = b?.description?.toLowerCase() || '';
-            if (!desc.includes(busDescriptionFilter.toLowerCase())) return false;
+            if (!desc.includes(busDescriptionFilter.toLowerCase())) {
+                return false;
+            }
         }
         return true;
     });
@@ -593,7 +619,7 @@ const ActivityLogPage = () => {
         setBusPage(newPage);
     };
     const handleChangeBusRowsPerPage = (event) => {
-        setBusRowsPerPage(parseInt(event.target.value, 10));
+        setBusRowsPerPage(Number.parseInt(event.target.value, 10));
         setBusPage(0);
     };
 
@@ -602,20 +628,28 @@ const ActivityLogPage = () => {
         if (incDateFrom) {
             const from = moment(incDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
             const incDateMs = moment.utc(inc.fecha).tz('America/Guatemala').valueOf();
-            if (incDateMs < from) return false;
+            if (incDateMs < from) {
+                return false;
+            }
         }
         if (incDateTo) {
             const to = moment(incDateTo, 'YYYY-MM-DD').endOf('day').valueOf();
             const incDateMs = moment.utc(inc.fecha).tz('America/Guatemala').valueOf();
-            if (incDateMs > to) return false;
+            if (incDateMs > to) {
+                return false;
+            }
         }
         if (incPilotFilter) {
             const pilotName = inc?.piloto?.name?.toLowerCase() || '';
-            if (!pilotName.includes(incPilotFilter.toLowerCase())) return false;
+            if (!pilotName.includes(incPilotFilter.toLowerCase())) {
+                return false;
+            }
         }
         if (incDescriptionFilter) {
             const desc = inc?.descripcion?.toLowerCase() || '';
-            if (!desc.includes(incDescriptionFilter.toLowerCase())) return false;
+            if (!desc.includes(incDescriptionFilter.toLowerCase())) {
+                return false;
+            }
         }
         return true;
     });
@@ -631,7 +665,7 @@ const ActivityLogPage = () => {
         setIncPage(newPage);
     };
     const handleChangeIncRowsPerPage = (event) => {
-        setIncRowsPerPage(parseInt(event.target.value, 10));
+        setIncRowsPerPage(Number.parseInt(event.target.value, 10));
         setIncPage(0);
     };
 
@@ -640,16 +674,22 @@ const ActivityLogPage = () => {
         if (emeDateFrom) {
             const from = moment(emeDateFrom, 'YYYY-MM-DD').startOf('day').valueOf();
             const emeDateMs = moment.utc(eme.fecha).tz('America/Guatemala').valueOf();
-            if (emeDateMs < from) return false;
+            if (emeDateMs < from) {
+                return false;
+            }
         }
         if (emeDateTo) {
             const to = moment(emeDateTo, 'YYYY-MM-DD').endOf('day').valueOf();
             const emeDateMs = moment.utc(eme.fecha).tz('America/Guatemala').valueOf();
-            if (emeDateMs > to) return false;
+            if (emeDateMs > to) {
+                return false;
+            }
         }
         if (emePilotFilter) {
             const pilotName = eme?.piloto?.name?.toLowerCase() || '';
-            if (!pilotName.includes(emePilotFilter.toLowerCase())) return false;
+            if (!pilotName.includes(emePilotFilter.toLowerCase())) {
+                return false;
+            }
         }
         return true;
     });
@@ -665,7 +705,7 @@ const ActivityLogPage = () => {
         setEmePage(newPage);
     };
     const handleChangeEmeRowsPerPage = (event) => {
-        setEmeRowsPerPage(parseInt(event.target.value, 10));
+        setEmeRowsPerPage(Number.parseInt(event.target.value, 10));
         setEmePage(0);
     };
 
@@ -674,7 +714,7 @@ const ActivityLogPage = () => {
         setPayPage(newPage);
     };
     const handleChangePayRowsPerPage = (event) => {
-        setPayRowsPerPage(parseInt(event.target.value, 10));
+        setPayRowsPerPage(Number.parseInt(event.target.value, 10));
         setPayPage(0);
     };
     
@@ -724,7 +764,9 @@ const ActivityLogPage = () => {
             if (totalPaid === 0 && pagadoComposite) {
                 // fallback: asignar todo a CONFIRMADO si sólo existe la clave PAGADO
                 totalPaid = pagadoComposite;
-                if (!confirmedCount && !adelantadoCount) confirmedCount = pagadoComposite;
+                if (!confirmedCount && !adelantadoCount) {
+                    confirmedCount = pagadoComposite;
+                }
             }
 
             setTotalPaidCountGlobal(totalPaid);
@@ -890,7 +932,7 @@ const ActivityLogPage = () => {
                                                             {formatGuatemalaDatetime(bus.currentRoute.startTime)})
                                                         </MobileValue>
                                                     )}
-                                                    {bus.currentRoute && bus.currentRoute.endTime && (
+                                                    {bus.currentRoute?.endTime && (
                                                         <MobileValue>
                                                             Finalizada a las{' '}
                                                             {formatGuatemalaDatetime(bus.currentRoute.endTime)}
@@ -1037,7 +1079,7 @@ const ActivityLogPage = () => {
                                                             sx={{ ml: 2 }}
                                                         />
                                                     )}
-                                                    {bus.currentRoute && bus.currentRoute.endTime && (
+                                                    {bus.currentRoute?.endTime && (
                                                         <Chip
                                                             label={`Finalizada a las ${formatGuatemalaDatetime(
                                                                 bus.currentRoute.endTime
@@ -1432,7 +1474,7 @@ const ActivityLogPage = () => {
                                                     <MobileLabel>Ubicación (Lat,Lng):</MobileLabel>
                                                     <MobileValue>
                                                         {eme.latitud && eme.longitud
-                                                            ? `${parseFloat(eme.latitud).toFixed(6)}, ${parseFloat(eme.longitud).toFixed(6)}`
+                                                            ? `${Number.parseFloat(eme.latitud).toFixed(6)}, ${Number.parseFloat(eme.longitud).toFixed(6)}`
                                                             : '—'}
                                                     </MobileValue>
                                                     {eme.latitud && eme.longitud && (
@@ -1441,8 +1483,8 @@ const ActivityLogPage = () => {
                                                                 size="small"
                                                                 onClick={() =>
                                                                     handleOpenMap(
-                                                                        parseFloat(eme.latitud),
-                                                                        parseFloat(eme.longitud)
+                                                                        Number.parseFloat(eme.latitud),
+                                                                        Number.parseFloat(eme.longitud)
                                                                     )
                                                                 }
                                                             >
@@ -1508,16 +1550,16 @@ const ActivityLogPage = () => {
                                                         <TableCell>
                                                             {eme.latitud && eme.longitud ? (
                                                                 <>
-                                                                    {parseFloat(eme.latitud).toFixed(6)},
+                                                                    {Number.parseFloat(eme.latitud).toFixed(6)},
                                                                     {' '}
-                                                                    {parseFloat(eme.longitud).toFixed(6)}
+                                                                    {Number.parseFloat(eme.longitud).toFixed(6)}
                                                                     <Tooltip title="Ver mapa" sx={{ ml: 1 }}>
                                                                         <IconButton
                                                                             size="small"
                                                                             onClick={() =>
                                                                                 handleOpenMap(
-                                                                                    parseFloat(eme.latitud),
-                                                                                    parseFloat(eme.longitud)
+                                                                                    Number.parseFloat(eme.latitud),
+                                                                                    Number.parseFloat(eme.longitud)
                                                                                 )
                                                                             }
                                                                         >

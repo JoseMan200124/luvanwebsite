@@ -148,7 +148,7 @@ const AuxiliaresManagementPage = () => {
         setPage(newPage);
     };
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 

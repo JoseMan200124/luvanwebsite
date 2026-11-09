@@ -20,7 +20,9 @@ const PageRefreshProvider = ({ children }) => {
     }, []);
 
     const triggerRefresh = useCallback(async () => {
-        if (inFlightRef.current) return;
+        if (inFlightRef.current) {
+            return;
+        }
 
         const scrollX = window.scrollX || 0;
         const scrollY = window.scrollY || 0;
@@ -45,7 +47,9 @@ const PageRefreshProvider = ({ children }) => {
             // If something auto-scrolled the page during refresh (remounts, effects, etc),
             // restore the previous scroll position unless the user scrolled intentionally.
             const restoreIfNeeded = () => {
-                if (userScrolled) return;
+                if (userScrolled) {
+                    return;
+                }
                 const currentX = window.scrollX || 0;
                 const currentY = window.scrollY || 0;
                 if (currentX !== scrollX || currentY !== scrollY) {

@@ -162,7 +162,9 @@ const SchoolDashboardPage = () => {
     }), [currentCicloEscolarId]);
 
     const fetchSchoolData = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         
         try {
             const response = await api.get(`/schools/${schoolId}`, {
@@ -182,8 +184,12 @@ const SchoolDashboardPage = () => {
     }, [auth.token, schoolId]);
 
     const fetchRouteOccupancy = useCallback(async () => {
-        if (!schoolId) return;
-        if (!puedeVerOcupacion) return;
+        if (!schoolId) {
+            return;
+        }
+        if (!puedeVerOcupacion) {
+            return;
+        }
         
         try {
             const response = await api.get(`/routes/occupancy/${schoolId}`, {
@@ -200,8 +206,12 @@ const SchoolDashboardPage = () => {
     }, [auth.token, schoolId, selectedDay, buildSchoolCycleParams, puedeVerOcupacion]);
 
     const fetchUserSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
-        if (!schoolId) return;
-        if (!puedeVerFamilias) return;
+        if (!schoolId) {
+            return;
+        }
+        if (!puedeVerFamilias) {
+            return;
+        }
         
         try {
             const response = await api.get(`/parents/summary/${schoolId}`, {
@@ -227,8 +237,12 @@ const SchoolDashboardPage = () => {
     }, [auth.token, schoolId, buildSchoolCycleParams, puedeVerFamilias]);
 
     const fetchStudentSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
-        if (!schoolId) return;
-        if (!puedeVerEstudiantes) return;
+        if (!schoolId) {
+            return;
+        }
+        if (!puedeVerEstudiantes) {
+            return;
+        }
         
         try {
             const response = await api.get(`/students/summary/${schoolId}`, {
@@ -260,7 +274,9 @@ const SchoolDashboardPage = () => {
 
     // Obtiene contadores globales: cuántas familias/estudiantes usan vs no usan el servicio
     const fetchServiceUsageSummary = useCallback(async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         const USING     = ['ACTIVE', 'SUSPENDED'];
         const NOT_USING = ['PAUSED', 'INACTIVE'];
         const allStatuses = [...USING, ...NOT_USING];
@@ -441,7 +457,9 @@ const SchoolDashboardPage = () => {
     };
 
     const exportAllDaysPDF = async () => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         try {
             const dayMap = {};
             // fetch occupancy for each weekday
@@ -981,7 +999,7 @@ const SchoolDashboardPage = () => {
                                         </Grid>
                                     </PermissionGuard>
 
-                                    {currentSchool && currentSchool.paymentsEnabled !== false && (
+                                    {currentSchool?.paymentsEnabled !== false && (
                                     <PermissionGuard permission="colegios-pagos">
                                         <Grid item xs={12} sm={6} md={4}>
                                             <SummaryCard sx={{ border: '1px solid', borderColor: 'divider', transition: 'box-shadow .2s, border-color .2s', '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }}>

@@ -58,7 +58,7 @@ const ProfilePage = () => {
     };
 
     const handleFileChange = (e) => {
-        if (e.target.files && e.target.files[0]) {
+        if (e.target.files?.[0]) {
             setSelectedFile(e.target.files[0]);
             setFormData({
                 ...formData,

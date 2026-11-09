@@ -81,8 +81,12 @@ export const formatPercent = (v) => (v === null || v === undefined ? 'N/A' : `${
 export const typesWithData = (byType) => FUEL_TYPES.filter((t) => Number(byType?.[t.key]?.gallons) > 0);
 
 export const clientTagLabel = (client) => {
-    if (client.clientType === 'corporation') return 'Corporación';
-    if (client.clientType === 'none') return 'Sin cliente';
+    if (client.clientType === 'corporation') {
+        return 'Corporación';
+    }
+    if (client.clientType === 'none') {
+        return 'Sin cliente';
+    }
     return client.cicloEscolarAnio ? String(client.cicloEscolarAnio) : '—';
 };
 
@@ -91,12 +95,16 @@ export const reasonLabel = (key) => FUELING_REASONS.find((r) => r.key === key)?.
 // Precio: null se conserva para que la línea tenga un hueco (no caiga a 0).
 export const toPriceChartData = (series) => series.map((s) => {
     const point = { label: s.label };
-    for (const t of FUEL_TYPES) point[t.key] = s.byType?.[t.key]?.price ?? null;
+    for (const t of FUEL_TYPES) {
+        point[t.key] = s.byType?.[t.key]?.price ?? null;
+    }
     return point;
 });
 
 export const toSpendChartData = (series) => series.map((s) => {
     const point = { label: s.label };
-    for (const t of FUEL_TYPES) point[t.key] = s.byType?.[t.key]?.amount ?? 0;
+    for (const t of FUEL_TYPES) {
+        point[t.key] = s.byType?.[t.key]?.amount ?? 0;
+    }
     return point;
 });

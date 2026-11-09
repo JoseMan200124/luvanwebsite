@@ -43,19 +43,29 @@ export const EMPTY_SCHEDULE = {
 const invalid = (message) => ({ valid: false, message });
 
 export function validateSchedule(value, now = new Date()) {
-    if (value.mode !== 'scheduled') return { valid: true };
+    if (value.mode !== 'scheduled') {
+        return { valid: true };
+    }
 
     const start = moment.tz(value.startAt, LOCAL_FORMAT, true, SCHEDULE_TIMEZONE);
-    if (!start.isValid()) return invalid('Indica la fecha y hora del envío.');
-    if (start.valueOf() < now.getTime() + 60 * 1000) return invalid('La fecha de envío debe ser al menos un minuto en el futuro.');
-    if (start.valueOf() > now.getTime() + MAX_AHEAD_MS) return invalid('La fecha de envío no puede ser a más de un año.');
+    if (!start.isValid()) {
+        return invalid('Indica la fecha y hora del envío.');
+    }
+    if (start.valueOf() < now.getTime() + 60 * 1000) {
+        return invalid('La fecha de envío debe ser al menos un minuto en el futuro.');
+    }
+    if (start.valueOf() > now.getTime() + MAX_AHEAD_MS) {
+        return invalid('La fecha de envío no puede ser a más de un año.');
+    }
 
     if (value.frequency === 'weekly' && value.daysOfWeek.length === 0) {
         return invalid('Selecciona al menos un día de la semana.');
     }
     if (value.frequency === 'monthly' && value.dayOfMonth !== '') {
         const day = Number(value.dayOfMonth);
-        if (!Number.isInteger(day) || day < 1 || day > 31) return invalid('El día del mes debe estar entre 1 y 31.');
+        if (!Number.isInteger(day) || day < 1 || day > 31) {
+            return invalid('El día del mes debe estar entre 1 y 31.');
+        }
     }
     if (value.frequency !== 'once' && value.endDate) {
         if (moment.tz(value.endDate, DATE_FORMAT, true, SCHEDULE_TIMEZONE).isBefore(start, 'day')) {
@@ -66,7 +76,9 @@ export function validateSchedule(value, now = new Date()) {
 }
 
 export function buildSchedulePayload(value) {
-    if (value.frequency === 'once') return { startAt: value.startAt, recurrence: null };
+    if (value.frequency === 'once') {
+        return { startAt: value.startAt, recurrence: null };
+    }
     return {
         startAt: value.startAt,
         recurrence: {
@@ -93,17 +105,23 @@ export function scheduleFromPayload(schedule, nextRunAt) {
 }
 
 function joinSpanish(items) {
-    if (items.length <= 1) return items.join('');
+    if (items.length <= 1) {
+        return items.join('');
+    }
     return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`;
 }
 
 export function describeSchedule(schedule) {
-    if (!schedule?.startAt) return '';
+    if (!schedule?.startAt) {
+        return '';
+    }
     const start = moment(schedule.startAt, LOCAL_FORMAT);
     const time = start.format('h:mm A');
     const recurrence = schedule.recurrence;
 
-    if (!recurrence) return `Una sola vez, el ${start.format('DD/MM/YYYY')} a las ${time}`;
+    if (!recurrence) {
+        return `Una sola vez, el ${start.format('DD/MM/YYYY')} a las ${time}`;
+    }
 
     let text;
     if (recurrence.frequency === 'daily') {
@@ -114,7 +132,9 @@ export function describeSchedule(schedule) {
     } else {
         const day = recurrence.dayOfMonth || start.date();
         text = `El día ${day} de cada mes a las ${time}`;
-        if (day > 28) text += ' (o el último día, si el mes es más corto)';
+        if (day > 28) {
+            text += ' (o el último día, si el mes es más corto)';
+        }
     }
     text += `, desde el ${start.format('DD/MM/YYYY')}`;
     text += recurrence.endDate

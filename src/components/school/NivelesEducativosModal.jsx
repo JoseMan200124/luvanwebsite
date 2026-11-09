@@ -46,7 +46,9 @@ const NivelesEducativosModal = ({ open, onClose }) => {
     }, []);
 
     useEffect(() => {
-        if (open) load();
+        if (open) {
+            load();
+        }
     }, [open, load]);
 
     const handleSaveLevel = async () => {
@@ -88,7 +90,9 @@ const NivelesEducativosModal = ({ open, onClose }) => {
     const handleDrop = async (targetIndex) => {
         const from = dragFromRef.current;
         resetDrag();
-        if (from === null || from === targetIndex) return;
+        if (from === null || from === targetIndex) {
+            return;
+        }
 
         const before = levels;
         const reordered = [...before];

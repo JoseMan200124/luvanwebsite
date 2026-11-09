@@ -51,7 +51,9 @@ const FuelStatisticsTab = () => {
 
     const applyPreset = (key) => {
         const range = computePresetRange(key, getCurrentDateSync());
-        if (!range) return;
+        if (!range) {
+            return;
+        }
         setPreset(key);
         setFromMonth(range.fromMonth);
         setToMonth(range.toMonth);
@@ -100,14 +102,18 @@ const FuelStatisticsTab = () => {
         const map = new Map();
         for (const s of clientOptions.schools) {
             const year = s.cicloEscolarAnio || 0;
-            if (!map.has(year)) map.set(year, []);
+            if (!map.has(year)) {
+                map.set(year, []);
+            }
             map.get(year).push(s);
         }
         return [...map.entries()].sort(([a], [b]) => b - a);
     }, [clientOptions.schools]);
 
     const clientName = useCallback((value) => {
-        if (value === 'none') return 'Sin cliente asignado';
+        if (value === 'none') {
+            return 'Sin cliente asignado';
+        }
         const [type, rawId] = value.split(':');
         const id = Number(rawId);
         if (type === 'school') {
@@ -122,8 +128,12 @@ const FuelStatisticsTab = () => {
     const filtersLabel = useMemo(() => {
         const parts = [];
         parts.push(isAllSelected(selectedClients) ? 'Todos los clientes' : selectedClients.map(clientName).join(', '));
-        if (!isAllSelected(selectedFuelTypes)) parts.push(selectedFuelTypes.map(fuelTypeLabel).join(', '));
-        if (!isAllSelected(selectedReasons)) parts.push(selectedReasons.map(reasonItemLabel).join(', '));
+        if (!isAllSelected(selectedFuelTypes)) {
+            parts.push(selectedFuelTypes.map(fuelTypeLabel).join(', '));
+        }
+        if (!isAllSelected(selectedReasons)) {
+            parts.push(selectedReasons.map(reasonItemLabel).join(', '));
+        }
         return parts.join(' · ');
     }, [selectedClients, selectedFuelTypes, selectedReasons, clientName]);
 
@@ -270,7 +280,9 @@ const FuelStatisticsTab = () => {
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Typography variant="caption" color="text.secondary">Agrupar por</Typography>
-                    <ToggleButtonGroup size="small" exclusive value={granularity} onChange={(e, v) => { if (v) setGranularity(v); }}>
+                    <ToggleButtonGroup size="small" exclusive value={granularity} onChange={(e, v) => { if (v) {
+                        setGranularity(v);
+                    } }}>
                         {GRANULARITIES.map((g) => <ToggleButton key={g.key} value={g.key}>{g.label}</ToggleButton>)}
                     </ToggleButtonGroup>
                 </Box>

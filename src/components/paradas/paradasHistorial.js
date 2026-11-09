@@ -39,9 +39,13 @@ export function historialReducer(h, msg, reducerBase) {
     case 'aplicar': {
         const { accion, ahora } = msg;
         const siguiente = reducerBase(h.presente, accion);
-        if (siguiente === h.presente) return h;
+        if (siguiente === h.presente) {
+            return h;
+        }
         const version = h.version + 1;
-        if (REINICIAN.has(accion.tipo)) return { ...historialInicial(siguiente), version };
+        if (REINICIAN.has(accion.tipo)) {
+            return { ...historialInicial(siguiente), version };
+        }
 
         const etiqueta = etiquetaAccion(accion, h.presente);
         const destructiva = DESTRUCTIVAS.has(accion.tipo);
@@ -61,7 +65,9 @@ export function historialReducer(h, msg, reducerBase) {
     }
     case 'deshacer': {
         const paso = h.pasado.at(-1);
-        if (!paso) return h;
+        if (!paso) {
+            return h;
+        }
         return {
             presente: paso.estado,
             pasado: h.pasado.slice(0, -1),
@@ -73,7 +79,9 @@ export function historialReducer(h, msg, reducerBase) {
     }
     case 'rehacer': {
         const paso = h.futuro.at(-1);
-        if (!paso) return h;
+        if (!paso) {
+            return h;
+        }
         return {
             presente: paso.estado,
             pasado: [...h.pasado, { estado: h.presente, etiqueta: paso.etiqueta }].slice(-MAX_PASOS),

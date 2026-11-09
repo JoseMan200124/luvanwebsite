@@ -3,7 +3,9 @@ import React from 'react';
 import { Alert, Typography } from '@mui/material';
 
 export default function ResumenCarga({ resumen, onCerrar }) {
-    if (!resumen) return null;
+    if (!resumen) {
+        return null;
+    }
     const conCambiosPerdidos = resumen.quitados.filter(q => q.teniaCambios).length;
     const lineas = [
         resumen.actualizados.length && `${resumen.actualizados.length} estudiante(s) actualizados con datos recientes de la plataforma.`,

@@ -138,7 +138,9 @@ const CorporateDashboardPage = () => {
     const stateFiscalYear = location.state?.fiscalYear;
 
     const fetchCorporationData = useCallback(async () => {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         
         try {
             const response = await api.get(`/corporations/${corporationId}`, {
@@ -199,8 +201,12 @@ const CorporateDashboardPage = () => {
     }, [auth.token, corporationId]);
 
     const fetchRouteOccupancy = useCallback(async () => {
-        if (!corporationId) return;
-        if (!puedeVerOcupacion) return;
+        if (!corporationId) {
+            return;
+        }
+        if (!puedeVerOcupacion) {
+            return;
+        }
         
         try {
             const response = await api.get(`/routes/occupancy-corporate/${corporationId}`, {
@@ -220,8 +226,12 @@ const CorporateDashboardPage = () => {
     }, [auth.token, corporationId, fiscalYear, selectedDay, puedeVerOcupacion]);
 
     const fetchColaboradorSummary = useCallback(async () => {
-        if (!corporationId) return;
-        if (!puedeVerColaboradores) return;
+        if (!corporationId) {
+            return;
+        }
+        if (!puedeVerColaboradores) {
+            return;
+        }
         
         try {
             const response = await api.get(`/corporations/${corporationId}/colaboradores`, {
@@ -266,8 +276,12 @@ const CorporateDashboardPage = () => {
     }, [auth.token, corporationId, fiscalYear, puedeVerColaboradores]);
 
     const fetchColaboradorStatusSummary = useCallback(async (serviceStatus = 'ACTIVE') => {
-        if (!corporationId) return;
-        if (!puedeVerColaboradores) return;
+        if (!corporationId) {
+            return;
+        }
+        if (!puedeVerColaboradores) {
+            return;
+        }
         try {
             const response = await api.get(`/corporations/${corporationId}/colaboradores/status-summary`, {
                 headers: { Authorization: `Bearer ${auth.token}` },
@@ -283,7 +297,9 @@ const CorporateDashboardPage = () => {
 
     // Obtiene contadores globales: cuántos colaboradores usan vs no usan el servicio
     const fetchColaboradorUsageSummary = useCallback(async () => {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         const USING     = ['ACTIVE', 'SUSPENDED'];
         const NOT_USING = ['PAUSED', 'INACTIVE'];
         const allStatuses = [...USING, ...NOT_USING];

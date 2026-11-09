@@ -46,7 +46,9 @@ const CUSTOM_SCHEDULE_BG_COLOR = '#D8B4FE';
  * Falls back to "Horario {CODE}" for unknown codes.
  */
 export function getScheduleLabel(code) {
-    if (!code) return '';
+    if (!code) {
+        return '';
+    }
     const upper = code.toUpperCase();
     return SCHEDULE_LABELS[upper] || `Horario ${upper}`;
 }
@@ -55,7 +57,9 @@ export function getScheduleLabel(code) {
  * Get MUI Chip color for a schedule code.
  */
 export function getScheduleColor(code) {
-    if (!code) return 'default';
+    if (!code) {
+        return 'default';
+    }
     return SCHEDULE_COLORS[code.toUpperCase()] || 'default';
 }
 
@@ -63,7 +67,9 @@ export function getScheduleColor(code) {
  * Get MUI background color for occupancy table cells.
  */
 export function getScheduleBgColor(code) {
-    if (!code) return CUSTOM_SCHEDULE_BG_COLOR;
+    if (!code) {
+        return CUSTOM_SCHEDULE_BG_COLOR;
+    }
     return SCHEDULE_BG_COLORS[code.toUpperCase()] || CUSTOM_SCHEDULE_BG_COLOR;
 }
 
@@ -76,7 +82,9 @@ export function getScheduleBgColor(code) {
 export function getScheduleCodesFromSchool(schedules) {
     const orderCodes = (codes, preferred = DEFAULT_SCHEDULE_CODES) => {
         const normalized = [...new Set((codes || []).map(c => String(c || '').toUpperCase().trim()).filter(Boolean))];
-        if (normalized.length === 0) return [];
+        if (normalized.length === 0) {
+            return [];
+        }
 
         const preferredNormalized = [...new Set((preferred || []).map(c => String(c || '').toUpperCase().trim()).filter(Boolean))];
         const preferredSet = new Set(preferredNormalized);
@@ -92,7 +100,9 @@ export function getScheduleCodesFromSchool(schedules) {
     if (typeof arr === 'string') {
         try { arr = JSON.parse(arr); } catch { return DEFAULT_SCHEDULE_CODES; }
     }
-    if (!Array.isArray(arr) || arr.length === 0) return DEFAULT_SCHEDULE_CODES;
+    if (!Array.isArray(arr) || arr.length === 0) {
+        return DEFAULT_SCHEDULE_CODES;
+    }
     const codes = arr.map(s => (s?.code || '').toUpperCase()).filter(Boolean);
     const ordered = orderCodes(codes, DEFAULT_SCHEDULE_CODES);
     return ordered.length > 0 ? ordered : DEFAULT_SCHEDULE_CODES;
@@ -136,24 +146,34 @@ export function getRouteTypeOptions(scheduleCodes = DEFAULT_SCHEDULE_CODES) {
  * Returns uppercase code or null if it cannot be determined.
  */
 export function resolveScheduleCodeFromSlot(slot, scheduleCodes = DEFAULT_SCHEDULE_CODES) {
-    if (!slot || typeof slot !== 'object') return null;
+    if (!slot || typeof slot !== 'object') {
+        return null;
+    }
 
     const allowed = new Set((Array.isArray(scheduleCodes) ? scheduleCodes : DEFAULT_SCHEDULE_CODES).map(c => String(c).toUpperCase()));
     const parseFromText = (value) => {
-        if (!value) return null;
+        if (!value) {
+            return null;
+        }
         const text = String(value);
         for (const code of allowed) {
             const re = new RegExp(`\\b${code}\\b`, 'i');
-            if (re.test(text)) return code;
+            if (re.test(text)) {
+                return code;
+            }
         }
         return null;
     };
 
     const fromSchoolSchedule = parseFromText(slot.schoolSchedule);
-    if (fromSchoolSchedule) return fromSchoolSchedule;
+    if (fromSchoolSchedule) {
+        return fromSchoolSchedule;
+    }
 
     const fromExplicitCode = parseFromText(slot.classification || slot.type);
-    if (fromExplicitCode) return fromExplicitCode;
+    if (fromExplicitCode) {
+        return fromExplicitCode;
+    }
 
     // Strict code mode: do not infer schedule code from time ranges.
     return null;
@@ -163,6 +183,8 @@ export function resolveScheduleCodeFromSlot(slot, scheduleCodes = DEFAULT_SCHEDU
  * Quick guard to know if a slot has enough schedule data to be considered in reports.
  */
 export function slotHasScheduleData(slot) {
-    if (!slot || typeof slot !== 'object') return false;
+    if (!slot || typeof slot !== 'object') {
+        return false;
+    }
     return Boolean(slot.schoolSchedule || slot.time || slot.timeSlot || slot.classification || slot.type);
 }

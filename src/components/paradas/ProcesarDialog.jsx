@@ -4,8 +4,12 @@ import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTi
 
 export default function ProcesarDialog({ open, resumen, ocupado = false, onCancelar, onConfirmar }) {
     const [confirmaSinParadas, setConfirmaSinParadas] = useState(false);
-    useEffect(() => { if (open) setConfirmaSinParadas(false); }, [open]);
-    if (!resumen) return null;
+    useEffect(() => { if (open) {
+        setConfirmaSinParadas(false);
+    } }, [open]);
+    if (!resumen) {
+        return null;
+    }
     const bloqueado = resumen.conErrores > 0 || resumen.conflictos > 0 || resumen.modificados === 0;
     const sinParadas = resumen.sinParadasLista;
 

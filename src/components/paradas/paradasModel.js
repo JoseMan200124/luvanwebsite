@@ -47,8 +47,12 @@ export function consolidar(paradas) {
         const p = normalizarParada(raw);
         const k = clave(p);
         const previa = m.get(k);
-        if (previa) previa.days = DIA_KEYS.filter(d => previa.days.includes(d) || p.days.includes(d));
-        else m.set(k, p);
+        if (previa) {
+            previa.days = DIA_KEYS.filter(d => previa.days.includes(d) || p.days.includes(d));
+        }
+        else {
+            m.set(k, p);
+        }
     }
     return [...m.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, p]) => p);
 }
@@ -57,10 +61,12 @@ export const paradasIguales = (a, b) => JSON.stringify(consolidar(a)) === JSON.s
 
 export function rutasParaFranja(contexto, franja) {
     const rutas = contexto?.rutas || [];
-    if (!franja) return rutas;
+    if (!franja) {
+        return rutas;
+    }
     return rutas.filter((r) => {
         const permitidas = contexto.franjasPorRuta?.[r];
-        return !permitidas || !permitidas.length || permitidas.includes(franja);
+        return !permitidas?.length || permitidas.includes(franja);
     });
 }
 
@@ -76,8 +82,12 @@ export function validarParadas(paradas, contexto) {
 
     lista.forEach((p, indice) => {
         const franjaOk = p.franja && codigos.has(p.franja);
-        if (!p.franja) errores.push({ indice, campo: 'franja', mensaje: 'Elige la franja' });
-        else if (!franjaOk) errores.push({ indice, campo: 'franja', mensaje: `La franja ${p.franja} no existe en el colegio` });
+        if (!p.franja) {
+            errores.push({ indice, campo: 'franja', mensaje: 'Elige la franja' });
+        }
+        else if (!franjaOk) {
+            errores.push({ indice, campo: 'franja', mensaje: `La franja ${p.franja} no existe en el colegio` });
+        }
 
         if (!p.routeNumber) {
             errores.push({ indice, campo: 'routeNumber', mensaje: 'Elige la ruta' });
@@ -85,7 +95,7 @@ export function validarParadas(paradas, contexto) {
             errores.push({ indice, campo: 'routeNumber', mensaje: `La ruta ${p.routeNumber} no pertenece al colegio` });
         } else if (franjaOk) {
             const permitidas = contexto.franjasPorRuta?.[p.routeNumber];
-            if (permitidas && permitidas.length && !permitidas.includes(p.franja)) {
+            if (permitidas?.length && !permitidas.includes(p.franja)) {
                 errores.push({ indice, campo: 'franja', mensaje: `La ruta ${p.routeNumber} no tiene la franja ${p.franja}` });
             }
         }
@@ -101,15 +111,21 @@ export function validarParadas(paradas, contexto) {
             }
         }
 
-        if (!p.days.length) errores.push({ indice, campo: 'days', mensaje: 'Marca al menos un día' });
-        if (p.note && p.note.length > MAX_NOTA) errores.push({ indice, campo: 'note', mensaje: `La nota supera ${MAX_NOTA} caracteres` });
+        if (!p.days.length) {
+            errores.push({ indice, campo: 'days', mensaje: 'Marca al menos un día' });
+        }
+        if (p.note && p.note.length > MAX_NOTA) {
+            errores.push({ indice, campo: 'note', mensaje: `La nota supera ${MAX_NOTA} caracteres` });
+        }
     });
 
     for (let j = 1; j < lista.length; j++) {
         for (let i = 0; i < j; i++) {
             const a = lista[i];
             const b = lista[j];
-            if (clave(a) !== clave(b)) continue;
+            if (clave(a) !== clave(b)) {
+                continue;
+            }
             const comunes = a.days.filter(d => b.days.includes(d));
             if (comunes.length) {
                 errores.push({ indice: j, campo: 'days', mensaje: `Repite la parada ${i + 1} en ${comunes.map(d => DIA_CORTO[d]).join(', ')}` });
@@ -127,7 +143,9 @@ const cacheFamilia = new WeakMap();
 
 export function revisarEstudiante(est, contexto) {
     const c = cacheEstudiante.get(est);
-    if (c && c.contexto === contexto) return c.valor;
+    if (c && c.contexto === contexto) {
+        return c.valor;
+    }
     const { errores, avisos } = validarParadas(est.paradas, contexto);
     const valor = {
         errores,
@@ -143,16 +161,30 @@ export function revisarEstudiante(est, contexto) {
 
 export function revisarFamilia(fam, contexto) {
     const c = cacheFamilia.get(fam);
-    if (c && c.contexto === contexto) return c.valor;
+    if (c && c.contexto === contexto) {
+        return c.valor;
+    }
     const valor = { conErrores: 0, modificados: 0, conflictos: 0, sinParadas: 0, incompletas: 0, editadosExcel: 0 };
     for (const est of fam.students) {
         const r = revisarEstudiante(est, contexto);
-        if (r.bloquea) valor.conErrores += 1;
-        if (est.touched) valor.modificados += 1;
-        if (r.conflictoPendiente) valor.conflictos += 1;
-        if (r.sinParadas) valor.sinParadas += 1;
-        if (r.incompleta) valor.incompletas += 1;
-        if (est.editadoEnExcel) valor.editadosExcel += 1;
+        if (r.bloquea) {
+            valor.conErrores += 1;
+        }
+        if (est.touched) {
+            valor.modificados += 1;
+        }
+        if (r.conflictoPendiente) {
+            valor.conflictos += 1;
+        }
+        if (r.sinParadas) {
+            valor.sinParadas += 1;
+        }
+        if (r.incompleta) {
+            valor.incompletas += 1;
+        }
+        if (est.editadoEnExcel) {
+            valor.editadosExcel += 1;
+        }
     }
     cacheFamilia.set(fam, { contexto, valor });
     return valor;

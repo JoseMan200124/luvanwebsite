@@ -158,7 +158,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
         try {
             const response = await api.post('/payments/extraordinary', formData);
             setSnackbar({ open: true, message: response.data.message, severity: 'success' });
-            onPaymentCreated && onPaymentCreated(response.data.extraordinaryPayment);
+            onPaymentCreated?.(response.data.extraordinaryPayment);
             // Reiniciar formulario
             setFormData({
                 schoolId: '',
@@ -221,7 +221,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -525,7 +525,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                                     {extraPayments.map((payment) => (
                                         <TableRow key={payment.id}>
                                             <TableCell>
-                                                {payment.School && payment.School.name
+                                                {payment.School?.name
                                                     ? payment.School.name
                                                     : payment.schoolId}
                                             </TableCell>
@@ -534,7 +534,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                                             <TableCell>
                                                 {payment.eventDate ? moment(payment.eventDate).format('DD/MM/YYYY') : '-'}
                                             </TableCell>
-                                            <TableCell>Q {parseFloat(payment.amount).toFixed(2)}</TableCell>
+                                            <TableCell>Q {Number.parseFloat(payment.amount).toFixed(2)}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>

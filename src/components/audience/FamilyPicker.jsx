@@ -46,7 +46,9 @@ const FamilyPicker = ({ value = [], onChange }) => {
         // inyecte el ciclo de la pestaña.
         api.get('/users/parents', { params: { allCycles: true } })
             .then((res) => {
-                if (!active) return;
+                if (!active) {
+                    return;
+                }
                 const users = res.data?.users || [];
                 setOptions(users.map((user) => {
                     const lastName = String(user.FamilyDetail?.familyLastName || '').trim();
@@ -62,13 +64,17 @@ const FamilyPicker = ({ value = [], onChange }) => {
                 }));
             })
             .catch((err) => {
-                if (!active) return;
+                if (!active) {
+                    return;
+                }
                 console.error('[FamilyPicker] Error cargando familias:', err);
                 setError('No se pudieron cargar las familias.');
                 setOptions([]);
             })
             .finally(() => {
-                if (active) setLoading(false);
+                if (active) {
+                    setLoading(false);
+                }
             });
 
         return () => { active = false; };
@@ -81,7 +87,9 @@ const FamilyPicker = ({ value = [], onChange }) => {
 
     const matches = useMemo(() => {
         const terms = parseTerms(searchTerm);
-        if (terms.length === 0) return [];
+        if (terms.length === 0) {
+            return [];
+        }
         return options.filter((option) => terms.some((term) => option.searchText.includes(term)));
     }, [options, searchTerm]);
 

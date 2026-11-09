@@ -113,12 +113,16 @@ const AttendanceManagementPage = () => {
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
     const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
+        if (isSpecificCicloEscolarSelected) {
+            return [];
+        }
         const map = new Map();
         schools.forEach((s) => {
             const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
             const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
+            if (!map.has(key)) {
+                map.set(key, []);
+            }
             map.get(key).push(s);
         });
         return Array.from(map.entries())
@@ -179,13 +183,17 @@ const AttendanceManagementPage = () => {
 
         if (schoolScheduleCodes.length > 0) {
             schoolScheduleCodes.forEach(code => {
-                if (code) codes.add(String(code).trim().toUpperCase());
+                if (code) {
+                    codes.add(String(code).trim().toUpperCase());
+                }
             });
         }
 
         attendances.forEach(attendance => {
             const code = String(attendance?.schedule || '').trim().toUpperCase();
-            if (code) codes.add(code);
+            if (code) {
+                codes.add(code);
+            }
         });
 
         if (codes.size === 0) {
@@ -210,12 +218,24 @@ const AttendanceManagementPage = () => {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedSchedule) filters.schedule = String(selectedSchedule).trim().toUpperCase();
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedSchool) {
+                filters.schoolId = selectedSchool;
+            }
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedSchedule) {
+                filters.schedule = String(selectedSchedule).trim().toUpperCase();
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const data = await getAttendances(filters);
             
@@ -281,7 +301,7 @@ const AttendanceManagementPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -453,7 +473,9 @@ const AttendanceManagementPage = () => {
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
                                         const na = Number(a);
                                         const nb = Number(b);
-                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+                                            return na - nb;
+                                        }
                                         return String(a).localeCompare(String(b));
                                     }).map((route) => (
                                         <MenuItem key={route} value={route}>

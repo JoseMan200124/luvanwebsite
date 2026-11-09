@@ -39,7 +39,9 @@ const LoginPage = () => {
     };
 
     const handleSnackbarClose = (_event, reason) => {
-        if (reason !== 'clickaway') setOpenSnackbar(false);
+        if (reason !== 'clickaway') {
+            setOpenSnackbar(false);
+        }
     };
 
     const handleSubmit = async (event) => {

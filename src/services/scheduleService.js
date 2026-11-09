@@ -62,7 +62,9 @@ export const updateSchoolSchedules = async (schoolId, schedules, options = {}) =
 };
 
 function getFilenameFromDisposition(contentDisposition, fallback) {
-  if (!contentDisposition) return fallback;
+  if (!contentDisposition) {
+      return fallback;
+  }
   const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
   if (utf8Match?.[1]) {
     try {
@@ -72,7 +74,9 @@ function getFilenameFromDisposition(contentDisposition, fallback) {
     }
   }
   const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
-  if (plainMatch?.[1]) return plainMatch[1];
+  if (plainMatch?.[1]) {
+      return plainMatch[1];
+  }
   return fallback;
 }
 

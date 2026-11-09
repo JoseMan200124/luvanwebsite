@@ -1,7 +1,9 @@
 import React from 'react';
 
 function articleForNoun(noun) {
-    if (!noun) return '';
+    if (!noun) {
+        return '';
+    }
     const n = String(noun).toLowerCase();
     const feminine = new Set(['familia', 'monitora']);
     return feminine.has(n) ? 'una' : 'un';

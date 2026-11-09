@@ -50,7 +50,9 @@ export const exportFuelRecordsExcel = async (filters = {}) => {
  */
 export const getRecentFuelRecords = async (schoolId, limit = 10) => {
     const params = new URLSearchParams();
-    if (schoolId) params.append('schoolId', schoolId);
+    if (schoolId) {
+        params.append('schoolId', schoolId);
+    }
     params.append('limit', limit);
 
     const response = await api.get(`/fuel-records/recent?${params.toString()}`);

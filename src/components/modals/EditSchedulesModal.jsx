@@ -31,7 +31,9 @@ import PermissionGuard from '../PermissionGuard';
 
 const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   const notify = (message, severity = 'info') => {
-    if (onNotify) onNotify({ open: true, message, severity });
+    if (onNotify) {
+        onNotify({ open: true, message, severity });
+    }
   };
 
   const isDraft = !school?.id;
@@ -55,7 +57,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   const ALL_DAY_KEYS = DAY_OPTIONS.map(d => d.key);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+        return;
+    }
 
     const scheduleArray = Array.isArray(school?.schedules)
       ? school.schedules.map((s, i) => ({
@@ -78,7 +82,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   }, [open, school?.id]);
 
   const isAllDaysSelected = (days) => {
-    if (!Array.isArray(days) || days.length === 0) return false;
+    if (!Array.isArray(days) || days.length === 0) {
+        return false;
+    }
     return ALL_DAY_KEYS.every(day => days.includes(day));
   };
 
@@ -150,7 +156,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   };
 
   const confirmRemoveSchedule = () => {
-    if (pendingDeleteIndex == null) return;
+    if (pendingDeleteIndex == null) {
+        return;
+    }
     handleRemoveSchedule(pendingDeleteIndex);
     setHasConfirmedLocalDeletion(true);
     setConfirmDeleteOpen(false);
@@ -198,7 +206,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
 
       if (current.includes(dayKey)) {
         const next = current.filter(d => d !== dayKey);
-        if (next.length === 0) return prev; // prevent empty — at least 1 day required
+        if (next.length === 0) {
+            return prev;
+        } // prevent empty — at least 1 day required
         clone[scheduleIndex] = { ...clone[scheduleIndex], days: next };
       } else {
         const next = [...current, dayKey];
@@ -222,7 +232,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
 
   const buildPayloadSchedules = () => {
     return schedules
-      .filter(s => s && s.code)
+      .filter(s => s?.code)
       .map(s => {
         const entry = {
           code: s.code.toUpperCase(),
@@ -240,7 +250,7 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   };
 
   const validateLocalSchedules = () => {
-    const schedulesWithCode = schedules.filter(s => s && s.code);
+    const schedulesWithCode = schedules.filter(s => s?.code);
     const invalidCode = schedulesWithCode.find(s => !/^[A-Z]{2,4}$/.test(s.code));
     if (invalidCode) {
       return `Codigo de horario invalido: "${invalidCode.code}". Use 2 a 4 letras mayusculas (ej: AM, VE).`;
@@ -267,7 +277,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
     for (const sch of schedulesWithCode) {
       const rawTime = Array.isArray(sch.times) ? sch.times[0] : null;
       const time = rawTime && rawTime !== 'N/A' ? rawTime : null;
-      if (!time) continue;
+      if (!time) {
+          continue;
+      }
 
       const expandedDays = sch.days;
 
@@ -387,7 +399,9 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
 
   const timeToMinutes = (times) => {
     const raw = Array.isArray(times) ? times[0] : null;
-    if (!raw || raw === 'N/A') return Infinity;
+    if (!raw || raw === 'N/A') {
+        return Infinity;
+    }
     const [h, m] = raw.split(':').map(Number);
     return (h * 60) + m;
   };

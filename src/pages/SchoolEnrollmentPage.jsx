@@ -126,7 +126,9 @@ const SchoolEnrollmentPage = () => {
 
     // Una sesión con permiso de reinscripción (p. ej. desde el banner del dashboard) entra directo.
     useEffect(() => {
-        if (loading || enrollmentBlockedMessage || !canReenroll || autoReenrollStartedRef.current) return;
+        if (loading || enrollmentBlockedMessage || !canReenroll || autoReenrollStartedRef.current) {
+            return;
+        }
         loadReenrollment();
     }, [loading, enrollmentBlockedMessage, canReenroll, loadReenrollment]);
 
@@ -202,7 +204,9 @@ const SchoolEnrollmentPage = () => {
             const match = contexts.find((context) => (
                 context.schoolId === String(result?.schoolId) && context.cicloEscolarId === String(result?.cicloEscolarId)
             ));
-            if (match) setStoredSchoolContext(match);
+            if (match) {
+                setStoredSchoolContext(match);
+            }
         } catch {
             // Sin contexto guardado, el portal le pedirá elegirlo en /select-context.
         }
@@ -428,8 +432,12 @@ const SchoolEnrollmentPage = () => {
                 />
             );
         }
-        if (step === STEPS.REENROLL) return renderReenrollStep();
-        if (step === STEPS.PUBLIC) return renderPublicStep();
+        if (step === STEPS.REENROLL) {
+            return renderReenrollStep();
+        }
+        if (step === STEPS.PUBLIC) {
+            return renderPublicStep();
+        }
         return renderChooseStep();
     };
 

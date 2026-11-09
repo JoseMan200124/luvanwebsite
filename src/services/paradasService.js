@@ -18,7 +18,9 @@ async function conReintento(fn) {
     try {
         return await fn();
     } catch (err) {
-        if (codigoError(err) !== 'REINTENTAR') throw err;
+        if (codigoError(err) !== 'REINTENTAR') {
+            throw err;
+        }
         return fn();
     }
 }
@@ -48,7 +50,9 @@ const paradasService = {
  * CORS, el bloqueo expira solo a los 2 minutos.
  */
 export function liberarAlCerrar(schoolId, lockToken) {
-    if (!schoolId || !lockToken) return;
+    if (!schoolId || !lockToken) {
+        return;
+    }
     try {
         fetch(`${api.defaults.baseURL}${base(schoolId)}/draft/lock/release`, {
             method: 'POST',

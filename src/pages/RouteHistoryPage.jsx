@@ -157,11 +157,15 @@ const RouteHistoryPage = () => {
 
     const getMonthRange = (monthStr) => {
         // monthStr: 'YYYY-MM'
-        if (!monthStr) return { start: undefined, end: undefined };
+        if (!monthStr) {
+            return { start: undefined, end: undefined };
+        }
         const [yyStr, mmStr] = monthStr.split('-');
-        const yy = parseInt(yyStr, 10);
-        const mm = parseInt(mmStr, 10);
-        if (Number.isNaN(yy) || Number.isNaN(mm)) return { start: undefined, end: undefined };
+        const yy = Number.parseInt(yyStr, 10);
+        const mm = Number.parseInt(mmStr, 10);
+        if (Number.isNaN(yy) || Number.isNaN(mm)) {
+            return { start: undefined, end: undefined };
+        }
 
         const start = `${monthStr}-01`;
 
@@ -313,8 +317,12 @@ const RouteHistoryPage = () => {
                         // Build grouped options: Colegios, Corporaciones (no 'Todos' ni 'Sin afiliación')
                         const combined = [];
                         const pushIfValid = (item, type) => {
-                            if (!item) return;
-                            if (item.deleted) return;
+                            if (!item) {
+                                return;
+                            }
+                            if (item.deleted) {
+                                return;
+                            }
                             const id = item.id || item._id || item.value || item.uuid || item.name;
                             const name = item.name || item.nombre || item.label || String(id);
                             const cycle = item.cicloEscolar || item.CicloEscolar || {};
@@ -363,8 +371,12 @@ const RouteHistoryPage = () => {
 
                 const combined = [];
                 const pushIfValid = (item, type) => {
-                    if (!item) return;
-                    if (item.deleted) return;
+                    if (!item) {
+                        return;
+                    }
+                    if (item.deleted) {
+                        return;
+                    }
                     const id = item.id || item._id || item.value || item.uuid || item.name;
                     const name = item.name || item.nombre || item.label || String(id);
                     const cycle = item.cicloEscolar || item.CicloEscolar || {};
@@ -401,7 +413,9 @@ const RouteHistoryPage = () => {
         }
 
         // clear previous timer
-        if (pilotTimerRef.current) clearTimeout(pilotTimerRef.current);
+        if (pilotTimerRef.current) {
+            clearTimeout(pilotTimerRef.current);
+        }
 
         const hasSearchText = Boolean(pilotInput && pilotInput.trim().length >= 2);
         const isInitialListRequest = pilotOpen && !hasSearchText;
@@ -423,10 +437,16 @@ const RouteHistoryPage = () => {
             try {
                 const params = new URLSearchParams();
                 params.set('limit', '50');
-                if (hasSearchText) params.set('query', pilotInput.trim());
+                if (hasSearchText) {
+                    params.set('query', pilotInput.trim());
+                }
                 // only add client filters when a specific client is selected
-                if (selectedClient.type === 'school') params.set('schoolId', selectedClient.id);
-                else if (selectedClient.type === 'corporation') params.set('corporationId', selectedClient.id);
+                if (selectedClient.type === 'school') {
+                    params.set('schoolId', selectedClient.id);
+                }
+                else if (selectedClient.type === 'corporation') {
+                    params.set('corporationId', selectedClient.id);
+                }
                 const url = `/users/pilots?${params.toString()}`;
                 const resp = await api.get(url);
                 const pilots = Array.isArray(resp.data?.users) ? resp.data.users : (resp.data || []);
@@ -441,7 +461,9 @@ const RouteHistoryPage = () => {
             }
         }, 300);
 
-        return () => { if (pilotTimerRef.current) clearTimeout(pilotTimerRef.current); };
+        return () => { if (pilotTimerRef.current) {
+            clearTimeout(pilotTimerRef.current);
+        } };
     }, [pilotInput, pilotOpen, selectedClient, auth.token]);
 
     // Debounced server-side search for buses
@@ -451,7 +473,9 @@ const RouteHistoryPage = () => {
             return;
         }
 
-        if (busTimerRef.current) clearTimeout(busTimerRef.current);
+        if (busTimerRef.current) {
+            clearTimeout(busTimerRef.current);
+        }
 
         const hasSearchText = Boolean(busInput && busInput.trim().length >= 2);
         const isInitialListRequest = busOpen && !hasSearchText;
@@ -473,10 +497,16 @@ const RouteHistoryPage = () => {
             try {
                 const params = new URLSearchParams();
                 params.set('limit', '50');
-                if (hasSearchText) params.set('query', busInput.trim());
+                if (hasSearchText) {
+                    params.set('query', busInput.trim());
+                }
                 // only add client filters when a specific client is selected
-                if (selectedClient.type === 'school') params.set('schoolId', selectedClient.id);
-                else if (selectedClient.type === 'corporation') params.set('corporationId', selectedClient.id);
+                if (selectedClient.type === 'school') {
+                    params.set('schoolId', selectedClient.id);
+                }
+                else if (selectedClient.type === 'corporation') {
+                    params.set('corporationId', selectedClient.id);
+                }
                 const url = `/buses/simple?${params.toString()}`;
                 const resp = await api.get(url);
                 const busesList = resp.data?.buses || resp.data || [];
@@ -491,7 +521,9 @@ const RouteHistoryPage = () => {
             }
         }, 300);
 
-        return () => { if (busTimerRef.current) clearTimeout(busTimerRef.current); };
+        return () => { if (busTimerRef.current) {
+            clearTimeout(busTimerRef.current);
+        } };
     }, [busInput, busOpen, selectedClient, auth.token]);
 
     // Debounced server-side search for buses (stats)
@@ -501,7 +533,9 @@ const RouteHistoryPage = () => {
             return;
         }
 
-        if (statsBusTimerRef.current) clearTimeout(statsBusTimerRef.current);
+        if (statsBusTimerRef.current) {
+            clearTimeout(statsBusTimerRef.current);
+        }
 
         const queryText = statsBusInput || '';
 
@@ -518,8 +552,12 @@ const RouteHistoryPage = () => {
                     query: queryText,
                     ...getCicloEscolarFilterParams(statsSelectedCicloEscolar)
                 };
-                if (statsSelectedClient.type === 'school') params.schoolId = statsSelectedClient.id;
-                if (statsSelectedClient.type === 'corporation') params.corporationId = statsSelectedClient.id;
+                if (statsSelectedClient.type === 'school') {
+                    params.schoolId = statsSelectedClient.id;
+                }
+                if (statsSelectedClient.type === 'corporation') {
+                    params.corporationId = statsSelectedClient.id;
+                }
                 const resp = await api.get('/buses/simple', { params });
                 const busesList = resp.data?.buses || resp.data || [];
                 const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
@@ -533,7 +571,9 @@ const RouteHistoryPage = () => {
             }
         }, 300);
 
-        return () => { if (statsBusTimerRef.current) clearTimeout(statsBusTimerRef.current); };
+        return () => { if (statsBusTimerRef.current) {
+            clearTimeout(statsBusTimerRef.current);
+        } };
     }, [statsBusInput, statsSelectedClient, statsSelectedCicloEscolar, auth.token]);
 
     // Load route numbers for selected client (no debounce; small payload)
@@ -635,13 +675,17 @@ const RouteHistoryPage = () => {
     }, [statsSelectedClient, statsSelectedCicloEscolar, auth.token]);
 
     const formatTime = (dateTime) => {
-        if (!dateTime) return 'N/A';
+        if (!dateTime) {
+            return 'N/A';
+        }
         const date = new Date(dateTime);
         return date.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
     };
 
     const formatDuration = (startTime, endTime) => {
-        if (!startTime || !endTime) return 'En progreso';
+        if (!startTime || !endTime) {
+            return 'En progreso';
+        }
         const start = new Date(startTime);
         const end = new Date(endTime);
         const diffMs = end - start;
@@ -671,14 +715,18 @@ const RouteHistoryPage = () => {
 
     const overallActiveDaysFallback = useMemo(() => {
         const rows = statsData?.rows || [];
-        if (!rows.length) return 0;
+        if (!rows.length) {
+            return 0;
+        }
         const activeDates = new Set();
         for (const row of rows) {
             const series = row?.daily || [];
             for (const it of series) {
                 const date = it?.date;
                 const km = Number(it?.km) || 0;
-                if (!date || km <= 0) continue;
+                if (!date || km <= 0) {
+                    continue;
+                }
                 activeDates.add(date);
             }
         }
@@ -695,7 +743,7 @@ const RouteHistoryPage = () => {
         const rows = statsData?.rows || [];
         return rows
             .slice()
-            .sort((a, b) => (parseFloat(b?.totalKm || 0) - parseFloat(a?.totalKm || 0)));
+            .sort((a, b) => (Number.parseFloat(b?.totalKm || 0) - Number.parseFloat(a?.totalKm || 0)));
     }, [statsData]);
 
     const statsRowsSortedForSelector = useMemo(() => {
@@ -711,9 +759,15 @@ const RouteHistoryPage = () => {
                 const bn = Number.parseInt(bk, 10);
                 const aOk = Number.isFinite(an);
                 const bOk = Number.isFinite(bn);
-                if (aOk && bOk) return an - bn;
-                if (aOk && !bOk) return -1;
-                if (!aOk && bOk) return 1;
+                if (aOk && bOk) {
+                    return an - bn;
+                }
+                if (aOk && !bOk) {
+                    return -1;
+                }
+                if (!aOk && bOk) {
+                    return 1;
+                }
             }
 
             return ak.localeCompare(bk);
@@ -722,7 +776,9 @@ const RouteHistoryPage = () => {
 
     const topChartRows = useMemo(() => {
         const topByKm = statsRowsSortedByKm.slice(0, 10);
-        if (statsTopSortByKm) return topByKm;
+        if (statsTopSortByKm) {
+            return topByKm;
+        }
 
         const toStr = (v) => String(v ?? '');
         const cmp = (a, b) => {
@@ -733,7 +789,9 @@ const RouteHistoryPage = () => {
                 const bn = Number.parseInt(bk, 10);
                 const aOk = Number.isFinite(an);
                 const bOk = Number.isFinite(bn);
-                if (aOk && bOk) return an - bn;
+                if (aOk && bOk) {
+                    return an - bn;
+                }
             }
             return ak.localeCompare(bk);
         };
@@ -756,9 +814,15 @@ const RouteHistoryPage = () => {
             }
 
             const clientParam = {};
-            if (statsSelectedClient?.type === 'school') clientParam.schoolId = selectedStatsClientId;
-            else if (statsSelectedClient?.type === 'corporation') clientParam.corporationId = selectedStatsClientId;
-            else clientParam.schoolId = selectedStatsClientId;
+            if (statsSelectedClient?.type === 'school') {
+                clientParam.schoolId = selectedStatsClientId;
+            }
+            else if (statsSelectedClient?.type === 'corporation') {
+                clientParam.corporationId = selectedStatsClientId;
+            }
+            else {
+                clientParam.schoolId = selectedStatsClientId;
+            }
 
             const groupByToUse = groupByOverride || statsGroupBy;
 
@@ -831,7 +895,9 @@ const RouteHistoryPage = () => {
     };
 
     const downloadStatsPdfReport = async () => {
-        if (!statsLastLoadedParams || !statsData) return;
+        if (!statsLastLoadedParams || !statsData) {
+            return;
+        }
         setStatsError(null);
         try {
             setStatsReportLoading(true);
@@ -897,14 +963,18 @@ const RouteHistoryPage = () => {
             return;
         }
         const keys = new Set(statsData.rows.map(r => String(r.key)));
-        if (statsSelectedKey && keys.has(String(statsSelectedKey))) return;
+        if (statsSelectedKey && keys.has(String(statsSelectedKey))) {
+            return;
+        }
         setStatsSelectedKey(String((statsRowsSortedByKm[0] || statsData.rows[0]).key));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [statsData, statsRowsSortedByKm]);
 
     const selectedGroupRow = useMemo(() => {
         const rows = statsData?.rows || [];
-        if (!rows.length) return null;
+        if (!rows.length) {
+            return null;
+        }
         const selected = rows.find(r => String(r.key) === String(statsSelectedKey));
         return selected || rows[0] || null;
     }, [statsData, statsSelectedKey]);
@@ -929,18 +999,24 @@ const RouteHistoryPage = () => {
     }, [selectedGroupRow]);
 
     const selectedDailySeries = useMemo(() => {
-        if (statsShowEmptyDays) return selectedDailySeriesRaw;
+        if (statsShowEmptyDays) {
+            return selectedDailySeriesRaw;
+        }
         return selectedDailySeriesRaw.filter((it) => it.km > 0);
     }, [selectedDailySeriesRaw, statsShowEmptyDays]);
 
     const dailyTickInterval = useMemo(() => {
         const n = selectedDailySeries.length;
-        if (n <= 1) return 0;
+        if (n <= 1) {
+            return 0;
+        }
 
         // Target a bounded number of visible ticks.
         // When showing empty days, the series grows a lot, so be more aggressive.
         const desiredTicks = statsShowEmptyDays ? 10 : 16;
-        if (n <= desiredTicks) return 0;
+        if (n <= desiredTicks) {
+            return 0;
+        }
 
         // Recharts shows every (interval + 1) tick.
         const interval = Math.ceil(n / desiredTicks) - 1;
@@ -950,19 +1026,27 @@ const RouteHistoryPage = () => {
     const dailyTickFormatter = (value) => {
         const s = String(value || '');
         // YYYY-MM-DD -> MM-DD
-        if (s.length >= 10 && s[4] === '-' && s[7] === '-') return s.slice(5, 10);
+        if (s.length >= 10 && s[4] === '-' && s[7] === '-') {
+            return s.slice(5, 10);
+        }
         return s;
     };
 
     const formatKmForTooltip = (value) => {
         const num = Number(value) || 0;
-        if (num > 0 && num < 0.01) return `${num.toFixed(4)} km`;
-        if (num > 0 && num < 0.1) return `${num.toFixed(3)} km`;
+        if (num > 0 && num < 0.01) {
+            return `${num.toFixed(4)} km`;
+        }
+        if (num > 0 && num < 0.1) {
+            return `${num.toFixed(3)} km`;
+        }
         return `${num.toFixed(2)} km`;
     };
 
     const KmByDayTooltip = useCallback(({ active, label, payload }) => {
-        if (!active || !Array.isArray(payload) || payload.length === 0) return null;
+        if (!active || !Array.isArray(payload) || payload.length === 0) {
+            return null;
+        }
 
         const base = payload[0]?.payload || {};
         const km = Number(base?.km) || 0;
@@ -980,7 +1064,9 @@ const RouteHistoryPage = () => {
     }, []);
 
     const TopKmTooltip = useCallback(({ active, label, payload }) => {
-        if (!active || !Array.isArray(payload) || payload.length === 0) return null;
+        if (!active || !Array.isArray(payload) || payload.length === 0) {
+            return null;
+        }
 
         const base = payload[0]?.payload || {};
         const km = Number(base?.km ?? payload[0]?.value) || 0;
@@ -1083,7 +1169,7 @@ const RouteHistoryPage = () => {
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
                                         <Box sx={{ minWidth: 0 }}>
                                             <Typography variant="caption" color="textSecondary">Total Kilómetros</Typography>
-                                            <Typography variant="h4" sx={{ letterSpacing: -0.5 }} noWrap>{statsData ? `${parseFloat(statsData.totalKm || 0).toFixed(2)} km` : '-'}</Typography>
+                                            <Typography variant="h4" sx={{ letterSpacing: -0.5 }} noWrap>{statsData ? `${Number.parseFloat(statsData.totalKm || 0).toFixed(2)} km` : '-'}</Typography>
                                         </Box>
                                         <Box sx={{ width: 34, height: 34, borderRadius: 1.5, backgroundColor: softPrimaryBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             <Speed fontSize="small" color="primary" />
@@ -1120,7 +1206,7 @@ const RouteHistoryPage = () => {
                                                     </IconButton>
                                                 </Tooltip>
                                             </Box>
-                                            <Typography variant="h4" sx={{ letterSpacing: -0.5 }} noWrap>{statsData ? `${parseFloat(statsData.overallAvgPerActiveDay || ((statsData.totalKm || 0) / Math.max(1, statsData.daysCount))).toFixed(2)} km` : '-'}</Typography>
+                                            <Typography variant="h4" sx={{ letterSpacing: -0.5 }} noWrap>{statsData ? `${Number.parseFloat(statsData.overallAvgPerActiveDay || ((statsData.totalKm || 0) / Math.max(1, statsData.daysCount))).toFixed(2)} km` : '-'}</Typography>
                                         </Box>
                                         <Box sx={{ width: 34, height: 34, borderRadius: 1.5, backgroundColor: softPrimaryBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             <CalendarToday fontSize="small" color="primary" />
@@ -1305,11 +1391,15 @@ const RouteHistoryPage = () => {
                                         label="Mes"
                                         fullWidth
                                         value={(() => {
-                                            if (!statsMonth) return '';
+                                            if (!statsMonth) {
+                                                return '';
+                                            }
                                             const [yyStr, mmStr] = statsMonth.split('-');
-                                            const yy = parseInt(yyStr, 10);
-                                            const mm = parseInt(mmStr, 10);
-                                            if (Number.isNaN(yy) || Number.isNaN(mm)) return statsMonth;
+                                            const yy = Number.parseInt(yyStr, 10);
+                                            const mm = Number.parseInt(mmStr, 10);
+                                            if (Number.isNaN(yy) || Number.isNaN(mm)) {
+                                                return statsMonth;
+                                            }
 
                                             const dt = new Date(Date.UTC(yy, mm - 1, 1));
                                             return new Intl.DateTimeFormat('es-ES', {
@@ -1323,8 +1413,10 @@ const RouteHistoryPage = () => {
                                             const base = statsMonth ? `${statsMonth}-01` : undefined;
                                             if (base) {
                                                 const [yyStr] = base.split('-');
-                                                const yy = parseInt(yyStr, 10);
-                                                if (!Number.isNaN(yy)) setStatsMonthViewYear(yy);
+                                                const yy = Number.parseInt(yyStr, 10);
+                                                if (!Number.isNaN(yy)) {
+                                                    setStatsMonthViewYear(yy);
+                                                }
                                             } else {
                                                 setStatsMonthViewYear(new Date().getFullYear());
                                             }
@@ -1669,7 +1761,7 @@ const RouteHistoryPage = () => {
                                                                         content={TopKmTooltip}
                                                                     />
                                                                     <Bar dataKey="km" radius={[6,6,6,6]} isAnimationActive={false} maxBarSize={28} activeBar={false}>
-                                                                        <LabelList dataKey="km" position="right" offset={10} formatter={(v) => `${parseFloat(v).toFixed(2)} km`} style={{ pointerEvents: 'none' }} />
+                                                                        <LabelList dataKey="km" position="right" offset={10} formatter={(v) => `${Number.parseFloat(v).toFixed(2)} km`} style={{ pointerEvents: 'none' }} />
                                                                         {topChartRows.map((entry, index) => (
                                                                             <Cell
                                                                                 key={`cell-${index}`}
@@ -1867,7 +1959,9 @@ const RouteHistoryPage = () => {
                             value={selectedClient}
                             onChange={(e, newVal) => { setSelectedClient(newVal); setClientTouched(true); }}
                             isOptionEqualToValue={(option, value) => {
-                                if (!value) return false;
+                                if (!value) {
+                                    return false;
+                                }
                                 return String(option.id) === String(value.id) && option.type === value.type;
                             }}
                             renderInput={(params) => (
@@ -2110,7 +2204,7 @@ const RouteHistoryPage = () => {
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                             <Speed color="action" fontSize="small" />
                                                             <Typography variant="body2" color="textSecondary">Kilometraje:</Typography>
-                                                            <Typography variant="body2" fontWeight="medium">{route.kilometraje ? `${parseFloat(route.kilometraje).toFixed(2)} km` : '0.00 km'}</Typography>
+                                                            <Typography variant="body2" fontWeight="medium">{route.kilometraje ? `${Number.parseFloat(route.kilometraje).toFixed(2)} km` : '0.00 km'}</Typography>
                                                         </Box>
 
                                                         <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -2155,7 +2249,7 @@ const RouteHistoryPage = () => {
                                                         <TableCell>{formatTime(route.startTime)}</TableCell>
                                                         <TableCell>{route.endTime ? formatTime(route.endTime) : 'En progreso'}</TableCell>
                                                         <TableCell>{formatDuration(route.startTime, route.endTime)}</TableCell>
-                                                        <TableCell>{route.kilometraje ? `${parseFloat(route.kilometraje).toFixed(2)} km` : '0.00 km'}</TableCell>
+                                                        <TableCell>{route.kilometraje ? `${Number.parseFloat(route.kilometraje).toFixed(2)} km` : '0.00 km'}</TableCell>
                                                         <TableCell>
                                                             <Chip icon={route.reporteFalla ? <Warning /> : <CheckCircle />} label={route.reporteFalla ? 'Con falla' : 'Sin falla'} color={route.reporteFalla ? 'error' : 'success'} size="small" />
                                                         </TableCell>

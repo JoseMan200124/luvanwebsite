@@ -62,7 +62,9 @@ const RetroactiveApplyModal = ({
     const unpaidPeriods = useMemo(() => {
         try {
             const raw = effectivePayment?.unpaidPeriods || effectivePayment?.PaymentPeriods || [];
-            if (!raw) return [];
+            if (!raw) {
+                return [];
+            }
             return typeof raw === 'string' ? JSON.parse(raw) : raw;
         } catch (e) {
             return [];
@@ -89,9 +91,15 @@ const RetroactiveApplyModal = ({
     useEffect(() => {
         const fetchPaymentByUser = async () => {
             try {
-                if (!open) return;
-                if (!userId) return;
-                if (paymentProp?.id) return; // prefer explicit payment when provided
+                if (!open) {
+                    return;
+                }
+                if (!userId) {
+                    return;
+                }
+                if (paymentProp?.id) {
+                    return;
+                } // prefer explicit payment when provided
 
                 const res = await api.get(`/payments/by-user/${userId}`);
                 const p = res.data?.payment || res.data || null;
@@ -108,14 +116,22 @@ const RetroactiveApplyModal = ({
         // If modal opens and the effective payment lacks FamilyDetail, fetch full payment
         const fetchFull = async () => {
             try {
-                if (!open) return;
+                if (!open) {
+                    return;
+                }
                 const hasFamily = effectivePayment?.User?.FamilyDetail || effectivePayment?.user?.FamilyDetail;
-                if (hasFamily) return;
+                if (hasFamily) {
+                    return;
+                }
 
                 const id = effectivePayment?.id || paymentProp?.id;
-                if (!id) return;
+                if (!id) {
+                    return;
+                }
                 const res = await api.get(`/payments/${id}`);
-                if (res?.data) setFullPayment(res.data.payment || res.data);
+                if (res?.data) {
+                    setFullPayment(res.data.payment || res.data);
+                }
             } catch (e) {
                 // ignore — we can still show what we have
             }
@@ -138,12 +154,16 @@ const RetroactiveApplyModal = ({
     };
 
     const getHeader = () => {
-        if (normalizedMode === 'ROUTE_TYPE') return 'Aplicar Cambio de Tipo de Ruta';
+        if (normalizedMode === 'ROUTE_TYPE') {
+            return 'Aplicar Cambio de Tipo de Ruta';
+        }
         return 'Aplicar Descuento Familiar';
     };
 
     const getIntroTitle = () => {
-        if (normalizedMode === 'ROUTE_TYPE') return '¿Cómo quieres aplicar el cambio de tipo de ruta?';
+        if (normalizedMode === 'ROUTE_TYPE') {
+            return '¿Cómo quieres aplicar el cambio de tipo de ruta?';
+        }
         return '¿Como quieres aplicar el descuento familiar?';
     };
 
@@ -256,8 +276,12 @@ const RetroactiveApplyModal = ({
                     payload = { ...payload, scope: 'ALL_PENDING' };
                 } else {
                     const onlyCurrent = selectedPeriods.length === 1 && selectedPeriods[0] === currentPeriod;
-                    if (onlyCurrent) payload = { ...payload, scope: 'CURRENT' };
-                    else payload = { ...payload, scope: 'SELECTED', periods: selectedPeriods };
+                    if (onlyCurrent) {
+                        payload = { ...payload, scope: 'CURRENT' };
+                    }
+                    else {
+                        payload = { ...payload, scope: 'SELECTED', periods: selectedPeriods };
+                    }
                 }
             }
 
@@ -352,7 +376,7 @@ const RetroactiveApplyModal = ({
                                 </Box>
 
                                 <Box sx={{ maxHeight: 220, overflow: 'auto', borderTop: '1px solid rgba(0,0,0,0.06)', pt: 1 }}>
-                                    {unpaidPeriods && unpaidPeriods.length ? (
+                                    {unpaidPeriods?.length ? (
                                         unpaidPeriods.map(p => {
                                             const original = Number(p.originalAmount ?? p.amount ?? 0);
                                             const net = Number(p.netAmount ?? p.net ?? p.amount ?? 0);

@@ -78,7 +78,9 @@ const CorporateBusesPage = () => {
     const currentFiscalYear = fiscalYear || stateFiscalYear;
 
     const fetchCorporationData = useCallback(async () => {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         try {
             const resp = await api.get(`/corporations/${corporationId}`, {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -113,7 +115,9 @@ const CorporateBusesPage = () => {
                     schedules = [];
                 }
             }
-            if (!Array.isArray(schedules)) schedules = [];
+            if (!Array.isArray(schedules)) {
+                schedules = [];
+            }
             const names = schedules.map((s) => String(s?.name || '').trim()).filter(Boolean);
             setCorporationScheduleCodes(names);
             setCorporationScheduleNames(Object.fromEntries(names.map((name) => [name, name])));
@@ -127,7 +131,9 @@ const CorporateBusesPage = () => {
     }, [auth.token, corporationId]);
 
     const fetchBuses = useCallback(async () => {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         try {
             const resp = await api.get('/buses/simple', {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -158,7 +164,9 @@ const CorporateBusesPage = () => {
     }, [auth.token, corporationId]);
 
     const fetchPilots = useCallback(async () => {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         try {
             // Fetch only pilots that belong to this corporation
             const url = `/users/pilots?corporationId=${corporationId}`;
@@ -174,7 +182,9 @@ const CorporateBusesPage = () => {
     }, [auth.token, corporationId]);
 
     const fetchRouteAssignments = useCallback(async () => {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         try {
             const response = await api.get(`/route-assignments?corporationId=${corporationId}`, {
                 headers: { Authorization: `Bearer ${auth.token}` }
@@ -230,7 +240,9 @@ const CorporateBusesPage = () => {
             .map((code) => {
                 const entry = routeSchedules[code] || {};
                 const hasValue = Boolean(entry.routeStartMaxTime || entry.routeEndMarginMinutes);
-                if (!hasValue) return null;
+                if (!hasValue) {
+                    return null;
+                }
 
                 return {
                     code,
@@ -242,7 +254,9 @@ const CorporateBusesPage = () => {
     };
 
     const handleSaveScheduleModal = async () => {
-        if (!scheduleModalRoute) return;
+        if (!scheduleModalRoute) {
+            return;
+        }
         setSavingSchedule(true);
         try {
             await api.post('/route-assignments/schedules', {
@@ -274,7 +288,9 @@ const CorporateBusesPage = () => {
     const handleRoutePilotChange = (routeNumber, pilotId) => {
         if (!pilotId) {
             const confirmed = globalThis.confirm(`Confirma desasignar piloto de la Ruta ${routeNumber}.`);
-            if (!confirmed) return;
+            if (!confirmed) {
+                return;
+            }
         }
 
         setRoutePilotAssignments(prev => ({
@@ -338,7 +354,9 @@ const CorporateBusesPage = () => {
     };
 
     const handleRefresh = async () => {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         setLoading(true);
         try {
             await Promise.all([fetchCorporationData(), fetchBuses(), fetchPilots(), fetchRouteAssignments()]);
@@ -404,7 +422,9 @@ const CorporateBusesPage = () => {
 
     const getBusInfo = (busId) => {
         const bus = buses.find(b => b.id === Number.parseInt(busId, 10));
-        if (!bus) return 'Bus no encontrado';
+        if (!bus) {
+            return 'Bus no encontrado';
+        }
         return `${bus.plate} (Cap: ${bus.capacity || 'N/A'})`;
     };
 

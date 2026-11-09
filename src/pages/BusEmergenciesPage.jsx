@@ -195,12 +195,24 @@ const BusEmergenciesPage = () => {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedCorporation) filters.corporationId = selectedCorporation;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedSchool) {
+                filters.schoolId = selectedSchool;
+            }
+            if (selectedCorporation) {
+                filters.corporationId = selectedCorporation;
+            }
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
             filters.orderBy = orderBy;
             filters.order = order;
 
@@ -228,7 +240,9 @@ const BusEmergenciesPage = () => {
                         const colegio = emergency.colegio || 'Sin Colegio';
                         bySchool[colegio] = (bySchool[colegio] || 0) + 1;
 
-                        if (emergency.latitud && emergency.longitud) withLocation++;
+                        if (emergency.latitud && emergency.longitud) {
+                            withLocation++;
+                        }
                     });
 
                     setStatistics({
@@ -261,7 +275,7 @@ const BusEmergenciesPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -449,7 +463,9 @@ const BusEmergenciesPage = () => {
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
                                         const na = Number(a);
                                         const nb = Number(b);
-                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+                                            return na - nb;
+                                        }
                                         return String(a).localeCompare(String(b));
                                     }).map((route) => (
                                         <MenuItem key={route} value={route}>
