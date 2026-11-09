@@ -1,4 +1,4 @@
-name: Deploy Frontend to cPanel (No Shell)
+name: Deploy Frontend via FTP
 
 on:
   push:
@@ -28,20 +28,24 @@ jobs:
         env:
           CI: false
 
-      - run: sudo apt-get update && sudo apt-get install -y openssh-client
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.CPANEL_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p ${{ secrets.CPANEL_PORT }} ${{ secrets.CPANEL_HOST }} >> ~/.ssh/known_hosts
-
       - name: Add deploy marker
         run: |
           echo "Deployed: $(date -u) | Commit: $GITHUB_SHA" > build/__deploy.txt
 
-      - name: Upload build to Document Root
-        run: |
-          scp -P ${{ secrets.CPANEL_PORT }} -i ~/.ssh/id_ed25519 -r build/* \
-            ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:${{ secrets.CPANEL_TARGET_DIR }}
+      - name: Upload build via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          port: ${{ secrets.FTP_PORT }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./build/
+          server-dir: ${{ secrets.FTP_TARGET_DIR }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            firma/**
+            plantillas/**
+            cgi-bin/**
+            php.ini
