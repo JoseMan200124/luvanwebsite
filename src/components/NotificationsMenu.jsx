@@ -112,7 +112,9 @@ const NotificationsMenu = ({ authToken }) => {
 
     // Helper: ensure links to SchoolPaymentsPage use the cycle tied to the notification/payment.
     const normalizeCycleInLink = (rawLink, source = {}) => {
-        if (!rawLink || typeof rawLink !== 'string') return rawLink;
+        if (!rawLink || typeof rawLink !== 'string') {
+            return rawLink;
+        }
         const { cicloEscolarId } = resolveNotificationCycle(source);
         try {
             const base = window.location.origin;
@@ -135,7 +137,9 @@ const NotificationsMenu = ({ authToken }) => {
         } catch (e) {
             // Best-effort string replace
             try {
-                if (!cicloEscolarId) return rawLink;
+                if (!cicloEscolarId) {
+                    return rawLink;
+                }
                 return rawLink.replace(/\/admin\/escuelas\/\d{4}\/(\d+)(\/[^?]*)?/, `/admin/escuelas/ciclo/${cicloEscolarId}/$1$2`);
             } catch (_) {
                 return rawLink;
@@ -177,7 +181,9 @@ const NotificationsMenu = ({ authToken }) => {
     // 2) Cargar notificaciones con paginación
     // ==============================
     const fetchNotifications = useCallback(async (pageNum = 0, append = false) => {
-        if (loading) return;
+        if (loading) {
+            return;
+        }
         
         try {
             setLoading(true);
@@ -257,12 +263,12 @@ const NotificationsMenu = ({ authToken }) => {
         // Only the X (delete) will mark as read. This preserves the user's
         // explicit action intent.
         // For 'Nueva Boleta de Pago', show the receipt preview inside the menu (no navigation).
-        if (notification && notification.type === 'boleta-pago') {
+        if (notification?.type === 'boleta-pago') {
             setAnchorEl(null);
             // Fetch detailed preview on demand (receipt + payment)
             try {
                 const res = await api.get(`/notifications/${notification.id}/preview`, { headers: { Authorization: `Bearer ${authToken}` } });
-                const preview = res.data && res.data.preview ? res.data.preview : { notification, receipt: null };
+                const preview = res.data?.preview ? res.data.preview : { notification, receipt: null };
                 setPreviewNotification(preview);
                 setPreviewOpen(true);
             } catch (e) {
@@ -274,7 +280,7 @@ const NotificationsMenu = ({ authToken }) => {
         }
 
         // Otherwise, if notification has a link, navigate to it
-        if (notification && notification.link) {
+        if (notification?.link) {
             try {
                 setAnchorEl(null);
                 const { cicloEscolarId } = resolveNotificationCycle(notification);
@@ -296,7 +302,9 @@ const NotificationsMenu = ({ authToken }) => {
     const [currentToast, setCurrentToast] = useState(null);
 
     const handleToastClose = (event, reason) => {
-        if (reason === 'clickaway') return;
+        if (reason === 'clickaway') {
+            return;
+        }
         setCurrentToast(null);
     };
 
@@ -334,7 +342,9 @@ const NotificationsMenu = ({ authToken }) => {
     // 4) Scroll infinito - cargar más notificaciones
     // ==============================
     const handleScroll = useCallback(() => {
-        if (!scrollContainerRef.current || loading || !hasMore) return;
+        if (!scrollContainerRef.current || loading || !hasMore) {
+            return;
+        }
         
         const container = scrollContainerRef.current;
         const scrollTop = container.scrollTop;
@@ -399,7 +409,9 @@ const NotificationsMenu = ({ authToken }) => {
     // 9) Efecto para cargar contador y escuchar socket
     // ==============================
     useEffect(() => {
-        if (!authToken) return;
+        if (!authToken) {
+            return;
+        }
 
         // Cargar conteo inicial
         fetchUnreadCount();
@@ -429,34 +441,10 @@ const NotificationsMenu = ({ authToken }) => {
                     setToastQueue((prev) => [...prev, copy]);
                 }
             });
-
-            socket.on('notification_deleted', (payload) => {
-                try {
-                    const uuidsRaw = payload && (payload.uuids || payload.uuid) ? (payload.uuids || payload.uuid) : null;
-                    const uuids = Array.isArray(uuidsRaw) ? uuidsRaw : (uuidsRaw ? [uuidsRaw] : []);
-
-                    if (uuids.length > 0 && menuOpen) {
-                        setNotifications((prev) => {
-                            const next = prev.filter((n) => !uuids.includes(n.uuid));
-                            const removed = prev.length - next.length;
-                            if (removed > 0) {
-                                setTotalNotifications((t) => Math.max(0, (t || 0) - removed));
-                            }
-                            return next;
-                        });
-                    }
-                } catch (e) {
-                    console.warn('Failed handling notification_deleted payload', e);
-                }
-
-                // Actualizar contador (por si borró una unread)
-                fetchUnreadCount();
-            });
         }
         return () => {
             if (socket) {
                 socket.off('new_notification');
-                socket.off('notification_deleted');
             }
         };
     }, [authToken, fetchUnreadCount, menuOpen, currentRoleId]);
@@ -692,14 +680,14 @@ const NotificationsMenu = ({ authToken }) => {
             <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} fullWidth maxWidth="md">
                 <DialogTitle>Vista previa de Boleta</DialogTitle>
                 <DialogContent>
-                    {previewNotification && previewNotification.receipt ? (
-                        (previewNotification.receipt.fileUrl && (previewNotification.receipt.fileUrl.match(/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)(\?|$)/i))) ? (
+                    {previewNotification?.receipt ? (
+                        (previewNotification.receipt.fileUrl?.match(/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)(\?|$)/i)) ? (
                             <div style={{ display: 'flex', justifyContent: 'center' }}>
                                 <img src={previewNotification.receipt.fileUrl} alt="boleta" style={{ maxWidth: '100%', maxHeight: '60vh' }} />
                             </div>
                         ) : (
                             <div>
-                                {previewNotification.receipt && previewNotification.receipt.fileUrl ? (
+                                {previewNotification.receipt?.fileUrl ? (
                                     <Button variant="outlined" href={previewNotification.receipt.fileUrl} target="_blank" rel="noreferrer">Abrir archivo</Button>
                                 ) : (
                                     <Typography variant="body2">No se encontró la boleta para vista previa.</Typography>
@@ -715,9 +703,6 @@ const NotificationsMenu = ({ authToken }) => {
                     <Button variant="contained" onClick={async () => {
                         // when user chooses to register a payment, navigate to page with openRegister=true
                         try {
-                            const rec = previewNotification.receipt;
-                            
-                            
                             // Build URL from notification.link if available, else construct
                             let link = previewNotification.link;
                             
@@ -727,8 +712,12 @@ const NotificationsMenu = ({ authToken }) => {
                                 
                                 const u = new URL(link, base);
                                 u.searchParams.set('openRegister', 'true');
-                                if (previewNotification.receipt.id) u.searchParams.set('receiptId', previewNotification.receipt.id);
-                                if (previewNotification.receipt.userId) u.searchParams.set('userId', previewNotification.receipt.userId);
+                                if (previewNotification.receipt.id) {
+                                    u.searchParams.set('receiptId', previewNotification.receipt.id);
+                                }
+                                if (previewNotification.receipt.userId) {
+                                    u.searchParams.set('userId', previewNotification.receipt.userId);
+                                }
                                 
                                 const state = previewNotification.paymentReceiptId;
 

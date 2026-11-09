@@ -29,7 +29,9 @@ import api from '../utils/axiosConfig';
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
 const formatDateLong = (dateString) => {
-  if (!dateString) return '';
+  if (!dateString) {
+    return '';
+  }
   try {
     return new Date(dateString).toLocaleDateString('es-ES', {
       year: 'numeric',
@@ -44,8 +46,12 @@ const formatDateLong = (dateString) => {
 const typeLabel = (t) => (t === 'protocolo' ? 'Protocolo' : t === 'reglamento' ? 'Reglamento' : 'Documento');
 
 const typeChipColor = (t) => {
-  if (t === 'protocolo') return 'info';
-  if (t === 'reglamento') return 'secondary';
+  if (t === 'protocolo') {
+    return 'info';
+  }
+  if (t === 'reglamento') {
+    return 'secondary';
+  }
   return 'default';
 };
 
@@ -72,7 +78,9 @@ const ParentProtocolsPage = () => {
     setLoading(true);
     setError('');
     try {
-      if (!userId) throw new Error('Usuario no autenticado');
+      if (!userId) {
+        throw new Error('Usuario no autenticado');
+      }
 
       const params = tab === 'all' ? {} : { type: tab };
       const res = await api.get(`/protocols/parent/${userId}`, { params });
@@ -101,8 +109,12 @@ const ParentProtocolsPage = () => {
   }, [userId, tab, isSuspended]);
 
   const emptyTitle = useMemo(() => {
-    if (tab === 'protocolo') return 'No hay protocolos disponibles';
-    if (tab === 'reglamento') return 'No hay reglamentos disponibles';
+    if (tab === 'protocolo') {
+      return 'No hay protocolos disponibles';
+    }
+    if (tab === 'reglamento') {
+      return 'No hay reglamentos disponibles';
+    }
     return 'No hay documentos disponibles';
   }, [tab]);
 
@@ -110,7 +122,9 @@ const ParentProtocolsPage = () => {
 
   const openPdf = (pdfUrl) => {
     const url = safeStr(pdfUrl);
-    if (!url) return;
+    if (!url) {
+      return;
+    }
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 

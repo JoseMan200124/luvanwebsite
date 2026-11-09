@@ -167,8 +167,12 @@ const TarjetaGrupo = memo(function TarjetaGrupo({
                         disabled={soloLectura}
                         onClick={(e) => {
                             e.stopPropagation();
-                            if (todos) onAplicar(grupo, 'ninguno');
-                            else onPedirConfirmacion(grupo);
+                            if (todos) {
+                                onAplicar(grupo, 'ninguno');
+                            }
+                            else {
+                                onPedirConfirmacion(grupo);
+                            }
                         }}
                         sx={{ mr: 1 }}
                     />
@@ -313,7 +317,9 @@ const PermissionsManagementPage = () => {
         for (const key of clavesCatalogo) {
             const antes = !!originalPermissions[key];
             const ahora = !!permissions[key];
-            if (antes !== ahora) lista.push({ key, ahora });
+            if (antes !== ahora) {
+                lista.push({ key, ahora });
+            }
         }
         return lista;
     }, [clavesCatalogo, permissions, originalPermissions]);
@@ -322,7 +328,9 @@ const PermissionsManagementPage = () => {
 
     const gruposFiltrados = useMemo(() => {
         const termino = sinAcentos(busqueda.trim());
-        if (!termino) return catalog;
+        if (!termino) {
+            return catalog;
+        }
         return catalog
             .map((grupo) => ({
                 ...grupo,
@@ -354,14 +362,20 @@ const PermissionsManagementPage = () => {
             setExpandidos({});
             return;
         }
-        if (totalFiltrado > LIMITE_AUTOEXPANDIR) return;
+        if (totalFiltrado > LIMITE_AUTOEXPANDIR) {
+            return;
+        }
         const abiertos = {};
-        for (const grupo of gruposFiltrados) abiertos[grupo.key] = true;
+        for (const grupo of gruposFiltrados) {
+            abiertos[grupo.key] = true;
+        }
         setExpandidos(abiertos);
     }, [busqueda, gruposFiltrados, totalFiltrado]);
 
     useEffect(() => {
-        if (!hayCambios) return undefined;
+        if (!hayCambios) {
+            return undefined;
+        }
         const avisar = (e) => {
             e.preventDefault();
             e.returnValue = '';
@@ -395,11 +409,17 @@ const PermissionsManagementPage = () => {
         setPermissions((prev) => {
             const siguiente = { ...prev };
             for (const permiso of grupo.permissions) {
-                if (modo === 'ninguno') siguiente[permiso.key] = false;
-                else if (modo === 'lectura') siguiente[permiso.key] = permiso.level === 'ver';
+                if (modo === 'ninguno') {
+                    siguiente[permiso.key] = false;
+                }
+                else if (modo === 'lectura') {
+                    siguiente[permiso.key] = permiso.level === 'ver';
+                }
                 // 'todo' concede el grupo salvo los permisos destructivos, que se
                 // activan uno por uno para que sea una decisión consciente.
-                else if (modo === 'todo') siguiente[permiso.key] = permiso.level !== 'eliminar';
+                else if (modo === 'todo') {
+                    siguiente[permiso.key] = permiso.level !== 'eliminar';
+                }
             }
             return siguiente;
         });
@@ -426,7 +446,9 @@ const PermissionsManagementPage = () => {
     );
 
     const confirmarAccesoCompleto = useCallback(() => {
-        if (!confirmacion) return;
+        if (!confirmacion) {
+            return;
+        }
         aplicarAGrupo(confirmacion.grupo, 'todo');
         setConfirmacion(null);
     }, [confirmacion, aplicarAGrupo]);
@@ -437,13 +459,17 @@ const PermissionsManagementPage = () => {
     }, [originalPermissions, showSnackbar]);
 
     const guardar = async () => {
-        if (!selectedRoleId || !hayCambios) return;
+        if (!selectedRoleId || !hayCambios) {
+            return;
+        }
         setIsSaving(true);
         try {
             // Se envían únicamente las claves del catálogo. Las filas heredadas
             // que aún viven en la base no se tocan.
             const aEnviar = {};
-            for (const key of clavesCatalogo) aEnviar[key] = !!permissions[key];
+            for (const key of clavesCatalogo) {
+                aEnviar[key] = !!permissions[key];
+            }
 
             const res = await api.put(
                 `/permissions/role/${selectedRoleId}`,
@@ -496,7 +522,9 @@ const PermissionsManagementPage = () => {
                             ) {
                                 return;
                             }
-                            if (hayCambios) setPermissions(originalPermissions);
+                            if (hayCambios) {
+                                setPermissions(originalPermissions);
+                            }
                             setPestana(v);
                         }}
                         sx={{ mb: 3, borderBottom: '1px solid #e0e0e0' }}
@@ -552,7 +580,9 @@ const PermissionsManagementPage = () => {
                                                 value={busquedaInput}
                                                 onChange={(e) => setBusquedaInput(e.target.value)}
                                                 onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') ejecutarBusqueda();
+                                                    if (e.key === 'Enter') {
+                                                        ejecutarBusqueda();
+                                                    }
                                                 }}
                                                 disabled={!selectedRoleId}
                                                 InputProps={{

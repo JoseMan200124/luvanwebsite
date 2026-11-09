@@ -23,9 +23,9 @@ class ErrorBoundary extends React.Component {
                 <div style={{ padding: '20px', textAlign: 'center' }}>
                     <h2>Algo salió mal.</h2>
                     <details style={{ whiteSpace: 'pre-wrap' }}>
-                        {this.state.error && this.state.error.toString()}
+                        {this.state.error?.toString()}
                         <br />
-                        {this.state.errorInfo && this.state.errorInfo.componentStack}
+                        {this.state.errorInfo?.componentStack}
                     </details>
                 </div>
             );

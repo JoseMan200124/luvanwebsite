@@ -33,7 +33,9 @@ import api from '../utils/axiosConfig';
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
 const formatDateLong = (dateString) => {
-  if (!dateString) return '';
+  if (!dateString) {
+      return '';
+  }
   try {
     return new Date(dateString).toLocaleDateString('es-ES', {
       year: 'numeric',
@@ -47,9 +49,13 @@ const formatDateLong = (dateString) => {
 
 const withPdfViewerParams = (url) => {
   const u = safeStr(url);
-  if (!u) return u;
+  if (!u) {
+      return u;
+  }
   // Hash doesn't affect signed URL query params.
-  if (u.includes('#')) return u;
+  if (u.includes('#')) {
+      return u;
+  }
   return `${u}#toolbar=0&navpanes=0&scrollbar=0`;
 };
 
@@ -102,7 +108,9 @@ const ParentCircularsPage = () => {
 
   const openDetail = async (uuid) => {
     const id = safeStr(uuid);
-    if (!id) return;
+    if (!id) {
+        return;
+    }
 
     setDetailOpen(true);
     setDetailLoading(true);
@@ -131,12 +139,16 @@ const ParentCircularsPage = () => {
 
   const downloadAttachment = async (attachmentUuid) => {
     const id = safeStr(attachmentUuid);
-    if (!id) return;
+    if (!id) {
+        return;
+    }
 
     try {
       const res = await api.get(`/circulars/parent/attachments/${id}/url`);
       const url = safeStr(res?.data?.url);
-      if (!url) return;
+      if (!url) {
+          return;
+      }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
       console.error('[ParentCirculars] download attachment error', e);

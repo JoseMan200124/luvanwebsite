@@ -4,7 +4,7 @@
  * Página de gestión de solicitudes de mecánica
  */
 
-import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Typography,
@@ -18,7 +18,6 @@ import {
     TablePagination,
     TextField,
     MenuItem,
-    ListSubheader,
     Grid,
     Chip,
     IconButton,
@@ -36,7 +35,6 @@ import {
     InputLabel,
     Select,
     Alert,
-    Autocomplete,
 } from '@mui/material';
 import {
     Visibility as VisibilityIcon,
@@ -52,7 +50,6 @@ import {
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import moment from 'moment-timezone';
-import { AuthContext } from '../context/AuthProvider';
 import {
     getAllMechanicRequests,
     getMechanicRequestById,
@@ -66,8 +63,8 @@ import {
 } from '../services/mechanicRequestService';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
+import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import PermissionGuard from '../components/PermissionGuard';
 
 const PageContainer = styled.div`
@@ -83,9 +80,6 @@ const StatsCard = styled(Card)`
 `;
 
 const MechanicRequestsPage = () => {
-    const { auth } = useContext(AuthContext);
-    const userRole = auth?.user?.role || auth?.user?.Role?.name;
-
     // Estados para datos
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -99,10 +93,12 @@ const MechanicRequestsPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [totalCount, setTotalCount] = useState(0);
+    const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
     // Estados para filtros (separados para homogeneidad con otras páginas)
-    const [schoolId, setSchoolId] = useState('');
-    const [corporationId, setCorporationId] = useState('');
+    const [selectedClient, setSelectedClient] = useState(null);
+    const schoolId = getClientSchoolId(selectedClient);
+    const corporationId = getClientCorporationId(selectedClient);
     const [plate, setPlate] = useState('');
     const [routeNumber, setRouteNumber] = useState('');
     const [tipoTrabajo, setTipoTrabajo] = useState('');
@@ -115,18 +111,6 @@ const MechanicRequestsPage = () => {
     // schools alimenta tanto el picker de filtro como el picker del diálogo "Nueva Solicitud" —
     // agrupar por ciclo evita que se elija el año equivocado de un colegio con nombre repetido.
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
-
-    const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
-        const map = new Map();
-        schools.forEach((s) => {
-            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(s);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
-    }, [schools, isSpecificCicloEscolarSelected]);
 
     // Estados para ordenamiento
     const [sortBy, setSortBy] = useState('fechaSolicitud');
@@ -143,8 +127,9 @@ const MechanicRequestsPage = () => {
     const [fechaCompletado, setFechaCompletado] = useState('');
     // Create modal states
     const [createModalOpen, setCreateModalOpen] = useState(false);
-    const [createSchoolId, setCreateSchoolId] = useState('');
-    const [createCorporationId, setCreateCorporationId] = useState('');
+    const [createClient, setCreateClient] = useState(null);
+    const createSchoolId = getClientSchoolId(createClient);
+    const createCorporationId = getClientCorporationId(createClient);
     const [createBusId, setCreateBusId] = useState('');
     const [createPlateOptions, setCreatePlateOptions] = useState([]);
     const [createTipoTrabajo, setCreateTipoTrabajo] = useState('mecánico');
@@ -187,8 +172,12 @@ const MechanicRequestsPage = () => {
                 setRouteOptions([]);
 
                 const params = {};
-                if (schoolId) params.schoolId = schoolId;
-                if (corporationId) params.corporationId = corporationId;
+                if (schoolId) {
+                    params.schoolId = schoolId;
+                }
+                if (corporationId) {
+                    params.corporationId = corporationId;
+                }
                 params.limit = 200;
 
                 const resp = await api.get('/buses', { params });
@@ -228,19 +217,38 @@ const MechanicRequestsPage = () => {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
 
-            if (schoolId) params.schoolId = schoolId;
-            if (corporationId) params.corporationId = corporationId;
-            if (plate) params.plate = plate;
-            if (routeNumber) params.routeNumber = routeNumber;
-            if (tipoTrabajo) params.tipoTrabajo = tipoTrabajo;
-            if (estado) params.estado = estado;
-            if (urgente !== '') params.urgente = urgente;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = endDate;
+            if (schoolId) {
+                params.schoolId = schoolId;
+            }
+            if (corporationId) {
+                params.corporationId = corporationId;
+            }
+            if (plate) {
+                params.plate = plate;
+            }
+            if (routeNumber) {
+                params.routeNumber = routeNumber;
+            }
+            if (tipoTrabajo) {
+                params.tipoTrabajo = tipoTrabajo;
+            }
+            if (estado) {
+                params.estado = estado;
+            }
+            if (urgente !== '') {
+                params.urgente = urgente;
+            }
+            if (startDate) {
+                params.startDate = startDate;
+            }
+            if (endDate) {
+                params.endDate = endDate;
+            }
 
             const response = await getAllMechanicRequests(params);
             setRequests(response.data || []);
             setTotalCount(response.pagination?.total || 0);
+            setClientBreakdown({ colegios: Number(response.clientBreakdown?.colegios || 0), corporativos: Number(response.clientBreakdown?.corporativos || 0) });
         } catch (error) {
             console.error('Error fetching mechanic requests:', error);
         } finally {
@@ -254,10 +262,18 @@ const MechanicRequestsPage = () => {
             const params = {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
-            if (schoolId) params.schoolId = schoolId;
-            if (corporationId) params.corporationId = corporationId;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = endDate;
+            if (schoolId) {
+                params.schoolId = schoolId;
+            }
+            if (corporationId) {
+                params.corporationId = corporationId;
+            }
+            if (startDate) {
+                params.startDate = startDate;
+            }
+            if (endDate) {
+                params.endDate = endDate;
+            }
 
             const stats = await getMechanicRequestStatistics(params);
             setStatistics(stats);
@@ -287,7 +303,7 @@ const MechanicRequestsPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -317,7 +333,9 @@ const MechanicRequestsPage = () => {
 
     // Confirmar eliminación
     const handleConfirmDelete = async () => {
-        if (!requestToDelete) return;
+        if (!requestToDelete) {
+            return;
+        }
         try {
             await deleteMechanicRequest(requestToDelete.id);
             setDeleteModalOpen(false);
@@ -344,7 +362,9 @@ const MechanicRequestsPage = () => {
 
     // Confirmar cambio de estado
     const handleConfirmStatusChange = async () => {
-        if (!selectedRequest) return;
+        if (!selectedRequest) {
+            return;
+        }
         try {
             const updateData = {
                 estado: newStatus,
@@ -370,8 +390,7 @@ const MechanicRequestsPage = () => {
     // Create modal handlers
     const handleOpenCreateModal = () => {
         // default to current selected client filters if present
-        setCreateSchoolId(schoolId || '');
-        setCreateCorporationId(corporationId || '');
+        setCreateClient(selectedClient);
         setCreateBusId('');
         setCreatePlateOptions([]);
         setCreateTipoTrabajo('mecánico');
@@ -384,12 +403,18 @@ const MechanicRequestsPage = () => {
 
     const loadCreatePlates = async () => {
         setCreatePlateOptions([]);
-        if (!createSchoolId && !createCorporationId) return;
+        if (!createSchoolId && !createCorporationId) {
+            return;
+        }
         setCreateLoadingPlates(true);
         try {
             const params = { limit: 200 };
-            if (createSchoolId) params.schoolId = createSchoolId;
-            if (createCorporationId) params.corporationId = createCorporationId;
+            if (createSchoolId) {
+                params.schoolId = createSchoolId;
+            }
+            if (createCorporationId) {
+                params.corporationId = createCorporationId;
+            }
             const resp = await api.get('/buses', { params });
             const buses = resp.data?.buses || [];
             const plates = buses.map(b => ({ id: b.id, label: b.plate }));
@@ -455,23 +480,19 @@ const MechanicRequestsPage = () => {
 
     // Formatear fecha con hora
     const formatDate = (date) => {
-        if (!date) return '-';
+        if (!date) {
+            return '-';
+        }
         return moment(date).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
     };
 
     // Formatear solo fecha (sin hora)
     const formatDateOnly = (date) => {
-        if (!date) return '-';
+        if (!date) {
+            return '-';
+        }
         return moment(date).tz('America/Guatemala').format('DD/MM/YYYY');
     };
-
-    // Columnas ordenables
-    const sortableColumns = [
-        { id: 'fechaSolicitud', label: 'Fecha' },
-        { id: 'tipoTrabajo', label: 'Tipo de Trabajo' },
-        { id: 'estado', label: 'Estado' },
-        { id: 'urgente', label: 'Urgente' }
-    ];
 
     return (
         <PageContainer>
@@ -491,6 +512,9 @@ const MechanicRequestsPage = () => {
                                 </Typography>
                                 <Typography variant="h4">
                                     {statistics.totalRequests}
+                                </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                    {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
                                 </Typography>
                             </CardContent>
                         </StatsCard>
@@ -561,6 +585,12 @@ const MechanicRequestsPage = () => {
                 </Grid>
             )}
 
+            {isSpecificCicloEscolarSelected && (
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                    Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                </Typography>
+            )}
+
             {/* Filtros */}
             <FiltersContainer elevation={1}>
                 <Grid container spacing={2}>
@@ -569,59 +599,22 @@ const MechanicRequestsPage = () => {
                             value={selectedCicloEscolar}
                             onChange={(value) => {
                                 setSelectedCicloEscolar(value);
-                                setSchoolId('');
-                                setCorporationId('');
+                                setSelectedClient(null);
                                 setPlate('');
                                 setRouteNumber('');
                                 setPage(0);
                             }}
                         />
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.5}>
-                        <TextField
-                            select
-                            fullWidth
-                            size="small"
-                            label="Colegio"
-                            value={schoolId}
-                            onChange={(e) => { setSchoolId(e.target.value); setCorporationId(''); setPage(0); setPlate(''); setRouteNumber(''); }}
-                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
-                            disabled={!!corporationId}
-                        >
-                            <MenuItem value="">Todos</MenuItem>
-                            {isSpecificCicloEscolarSelected || groupedSchools.length === 0
-                                ? schools.map((school) => (
-                                    <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                ))
-                                : groupedSchools.map((group) => [
-                                    <ListSubheader key={`header-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                        {group.cycleLabel}
-                                    </ListSubheader>,
-                                    ...group.schools.map((school) => (
-                                        <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                    ))
-                                ])}
-                        </TextField>
+                    <Grid item xs={12} sm={6} md={2}>
+                        <ClientSelector
+                            schools={schools}
+                            corporations={corporations}
+                            value={selectedClient}
+                            onChange={(client) => { setSelectedClient(client); setPage(0); setPlate(''); setRouteNumber(''); }}
+                        />
                     </Grid>
-                    <Grid item xs={12} sm={6} md={1.5}>
-                        <TextField
-                            select
-                            fullWidth
-                            size="small"
-                            label="Corporación"
-                            value={corporationId}
-                            onChange={(e) => { setCorporationId(e.target.value); setSchoolId(''); setPage(0); setPlate(''); setRouteNumber(''); }}
-                            SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 300 } } } }}
-                            disabled={!!schoolId}
-                        >
-                            <MenuItem value="">Todas</MenuItem>
-                            {corporations.map((corp) => (
-                                <MenuItem key={corp.id} value={corp.id}>
-                                    {corp.name}
-                                </MenuItem>
-                            ))}
-                        </TextField>
-                    </Grid>
+
                     <Grid item xs={12} sm={6} md={1.3}>
                         <TextField
                             select
@@ -926,47 +919,15 @@ const MechanicRequestsPage = () => {
                         <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>
                     )}
                     <Grid container spacing={2}>
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                    select
-                                    fullWidth
-                                    size="small"
-                                    label="Colegio"
-                                    value={createSchoolId}
-                                    onChange={(e) => { setCreateSchoolId(e.target.value); setCreateCorporationId(''); setCreateBusId(''); }}
-                                    disabled={!!createCorporationId}
-                                >
-                                <MenuItem value="">Seleccione</MenuItem>
-                                {isSpecificCicloEscolarSelected || groupedSchools.length === 0
-                                    ? schools.map((s) => (
-                                        <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                                    ))
-                                    : groupedSchools.map((group) => [
-                                        <ListSubheader key={`header-create-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                            {group.cycleLabel}
-                                        </ListSubheader>,
-                                        ...group.schools.map((s) => (
-                                            <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                                        ))
-                                    ])}
-                            </TextField>
+                        <Grid item xs={12}>
+                            <ClientSelector
+                                schools={schools}
+                                corporations={corporations}
+                                value={createClient}
+                                onChange={(client) => { setCreateClient(client); setCreateBusId(''); }}
+                            />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                    select
-                                    fullWidth
-                                    size="small"
-                                    label="Corporación"
-                                    value={createCorporationId}
-                                    onChange={(e) => { setCreateCorporationId(e.target.value); setCreateSchoolId(''); setCreateBusId(''); }}
-                                    disabled={!!createSchoolId}
-                                >
-                                <MenuItem value="">Seleccione</MenuItem>
-                                {corporations.map((c) => (
-                                    <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
+
                         <Grid item xs={12} sm={6}>
                             <TextField
                                 select

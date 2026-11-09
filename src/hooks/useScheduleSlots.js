@@ -5,7 +5,7 @@ export default function useScheduleSlots() {
   const fetchSlots = useCallback(async (studentId) => {
     const res = await axios.get(`/students/${studentId}/scheduleSlots`);
     // API returns { slots: [...] }
-    const raw = (res && res.data && Array.isArray(res.data.slots)) ? res.data.slots : [];
+    const raw = (res?.data && Array.isArray(res.data.slots)) ? res.data.slots : [];
     // Normalize `days` to always be an array (DB may return JSON string or null)
     // Also ensure we work with plain objects: if the backend returned Sequelize instances
     // they might still have `toJSON` or `dataValues` so convert them first.
@@ -14,14 +14,16 @@ export default function useScheduleSlots() {
       let slot = s;
       if (slot && typeof slot.toJSON === 'function') {
         try { slot = slot.toJSON(); } catch (e) { /* ignore */ }
-      } else if (slot && slot.dataValues) {
+      } else if (slot?.dataValues) {
         slot = slot.dataValues;
       }
-      let days = slot && slot.days;
+      let days = slot?.days;
       if (typeof days === 'string') {
         try { days = JSON.parse(days); } catch (e) { days = []; }
       }
-      if (!Array.isArray(days)) days = [];
+      if (!Array.isArray(days)) {
+          days = [];
+      }
       return { ...(slot || {}), days };
     });
     return slots;
@@ -45,20 +47,26 @@ export default function useScheduleSlots() {
   const fetchSchoolSchedules = useCallback(async (schoolId) => {
   const res = await axios.get(`/schools/${schoolId}`);
   // API returns { school: { schedules: [...] } }
-  return (res.data && res.data.school && Array.isArray(res.data.school.schedules)) ? res.data.school.schedules : [];
+  return (res.data?.school && Array.isArray(res.data.school.schedules)) ? res.data.school.schedules : [];
   }, []);
 
   const fetchSchoolRouteNumbers = useCallback(async (schoolId) => {
     const res = await axios.get(`/schools/${schoolId}`);
     // API returns { school: { routeNumbers: [...] } }
-    return (res.data && res.data.school && Array.isArray(res.data.school.routeNumbers)) ? res.data.school.routeNumbers : [];
+    return (res.data?.school && Array.isArray(res.data.school.routeNumbers)) ? res.data.school.routeNumbers : [];
   }, []);
 
   const fetchRoutesByTime = useCallback(async (schoolId, time, code = null) => {
     const params = [];
-    if (code) params.push(`code=${encodeURIComponent(code)}`);
-    if (time) params.push(`time=${encodeURIComponent(time)}`);
-    if (params.length === 0) return [];
+    if (code) {
+        params.push(`code=${encodeURIComponent(code)}`);
+    }
+    if (time) {
+        params.push(`time=${encodeURIComponent(time)}`);
+    }
+    if (params.length === 0) {
+        return [];
+    }
     const res = await axios.get(`/schools/${schoolId}/routes-by-schedule?${params.join('&')}`);
     return res.data.routes || [];
   }, []);

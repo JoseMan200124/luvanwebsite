@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import {
@@ -14,7 +14,6 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ErrorBoundary from '../components/ErrorBoundary';
 import parse from 'html-react-parser';
-import SignatureCanvas from 'react-signature-canvas';
 
 const FilledContractViewer = () => {
     const { uuid } = useParams();
@@ -25,10 +24,6 @@ const FilledContractViewer = () => {
         message: '',
         severity: 'success'
     });
-
-    // Aunque aquí no hay inputs que llenar (el contrato ya está lleno),
-    // conservamos la referencia de firma por consistencia
-    const signaturePads = useRef({});
 
     useEffect(() => {
         const fetchFilledContract = async () => {
@@ -159,10 +154,14 @@ const FilledContractViewer = () => {
 
     // Generamos PDF a partir del contenido ya "llenado"
     const handleGeneratePDF = async () => {
-        if (!filledContract) return;
+        if (!filledContract) {
+            return;
+        }
 
         const previewDiv = document.getElementById('contract-preview');
-        if (!previewDiv) return;
+        if (!previewDiv) {
+            return;
+        }
 
         // Clone the preview div off-screen without any overflow/height constraints
         // so html2canvas captures the full content, not just the visible scroll area.
@@ -198,9 +197,13 @@ const FilledContractViewer = () => {
                     const { data } = ctx.getImageData(0, y, canvas.width, 1);
                     let whiteCount = 0;
                     for (let i = 0; i < data.length; i += 4) {
-                        if (data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240) whiteCount++;
+                        if (data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240) {
+                            whiteCount++;
+                        }
                     }
-                    if (whiteCount / (canvas.width) >= threshold) return y;
+                    if (whiteCount / (canvas.width) >= threshold) {
+                        return y;
+                    }
                 }
                 return ideal; // fallback: use the ideal boundary as-is
             };
@@ -225,7 +228,9 @@ const FilledContractViewer = () => {
                     .getContext('2d')
                     .drawImage(canvas, 0, offsetY, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
 
-                if (pageIndex > 0) pdf.addPage();
+                if (pageIndex > 0) {
+                    pdf.addPage();
+                }
                 pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, sliceHeightMm);
 
                 offsetY = splitY;
@@ -235,7 +240,9 @@ const FilledContractViewer = () => {
             pdf.save(`${filledContract.title}.pdf`);
             setSnackbar({ open: true, message: 'PDF generado exitosamente.', severity: 'success' });
         } catch (error) {
-            if (document.body.contains(clone)) document.body.removeChild(clone);
+            if (document.body.contains(clone)) {
+                document.body.removeChild(clone);
+            }
             console.error('Error generando el PDF:', error);
             setSnackbar({ open: true, message: 'Hubo un error al generar el PDF.', severity: 'error' });
         }

@@ -48,7 +48,9 @@ export const getDuplicateRowsByEmail = (drafts) => {
     const rowsByEmail = new Map();
     drafts.forEach((draft) => {
         const email = String(draft.correo || '').trim().toLowerCase();
-        if (draft.skip || !email) return;
+        if (draft.skip || !email) {
+            return;
+        }
         rowsByEmail.set(email, [...(rowsByEmail.get(email) || []), draft.row]);
     });
     return new Map([...rowsByEmail].filter(([, rows]) => rows.length > 1).map(([email, rows]) => [email, rows.join(', ')]));
@@ -58,10 +60,18 @@ export const getDuplicateRowsByEmail = (drafts) => {
 // El backend vuelve a validar al guardar.
 export const getDraftIssues = (draft, allowedGrades, allowedRouteTypes, passwordMinLength, duplicateRows = '') => {
     const issues = [];
-    if (!draft.nombre?.trim()) issues.push({ field: 'nombre', message: 'Falta el nombre.' });
-    if (!draft.correo?.trim()) issues.push({ field: 'correo', message: 'Falta el correo.' });
-    else if (!EMAIL_REGEX.test(draft.correo.trim())) issues.push({ field: 'correo', message: 'El correo no es válido.' });
-    else if (!ASCII_EMAIL_REGEX.test(draft.correo.trim())) issues.push({ field: 'correo', message: 'El correo no puede tener tildes ni caracteres especiales.' });
+    if (!draft.nombre?.trim()) {
+        issues.push({ field: 'nombre', message: 'Falta el nombre.' });
+    }
+    if (!draft.correo?.trim()) {
+        issues.push({ field: 'correo', message: 'Falta el correo.' });
+    }
+    else if (!EMAIL_REGEX.test(draft.correo.trim())) {
+        issues.push({ field: 'correo', message: 'El correo no es válido.' });
+    }
+    else if (!ASCII_EMAIL_REGEX.test(draft.correo.trim())) {
+        issues.push({ field: 'correo', message: 'El correo no puede tener tildes ni caracteres especiales.' });
+    }
     // La contraseña del archivo solo cuenta en una cuenta nueva (mínimo que exige el servidor). En una existente se
     // conserva la actual, o se restablece con una temporal enviada por correo.
     if (!hasExistingAccount(draft)) {
@@ -72,7 +82,9 @@ export const getDraftIssues = (draft, allowedGrades, allowedRouteTypes, password
         }
     }
     // En una familia que ya existe la ruta no se cambia desde la carga masiva, así que no se valida.
-    if (!hasExistingFamily(draft) && !allowedRouteTypes.includes(draft.routeType)) issues.push({ field: 'routeType', message: 'Selecciona un tipo de ruta válido.' });
+    if (!hasExistingFamily(draft) && !allowedRouteTypes.includes(draft.routeType)) {
+        issues.push({ field: 'routeType', message: 'Selecciona un tipo de ruta válido.' });
+    }
 
     if (draft.students.length === 0) {
         issues.push({ field: 'students', message: 'Agrega al menos un estudiante con nombre y grado.' });
@@ -94,7 +106,9 @@ export const getDraftIssues = (draft, allowedGrades, allowedRouteTypes, password
     if (duplicateRows) {
         issues.push({ field: 'duplicate', message: `El correo está repetido en las filas ${duplicateRows}. Deja una sola incluida y omite las demás.` });
     }
-    if (draft.serverIssue) issues.push({ field: 'general', message: draft.serverIssue });
+    if (draft.serverIssue) {
+        issues.push({ field: 'general', message: draft.serverIssue });
+    }
     return issues;
 };
 
@@ -136,7 +150,9 @@ const findRemovedStudents = (existingStudents, incomingStudents) => {
     const unmatched = [...existingStudents];
     const takeFirst = (predicate) => {
         const index = unmatched.findIndex(predicate);
-        if (index >= 0) unmatched.splice(index, 1);
+        if (index >= 0) {
+            unmatched.splice(index, 1);
+        }
         return index >= 0;
     };
     const incomingKeys = new Set(incomingStudents.map(studentKey));
@@ -167,14 +183,18 @@ const formatStudents = (students) =>
 //   (tipo de ruta, descuento y alumnos se cambian desde sus propios flujos, que recalculan el pago).
 export const getExistingChanges = (draft) => {
     const existing = draft.existing;
-    if (!hasExistingAccount(draft)) return null;
+    if (!hasExistingAccount(draft)) {
+        return null;
+    }
 
     const changes = [];
     const ignored = [];
     FAMILY_FIELD_LABELS.forEach(([field, label]) => {
         const from = String(existing[field] ?? '').trim();
         const to = field === 'specialFee' ? normalizeFee(draft[field]) : String(draft[field] ?? '').trim();
-        if (from === to) return;
+        if (from === to) {
+            return;
+        }
         if (existing.hasFamily && NOT_APPLIED_FIELDS.includes(field)) {
             ignored.push({ label, from, to });
         } else if (existing.hasFamily || (field === 'nombre' && !existing.reuseOnly)) {
@@ -197,7 +217,9 @@ export const getExistingChanges = (draft) => {
         const to = formatStudents(draft.students);
         const sameStudents = existing.students.length === draft.students.length
             && existing.students.map(studentKey).sort().join('#') === draft.students.map(studentKey).sort().join('#');
-        if (!sameStudents) changes.push({ label: 'Estudiantes', from, to });
+        if (!sameStudents) {
+            changes.push({ label: 'Estudiantes', from, to });
+        }
     }
 
     return { changes, ignored, removedStudents, hasFamily: existing.hasFamily, passwordChange, reuseOnly: Boolean(existing.reuseOnly) };
@@ -326,7 +348,9 @@ const BufferedTextField = ({ value, onCommit, onBlurCommit, ...props }) => {
             }}
             onBlur={() => {
                 flush(local);
-                if (onBlurCommit) onBlurCommit(local);
+                if (onBlurCommit) {
+                    onBlurCommit(local);
+                }
             }}
         />
     );
@@ -533,7 +557,9 @@ const describePendingStep = ({ step, status, message, reason }) => {
             ? `${base}. Al completar se envía una contraseña temporal nueva.${detail ? ` ${detail}` : ''}`
             : `${base}.${detail ? ` ${detail}` : ''}`;
     }
-    if (status === 'denied') return `${label}: ${detail || 'sin permiso.'}`;
+    if (status === 'denied') {
+        return `${label}: ${detail || 'sin permiso.'}`;
+    }
     return `${label}: no se entregó.${detail ? ` ${detail}` : ''}`;
 };
 
@@ -542,7 +568,9 @@ const isRetryableStep = (step, canResetPassword) => step.status === 'failed' && 
 // Familias que YA se guardaron pero a las que les quedó un paso por completar (pagos, estado de servicio o correo):
 // se completa solo ese paso, sin reprocesar la familia.
 export const BulkPendingSteps = ({ families, canResetPassword, completing, onComplete, onDismiss }) => {
-    if (families.length === 0) return null;
+    if (families.length === 0) {
+        return null;
+    }
     const retryableCount = families.filter(family => family.steps.some(step => isRetryableStep(step, canResetPassword))).length;
 
     return (

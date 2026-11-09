@@ -56,26 +56,34 @@ export default function ParentNavbar() {
     const safeStr = useCallback((v) => (v == null ? '' : String(v)).trim(), []);
 
     const cleanPhoneDigits = useCallback((phone) => {
-        if (!phone) return '';
+        if (!phone) {
+            return '';
+        }
         return String(phone).replace(/[^0-9]/g, '');
     }, []);
 
     const openPhone = useCallback((phone) => {
         const digits = cleanPhoneDigits(phone);
-        if (!digits) return;
+        if (!digits) {
+            return;
+        }
         window.location.href = `tel:${digits}`;
     }, [cleanPhoneDigits]);
 
     const openEmail = useCallback((email) => {
         const e = safeStr(email);
-        if (!e) return;
+        if (!e) {
+            return;
+        }
         window.location.href = `mailto:${encodeURIComponent(e)}`;
     }, [safeStr]);
 
     const openWhatsApp = useCallback((whatsappLink, fallbackPhone) => {
         const direct = safeStr(whatsappLink);
         const url = direct || (cleanPhoneDigits(fallbackPhone) ? `https://wa.me/${cleanPhoneDigits(fallbackPhone)}` : '');
-        if (!url) return;
+        if (!url) {
+            return;
+        }
         window.open(url, '_blank', 'noopener,noreferrer');
     }, [cleanPhoneDigits, safeStr]);
 
@@ -130,11 +138,17 @@ export default function ParentNavbar() {
                     contactEmail: safeStr(raw?.contactEmail),
                     whatsappLink: safeStr(raw?.whatsappLink),
                 };
-                if (mounted) setContactInfo(info);
+                if (mounted) {
+                    setContactInfo(info);
+                }
             } catch (e) {
-                if (mounted) setContactInfo(null);
+                if (mounted) {
+                    setContactInfo(null);
+                }
             } finally {
-                if (mounted) setContactLoading(false);
+                if (mounted) {
+                    setContactLoading(false);
+                }
             }
         })();
 

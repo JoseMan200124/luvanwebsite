@@ -127,15 +127,21 @@ const RouteTimeLogsPage = () => {
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
     const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
+        if (isSpecificCicloEscolarSelected) {
+            return [];
+        }
         const map = new Map();
         schools.forEach((s) => {
             const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
             const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
+            if (!map.has(key)) {
+                map.set(key, []);
+            }
             map.get(key).push(s);
         });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
+        return Array.from(map.entries())
+            .sort(([a], [b]) => a.localeCompare(b, 'es'))
+            .map(([cycleLabel, schools]) => ({ cycleLabel, schools: [...schools].sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')) }));
     }, [schools, isSpecificCicloEscolarSelected]);
 
     const fetchBusesBySchool = async (schoolId) => {
@@ -202,34 +208,54 @@ const RouteTimeLogsPage = () => {
             };
 
             // Añadir ordenamiento solicitado al servidor
-            if (orderBy) filters.sortBy = orderBy;
-            if (order) filters.order = order;
+            if (orderBy) {
+                filters.sortBy = orderBy;
+            }
+            if (order) {
+                filters.order = order;
+            }
 
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedSchedule) filters.schedule = String(selectedSchedule).trim().toUpperCase();
-            if (selectedDay) filters.day = selectedDay;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedSchool) {
+                filters.schoolId = selectedSchool;
+            }
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedSchedule) {
+                filters.schedule = String(selectedSchedule).trim().toUpperCase();
+            }
+            if (selectedDay) {
+                filters.day = selectedDay;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const data = await getRouteTimeLogs(filters);
 
             // Si llegó otra request más reciente, ignorar esta respuesta
-            if (requestSeq !== timeLogsRequestSeqRef.current) return;
+            if (requestSeq !== timeLogsRequestSeqRef.current) {
+                return;
+            }
 
             const logsList = data.timeLogs || data.data || [];
             setTimeLogs(logsList);
 
-            const totalFromServer = data.total ?? data.totalTimeLogs ?? data.totalRecords ?? (data.pagination && data.pagination.total) ?? 0;
+            const totalFromServer = data.total ?? data.totalTimeLogs ?? data.totalRecords ?? (data.pagination?.total) ?? 0;
             setTotalCount(totalFromServer || 0);
 
             // Calcular estadísticas
-            const serverAvg = data.averageDuration ?? data.averageTripDuration ?? (data.statistics && data.statistics.averageDuration);
+            const serverAvg = data.averageDuration ?? data.averageTripDuration ?? (data.statistics?.averageDuration);
             if (totalFromServer && serverAvg !== undefined) {
                 setStatistics({
                     total: totalFromServer,
-                    averageDuration: parseFloat(serverAvg).toFixed(2),
+                    averageDuration: Number.parseFloat(serverAvg).toFixed(2),
                 });
             } else if (logsList.length > 0) {
                 const totalDuration = logsList.reduce((sum, log) => sum + (log.tripDuration || 0), 0);
@@ -279,7 +305,7 @@ const RouteTimeLogsPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     };
 
@@ -297,7 +323,9 @@ const RouteTimeLogsPage = () => {
     };
 
     const handleConfirmDelete = async () => {
-        if (!deleteId) return;
+        if (!deleteId) {
+            return;
+        }
         try {
             await deleteRouteTimeLog(deleteId);
             // refresh list
@@ -348,7 +376,9 @@ const RouteTimeLogsPage = () => {
     };
 
     const formatDuration = (minutes) => {
-        if (!minutes) return 'N/A';
+        if (!minutes) {
+            return 'N/A';
+        }
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
@@ -365,13 +395,27 @@ const RouteTimeLogsPage = () => {
             const filters = {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar),
             };
-            if (selectedSchool) filters.schoolId = selectedSchool;
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedSchedule) filters.schedule = String(selectedSchedule).trim().toUpperCase();
-            if (selectedDay) filters.day = selectedDay;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedSchool) {
+                filters.schoolId = selectedSchool;
+            }
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedSchedule) {
+                filters.schedule = String(selectedSchedule).trim().toUpperCase();
+            }
+            if (selectedDay) {
+                filters.day = selectedDay;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const all = await getAllRouteTimeLogs(filters, 1000);
 
@@ -509,7 +553,7 @@ const RouteTimeLogsPage = () => {
                                 <Box display="flex" alignItems="baseline" gap={2}>
                                     <Box>
                                         <Typography variant="h3" component="span">
-                                            {Math.floor(parseFloat(statistics.averageDuration) / 60) || 0}
+                                            {Math.floor(Number.parseFloat(statistics.averageDuration) / 60) || 0}
                                         </Typography>
                                         <Typography variant="h6" component="span" color="textSecondary">
                                             {' h '}
@@ -517,7 +561,7 @@ const RouteTimeLogsPage = () => {
                                     </Box>
                                     <Box>
                                         <Typography variant="h3" component="span">
-                                            {Math.round(parseFloat(statistics.averageDuration) % 60) || 0}
+                                            {Math.round(Number.parseFloat(statistics.averageDuration) % 60) || 0}
                                         </Typography>
                                         <Typography variant="h6" component="span" color="textSecondary">
                                             {' min'}
@@ -557,7 +601,11 @@ const RouteTimeLogsPage = () => {
                                         setSelectedSchedule('');
                                     }}
                                     label="Colegio"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+                                    MenuProps={{
+                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
+                                        PaperProps: { style: { maxHeight: 300 } }
+                                    }}
                                 >
                                     <MenuItem value="">Todos</MenuItem>
                                     {isSpecificCicloEscolarSelected || groupedSchools.length === 0
@@ -616,7 +664,9 @@ const RouteTimeLogsPage = () => {
                                     {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
                                         const na = Number(a);
                                         const nb = Number(b);
-                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+                                            return na - nb;
+                                        }
                                         return String(a).localeCompare(String(b));
                                     }).map((route) => (
                                         <MenuItem key={route} value={route}>

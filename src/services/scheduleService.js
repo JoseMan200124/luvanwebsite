@@ -62,7 +62,9 @@ export const updateSchoolSchedules = async (schoolId, schedules, options = {}) =
 };
 
 function getFilenameFromDisposition(contentDisposition, fallback) {
-  if (!contentDisposition) return fallback;
+  if (!contentDisposition) {
+      return fallback;
+  }
   const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
   if (utf8Match?.[1]) {
     try {
@@ -72,7 +74,9 @@ function getFilenameFromDisposition(contentDisposition, fallback) {
     }
   }
   const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
-  if (plainMatch?.[1]) return plainMatch[1];
+  if (plainMatch?.[1]) {
+      return plainMatch[1];
+  }
   return fallback;
 }
 
@@ -130,22 +134,6 @@ export const getSchoolSchedules = async (schoolId) => {
   } catch (error) {
     console.error('Error fetching school schedules:', error);
     return [];
-  }
-};
-
-/**
- * Obtiene toda la información de una escuela
- * 
- * @param {number} schoolId - ID de la escuela
- * @returns {Promise} - Datos de la escuela
- */
-export const getSchoolById = async (schoolId) => {
-  try {
-    const response = await api.get(`/schools/${schoolId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching school:', error);
-    throw error;
   }
 };
 
@@ -215,32 +203,3 @@ export const formatScheduleChange = (change) => {
 
   return `◆ Cambio en horario: ${JSON.stringify(change)}`;
 };
-
-/**
- * Extrae el código de un string de horario escolar
- * Ej: "07:15 LUN" -> "LUN"
- * 
- * @param {string} schoolScheduleStr - String del formato "HH:MM CODE"
- * @returns {string|null} - El código o null si no se encuentra
- */
-export const extractScheduleCode = (schoolScheduleStr) => {
-  if (!schoolScheduleStr || typeof schoolScheduleStr !== 'string') {
-    return null;
-  }
-
-  const parts = schoolScheduleStr.trim().split(/\s+/);
-  return parts.length > 1 ? parts[parts.length - 1] : null;
-};
-
-const scheduleService = {
-  updateSchoolSchedules,
-  getScheduleDeletionImpact,
-  downloadScheduleDeletionZip,
-  getSchoolSchedules,
-  getSchoolById,
-  validateSchedules,
-  formatScheduleChange,
-  extractScheduleCode
-};
-
-export default scheduleService;

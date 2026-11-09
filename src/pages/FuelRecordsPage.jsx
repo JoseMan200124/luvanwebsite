@@ -62,7 +62,7 @@ import {
 } from '../services/fuelRecordService';
 import api from '../utils/axiosConfig';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
+import ClientSelector from '../components/ClientSelector';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -117,7 +117,6 @@ const FuelRecordsPage = () => {
     const [editSchools, setEditSchools] = useState([]);
     const [editCorporations, setEditCorporations] = useState([]);
     const [editBuses, setEditBuses] = useState([]);
-    const [editRecordCycleId, setEditRecordCycleId] = useState(null);
     const [editClientRouteNumbers, setEditClientRouteNumbers] = useState([]);
     const [editForm, setEditForm] = useState({
         client: null,
@@ -153,6 +152,7 @@ const FuelRecordsPage = () => {
     });
 
     // Estadísticas
+    const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
     const [statistics, setStatistics] = useState({
         totalRecords: 0,
         totalGallons: 0,
@@ -230,7 +230,7 @@ const FuelRecordsPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) });
+            const response = await api.get('/corporations');
             const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
             setCorporations(corporationsData);
         } catch (error) {
@@ -253,24 +253,13 @@ const FuelRecordsPage = () => {
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
-    const getSchoolCycleLabel = (school) =>
-        getCicloEscolarOptionLabel(school?.cicloEscolar) || (school?.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar');
-
-    // Opciones de cliente (colegios + corporaciones) y placas. groupLabel distingue colegios
-    // con el mismo nombre pero distinto ciclo escolar cuando el filtro de página está en
-    // "Todos los ciclos" — sin esto, dos filas "Colegio X" de años distintos se ven idénticas.
-    const clientOptionsRaw = [
-        ...schools.map(s => ({ label: `${s.name} (Colegio)`, value: `school-${s.id}`, type: 'school', id: s.id, groupLabel: getSchoolCycleLabel(s) })),
-        ...corporations.map(c => ({ label: `${c.name} (Corporación)`, value: `corp-${c.id}`, type: 'corp', id: c.id, groupLabel: 'Corporaciones' })),
-    ];
-
-    const clientOptions = isSpecificCicloEscolarSelected
-        ? clientOptionsRaw
-        : [...clientOptionsRaw].sort((a, b) => a.groupLabel.localeCompare(b.groupLabel) || a.label.localeCompare(b.label));
-
     const getBusClientId = (bus, type) => {
-        if (type === 'school') return bus.schoolId ?? bus.school?.id;
-        if (type === 'corp') return bus.corporationId ?? bus.corporation?.id;
+        if (type === 'school') {
+            return bus.schoolId ?? bus.school?.id;
+        }
+        if (type === 'corp') {
+            return bus.corporationId ?? bus.corporation?.id;
+        }
         return null;
     };
 
@@ -373,20 +362,42 @@ const FuelRecordsPage = () => {
 
             if (selectedClient) {
                 const { type, id } = selectedClient;
-                if (type === 'school') filters.schoolId = id;
-                if (type === 'corp') filters.corporationId = id;
+                if (type === 'school') {
+                    filters.schoolId = id;
+                }
+                if (type === 'corp') {
+                    filters.corporationId = id;
+                }
             }
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedFuelingReason) filters.fuelingReason = selectedFuelingReason;
-            if (selectedFuelType) filters.fuelType = selectedFuelType;
-            if (selectedFuelType) filters.fuelType = selectedFuelType;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedFuelingReason) {
+                filters.fuelingReason = selectedFuelingReason;
+            }
+            if (selectedFuelType) {
+                filters.fuelType = selectedFuelType;
+            }
+            if (selectedFuelType) {
+                filters.fuelType = selectedFuelType;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             // Ordenamiento
-            if (orderBy) filters.orderBy = orderBy;
-            if (order) filters.order = order;
+            if (orderBy) {
+                filters.orderBy = orderBy;
+            }
+            if (order) {
+                filters.order = order;
+            }
 
             // DEBUG: log filters being sent to backend
             // eslint-disable-next-line no-console
@@ -398,15 +409,19 @@ const FuelRecordsPage = () => {
             if (response.success && response.data) {
                 setFuelRecords(response.data);
                 setTotalCount(response.pagination?.total || 0);
+                setClientBreakdown({
+                    colegios: Number(response.clientBreakdown?.colegios || 0),
+                    corporativos: Number(response.clientBreakdown?.corporativos || 0)
+                });
                 // Preferir totales/estadísticas devueltas por el endpoint de list (si las incluye)
                 const totalsFromList = response.totals || response.statistics || response.meta;
                 if (totalsFromList) {
                     const t = totalsFromList;
                     setStatistics(prev => ({
-                        totalRecords: parseInt(t.totalRecords || t.total || prev.totalRecords) || 0,
-                        totalGallons: parseFloat(t.totalGallonage || t.totalGallons || prev.totalGallons) || 0,
-                        totalAmount: parseFloat(t.totalAmount || prev.totalAmount) || 0,
-                        averagePrice: parseFloat(t.avgPricePerGallon || t.averagePrice || prev.averagePrice) || 0,
+                        totalRecords: Number.parseInt(t.totalRecords || t.total || prev.totalRecords) || 0,
+                        totalGallons: Number.parseFloat(t.totalGallonage || t.totalGallons || prev.totalGallons) || 0,
+                        totalAmount: Number.parseFloat(t.totalAmount || prev.totalAmount) || 0,
+                        averagePrice: Number.parseFloat(t.avgPricePerGallon || t.averagePrice || prev.averagePrice) || 0,
                         byReason: prev.byReason
                     }));
                 }
@@ -438,13 +453,25 @@ const FuelRecordsPage = () => {
 
             if (selectedClient) {
                     const { type, id } = selectedClient || {};
-                    if (type === 'school') filters.schoolId = id;
-                    if (type === 'corp') filters.corporationId = id;
+                    if (type === 'school') {
+                        filters.schoolId = id;
+                    }
+                    if (type === 'corp') {
+                        filters.corporationId = id;
+                    }
                 }
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const response = await getFuelStatistics(filters);
             
@@ -457,18 +484,18 @@ const FuelRecordsPage = () => {
                 const byReason = {};
                 byFuelType.forEach(stat => {
                     byReason[stat.fuelingReason] = {
-                        count: parseInt(stat.count) || 0,
-                        totalGallonage: parseFloat(stat.totalGallonage) || 0,
-                        totalAmount: parseFloat(stat.totalAmount) || 0,
-                        avgPricePerGallon: parseFloat(stat.avgPricePerGallon) || 0
+                        count: Number.parseInt(stat.count) || 0,
+                        totalGallonage: Number.parseFloat(stat.totalGallonage) || 0,
+                        totalAmount: Number.parseFloat(stat.totalAmount) || 0,
+                        avgPricePerGallon: Number.parseFloat(stat.avgPricePerGallon) || 0
                     };
                 });
 
                 setStatistics({
-                    totalRecords: parseInt(totals.totalRecords) || 0,
-                    totalGallons: parseFloat(totals.totalGallonage) || 0,
-                    totalAmount: parseFloat(totals.totalAmount) || 0,
-                    averagePrice: parseFloat(totals.avgPricePerGallon) || 0,
+                    totalRecords: Number.parseInt(totals.totalRecords) || 0,
+                    totalGallons: Number.parseFloat(totals.totalGallonage) || 0,
+                    totalAmount: Number.parseFloat(totals.totalAmount) || 0,
+                    averagePrice: Number.parseFloat(totals.avgPricePerGallon) || 0,
                     efficiency: response.data.efficiency || {
                         estimatedConsumptionPerDay: 0,
                         estimatedConsumptionPerRoute: 0,
@@ -530,13 +557,8 @@ const FuelRecordsPage = () => {
     };
 
     const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
-    };
-
-    const handleRefresh = () => {
-        fetchFuelRecords();
-        fetchStatistics();
     };
 
     const handleDownloadExcel = async () => {
@@ -553,15 +575,31 @@ const FuelRecordsPage = () => {
 
             if (selectedClient) {
                 const { type, id } = selectedClient;
-                if (type === 'school') filters.schoolId = id;
-                if (type === 'corp') filters.corporationId = id;
+                if (type === 'school') {
+                    filters.schoolId = id;
+                }
+                if (type === 'corp') {
+                    filters.corporationId = id;
+                }
             }
-            if (selectedPlate) filters.plate = selectedPlate;
-            if (selectedRoute) filters.routeNumber = selectedRoute;
-            if (selectedFuelingReason) filters.fuelingReason = selectedFuelingReason;
-            if (selectedFuelType) filters.fuelType = selectedFuelType;
-            if (startDate) filters.startDate = startDate.format('YYYY-MM-DD');
-            if (endDate) filters.endDate = endDate.format('YYYY-MM-DD');
+            if (selectedPlate) {
+                filters.plate = selectedPlate;
+            }
+            if (selectedRoute) {
+                filters.routeNumber = selectedRoute;
+            }
+            if (selectedFuelingReason) {
+                filters.fuelingReason = selectedFuelingReason;
+            }
+            if (selectedFuelType) {
+                filters.fuelType = selectedFuelType;
+            }
+            if (startDate) {
+                filters.startDate = startDate.format('YYYY-MM-DD');
+            }
+            if (endDate) {
+                filters.endDate = endDate.format('YYYY-MM-DD');
+            }
 
             const response = await exportFuelRecordsExcel(filters);
             const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -604,12 +642,15 @@ const FuelRecordsPage = () => {
         setSelectedRecord(null);
     };
 
-    const loadEditReferenceData = async (cicloEscolarId) => {
+    const loadEditReferenceData = async () => {
         try {
-            const params = cicloEscolarId ? { cicloEscolarId: String(cicloEscolarId), includeArchived: true } : { includeArchived: true };
+            // Siempre colegios de todos los ciclos: un registro puede corregirse a un colegio de otro ciclo
+            // (p. ej. creado en un colegio de 2027 que en realidad es de 2026).
+            // Sin allCycles, interceptor y backend limitarían a uno.
+            const params = { allCycles: true, includeArchived: true };
             const [schoolsResponse, corporationsResponse, busesResponse] = await Promise.all([
                 api.get('/schools', { params }),
-                api.get('/corporations', { params: cicloEscolarId ? { cicloEscolarId: String(cicloEscolarId) } : {} }),
+                api.get('/corporations'),
                 api.get('/buses/simple')
             ]);
 
@@ -617,15 +658,8 @@ const FuelRecordsPage = () => {
             const corporationsData = Array.isArray(corporationsResponse.data) ? corporationsResponse.data : (corporationsResponse.data?.corporations || []);
             const busesData = Array.isArray(busesResponse.data) ? busesResponse.data : (busesResponse.data?.buses || []);
 
-            const normalizedCycleId = cicloEscolarId !== undefined && cicloEscolarId !== null && cicloEscolarId !== '' ? String(cicloEscolarId) : '';
-            const inSameCycle = (item) => {
-                const itemCycleId = item?.cicloEscolarId ?? item?.cicloEscolar?.id ?? item?.school?.cicloEscolarId ?? item?.school?.cicloEscolar?.id ?? null;
-                if (!normalizedCycleId) return itemCycleId === null || itemCycleId === undefined || itemCycleId === '';
-                return String(itemCycleId) === normalizedCycleId;
-            };
-
-            setEditSchools(schoolsData.filter(inSameCycle));
-            setEditCorporations(corporationsData.filter(inSameCycle));
+            setEditSchools(schoolsData);
+            setEditCorporations(corporationsData);
             setEditBuses(busesData);
         } catch (error) {
             console.error('Error al cargar datos de edición:', error);
@@ -655,21 +689,15 @@ const FuelRecordsPage = () => {
     };
 
     const handleOpenEdit = (record) => {
-        if (!record || !record.canEdit) return;
-        const recordCycleId = record?.cicloEscolarId
-            ?? record?.cicloEscolar?.id
-            ?? record?.school?.cicloEscolarId
-            ?? record?.school?.cicloEscolar?.id
-            ?? record?.corporation?.cicloEscolarId
-            ?? record?.corporation?.cicloEscolar?.id
-            ?? null;
+        if (!record?.canEdit) {
+            return;
+        }
         setSelectedRecord(record);
-        setEditRecordCycleId(recordCycleId);
         setEditSchools([]);
         setEditCorporations([]);
         setEditBuses([]);
         setEditForm(buildEditFormFromRecord(record));
-        loadEditReferenceData(recordCycleId);
+        loadEditReferenceData();
         setEditOpen(true);
         setDetailsOpen(false);
     };
@@ -677,7 +705,6 @@ const FuelRecordsPage = () => {
     const handleCloseEdit = () => {
         setEditOpen(false);
         setUpdating(false);
-        setEditRecordCycleId(null);
         setEditSchools([]);
         setEditCorporations([]);
         setEditBuses([]);
@@ -754,7 +781,7 @@ const FuelRecordsPage = () => {
         try {
             setUpdating(true);
             const response = await updateFuelRecord(selectedRecord.id, payload);
-            if (response && response.success) {
+            if (response?.success) {
                 handleCloseEdit();
                 handleCloseDetails();
                 await Promise.all([fetchFuelRecords(), fetchStatistics()]);
@@ -789,7 +816,9 @@ const FuelRecordsPage = () => {
     };
 
     const handleConfirmDelete = async () => {
-        if (!deleteId) return;
+        if (!deleteId) {
+            return;
+        }
         try {
             setDeleting(true);
             const response = await deleteFuelRecord(deleteId);
@@ -835,49 +864,10 @@ const FuelRecordsPage = () => {
         }).format(amount || 0);
     };
 
-    const editClientOptions = [
-        ...editSchools
-            .filter((school) => {
-                const schoolCycleId = school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? null;
-                return editRecordCycleId ? String(schoolCycleId) === String(editRecordCycleId) : schoolCycleId === null || schoolCycleId === undefined;
-            })
-            .map((school) => ({ label: `${school.name} (Colegio)`, type: 'school', id: school.id })),
-        ...editCorporations
-            .filter((corporation) => {
-                const corporationCycleId = corporation?.cicloEscolarId ?? corporation?.cicloEscolar?.id ?? null;
-                return editRecordCycleId ? String(corporationCycleId) === String(editRecordCycleId) : corporationCycleId === null || corporationCycleId === undefined;
-            })
-            .map((corporation) => ({ label: `${corporation.name} (Corporación)`, type: 'corp', id: corporation.id })),
-    ];
-
     const editPlateOptions = [...new Set(editBuses.map((bus) => bus.plate).filter(Boolean))]
         .sort((firstPlate, secondPlate) => String(firstPlate).localeCompare(String(secondPlate)));
 
     const selectedRecordBus = selectedRecord?.bus || null;
-    const selectedRecordBusId = selectedRecord?.busId != null ? String(selectedRecord.busId) : (selectedRecordBus?.id != null ? String(selectedRecordBus.id) : '');
-    const selectedRecordBusPlate = selectedRecord?.plate || selectedRecordBus?.plate || '';
-
-    const editBusOptions = selectedRecordBusPlate
-        ? (() => {
-            const currentOptions = editPlateOptions.map((plate) => {
-                const bus = editBuses.find((item) => item.plate === plate);
-                return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
-            });
-            const hasCurrentBus = currentOptions.some((option) => String(option.id) === selectedRecordBusId || option.plate === selectedRecordBusPlate);
-            if (hasCurrentBus) return currentOptions;
-            return [
-                { label: selectedRecordBusPlate, id: selectedRecordBusId, plate: selectedRecordBusPlate },
-                ...currentOptions,
-            ];
-        })()
-        : editPlateOptions.map((plate) => {
-            const bus = editBuses.find((item) => item.plate === plate);
-            return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
-        });
-
-    const selectedEditClientValue = editForm.client
-        ? editClientOptions.find((option) => option.type === editForm.client.type && String(option.id) === String(editForm.client.id)) || editForm.client
-        : null;
 
     const selectedEditBusValue = editForm.busId
         ? (() => {
@@ -954,14 +944,18 @@ const FuelRecordsPage = () => {
         // Map client to schoolId or corporationId
         if (createForm.client) {
             const { type, id } = createForm.client || {};
-            if (type === 'school') payload.schoolId = Number(id);
-            if (type === 'corp') payload.corporationId = Number(id);
+            if (type === 'school') {
+                payload.schoolId = Number(id);
+            }
+            if (type === 'corp') {
+                payload.corporationId = Number(id);
+            }
         }
 
         try {
             setCreating(true);
             const response = await createFuelRecordWeb(payload);
-            if (response && response.success) {
+            if (response?.success) {
                 handleCloseCreate();
                 // Refresh list and stats
                 setPage(0);
@@ -1007,6 +1001,9 @@ const FuelRecordsPage = () => {
                                 </Box>
                                 <Typography variant="h4">
                                     {statistics.totalRecords}
+                                </Typography>
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                    {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -1073,6 +1070,12 @@ const FuelRecordsPage = () => {
                     )}
                 </Grid>
 
+                {isSpecificCicloEscolarSelected && (
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                        Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                    </Typography>
+                )}
+
                 {/* Filtros */}
                 <Paper sx={{ p: 3, mb: 3 }}>
                     <Grid container spacing={2} alignItems="center">
@@ -1090,16 +1093,14 @@ const FuelRecordsPage = () => {
                             />
                         </Grid>
                         <Grid item xs="auto" sm="auto" md={"auto"}>
-                                <Autocomplete
-                                    options={clientOptions}
+                                <ClientSelector
+                                    schools={schools}
+                                    corporations={corporations}
                                     value={selectedClient}
-                                    onChange={(e, newValue) => { setSelectedClient(newValue); setSelectedRoute(''); setSelectedPlate(''); }}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    groupBy={isSpecificCicloEscolarSelected ? undefined : (option) => option.groupLabel}
-                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
+                                    onChange={(client) => { setSelectedClient(client); setSelectedRoute(''); setSelectedPlate(''); }}
+                                    fullWidth={false}
+                                    size="medium"
                                     sx={{ width: 250 }}
-                                    isOptionEqualToValue={(opt, val) => opt?.value === val?.value}
-                                    clearOnEscape
                                 />
                         </Grid>
 
@@ -1392,7 +1393,7 @@ const FuelRecordsPage = () => {
                                                     )}
                                                 </TableCell>
                                                 <TableCell align="right">
-                                                    {parseFloat(record.gallonage).toFixed(2)}
+                                                    {Number.parseFloat(record.gallonage).toFixed(2)}
                                                 </TableCell>
                                                 <TableCell align="right">
                                                     {formatCurrency(record.pricePerGallon)}
@@ -1474,15 +1475,12 @@ const FuelRecordsPage = () => {
                     <DialogContent dividers>
                         <Grid container spacing={2} sx={{ mt: 0.5 }}>
                             <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={clientOptions}
+                                <ClientSelector
+                                    size="medium"
+                                    schools={schools}
+                                    corporations={corporations}
                                     value={createForm.client}
-                                    onChange={(e, newValue) => handleCreateChange('client', newValue)}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    groupBy={isSpecificCicloEscolarSelected ? undefined : (option) => option.groupLabel}
-                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
-                                    fullWidth
-                                    isOptionEqualToValue={(opt, val) => opt?.value === val?.value}
+                                    onChange={(client) => handleCreateChange('client', client)}
                                 />
                             </Grid>
 
@@ -1692,7 +1690,7 @@ const FuelRecordsPage = () => {
                                         Galones
                                     </Typography>
                                     <Typography variant="h6" gutterBottom>
-                                        {parseFloat(selectedRecord.gallonage).toFixed(2)}
+                                        {Number.parseFloat(selectedRecord.gallonage).toFixed(2)}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={4}>
@@ -1767,14 +1765,12 @@ const FuelRecordsPage = () => {
                         )}
                         <Grid container spacing={2} sx={{ mt: 0.5 }}>
                             <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={editClientOptions}
-                                    value={selectedEditClientValue}
-                                    onChange={(e, newValue) => handleEditChange('client', newValue)}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    renderInput={(params) => <TextField {...params} label="Cliente" variant="outlined" />}
-                                    fullWidth
-                                    isOptionEqualToValue={(opt, val) => opt?.type === val?.type && String(opt?.id) === String(val?.id)}
+                                <ClientSelector
+                                    size="medium"
+                                    schools={editSchools}
+                                    corporations={editCorporations}
+                                    value={editForm.client}
+                                    onChange={(client) => handleEditChange('client', client)}
                                 />
                             </Grid>
 

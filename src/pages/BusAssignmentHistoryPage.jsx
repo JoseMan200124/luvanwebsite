@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
     Autocomplete,
     Box,
@@ -9,10 +9,8 @@ import {
     CircularProgress,
     Alert,
     FormControl,
-    FormHelperText,
     Grid2,
     InputLabel,
-    ListSubheader,
     MenuItem,
     Paper,
     Select,
@@ -37,19 +35,25 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import moment from 'moment-timezone';
+import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
 moment.tz.setDefault('America/Guatemala');
 
 const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) return '—';
+    if (!dateString) {
+        return '—';
+    }
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY, hh:mm a');
 };
 
 const safeParseJson = (v) => {
-    if (!v) return {};
-    if (typeof v === 'object') return v;
+    if (!v) {
+        return {};
+    }
+    if (typeof v === 'object') {
+        return v;
+    }
     try {
         const parsed = JSON.parse(v);
         return typeof parsed === 'object' && parsed !== null ? parsed : {};
@@ -60,10 +64,14 @@ const safeParseJson = (v) => {
 
 /** Helper: "Colegio X — Ruta 5" or just the client name, or just "Ruta 5" */
 const clientRouteLabel = (o) => {
-    if (!o || Object.keys(o).length === 0) return null;
+    if (!o || Object.keys(o).length === 0) {
+        return null;
+    }
     const client = o.schoolName || o.corporationName || null;
     const route = o.routeNumber ? `Ruta ${o.routeNumber}` : null;
-    if (client && route) return `${client} \u2014 ${route}`;
+    if (client && route) {
+        return `${client} \u2014 ${route}`;
+    }
     return client || route || null;
 };
 
@@ -85,17 +93,29 @@ const ASSIGNMENT_ICONS = {
 
 /** Narrative: bus_pilot changes */
 const narrativePilot = (prev, next, plate, ctype) => {
-    if (ctype === 'assignment') return `Se asignó ${next.pilotName} como piloto al bus ${plate}`;
-    if (ctype === 'unassignment') return `Se retiró al piloto ${prev.pilotName} del bus ${plate}`;
-    if (ctype === 'reassignment') return `Cambio de piloto: ${prev.pilotName} → ${next.pilotName} en bus ${plate}`;
+    if (ctype === 'assignment') {
+        return `Se asignó ${next.pilotName} como piloto al bus ${plate}`;
+    }
+    if (ctype === 'unassignment') {
+        return `Se retiró al piloto ${prev.pilotName} del bus ${plate}`;
+    }
+    if (ctype === 'reassignment') {
+        return `Cambio de piloto: ${prev.pilotName} → ${next.pilotName} en bus ${plate}`;
+    }
     return '';
 };
 
 /** Narrative: bus_monitora changes */
 const narrativeMonitora = (prev, next, plate, ctype) => {
-    if (ctype === 'assignment') return `Se asignó ${next.monitoraName} como monitora al bus ${plate}`;
-    if (ctype === 'unassignment') return `Se retiró a la monitora ${prev.monitoraName} del bus ${plate}`;
-    if (ctype === 'reassignment') return `Cambio de monitora: ${prev.monitoraName} → ${next.monitoraName} en bus ${plate}`;
+    if (ctype === 'assignment') {
+        return `Se asignó ${next.monitoraName} como monitora al bus ${plate}`;
+    }
+    if (ctype === 'unassignment') {
+        return `Se retiró a la monitora ${prev.monitoraName} del bus ${plate}`;
+    }
+    if (ctype === 'reassignment') {
+        return `Cambio de monitora: ${prev.monitoraName} → ${next.monitoraName} en bus ${plate}`;
+    }
     return '';
 };
 
@@ -106,21 +126,39 @@ const narrativeClient = (prev, next, plate, ctype, atype, routeNumber) => {
     const isSwap = prev.busPlate && next.busPlate && prev.busPlate !== next.busPlate && prevLabel === nextLabel;
     if (isSwap) {
         const location = prevLabel || 'ruta ' + (routeNumber || '?');
-        if (ctype === 'reassignment') return `Cambio de bus: ${prev.busPlate} → ${next.busPlate} en ${location}`;
-        if (ctype === 'assignment') return `Se asignó el bus ${next.busPlate} a ${nextLabel}`;
-        if (ctype === 'unassignment') return `Se retiró el bus ${prev.busPlate} de ${prevLabel}`;
+        if (ctype === 'reassignment') {
+            return `Cambio de bus: ${prev.busPlate} → ${next.busPlate} en ${location}`;
+        }
+        if (ctype === 'assignment') {
+            return `Se asignó el bus ${next.busPlate} a ${nextLabel}`;
+        }
+        if (ctype === 'unassignment') {
+            return `Se retiró el bus ${prev.busPlate} de ${prevLabel}`;
+        }
     }
-    if (ctype === 'assignment') return `Se asignó el bus ${plate} a ${nextLabel}`;
-    if (ctype === 'unassignment') return `El bus ${plate} ya no está asignado a ${prevLabel}`;
-    if (ctype === 'reassignment') return `El bus ${plate} cambió: ${prevLabel} → ${nextLabel}`;
+    if (ctype === 'assignment') {
+        return `Se asignó el bus ${plate} a ${nextLabel}`;
+    }
+    if (ctype === 'unassignment') {
+        return `El bus ${plate} ya no está asignado a ${prevLabel}`;
+    }
+    if (ctype === 'reassignment') {
+        return `El bus ${plate} cambió: ${prevLabel} → ${nextLabel}`;
+    }
     return '';
 };
 
 /** Narrative: bus_plate changes */
 const narrativePlate = (prev, next, ctype) => {
-    if (ctype === 'reassignment') return `Cambio de placa: ${prev.busPlate || '?'} → ${next.busPlate || '?'}`;
-    if (ctype === 'assignment') return `Se registró el bus ${next.busPlate || '?'}`;
-    if (ctype === 'unassignment') return `Se dio de baja el bus ${prev.busPlate || '?'}`;
+    if (ctype === 'reassignment') {
+        return `Cambio de placa: ${prev.busPlate || '?'} → ${next.busPlate || '?'}`;
+    }
+    if (ctype === 'assignment') {
+        return `Se registró el bus ${next.busPlate || '?'}`;
+    }
+    if (ctype === 'unassignment') {
+        return `Se dio de baja el bus ${prev.busPlate || '?'}`;
+    }
     return '';
 };
 
@@ -132,10 +170,18 @@ const buildNarrative = (record) => {
     const ctype = record.changeType;
     const atype = record.assignmentType;
 
-    if (atype === 'bus_pilot') return narrativePilot(prev, next, plate, ctype);
-    if (atype === 'bus_monitora') return narrativeMonitora(prev, next, plate, ctype);
-    if (atype === 'bus_school' || atype === 'bus_corporation') return narrativeClient(prev, next, plate, ctype, atype, record.routeNumber);
-    if (atype === 'bus_plate') return narrativePlate(prev, next, ctype);
+    if (atype === 'bus_pilot') {
+        return narrativePilot(prev, next, plate, ctype);
+    }
+    if (atype === 'bus_monitora') {
+        return narrativeMonitora(prev, next, plate, ctype);
+    }
+    if (atype === 'bus_school' || atype === 'bus_corporation') {
+        return narrativeClient(prev, next, plate, ctype, atype, record.routeNumber);
+    }
+    if (atype === 'bus_plate') {
+        return narrativePlate(prev, next, ctype);
+    }
     return '';
 };
 
@@ -212,7 +258,9 @@ const CHANGE_SUMMARY_MAP = {
     },
     bus_plate: (prev, next, rec) => {
         const formatBus = (bp, rn) => {
-            if (!bp) return null;
+            if (!bp) {
+                return null;
+            }
             return rn ? `${bp} (Ruta ${rn})` : bp;
         };
         return {
@@ -228,7 +276,9 @@ const computeChangeSummary = (record) => {
     const prev = safeParseJson(record.previousValue);
     const next = safeParseJson(record.newValue);
     const handler = CHANGE_SUMMARY_MAP[record.assignmentType];
-    if (!handler) return { subject: '\u2014', fromText: null, toText: null };
+    if (!handler) {
+        return { subject: '\u2014', fromText: null, toText: null };
+    }
     return handler(prev, next, record);
 };
 
@@ -259,13 +309,15 @@ const renderReassignmentDetail = (fromText, toText) => (
 );
 
 const renderChangeDetailCell = (ctype, fromText, toText) => {
-    if (ctype === 'reassignment') return renderReassignmentDetail(fromText, toText);
-    if (ctype === 'assignment') return (
+    if (ctype === 'reassignment') {
+        return renderReassignmentDetail(fromText, toText);
+    }
+    if (ctype === 'assignment') {return (
         <Typography variant="body2" sx={{ color: 'success.dark', fontWeight: 'medium' }}>{toText || '—'}</Typography>
-    );
-    if (ctype === 'unassignment') return (
+    );}
+    if (ctype === 'unassignment') {return (
         <Typography variant="body2" sx={{ color: 'error.main', textDecoration: 'line-through' }}>{fromText || '—'}</Typography>
-    );
+    );}
     return <Typography variant="body2" color="text.secondary">—</Typography>;
 };
 
@@ -282,8 +334,9 @@ const BusAssignmentHistoryPage = () => {
     const [changeTypeFilter, setChangeTypeFilter] = useState('');
     const [busId, setBusId] = useState('');
     const [busInputValue, setBusInputValue] = useState('');
-    const [schoolId, setSchoolId] = useState('');
-    const [corporationId, setCorporationId] = useState('');
+    const [selectedClient, setSelectedClient] = useState(null);
+    const schoolId = getClientSchoolId(selectedClient);
+    const corporationId = getClientCorporationId(selectedClient);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
@@ -295,36 +348,11 @@ const BusAssignmentHistoryPage = () => {
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
-    const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
-        const map = new Map();
-        schools.forEach((s) => {
-            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(s);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
-    }, [schools, isSpecificCicloEscolarSelected]);
-
-    const groupedCorporations = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
-        const map = new Map();
-        corporations.forEach((c) => {
-            const cycleLabel = getCicloEscolarOptionLabel(c.cicloEscolar) || (c.cicloEscolarId ? `Ciclo ${c.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(c);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, corps]) => ({ cycleLabel, corporations: corps }));
-    }, [corporations, isSpecificCicloEscolarSelected]);
-
     const clearFilters = () => {
         setChangeTypeFilter('');
         setBusId('');
         setBusInputValue('');
-        setSchoolId('');
-        setCorporationId('');
+        setSelectedClient(null);
         setStartDate('');
         setEndDate('');
         setStats(null);
@@ -342,12 +370,24 @@ const BusAssignmentHistoryPage = () => {
                 assignmentType: ['bus_plate', 'bus_pilot', 'bus_monitora', 'bus_school', 'bus_corporation'].join(','),
             };
 
-            if (changeTypeFilter) params.changeType = changeTypeFilter;
-            if (busId) params.busId = busId;
-            if (schoolId) params.schoolId = schoolId;
-            if (corporationId) params.corporationId = corporationId;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+            if (changeTypeFilter) {
+                params.changeType = changeTypeFilter;
+            }
+            if (busId) {
+                params.busId = busId;
+            }
+            if (schoolId) {
+                params.schoolId = schoolId;
+            }
+            if (corporationId) {
+                params.corporationId = corporationId;
+            }
+            if (startDate) {
+                params.startDate = startDate;
+            }
+            if (endDate) {
+                params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+            }
 
             const response = await api.get('/assignment-history', {
                 params,
@@ -369,11 +409,21 @@ const BusAssignmentHistoryPage = () => {
             ...getCicloEscolarFilterParams(selectedCicloEscolar),
             assignmentType: ['bus_plate', 'bus_pilot', 'bus_monitora', 'bus_school', 'bus_corporation'].join(','),
         };
-        if (busId) params.busId = busId;
-        if (schoolId) params.schoolId = schoolId;
-        if (corporationId) params.corporationId = corporationId;
-        if (startDate) params.startDate = startDate;
-        if (endDate) params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+        if (busId) {
+            params.busId = busId;
+        }
+        if (schoolId) {
+            params.schoolId = schoolId;
+        }
+        if (corporationId) {
+            params.corporationId = corporationId;
+        }
+        if (startDate) {
+            params.startDate = startDate;
+        }
+        if (endDate) {
+            params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+        }
         return params;
     }, [selectedCicloEscolar, busId, schoolId, corporationId, startDate, endDate]);
 
@@ -445,17 +495,25 @@ const BusAssignmentHistoryPage = () => {
             {!loading && stats && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
-                        <strong>{stats.totalChanges}</strong> registros en total
+                        <strong>{stats.totalChanges}</strong> registros en total ({Number(stats.colegios || 0)} de colegios · {Number(stats.corporativos || 0)} corporativos)
                     </Typography>
                     {stats.byChangeType.map((item) => {
                         const ct = item.changeType;
                         const cfg = STATS_CONFIG[ct];
-                        if (!cfg || Number(item.count) === 0) return null;
+                        if (!cfg || Number(item.count) === 0) {
+                            return null;
+                        }
                         return (
                             <Chip key={ct} icon={<span>{cfg.icon}</span>} label={`${Number(item.count)} ${cfg.label}`} color={cfg.color} size="small" variant="outlined" />
                         );
                     })}
                 </Box>
+            )}
+
+            {isSpecificCicloEscolarSelected && (
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                    Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
+                </Typography>
             )}
 
             {/* Filtros */}
@@ -509,68 +567,24 @@ const BusAssignmentHistoryPage = () => {
                         <Grid2 size={{ xs: 12, sm: 6, md: 1.5 }}>
                             <CicloEscolarFilter
                                 value={selectedCicloEscolar}
-                                onChange={(value) => { setSelectedCicloEscolar(value); setBusId(''); setBusInputValue(''); setSchoolId(''); setCorporationId(''); setPage(0); }}
+                                onChange={(value) => { setSelectedCicloEscolar(value); setBusId(''); setBusInputValue(''); setSelectedClient(null); setPage(0); }}
                                 label="Ciclo escolar"
                                 allLabel="Todos los ciclos"
                                 size="small"
                             />
                         </Grid2>
 
-                        {/* 4. Colegio */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 2.5 }}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={schoolId}
-                                    onChange={(e) => { setSchoolId(e.target.value); setPage(0); }}
-                                    label="Colegio"
-                                >
-                                    <MenuItem value="">{isSpecificCicloEscolarSelected ? 'Todos los colegios del ciclo' : 'Todos los colegios'}</MenuItem>
-                                    {isSpecificCicloEscolarSelected ? (
-                                        schools.map((school) => (
-                                            <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                        ))
-                                    ) : (
-                                        groupedSchools.map((group) => [
-                                            <ListSubheader key={`header-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.schools.map((s) => (
-                                                <MenuItem key={s.id} value={s.id} sx={{ pl: 3 }}>{s.name}</MenuItem>
-                                            )),
-                                        ])
-                                    )}
-                                </Select>
-                                <FormHelperText>
-                                    {isSpecificCicloEscolarSelected && !schoolId
-                                        ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
-                                        : 'Las opciones dependen del ciclo escolar seleccionado.'}
-                                </FormHelperText>
-                            </FormControl>
-                        </Grid2>
-
-                        {/* 5. Corporación */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 2.5 }}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Corporación</InputLabel>
-                                <Select value={corporationId} onChange={(e) => { setCorporationId(e.target.value); setPage(0); }} label="Corporación">
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {isSpecificCicloEscolarSelected ? (
-                                        corporations.map((corp) => (
-                                            <MenuItem key={corp.id} value={corp.id}>{corp.name}</MenuItem>
-                                        ))
-                                    ) : (
-                                        groupedCorporations.map((group) => [
-                                            <ListSubheader key={`header-corp-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.corporations.map((c) => (
-                                                <MenuItem key={c.id} value={c.id} sx={{ pl: 3 }}>{c.name}</MenuItem>
-                                            )),
-                                        ])
-                                    )}
-                                </Select>
-                            </FormControl>
+                        {/* 4. Cliente (colegios por ciclo y corporaciones) */}
+                        <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+                            <ClientSelector
+                                schools={schools}
+                                corporations={corporations}
+                                value={selectedClient}
+                                onChange={(client) => { setSelectedClient(client); setPage(0); }}
+                                helperText={isSpecificCicloEscolarSelected && !selectedClient
+                                    ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
+                                    : 'Los colegios dependen del ciclo escolar seleccionado.'}
+                            />
                         </Grid2>
 
                         {/* 6. Rango de fechas */}

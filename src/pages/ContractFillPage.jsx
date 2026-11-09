@@ -47,14 +47,18 @@ const ContractFillPage = () => {
 
     useEffect(() => {
         return () => {
-            if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current);
+            if (redirectTimeoutRef.current) {
+                clearTimeout(redirectTimeoutRef.current);
+            }
         };
     }, []);
 
     const handleSuccessRedirect = (message) => {
         setSnackbar({ open: true, message: message || 'Contrato generado y almacenado exitosamente.', severity: 'success' });
         // after 8 seconds redirect to login
-        if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current);
+        if (redirectTimeoutRef.current) {
+            clearTimeout(redirectTimeoutRef.current);
+        }
         redirectTimeoutRef.current = setTimeout(() => {
             navigate('/login');
         }, 4000);
@@ -116,7 +120,9 @@ const ContractFillPage = () => {
 
     // Generar/Guardar PDF (en backend)
     const handleGeneratePDF = async () => {
-        if (!contract) return;
+        if (!contract) {
+            return;
+        }
 
         // Validamos campos obligatorios (text, date, number, signature)
         const placeholders = extractPlaceholders(contract.content);
@@ -126,10 +132,14 @@ const ContractFillPage = () => {
             if (ph.type === 'signature') {
                 const sigPad = signaturePads.current[name];
                 const hasSignature = sigPad && !sigPad.isEmpty();
-                if (!hasSignature) newlyMissing.push(name);
+                if (!hasSignature) {
+                    newlyMissing.push(name);
+                }
             } else {
                 const value = filledData[name];
-                if (value === undefined || value === null || value === '') newlyMissing.push(name);
+                if (value === undefined || value === null || value === '') {
+                    newlyMissing.push(name);
+                }
             }
         }
 
@@ -149,8 +159,12 @@ const ContractFillPage = () => {
             setTimeout(() => {
                 const el = fieldRefs.current[first];
                 if (el) {
-                    if (el.focus) try { el.focus(); } catch (e) {}
-                    if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (el.focus) {
+                        try { el.focus(); } catch (e) {}
+                    }
+                    if (el.scrollIntoView) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
                 }
             }, 50);
             return;
@@ -172,12 +186,12 @@ const ContractFillPage = () => {
             // ========================================
             // Mandar parentId y familyDetailId si existen
             // ========================================
-            parentId: parentId ? parseInt(parentId, 10) : undefined,
-            familyDetailId: familyDetailId ? parseInt(familyDetailId, 10) : undefined
+            parentId: parentId ? Number.parseInt(parentId, 10) : undefined,
+            familyDetailId: familyDetailId ? Number.parseInt(familyDetailId, 10) : undefined
         };
 
         // All fields complete. Now check auth (open login only after validation passed)
-        const effectiveParentId = sessionParentId || (parentId ? parseInt(parentId, 10) : null);
+        const effectiveParentId = sessionParentId || (parentId ? Number.parseInt(parentId, 10) : null);
         if (!effectiveParentId) {
             // open login modal and store filledData temporarily in component state
             setLoginOpen(true);
@@ -205,8 +219,8 @@ const ContractFillPage = () => {
 
     // Keep pending payload when login required
     const [pendingPayload, setPendingPayload] = useState(null);
-    const [sessionParentId, setSessionParentId] = useState(parentId ? parseInt(parentId, 10) : null);
-    const [sessionFamilyDetailId, setSessionFamilyDetailId] = useState(familyDetailId ? parseInt(familyDetailId, 10) : null);
+    const [sessionParentId, setSessionParentId] = useState(parentId ? Number.parseInt(parentId, 10) : null);
+    const sessionFamilyDetailId = familyDetailId ? Number.parseInt(familyDetailId, 10) : null;
 
     // Handle login from modal
     const handleLogin = async () => {
@@ -218,13 +232,17 @@ const ContractFillPage = () => {
         try {
             const res = await api.post('/auth/login', { email: loginEmail, password: loginPassword });
             const { token, refreshToken } = res.data;
-            if (token) localStorage.setItem('token', token);
-            if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+            if (token) {
+                localStorage.setItem('token', token);
+            }
+            if (refreshToken) {
+                localStorage.setItem('refreshToken', refreshToken);
+            }
 
             // Verify and get user info
             const verifyRes = await api.get('/auth/verify');
             const user = verifyRes.data.user;
-            if (user && user.id) {
+            if (user?.id) {
                 // Set parentId and close modal
                 setLoginOpen(false);
                 setSessionParentId(user.id);

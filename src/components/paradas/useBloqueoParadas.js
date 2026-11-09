@@ -17,12 +17,16 @@ export default function useBloqueoParadas({ schoolId, lockToken, activo, hayPend
     pendienteRef.current = hayPendiente;
 
     useEffect(() => {
-        if (!activo || !lockToken) return undefined;
+        if (!activo || !lockToken) {
+            return undefined;
+        }
         const id = setInterval(async () => {
             try {
                 await paradasService.heartbeat(schoolId, lockToken);
             } catch (err) {
-                if (codigoError(err) === 'LOCK_LOST') alPerder.current?.(err.response.data);
+                if (codigoError(err) === 'LOCK_LOST') {
+                    alPerder.current?.(err.response.data);
+                }
                 // otros errores (red): el siguiente heartbeat reintenta; el servidor da 2 min de gracia
             }
         }, HEARTBEAT_MS);
@@ -31,14 +35,20 @@ export default function useBloqueoParadas({ schoolId, lockToken, activo, hayPend
 
     // Si la pestaña se recarga, el cleanup no corre: el token queda recordado y el editor lo libera al reabrir.
     useEffect(() => {
-        if (!lockToken) return undefined;
+        if (!lockToken) {
+            return undefined;
+        }
         recordarBloqueo(schoolId, lockToken);
         return () => olvidarBloqueo(schoolId);
     }, [schoolId, lockToken]);
 
     useEffect(() => {
-        if (!lockToken) return undefined;
-        const alSalir = () => { if (!pendienteRef.current?.()) liberarAlCerrar(schoolId, lockToken); };
+        if (!lockToken) {
+            return undefined;
+        }
+        const alSalir = () => { if (!pendienteRef.current?.()) {
+            liberarAlCerrar(schoolId, lockToken);
+        } };
         window.addEventListener('pagehide', alSalir);
         return () => window.removeEventListener('pagehide', alSalir);
     }, [schoolId, lockToken]);

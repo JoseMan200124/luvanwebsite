@@ -276,11 +276,6 @@ const CicloEscolarSelectionPage = () => {
     const [schoolYearStart, setSchoolYearStart] = useState('');
     const [schoolYearEnd, setSchoolYearEnd] = useState('');
     
-    // Estados para limpieza de mora
-    const [clearPeriod, setClearPeriod] = useState('CURRENT');
-    const [customClearPeriod, setCustomClearPeriod] = useState('');
-    const [clearReason, setClearReason] = useState('');
-    const [clearingPenalty, setClearingPenalty] = useState(false);
     // Quick modal para limpieza (período actual fijo)
     const [openQuickClear, setOpenQuickClear] = useState(false);
     const [quickClearReason, setQuickClearReason] = useState('');
@@ -320,7 +315,6 @@ const CicloEscolarSelectionPage = () => {
         .filter(Boolean);
 
     const selectedCicloEscolar = ciclosEscolares.find((cicloEscolar) => String(cicloEscolar.id) === String(selectedCicloEscolarId));
-    const defaultCicloEscolar = ciclosEscolares.find((cicloEscolar) => cicloEscolar.predeterminado && cicloEscolar.activo) || ciclosEscolares.find((cicloEscolar) => cicloEscolar.predeterminado) || null;
     const selectedCycleYear = selectedCicloEscolar?.anio ? String(selectedCicloEscolar.anio) : '';
     const enabledCiclosEscolares = ciclosEscolares.filter((cicloEscolar) => cicloEscolar.activo);
     const selectableCiclosEscolares = enabledCiclosEscolares.length > 0 ? enabledCiclosEscolares : ciclosEscolares;
@@ -336,7 +330,9 @@ const CicloEscolarSelectionPage = () => {
     // For NEW schools (empty schedules): seeds with the 4 default codes.
     const ensureFourSchedules = (schedules) => {
         const arr = Array.isArray(schedules) ? schedules : [];
-        if (arr.length > 0) return [...arr]; // existing school — keep as-is
+        if (arr.length > 0) {
+            return [...arr];
+        } // existing school — keep as-is
         return ensureSchedules([], DEFAULT_SCHEDULE_CODES); // new school — seed defaults
     };
 
@@ -344,7 +340,9 @@ const CicloEscolarSelectionPage = () => {
     const getDefaultOperationStatusForNewSchool = () => 'INACTIVE';
 
     const parseArrayField = (value) => {
-        if (Array.isArray(value)) return value;
+        if (Array.isArray(value)) {
+            return value;
+        }
         if (typeof value === 'string' && value.trim()) {
             try {
                 const parsed = JSON.parse(value);
@@ -359,7 +357,9 @@ const CicloEscolarSelectionPage = () => {
     // Los campos JSON (p. ej. levelGrades) a veces llegan como objeto y a veces
     // como string JSON según la capa que sirva el colegio.
     const parseObjectField = (value) => {
-        if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            return value;
+        }
         if (typeof value === 'string' && value.trim()) {
             try {
                 const parsed = JSON.parse(value);
@@ -425,7 +425,9 @@ const CicloEscolarSelectionPage = () => {
         sourceRouteSchedules.forEach((entry) => {
             const normalized = normalizeEntry(entry);
             const key = String(normalized.routeNumber);
-            if (key && !routeNumberSet.has(key)) aligned.push(normalized);
+            if (key && !routeNumberSet.has(key)) {
+                aligned.push(normalized);
+            }
         });
 
         return aligned;
@@ -471,15 +473,6 @@ const CicloEscolarSelectionPage = () => {
         setDraftEnrollmentTiers([]);
     };
 
-    const isPreviousCycleSchool = (school) => {
-        const cycleStatus = String(school?.cycleStatus || '').trim().toUpperCase();
-        if (cycleStatus === 'ARCHIVED') return true;
-
-        const selectedYear = Number(selectedCicloEscolar?.anio || selectedCycleYear || 0);
-        const defaultYear = Number(defaultCicloEscolar?.anio || 0);
-        return selectedYear > 0 && defaultYear > 0 && selectedYear < defaultYear;
-    };
-
     const fetchCiclosEscolares = useCallback(async () => {
         setCyclesLoading(true);
         try {
@@ -487,7 +480,9 @@ const CicloEscolarSelectionPage = () => {
             const ciclos = Array.isArray(data.ciclosEscolares) ? data.ciclosEscolares : [];
             setCiclosEscolares(ciclos);
 
-            if (ciclos.length === 0) return;
+            if (ciclos.length === 0) {
+                return;
+            }
 
             const storedId = getSelectedCicloEscolarId();
             const selectableCycles = ciclos.filter((cicloEscolar) => cicloEscolar.activo);
@@ -573,7 +568,9 @@ const CicloEscolarSelectionPage = () => {
     }, [auth.token, selectedCicloEscolarId]);
 
     const fetchPrefillSchools = useCallback(async () => {
-        if (!auth.token) return;
+        if (!auth.token) {
+            return;
+        }
 
         setPrefillSchoolsLoading(true);
         try {
@@ -747,11 +744,15 @@ const CicloEscolarSelectionPage = () => {
             } else if (typeof school.routeSchedules === 'string' && school.routeSchedules.trim()) {
                 try { rs = JSON.parse(school.routeSchedules); } catch { rs = []; }
             }
-            if (!Array.isArray(rs)) rs = [];
+            if (!Array.isArray(rs)) {
+                rs = [];
+            }
 
             // All routeSchedules in DB use the canonical {schedules:[{code,name,times}]} format.
             const normalizeEntry = (x) => {
-                if (!x) return { routeNumber: '', schedules: [] };
+                if (!x) {
+                    return { routeNumber: '', schedules: [] };
+                }
                 const cleaned = (Array.isArray(x.schedules) ? x.schedules : []).map(s => ({
                     code: s?.code ? String(s.code).toUpperCase() : null,
                     name: s?.name ? s.name : (s?.code ? `HORARIO ${String(s.code).toUpperCase()}` : 'HORARIO'),
@@ -766,7 +767,9 @@ const CicloEscolarSelectionPage = () => {
             // Also include any backend entries that aren't in routeNumbers (to not lose data)
             (rs || []).forEach(x => {
                 const key = String(x.routeNumber);
-                if (!rnSet.has(key)) aligned.push({ routeNumber: key, schedules: normalizeEntry(x).schedules });
+                if (!rnSet.has(key)) {
+                    aligned.push({ routeNumber: key, schedules: normalizeEntry(x).schedules });
+                }
             });
             setSchoolRouteSchedules(aligned);
         }
@@ -808,7 +811,9 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const handleConfirmDeleteSchool = async () => {
-        if (!deleteDialog?.schoolId) return;
+        if (!deleteDialog?.schoolId) {
+            return;
+        }
         setDeletingSchool(true);
         try {
             await api.delete(`/schools/${deleteDialog.schoolId}`, {
@@ -887,7 +892,9 @@ const CicloEscolarSelectionPage = () => {
         setBulkResults(null);
     };
     const submitBulkUpload = async () => {
-        if (!bulkFile) return;
+        if (!bulkFile) {
+            return;
+        }
         setBulkLoading(true);
         setBulkResults(null);
         try {
@@ -933,7 +940,9 @@ const CicloEscolarSelectionPage = () => {
         }
 
         const sourceSchool = prefillSchools.find((school) => String(school.id) === String(nextSchoolId));
-        if (!sourceSchool) return;
+        if (!sourceSchool) {
+            return;
+        }
 
         resetCreateSchoolDraft(sourceSchool);
     };
@@ -965,7 +974,9 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const handleOpenEditSchedulesModal = () => {
-        if (!selectedSchool) return;
+        if (!selectedSchool) {
+            return;
+        }
         setOpenEditSchedulesModal(true);
     };
 
@@ -1048,16 +1059,6 @@ const CicloEscolarSelectionPage = () => {
         }));
     };
 
-    const handleTimeChange = (e, scheduleIndex, timeIndex) => {
-        const { value } = e.target;
-        setSchoolSchedules((prev) => {
-            const clone = [...prev];
-            // Only allow one time entry per schedule. If empty, set to 'N/A'
-            clone[scheduleIndex].times = [value ? value : 'N/A'];
-            return clone;
-        });
-    };
-
     const DAY_OPTIONS = [
         { key: 'monday', label: 'Lun' },
         { key: 'tuesday', label: 'Mar' },
@@ -1073,27 +1074,31 @@ const CicloEscolarSelectionPage = () => {
     }, {});
 
     const formatTimeTo12h = (hhmm) => {
-        if (!hhmm || typeof hhmm !== 'string') return hhmm;
+        if (!hhmm || typeof hhmm !== 'string') {
+            return hhmm;
+        }
         const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
-        if (!m) return hhmm;
+        if (!m) {
+            return hhmm;
+        }
         const h24 = Number(m[1]);
         const min = m[2];
-        if (Number.isNaN(h24) || h24 < 0 || h24 > 23) return hhmm;
+        if (Number.isNaN(h24) || h24 < 0 || h24 > 23) {
+            return hhmm;
+        }
         const suffix = h24 >= 12 ? 'PM' : 'AM';
         const h12 = ((h24 + 11) % 12) + 1;
         return `${h12}:${min} ${suffix}`;
     };
 
     const isAllDaysSelected = (days) => {
-        if (!Array.isArray(days) || days.length === 0) return true;
+        if (!Array.isArray(days) || days.length === 0) {
+            return true;
+        }
         return ALL_DAY_KEYS.every(day => days.includes(day));
     };
 
     // Funciones para grados
-    const handleAddGrade = () => {
-        setSchoolGrades((prev) => [...prev, { name: '' }]);
-    };
-
     const pruneLevelGradesTo = (validNames) => {
         const allowed = new Set(validNames);
         setSchoolLevelGrades((prev) => {
@@ -1101,9 +1106,15 @@ const CicloEscolarSelectionPage = () => {
             const next = {};
             for (const [levelId, gradeList] of Object.entries(prev || {})) {
                 const kept = (gradeList || []).filter((name) => allowed.has(name));
-                if (kept.length !== (gradeList || []).length) changed = true;
-                if (kept.length > 0) next[levelId] = kept;
-                else if ((gradeList || []).length > 0) changed = true;
+                if (kept.length !== (gradeList || []).length) {
+                    changed = true;
+                }
+                if (kept.length > 0) {
+                    next[levelId] = kept;
+                }
+                else if ((gradeList || []).length > 0) {
+                    changed = true;
+                }
             }
             return changed ? next : prev;
         });
@@ -1121,15 +1132,6 @@ const CicloEscolarSelectionPage = () => {
                     .filter(Boolean)
             );
             return newArr;
-        });
-    };
-
-    const handleGradeChange = (e, gradeIndex) => {
-        const { value } = e.target;
-        setSchoolGrades((prev) => {
-            const clone = [...prev];
-            clone[gradeIndex].name = value;
-            return clone;
         });
     };
 
@@ -1160,8 +1162,12 @@ const CicloEscolarSelectionPage = () => {
             setSchoolRouteSchedules(prevRS => {
                 const arr = Array.isArray(prevRS) ? [...prevRS] : [];
                 const idx = arr.findIndex(x => String(x.routeNumber) === String(oldVal));
-                if (idx !== -1) arr[idx] = { routeNumber: String(value), schedules: Array.isArray(arr[idx].schedules) ? arr[idx].schedules : [] };
-                else arr.push({ routeNumber: String(value), schedules: [] });
+                if (idx !== -1) {
+                    arr[idx] = { routeNumber: String(value), schedules: Array.isArray(arr[idx].schedules) ? arr[idx].schedules : [] };
+                }
+                else {
+                    arr.push({ routeNumber: String(value), schedules: [] });
+                }
                 return arr;
             });
             return clone;
@@ -1194,7 +1200,9 @@ const CicloEscolarSelectionPage = () => {
 
     // Función para guardar cambios
     const handleSave = async (extraPayload = {}) => {
-        if (!selectedSchool) return;
+        if (!selectedSchool) {
+            return;
+        }
 
         // Excluir del flujo de pagos borra los datos de pagos del colegio: se confirma antes de guardar.
         if (
@@ -1248,7 +1256,7 @@ const CicloEscolarSelectionPage = () => {
         }
 
         // Validate schedules: codes must be 2-4 uppercase letters, no duplicates
-        const schedulesWithCode = schoolSchedules.filter(s => s && s.code);
+        const schedulesWithCode = schoolSchedules.filter(s => s?.code);
         const invalidCode = schedulesWithCode.find(s => !/^[A-Z]{2,4}$/.test(s.code));
         if (invalidCode) {
             setSnackbar({ open: true, message: `Código de horario inválido: "${invalidCode.code}". Use 2 a 4 letras mayúsculas (ej: AM, VE, NO).`, severity: 'error' });
@@ -1268,7 +1276,9 @@ const CicloEscolarSelectionPage = () => {
         const occupancyByDayTime = new Map();
         for (const s of schedulesWithCode) {
             const time = Array.isArray(s.times) && s.times[0] && s.times[0] !== 'N/A' ? String(s.times[0]) : null;
-            if (!time) continue;
+            if (!time) {
+                continue;
+            }
 
             const daysForSchedule = isAllDaysSelected(s.days) ? ALL_DAY_KEYS : s.days;
             for (const day of daysForSchedule) {
@@ -1318,15 +1328,19 @@ const CicloEscolarSelectionPage = () => {
             // Build routeSchedules payload aligned to current routeNumbers
             const routeSchedulesPayload = (schoolRouteNumbers || []).map(rn => {
                 const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn));
-                const schedules = Array.isArray(entry && entry.schedules) ? entry.schedules : [];
+                const schedules = Array.isArray(entry?.schedules) ? entry.schedules : [];
                 // Clean schedules: ensure unique by code, keep only first time if present
                 const byCode = new Map();
                 (schedules || []).forEach(s => {
-                    if (!s) return;
+                    if (!s) {
+                        return;
+                    }
                     const code = (s.code || '').toUpperCase() || null;
                     const time = Array.isArray(s.times) && s.times[0] ? String(s.times[0]) : null;
                     const name = s.name || (code ? `HORARIO ${code}` : 'HORARIO');
-                    if (code) byCode.set(code, { code, name, times: time ? [time] : [] });
+                    if (code) {
+                        byCode.set(code, { code, name, times: time ? [time] : [] });
+                    }
                 });
                 return { routeNumber: String(rn), schedules: Array.from(byCode.values()) };
             });
@@ -1455,7 +1469,9 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const handleApplyBillingDecision = async () => {
-        if (!billingConflict) return;
+        if (!billingConflict) {
+            return;
+        }
 
         const action = billingDecision.action || 'SET_NEXT_MONTH_START';
         const nextStartDate = action === 'SET_NEXT_MONTH_START'
@@ -1499,7 +1515,9 @@ const CicloEscolarSelectionPage = () => {
 
     const handleApplyPaymentsReactivation = async () => {
         const { chargeEnrollment, billingStart, clearPenalty } = paymentsReactivationChoice;
-        if (typeof chargeEnrollment !== 'boolean' || !billingStart) return;
+        if (typeof chargeEnrollment !== 'boolean' || !billingStart) {
+            return;
+        }
 
         setPaymentsReactivationPrompt(null);
         await handleSave({
@@ -1509,78 +1527,6 @@ const CicloEscolarSelectionPage = () => {
                 clearPenalty: billingStart === 'CURRENT_MONTH' && clearPenalty
             }
         });
-    };
-
-    // Función para limpiar mora
-    const handleClearPenalty = async () => {
-        if (!selectedSchool) return;
-        
-        if (!clearReason.trim()) {
-            setSnackbar({
-                open: true,
-                message: 'Debe ingresar un motivo para la limpieza de mora',
-                severity: 'warning'
-            });
-            return;
-        }
-        
-        // Determinar período a limpiar
-        let periodToClean = clearPeriod;
-        if (clearPeriod === 'CUSTOM') {
-            if (!customClearPeriod) {
-                setSnackbar({
-                    open: true,
-                    message: 'Debe seleccionar un período personalizado',
-                    severity: 'warning'
-                });
-                return;
-            }
-            periodToClean = customClearPeriod;
-        } else if (clearPeriod === 'CURRENT') {
-            // Usar período actual (formato YYYY-MM)
-            const now = new Date();
-            periodToClean = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        }
-        
-        const confirmMessage = clearPeriod === 'ALL'
-            ? `¿Está seguro de limpiar TODA la mora acumulada del colegio "${selectedSchool.name}"?\n\nMotivo: ${clearReason}`
-            : `¿Está seguro de limpiar la mora del período ${periodToClean} del colegio "${selectedSchool.name}"?\n\nMotivo: ${clearReason}`;
-        
-        if (!window.confirm(confirmMessage)) {
-            return;
-        }
-        
-        setClearingPenalty(true);
-        
-        try {
-            const response = await api.post('/payments/penalties/clear', {
-                schoolId: selectedSchool.id,
-                cicloEscolarId: selectedCicloEscolarId || null,
-                period: periodToClean,
-                reason: clearReason
-            });
-            
-            setSnackbar({
-                open: true,
-                message: response.data.message || 'Mora limpiada exitosamente',
-                severity: 'success'
-            });
-            
-            // Limpiar campos
-            setClearPeriod('CURRENT');
-            setCustomClearPeriod('');
-            setClearReason('');
-            
-        } catch (err) {
-            console.error('Error al limpiar mora:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al limpiar la mora',
-                severity: 'error'
-            });
-        } finally {
-            setClearingPenalty(false);
-        }
     };
 
     const renderSchoolStatusChips = (school) => {
@@ -2569,7 +2515,9 @@ const CicloEscolarSelectionPage = () => {
                                             const raw = (newGradeName || '').toString();
                                             const normalizeGradeName = (value) => {
                                                 const trimmed = (value || '').toString().trim();
-                                                if (!trimmed) return '';
+                                                if (!trimmed) {
+                                                    return '';
+                                                }
                                                 const collapsed = trimmed.replace(/\s+/g, ' ');
                                                 return collapsed.replace(/\s+([.,;:!?])$/, '$1');
                                             };
@@ -2578,7 +2526,9 @@ const CicloEscolarSelectionPage = () => {
                                                 .split(',')
                                                 .map(normalizeGradeName)
                                                 .filter(Boolean);
-                                            if (names.length === 0) return;
+                                            if (names.length === 0) {
+                                                return;
+                                            }
 
                                             setSchoolGrades((prev) => {
                                                 const prevArr = Array.isArray(prev) ? prev : [];
@@ -2591,7 +2541,9 @@ const CicloEscolarSelectionPage = () => {
                                                 const next = [...prevArr];
                                                 for (const n of names) {
                                                     const key = n.toLowerCase();
-                                                    if (existing.has(key)) continue;
+                                                    if (existing.has(key)) {
+                                                        continue;
+                                                    }
                                                     existing.add(key);
                                                     next.push({ name: n });
                                                 }
@@ -2653,7 +2605,7 @@ const CicloEscolarSelectionPage = () => {
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 {schoolRouteNumbers.map((rn, idx) => {
                                     const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
-                                    const selectedByCode = new Set((entry.schedules || []).map(s => s && s.code).filter(Boolean));
+                                    const selectedByCode = new Set((entry.schedules || []).map(s => s?.code).filter(Boolean));
                                     const toggleSchedule = (code, schObj, checked) => {
                                         setSchoolRouteSchedules(prev => {
                                             const arr = Array.isArray(prev) ? [...prev] : [];
@@ -2663,9 +2615,15 @@ const CicloEscolarSelectionPage = () => {
                                             const idxByCode = curr.findIndex(s => s && s.code === code);
                                             if (checked) {
                                                 const cleaned = { code: schObj.code, name: schObj.name || `HORARIO ${schObj.code}`, times: Array.isArray(schObj.times) && schObj.times[0] ? [String(schObj.times[0])] : [] };
-                                                if (idxByCode === -1) curr.push(cleaned); else curr[idxByCode] = cleaned;
+                                                if (idxByCode === -1) {
+                                                    curr.push(cleaned);
+                                                } else {
+                                                    curr[idxByCode] = cleaned;
+                                                }
                                             } else {
-                                                if (idxByCode !== -1) curr.splice(idxByCode, 1);
+                                                if (idxByCode !== -1) {
+                                                    curr.splice(idxByCode, 1);
+                                                }
                                             }
                                             arr[i] = { routeNumber: String(rn), schedules: curr };
                                             return arr;
@@ -2911,7 +2869,9 @@ const CicloEscolarSelectionPage = () => {
                                     ...DELETE_IMPACT_STAFF.map(({ key, label }) => ({ label: label.toLowerCase(), n: deleteDialog.impact.staff[key].kept })),
                                     { label: 'otros usuarios', n: deleteDialog.impact.staff.otros.kept }
                                 ].filter((item) => item.n > 0);
-                                if (kept.length === 0) return null;
+                                if (kept.length === 0) {
+                                    return null;
+                                }
                                 return (
                                     <Alert severity="info">
                                         Conservan su cuenta ({kept.map((item) => `${item.n} ${item.label}`).join(', ')}) porque

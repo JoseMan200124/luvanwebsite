@@ -7,7 +7,9 @@ import ListaParadasComparada from './ListaParadasComparada';
 
 export default function ConflictosPanel({ familias, soloLectura, despachar }) {
     const conConflicto = familias.filter(f => f.students.some(s => s.conflicto));
-    if (!conConflicto.length) return null;
+    if (!conConflicto.length) {
+        return null;
+    }
     const pendientes = conConflicto.reduce((n, f) => n + f.students.filter(s => s.conflicto && !s.conflicto.eleccion).length, 0);
 
     return (

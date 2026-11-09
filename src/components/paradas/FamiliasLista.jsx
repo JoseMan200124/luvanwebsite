@@ -24,7 +24,9 @@ export default function FamiliasLista({ familias, contexto, soloLectura, despach
     const filtradas = useMemo(() => {
         const q = normalizar(busqueda.trim());
         return familias.filter((f) => {
-            if (q && !normalizar(f.familyLastName).includes(q) && !f.students.some(s => normalizar(s.fullName).includes(q))) return false;
+            if (q && !normalizar(f.familyLastName).includes(q) && !f.students.some(s => normalizar(s.fullName).includes(q))) {
+                return false;
+            }
             const r = revisarFamilia(f, contexto);
             switch (filtro) {
             case 'errores': return r.conErrores > 0 || r.incompletas > 0;

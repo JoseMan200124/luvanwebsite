@@ -38,23 +38,6 @@ export const getStudentIncidentById = async (id) => {
 };
 
 /**
- * Obtener estadísticas de incidentes
- * @param {Object} filters - Filtros para las estadísticas
- */
-export const getStudentIncidentStatistics = async (filters = {}) => {
-    const params = new URLSearchParams();
-    
-    Object.keys(filters).forEach(key => {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            params.append(key, filters[key]);
-        }
-    });
-
-    const response = await api.get(`/student-incidents/statistics?${params.toString()}`);
-    return response.data;
-};
-
-/**
  * Tipos de incidentes disponibles
  */
 export const INCIDENT_TYPES = {

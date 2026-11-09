@@ -186,7 +186,9 @@ const CatalogOrganizer = ({ onNotify }) => {
             categoria.permissionCount > 0
                 ? `"${categoria.label}" tiene ${categoria.permissionCount} permiso(s). Se moverán a "Sin clasificar". ¿Continuar?`
                 : `¿Eliminar la categoría "${categoria.label}"?`;
-        if (!window.confirm(aviso)) return;
+        if (!window.confirm(aviso)) {
+            return;
+        }
         try {
             const res = await api.delete(`/permissions/categories/${categoria.id}`, cabeceras);
             onNotify(
@@ -236,7 +238,9 @@ const CatalogOrganizer = ({ onNotify }) => {
     // ------------------------------------------------------------ derivados
     const gruposFiltrados = useMemo(() => {
         const t = sinAcentos(busqueda.trim());
-        if (!t) return grupos;
+        if (!t) {
+            return grupos;
+        }
         return grupos
             .map((g) => ({
                 ...g,
@@ -332,7 +336,9 @@ const CatalogOrganizer = ({ onNotify }) => {
                     value={busquedaInput}
                     onChange={(e) => setBusquedaInput(e.target.value)}
                     onKeyDown={(e) => {
-                        if (e.key === 'Enter') ejecutarBusqueda();
+                        if (e.key === 'Enter') {
+                            ejecutarBusqueda();
+                        }
                     }}
                     InputProps={{
                         startAdornment: (

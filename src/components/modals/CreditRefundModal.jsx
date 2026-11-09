@@ -53,7 +53,7 @@ function validateDetail(detail, creditBalance, todayMoment) {
         errors.refundDate = 'No puede ser futura';
     }
 
-    if (!detail.referenceNumber || !detail.referenceNumber.trim()) {
+    if (!detail.referenceNumber?.trim()) {
         errors.referenceNumber = 'Requerido';
     }
 
@@ -107,27 +107,35 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
 
     const handleClose = useCallback(() => {
         reset();
-        onClose && onClose();
+        onClose?.();
     }, [reset, onClose]);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            return;
+        }
         let cancelled = false;
         setLoading(true);
         setLoadError('');
         api.get('/payments/v2/credit-refunds/candidates', { params: buildPaymentParams ? buildPaymentParams() : { schoolId, cicloEscolarId } })
             .then((res) => {
-                if (cancelled) return;
+                if (cancelled) {
+                    return;
+                }
                 const data = res?.data || {};
                 setCicloEscolar(data.cicloEscolar || null);
                 setFamilies(Array.isArray(data.families) ? data.families : []);
             })
             .catch((err) => {
-                if (cancelled) return;
+                if (cancelled) {
+                    return;
+                }
                 setLoadError(err?.response?.data?.error || 'Error al cargar las familias con crédito a favor');
             })
             .finally(() => {
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             });
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,7 +143,9 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
 
     const filteredFamilies = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return families;
+        if (!q) {
+            return families;
+        }
         return families.filter((f) => (f.familyLastName || '').toLowerCase().includes(q));
     }, [families, search]);
 
@@ -256,8 +266,10 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
             ? `Se reintegraron ${processed} crédito${processed === 1 ? '' : 's'} a favor por ${formatMoney(results?.totalRefunded)}`
             : null;
         reset();
-        onClose && onClose();
-        if (onApplied) onApplied(message);
+        onClose?.();
+        if (onApplied) {
+            onApplied(message);
+        }
     };
 
     const totalCreditBalance = families.reduce((sum, f) => sum + Number(f.creditBalance || 0), 0);

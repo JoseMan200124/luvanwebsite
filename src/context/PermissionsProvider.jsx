@@ -17,7 +17,9 @@ const PermissionsProvider = ({ children }) => {
         // no llegó a auth.token y esto marca permissionsLoaded=true con {}
         // antes de tiempo — ProtectedRoute lee ese vacío transitorio y
         // redirige a /login aunque el usuario sí tenga sesión válida.
-        if (initialLoad) return;
+        if (initialLoad) {
+            return;
+        }
 
         const loadPermissions = async () => {
             setLoading(true);

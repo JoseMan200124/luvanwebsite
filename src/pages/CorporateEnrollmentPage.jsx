@@ -22,9 +22,11 @@ import logoLuvan from '../assets/img/logo-sin-fondo.png';
 
 // Función para convertir tiempo de 24h a 12h con AM/PM
 const formatTime12Hour = (time24) => {
-    if (!time24) return '';
+    if (!time24) {
+        return '';
+    }
     const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours, 10);
+    const hour = Number.parseInt(hours, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
@@ -150,7 +152,7 @@ const CorporateEnrollmentPage = () => {
             try {
                 const response = await api.get(`/corporations/${corporationId}`);
                 
-                if (response.data && response.data.corporation) {
+                if (response.data?.corporation) {
                     const corp = response.data.corporation;
                     
                     // Parse schedules if it's a string
@@ -177,7 +179,9 @@ const CorporateEnrollmentPage = () => {
 
                     // Normalizar cada campo extra al mismo formato que usa el flujo de colegios: { fieldName, type, required, options?, default? }
                     corp.extraEnrollmentFields = (corp.extraEnrollmentFields || []).map((fld, idx) => {
-                        if (!fld) return null;
+                        if (!fld) {
+                            return null;
+                        }
                         if (typeof fld === 'string') {
                             return { fieldName: fld, type: 'text', required: false, options: [], default: '' };
                         }

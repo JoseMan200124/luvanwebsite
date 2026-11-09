@@ -38,9 +38,6 @@ import {
 import {
   Edit as EditIcon,
   Description as DescriptionIcon,
-  CloudUpload as CloudUploadIcon,
-  MenuBook as MenuBookIcon,
-  Info as InfoIcon,
   Call as CallIcon,
   Email as EmailIcon,
   WhatsApp as WhatsAppIcon,
@@ -48,8 +45,6 @@ import {
   ExpandMore as ExpandMoreIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
-  Notifications as NotificationsIcon,
-  DocumentScanner,
   CreditCard as CreditCardIcon,
   AttachEmail,
 } from '@mui/icons-material';
@@ -68,14 +63,6 @@ import html2canvas from 'html2canvas';
 // ---------- Estilos ----------
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
 const LoaderBox   = styled(MuiBox)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
-const DayCol      = styled(MuiBox)`
-  min-width:190px;
-
-  @media (max-width: 600px) {
-    min-width: 100%;
-    width: 100%;
-  }
-`;
 
 // ---------- Utilidades ----------
 const toArray = (v) => (Array.isArray(v) ? v : []);
@@ -94,36 +81,52 @@ const DAYS = [
 // "06:02" -> 362
 const timeToMinutes = (t) => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
-  if (!m) return Number.POSITIVE_INFINITY;
-  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  if (!m) {
+      return Number.POSITIVE_INFINITY;
+  }
+  return Number.parseInt(m[1], 10) * 60 + Number.parseInt(m[2], 10);
 };
 
 // Extrae la parte HH:mm de un valor de schoolSchedule (ej. "15:00 PM", "12:00 MD", "07:00 AM")
 // y la devuelve siempre en formato 12h con AM/PM real, ignorando cualquier código de horario.
 const formatSchoolTime = (value) => {
-  if (!value) return '';
+  if (!value) {
+      return '';
+  }
   const m = String(value).match(/(\d{1,2}):(\d{2})/);
-  if (!m) return String(value).trim();
-  let h = parseInt(m[1], 10);
+  if (!m) {
+      return String(value).trim();
+  }
+  let h = Number.parseInt(m[1], 10);
   const min = m[2];
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12;
-  if (h === 0) h = 12;
+  if (h === 0) {
+      h = 12;
+  }
   return `${h}:${min} ${ampm}`;
 };
 
 // Formatea HH:mm -> h:mm AM/PM (si ya viene con AM/PM, lo deja)
 const formatTime12 = (timeStr) => {
-  if (!timeStr) return '';
+  if (!timeStr) {
+      return '';
+  }
   const s = String(timeStr).trim();
-  if (/\b(am|pm)\b/i.test(s)) return s;
+  if (/\b(am|pm)\b/i.test(s)) {
+      return s;
+  }
   const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (!m) return s;
-  let h = parseInt(m[1], 10);
+  if (!m) {
+      return s;
+  }
+  let h = Number.parseInt(m[1], 10);
   const min = m[2];
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12;
-  if (h === 0) h = 12;
+  if (h === 0) {
+      h = 12;
+  }
   return `${h}:${min} ${ampm}`;
 };
 
@@ -199,7 +202,9 @@ const fetchSlotsByStudentIds = async (ids) => {
         const slots = toArray(res?.data?.slots).map((s) => {
           const days = s?.days;
           let daysArr = [];
-          if (Array.isArray(days)) daysArr = days;
+          if (Array.isArray(days)) {
+              daysArr = days;
+          }
           else if (typeof days === 'string') {
             try { daysArr = JSON.parse(days) || []; } catch { daysArr = []; }
           }
@@ -228,11 +233,11 @@ const tagSlotsByDay = (slotsForDay) => {
   const sorted = [...slotsForDay].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
 
   // If the API already provides a semantic `type` (pickup/dropoff), prefer it
-  const hasType = sorted.some((s) => s && s.type);
+  const hasType = sorted.some((s) => s?.type);
   if (hasType) {
     return sorted.map((s) => {
-      const t = (s && s.type) || '';
-      const lbl = t === 'pickup' ? 'Entrada' : t === 'dropoff' ? 'Salida' : (s && s._label) || 'Parada';
+      const t = (s?.type) || '';
+      const lbl = t === 'pickup' ? 'Entrada' : t === 'dropoff' ? 'Salida' : (s?._label) || 'Parada';
       return { ...s, _label: lbl };
     });
   }
@@ -240,12 +245,16 @@ const tagSlotsByDay = (slotsForDay) => {
   if (sorted.length >= 2) {
     const first = { ...sorted[0], _label: 'Entrada' };
     const last  = { ...sorted[sorted.length - 1], _label: 'Salida' };
-    if (sorted.length === 2) return [first, last];
+    if (sorted.length === 2) {
+        return [first, last];
+    }
     // Si hay más de 2, etiqueta inicio y fin; los intermedios como "Parada"
     const middle = sorted.slice(1, -1).map((x) => ({ ...x, _label: 'Parada' }));
     return [first, ...middle, last];
   }
-  if (sorted.length === 1) return [{ ...sorted[0], _label: 'Parada' }];
+  if (sorted.length === 1) {
+      return [{ ...sorted[0], _label: 'Parada' }];
+  }
   return [];
 };
 
@@ -264,8 +273,6 @@ const ParentDashboardPage = () => {
   useEffect(() => {
     setServiceStatus(auth?.user?.serviceStatus || '');
   }, [auth?.user?.serviceStatus]);
-
-  const lastRefreshRef = useRef(0);
 
   const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({ open: false, sev: 'success', msg: '' });
@@ -286,7 +293,6 @@ const ParentDashboardPage = () => {
 
   // Estado para ver contrato firmado embebido
   const [viewFilledOpen, setViewFilledOpen] = useState(false);
-  const [viewFilledUuid, setViewFilledUuid] = useState('');
   const [viewFilledData, setViewFilledData] = useState(null);
   const [viewFilledLoading, setViewFilledLoading] = useState(false);
 
@@ -323,7 +329,9 @@ const ParentDashboardPage = () => {
   const [pendingEnrollmentFee, setPendingEnrollmentFee] = useState(null);
   useEffect(() => {
     const userId = auth?.user?.id;
-    if (!userId) return;
+    if (!userId) {
+        return;
+    }
     if (paymentsEnabled !== true) {
       setPendingEnrollmentFee(null);
       return;
@@ -331,37 +339,49 @@ const ParentDashboardPage = () => {
     let cancelled = false;
     api.get(`/enrollment-payments/by-user/${userId}`)
       .then(({ data }) => {
-        if (cancelled) return;
+        if (cancelled) {
+            return;
+        }
         const enrollmentPayment = data?.enrollmentPayment || null;
-        setPendingEnrollmentFee(enrollmentPayment && enrollmentPayment.status !== 'PAGADO' ? enrollmentPayment : null);
+        setPendingEnrollmentFee(enrollmentPayment?.status !== 'PAGADO' ? enrollmentPayment : null);
       })
       .catch(() => {
-        if (!cancelled) setPendingEnrollmentFee(null);
+        if (!cancelled) {
+            setPendingEnrollmentFee(null);
+        }
       });
     return () => { cancelled = true; };
   }, [auth?.user?.id, paymentsEnabled]);
 
   const cleanPhoneDigits = (phone) => {
-    if (!phone) return '';
+    if (!phone) {
+        return '';
+    }
     return String(phone).replace(/[^0-9]/g, '');
   };
 
   const openPhone = (phone) => {
     const digits = cleanPhoneDigits(phone);
-    if (!digits) return;
+    if (!digits) {
+        return;
+    }
     window.location.href = `tel:${digits}`;
   };
 
   const openEmail = (email) => {
     const e = safeStr(email);
-    if (!e) return;
+    if (!e) {
+        return;
+    }
     window.location.href = `mailto:${encodeURIComponent(e)}`;
   };
 
   const openWhatsApp = (whatsappLink, fallbackPhone) => {
     const direct = safeStr(whatsappLink);
     const url = direct || (cleanPhoneDigits(fallbackPhone) ? `https://wa.me/${cleanPhoneDigits(fallbackPhone)}` : '');
-    if (!url) return;
+    if (!url) {
+        return;
+    }
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -408,10 +428,14 @@ const ParentDashboardPage = () => {
         try {
           const routeSet = new Set();
           Object.values(byId).forEach((arr) => {
-            (arr || []).forEach((s) => { if (s && s.routeNumber) routeSet.add(String(s.routeNumber)); });
+            (arr || []).forEach((s) => { if (s?.routeNumber) {
+                routeSet.add(String(s.routeNumber));
+            } });
           });
           // incluir rutas definidas en parentInfo.routes también
-          (info.routes || []).forEach((r) => { if (r && r.routeNumber) routeSet.add(String(r.routeNumber)); });
+          (info.routes || []).forEach((r) => { if (r?.routeNumber) {
+              routeSet.add(String(r.routeNumber));
+          } });
           const routesArr = Array.from(routeSet).filter(Boolean);
           if (routesArr.length > 0) {
             const q = encodeURIComponent(routesArr.join(','));
@@ -421,7 +445,9 @@ const ParentDashboardPage = () => {
             const busesArr = platesRes.data?.data ?? platesRes.data ?? [];
             const pmap = {};
             if (Array.isArray(busesArr)) {
-              busesArr.forEach((b) => { if (b && b.routeNumber != null && b.plate != null) pmap[String(b.routeNumber)] = b.plate; });
+              busesArr.forEach((b) => { if (b?.routeNumber != null && b.plate != null) {
+                  pmap[String(b.routeNumber)] = b.plate;
+              } });
             }
             setPlateMap(pmap);
           } else {
@@ -527,7 +553,9 @@ const ParentDashboardPage = () => {
   };
 
   const handleOpenContractShare = async (contract) => {
-    if (!contract || !contract.uuid) return;
+    if (!contract?.uuid) {
+        return;
+    }
     try {
       // Load shared contract HTML/content
       const res = await api.get(`/contracts/share/${contract.uuid}`);
@@ -545,9 +573,10 @@ const ParentDashboardPage = () => {
   };
 
   const handleOpenFilledView = (filled) => {
-    if (!filled || !filled.uuid) return;
+    if (!filled?.uuid) {
+        return;
+    }
     const uuid = filled.uuid;
-    setViewFilledUuid(uuid);
     setViewFilledLoading(true);
     setViewFilledOpen(true);
     setViewFilledData(null);
@@ -584,16 +613,22 @@ const ParentDashboardPage = () => {
 
   const handleChangeField = (name, value) => {
     setFilledData((prev) => ({ ...prev, [name]: value }));
-    if (value) setMissingFields((prev) => prev.filter((n) => n !== name));
+    if (value) {
+        setMissingFields((prev) => prev.filter((n) => n !== name));
+    }
   };
 
   const handleSignatureRef = (name, ref) => {
-    if (ref) signaturePads.current[name] = ref;
+    if (ref) {
+        signaturePads.current[name] = ref;
+    }
   };
 
   const handleSignatureEndLocal = (name) => {
     const pad = signaturePads.current[name];
-    if (pad && !pad.isEmpty()) setMissingFields((prev) => prev.filter((n) => n !== name));
+    if (pad && !pad.isEmpty()) {
+        setMissingFields((prev) => prev.filter((n) => n !== name));
+    }
   };
 
   const renderSigningContent = (html) => {
@@ -607,7 +642,9 @@ const ParentDashboardPage = () => {
       const type = match[2];
       const nameTrim = rawName.trim();
       const before = html.substring(lastIndex, match.index);
-      if (before) elements.push(<span key={`before-${lastIndex}`} dangerouslySetInnerHTML={{ __html: before }} />);
+      if (before) {
+          elements.push(<span key={`before-${lastIndex}`} dangerouslySetInnerHTML={{ __html: before }} />);
+      }
 
       if (type === 'signature') {
         const isMissing = missingFields.includes(nameTrim);
@@ -639,7 +676,9 @@ const ParentDashboardPage = () => {
       lastIndex = match.index + full.length;
     }
     const remaining = html.substring(lastIndex);
-    if (remaining) elements.push(<span key={`rem-${lastIndex}`} dangerouslySetInnerHTML={{ __html: remaining }} />);
+    if (remaining) {
+        elements.push(<span key={`rem-${lastIndex}`} dangerouslySetInnerHTML={{ __html: remaining }} />);
+    }
     return elements;
   };
 
@@ -657,7 +696,9 @@ const ParentDashboardPage = () => {
             const [fullMatch, rawName, type] = match;
             const nameTrim = rawName.trim();
             const beforeText = text.substring(lastIndex, match.index);
-            if (beforeText) segments.push(beforeText);
+            if (beforeText) {
+                segments.push(beforeText);
+            }
 
             if (type === 'signature') {
               const signatureDataUrl = viewFilledData?.filledData[`${nameTrim}_signature`] || '';
@@ -687,9 +728,13 @@ const ParentDashboardPage = () => {
           }
 
           const remainingText = text.substring(lastIndex);
-          if (remainingText) segments.push(remainingText);
+          if (remainingText) {
+              segments.push(remainingText);
+          }
 
-          if (segments.length > 0) return <React.Fragment key={`frag-${domNode.key}`}>{segments}</React.Fragment>;
+          if (segments.length > 0) {
+              return <React.Fragment key={`frag-${domNode.key}`}>{segments}</React.Fragment>;
+          }
         }
       }
     });
@@ -697,7 +742,9 @@ const ParentDashboardPage = () => {
 
   // Genera PDF a partir del contenido llenado (similar a FilledContractViewer)
   const handleGeneratePDFView = async () => {
-    if (!viewFilledData) return;
+    if (!viewFilledData) {
+        return;
+    }
 
     const filledContract = viewFilledData;
     const tempDiv = document.createElement('div');
@@ -764,7 +811,9 @@ const ParentDashboardPage = () => {
   };
 
   const handleSubmitSigning = async () => {
-    if (!signingContract) return;
+    if (!signingContract) {
+        return;
+    }
     // validate
     const placeholders = extractPlaceholders(signingContract.content);
     const newlyMissing = [];
@@ -772,25 +821,35 @@ const ParentDashboardPage = () => {
       const name = ph.name;
       if (ph.type === 'signature') {
         const pad = signaturePads.current[name];
-        if (!pad || pad.isEmpty()) newlyMissing.push(name);
+        if (!pad || pad.isEmpty()) {
+            newlyMissing.push(name);
+        }
       } else {
         const val = filledData[name];
-        if (val === undefined || val === null || val === '') newlyMissing.push(name);
+        if (val === undefined || val === null || val === '') {
+            newlyMissing.push(name);
+        }
       }
     }
     if (newlyMissing.length > 0) {
       setMissingFields(newlyMissing);
       setSnackbar({ open: true, sev: 'warning', msg: `Faltan campos: ${newlyMissing.slice(0,3).join(', ')}${newlyMissing.length>3? '...':''}` });
       const first = newlyMissing[0];
-      setTimeout(() => { const el = fieldRefs.current[first]; if (el && el.focus) try { el.focus(); } catch(e){} }, 50);
+      setTimeout(() => { const el = fieldRefs.current[first]; if (el?.focus) {
+          try { el.focus(); } catch(e){}
+      } }, 50);
       return;
     }
 
     // collect signatures
     const signatures = {};
     for (const [name, pad] of Object.entries(signaturePads.current)) {
-      if (pad && !pad.isEmpty()) signatures[`${name}_signature`] = pad.getTrimmedCanvas().toDataURL('image/png');
-      else signatures[`${name}_signature`] = '';
+      if (pad && !pad.isEmpty()) {
+          signatures[`${name}_signature`] = pad.getTrimmedCanvas().toDataURL('image/png');
+      }
+      else {
+          signatures[`${name}_signature`] = '';
+      }
     }
 
     const payload = { 
@@ -801,7 +860,7 @@ const ParentDashboardPage = () => {
 
     try {
       setSubmittingSignature(true);
-      const res = await api.post(`/contracts/share/${signingContract.uuid}`, payload);
+      await api.post(`/contracts/share/${signingContract.uuid}`, payload);
       setSnackbar({ open: true, sev: 'success', msg: 'Contrato firmado y guardado correctamente.' });
       // refresh lists: remove from contractsList and reload filledContractsList
       // simple approach: refetch dialog data
@@ -827,7 +886,9 @@ const ParentDashboardPage = () => {
   // Estudiantes filtrados
   const studentsToRender = useMemo(() => {
     const id = selectedStudent === 'all' ? null : Number(selectedStudent);
-    if (!id) return parentInfo.students;
+    if (!id) {
+        return parentInfo.students;
+    }
     return parentInfo.students.filter((s) => s.id === id);
   }, [parentInfo.students, selectedStudent]);
 
@@ -845,19 +906,25 @@ const ParentDashboardPage = () => {
 
   const handlePrevStudent = () => {
     const n = parentInfo.students.length;
-    if (n <= 1) return;
+    if (n <= 1) {
+        return;
+    }
     setCarouselIndex((prev) => (prev - 1 + n) % n);
   };
 
   const handleNextStudent = () => {
     const n = parentInfo.students.length;
-    if (n <= 1) return;
+    if (n <= 1) {
+        return;
+    }
     setCarouselIndex((prev) => (prev + 1) % n);
   };
 
   // Días filtrados
   const daysToRender = useMemo(() => {
-    if (selectedDay === 'all') return DAYS;
+    if (selectedDay === 'all') {
+        return DAYS;
+    }
     return DAYS.filter((d) => d.key === selectedDay);
   }, [selectedDay]);
 
@@ -1190,7 +1257,9 @@ const ParentDashboardPage = () => {
                     slots.forEach((s) => {
                       const sDays = toArray(s.days).map((d) => String(d || '').toLowerCase());
                       DAYS.forEach(({ key }) => {
-                        if (sDays.includes(key)) byDay[key].push(s);
+                        if (sDays.includes(key)) {
+                            byDay[key].push(s);
+                        }
                       });
                     });
                     Object.keys(byDay).forEach((k) => {

@@ -14,7 +14,9 @@ const GlobalRefreshButton = ({ compact = false, onRefreshStart, onRefreshEnd }) 
     const isRefreshing = !!refreshCtx?.isRefreshing;
 
     const handleClick = useCallback(async () => {
-        if (!refreshCtx?.triggerRefresh || isRefreshing) return;
+        if (!refreshCtx?.triggerRefresh || isRefreshing) {
+            return;
+        }
         onRefreshStart?.(compact);
         try {
             await refreshCtx.triggerRefresh();
@@ -88,7 +90,9 @@ const ProtectedLayout = () => {
     };
 
     useEffect(() => {
-        if (isMobile) setIsSidebarOpen(false);
+        if (isMobile) {
+            setIsSidebarOpen(false);
+        }
     }, [isMobile]);
 
     useEffect(() => {
@@ -116,7 +120,9 @@ const ProtectedLayout = () => {
         const el = outletWrapperRef.current;
         if (el) {
             const measured = Math.max(el.scrollHeight || 0, el.offsetHeight || 0);
-            if (measured > 0) setOutletMinHeightPx(measured);
+            if (measured > 0) {
+                setOutletMinHeightPx(measured);
+            }
         }
     }, []);
 

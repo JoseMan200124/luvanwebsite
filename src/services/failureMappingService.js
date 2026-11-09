@@ -47,23 +47,6 @@ export const updateFailureMapping = async (id, payload = {}) => {
 };
 
 /**
- * Obtener estadísticas de mapeos de fallas
- * @param {Object} filters - Filtros para las estadísticas
- */
-export const getFailureMappingStatistics = async (filters = {}) => {
-    const params = new URLSearchParams();
-
-    Object.keys(filters).forEach(key => {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            params.append(key, filters[key]);
-        }
-    });
-
-    const response = await api.get(`/failure-mappings/statistics?${params.toString()}`);
-    return response.data;
-};
-
-/**
  * Tipos de falla disponibles
  */
 export const FAILURE_TYPES = {

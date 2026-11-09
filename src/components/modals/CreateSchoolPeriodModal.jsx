@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TextField, MenuItem, Alert, Grid, InputLabel, FormControl, Select, Typography, Divider, Stack, InputAdornment, FormHelperText, Tooltip, IconButton, Checkbox, FormControlLabel } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TextField, Alert, Grid, Typography, Divider, InputAdornment, IconButton, Checkbox, FormControlLabel } from '@mui/material';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloseIcon from '@mui/icons-material/Close';
@@ -31,7 +31,7 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
 
     const handleClose = () => {
         reset();
-        onClose && onClose();
+        onClose?.();
     };
 
     const handleCreate = async () => {
@@ -42,11 +42,19 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
         const payload = { period };
         // Enviar la tarifa base; las fechas de facturación se establecen en backend (fecha de creación).
         payload.originalAmount = Number(originalAmount);
-        if (dueDateEnd) payload.dueDateEnd = dueDateEnd.format('YYYY-MM-DD');
-        if (schoolId) payload.schoolId = schoolId;
+        if (dueDateEnd) {
+            payload.dueDateEnd = dueDateEnd.format('YYYY-MM-DD');
+        }
+        if (schoolId) {
+            payload.schoolId = schoolId;
+        }
         // Indica en la UI que este periodo no debe acumular mora (backend debe interpretar si aplica)
-        if (noAccruePenalty) payload.noAccruePenalty = true;
-        if (applyFamilyDiscounts) payload.applyFamilyDiscounts = true;
+        if (noAccruePenalty) {
+            payload.noAccruePenalty = true;
+        }
+        if (applyFamilyDiscounts) {
+            payload.applyFamilyDiscounts = true;
+        }
 
         setLoading(true);
         setError('');
@@ -54,14 +62,15 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
             const res = await api.post('/payments/v2/school-periods', payload);
             const data = res?.data || {};
             const created = Number.isFinite(Number(data.created)) ? Number(data.created) : null;
-            const skipped = Number.isFinite(Number(data.skipped)) ? Number(data.skipped) : null;
 
             if (created && created > 0) {
                 const successMessage = `Período creado correctamente (familias afectadas: ${created})`;
-                if (onCreated) onCreated(successMessage);
+                if (onCreated) {
+                    onCreated(successMessage);
+                }
                 setTimeout(() => {
                     reset();
-                    onClose && onClose();
+                    onClose?.();
                 }, 900);
             } else {
                 // Mensaje simple y auto-dismiss cuando no se creó ningún período

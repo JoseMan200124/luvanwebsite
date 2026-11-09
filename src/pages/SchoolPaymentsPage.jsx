@@ -161,22 +161,21 @@ const SchoolPaymentsPage = () => {
     const [showDeleted, setShowDeleted] = useState(false);
     const [countersView, setCountersView] = useState('payment'); // 'payment' o 'service'
     useEffect(() => {
-        if (statusFilter) setShowDeleted(false);
+        if (statusFilter) {
+            setShowDeleted(false);
+        }
     }, [statusFilter]);
     useEffect(() => {
-        if (serviceStatusFilter === 'INACTIVE') setShowInactive(false);
+        if (serviceStatusFilter === 'INACTIVE') {
+            setShowInactive(false);
+        }
     }, [serviceStatusFilter]);
     // client-side pagination state (we fetch all data once and paginate locally)
     const [page, setPage] = useState(0); // UI page (0-based)
     const [rowsPerPage, setRowsPerPage] = useState(25);
-    const [totalPayments, setTotalPayments] = useState(0);
     // Total families authoritative (includes active + inactive). Fetched independently
     // so it doesn't change when table filters/switches are toggled.
     const [totalFamiliesCount, setTotalFamiliesCount] = useState(null);
-    const [totalPaidCount, setTotalPaidCount] = useState(0);
-    const [totalMoraCount, setTotalMoraCount] = useState(0);
-    const [totalPendingCount, setTotalPendingCount] = useState(0);
-    const [totalInactiveCount, setTotalInactiveCount] = useState(0);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     // Loading indicator for initial data fetch
     const [loading, setLoading] = useState(true);
@@ -212,7 +211,9 @@ const SchoolPaymentsPage = () => {
     const fin = metricsData?.metrics || null;
     // Selector Caja/Devengado para las métricas que exponen ambas bases.
     const finByBasis = (obj) => {
-        if (!obj || typeof obj !== 'object') return null;
+        if (!obj || typeof obj !== 'object') {
+            return null;
+        }
         return metricsBasis === 'devengado' ? obj.devengado : obj.caja;
     };
     const familiasActivas = fin ? fin.familiasActivas : null;
@@ -277,7 +278,9 @@ const SchoolPaymentsPage = () => {
 
     // Métricas financieras: el backend hace todos los cálculos; el frontend sólo consume el endpoint.
     const fetchMetrics = useCallback(async (period) => {
-        if (!schoolId || !currentCicloEscolarId || !period) return;
+        if (!schoolId || !currentCicloEscolarId || !period) {
+            return;
+        }
         setMetricsLoading(true);
         try {
             const res = await api.get('/payments/metrics', {
@@ -307,7 +310,9 @@ const SchoolPaymentsPage = () => {
         (async () => {
             try {
                 const d = await getCurrentDate();
-                if (!active) return;
+                if (!active) {
+                    return;
+                }
                 const p = d.format('YYYY-MM');
                 setTodayPeriod(p);
                 if (!didInitPeriodRef.current) {
@@ -326,8 +331,12 @@ const SchoolPaymentsPage = () => {
     const shiftSelectedPeriod = useCallback((delta) => {
         setSelectedPeriod((prev) => {
             const next = moment(`${prev}-01`).add(delta, 'month').format('YYYY-MM');
-            if (minPeriod && next < minPeriod) return prev;
-            if (next > todayPeriod) return prev;
+            if (minPeriod && next < minPeriod) {
+                return prev;
+            }
+            if (next > todayPeriod) {
+                return prev;
+            }
             return next;
         });
     }, [minPeriod, todayPeriod]);
@@ -358,7 +367,9 @@ const SchoolPaymentsPage = () => {
     // Fetch all payments for the school in one request and store locally.
     // Tries a single large request first and falls back to iterative paging if backend enforces pagination.
     const fetchAllPayments = async (status = '', q = '') => {
-        if (!schoolId) return;
+        if (!schoolId) {
+            return;
+        }
         try {
             const st = status ? String(status).toUpperCase().trim() : '';
             const qq = q ? String(q).trim() : '';
@@ -368,12 +379,20 @@ const SchoolPaymentsPage = () => {
             // PAGADO (== CONFIRMADO) e INACTIVO (= serviceStatus INACTIVE)
             // se manejan solo en cliente cuando corresponde.
             const SERVER_FINAL_STATUS = new Set(['MORA', 'PENDIENTE', 'PARCIAL', 'CONFIRMADO', 'ADELANTADO', 'ELIMINADO']);
-            if (st && SERVER_FINAL_STATUS.has(st)) params.finalStatus = st;
+            if (st && SERVER_FINAL_STATUS.has(st)) {
+                params.finalStatus = st;
+            }
             // PAGADO e INACTIVO: no enviar filtro al servidor, el cliente filtra
-            if (qq) params.search = qq;
+            if (qq) {
+                params.search = qq;
+            }
             // include auto-debit filter if set: 'yes'|'no'
-            if (autoDebitFilter === 'yes') params.autoDebit = true;
-            if (autoDebitFilter === 'no') params.autoDebit = false;
+            if (autoDebitFilter === 'yes') {
+                params.autoDebit = true;
+            }
+            if (autoDebitFilter === 'no') {
+                params.autoDebit = false;
+            }
             const res = await api.get('/payments', { params });
             let arr = res.data.payments || res.data.rows || [];
             let total = typeof res.data.totalCount === 'number'
@@ -389,25 +408,17 @@ const SchoolPaymentsPage = () => {
                     const serverFilter = st && SERVER_FINAL_STATUS.has(st) ? { finalStatus: st } : {};
                     const r = await api.get('/payments', { params: buildPaymentParams({ page: p + 1, limit: per, ...serverFilter, ...(qq ? { search: qq } : {}) }) });
                     const part = r.data.payments || r.data.rows || [];
-                    if (Array.isArray(part) && part.length > 0) all.push(...part);
+                    if (Array.isArray(part) && part.length > 0) {
+                        all.push(...part);
+                    }
                 }
-                if (all.length > 0) arr = all;
+                if (all.length > 0) {
+                    arr = all;
+                }
             }
 
             setPaymentsAll(arr);
             setFiltered(arr);
-            setTotalPayments(total || (Array.isArray(arr) ? arr.length : 0));
-            
-            // IMPORTANTE: Excluir usuarios inactivos de los conteos de PAGADO/PENDIENTE/MORA
-            const isUserActive = (pmt) => Number(pmt.User?.state) !== 0;
-            const activePayments = arr.filter(isUserActive);
-            const inactivePayments = arr.filter(pmt => !isUserActive(pmt));
-            
-            const paidPayments = activePayments.filter(pmt => ((pmt.finalStatus || '').toUpperCase() === 'CONFIRMADO'));
-            setTotalPaidCount(typeof res.data.totalPaidCount === 'number' ? res.data.totalPaidCount : paidPayments.length);
-            setTotalPendingCount(typeof res.data.totalPendingCount === 'number' ? res.data.totalPendingCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'PENDIENTE').length);
-            setTotalMoraCount(typeof res.data.totalMoraCount === 'number' ? res.data.totalMoraCount : activePayments.filter(pmt => (pmt.finalStatus||'').toUpperCase() === 'MORA').length);
-            setTotalInactiveCount(typeof res.data.totalInactiveCount === 'number' ? res.data.totalInactiveCount : inactivePayments.length);
             // Do not reset pagination here; preserve current page.
             // Page resets are handled only when filters/search change.
         } catch (err) {
@@ -422,7 +433,9 @@ const SchoolPaymentsPage = () => {
 
     // Small analysis fetch: tries backend endpoint /payments/analysis or derives simple metrics
     const fetchPaymentsAnalysis = async (schId) => {
-        if (!schId || !hasPermission('pagos-ver-analisis')) return;
+        if (!schId || !hasPermission('pagos-ver-analisis')) {
+            return;
+        }
         try {
             // Pedir al backend los totales respetando los toggles de la UI.
             // Si `showInactive` o `showDeleted` están activos, incluimos esas familias;
@@ -491,7 +504,9 @@ const SchoolPaymentsPage = () => {
     }, [analysisData]);
 
     const fetchExtraordinaryEarnings = async () => {
-        if (!hasPermission('pagos-ver-analisis-extraordinarios')) return [];
+        if (!hasPermission('pagos-ver-analisis-extraordinarios')) {
+            return [];
+        }
         try {
             const res = await api.get('/payments/extraordinary/analysis', { params: buildPaymentParams() });
             return res.data.monthlyEarnings || [];
@@ -550,11 +565,15 @@ const SchoolPaymentsPage = () => {
             paymentsAll.forEach(p => {
                 const fam = p?.User?.FamilyDetail || p?.FamilyDetail || null;
                 const familyId = fam?.id || fam?.familyId || p?.familyDetailId || p?.familyId || p?.userId || p?.User?.id || null;
-                if (!familyId) return;
+                if (!familyId) {
+                    return;
+                }
                 const serviceStatus = (fam?.serviceStatus || p?.serviceStatus || '').toString().toUpperCase();
                 const familyDeletedFlag = fam?.deleted || fam?.isDeleted || !!fam?.deletedAt || !!p?.deleted || !!p?.deletedAt || false;
                 const deleted = familyDeletedFlag || serviceStatus === 'DELETED' || serviceStatus === 'ELIMINADO';
-                if (deleted) return;
+                if (deleted) {
+                    return;
+                }
                 famMap.set(String(familyId), true);
             });
             setTotalFamiliesCount(famMap.size);
@@ -565,7 +584,9 @@ const SchoolPaymentsPage = () => {
     }, [paymentsAll]);
 
     useEffect(() => {
-        if (schoolId) fetchTotalFamiliesCount(schoolId);
+        if (schoolId) {
+            fetchTotalFamiliesCount(schoolId);
+        }
     }, [schoolId, fetchTotalFamiliesCount]);
 
     // Extraordinary payments are handled by the shared ExtraordinaryPaymentSection component
@@ -595,48 +616,70 @@ const SchoolPaymentsPage = () => {
 
                 // Por defecto, NO mostrar inactivas. Solo mostrarlas si el toggle está activo
                 // o si el usuario filtró explícitamente por Estado del Servicio = INACTIVE.
-                if (isServiceInactive && !allowInactive) return false;
+                if (isServiceInactive && !allowInactive) {
+                    return false;
+                }
 
                 if (st) {
                     if (st === 'INACTIVO') {
                         // Filtrar solo familias con servicio inactivo
-                        if (!isServiceInactive) return false;
+                        if (!isServiceInactive) {
+                            return false;
+                        }
                     } else if (st === 'ELIMINADO') {
                         // Filtrar solo eliminados
-                        if (!isDeleted) return false;
+                        if (!isDeleted) {
+                            return false;
+                        }
                     } else {
                         // Para otros estados: filtrar por finalStatus.
                         // Excepción: cuando el usuario pidió `PAGADO`, incluir
                         // familias eliminadas/inactivas para coincidir con los
                         // totales autoritativos del backend (las chips).
-                        if (st !== 'PAGADO' && isDeleted && !allowDeleted) return false;
+                        if (st !== 'PAGADO' && isDeleted && !allowDeleted) {
+                            return false;
+                        }
                         const s = (p.finalStatus || '').toUpperCase();
 
                         // Interpretar `PAGADO` como `CONFIRMADO` solamente (ADELANTADO es separado)
                         if (st === 'PAGADO') {
-                            if (s !== 'CONFIRMADO') return false;
+                            if (s !== 'CONFIRMADO') {
+                                return false;
+                            }
                         } else {
-                            if (s !== st) return false;
+                            if (s !== st) {
+                                return false;
+                            }
                         }
                     }
                 } else {
                     // No se seleccionó estado: aplicar reglas por defecto
-                    if (isDeleted && !allowDeleted) return false;
+                    if (isDeleted && !allowDeleted) {
+                        return false;
+                    }
 
                     const s = (p.finalStatus || '').toUpperCase();
                     const defaultAllowed = ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'PARCIAL'];
-                    if (!(defaultAllowed.includes(s) || (allowDeleted && s === 'ELIMINADO') || (allowInactive && isServiceInactive))) return false;
+                    if (!(defaultAllowed.includes(s) || (allowDeleted && s === 'ELIMINADO') || (allowInactive && isServiceInactive))) {
+                        return false;
+                    }
                 }
                 if (qq) {
                     const familyLast = (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toLowerCase();
-                    if (!familyLast.includes(qq)) return false;
+                    if (!familyLast.includes(qq)) {
+                        return false;
+                    }
                 }
                 if (autoDebitFilter === 'yes') {
                     const auto = !!(p.automaticDebit || p.User?.FamilyDetail?.automaticDebit || p.User?.FamilyDetail?.autoDebit);
-                    if (!auto) return false;
+                    if (!auto) {
+                        return false;
+                    }
                 } else if (autoDebitFilter === 'no') {
                     const auto = !!(p.automaticDebit || p.User?.FamilyDetail?.automaticDebit || p.User?.FamilyDetail?.autoDebit);
-                    if (auto) return false;
+                    if (auto) {
+                        return false;
+                    }
                 }
                 // Filtrado por estado del servicio
                 if (serviceStatusFilter) {
@@ -644,15 +687,18 @@ const SchoolPaymentsPage = () => {
                     const paymentServiceStatus = (paymentServiceStatusRaw || '').toString().toUpperCase();
                     const paymentIsDeleted = !!p.User?.FamilyDetail?.deleted || paymentServiceStatus === 'DELETED' || paymentServiceStatus === 'ELIMINADO';
                     if (serviceStatusFilter === 'ELIMINADO') {
-                        if (!paymentIsDeleted) return false;
+                        if (!paymentIsDeleted) {
+                            return false;
+                        }
                     } else {
-                        if (paymentServiceStatus !== serviceStatusFilter) return false;
+                        if (paymentServiceStatus !== serviceStatusFilter) {
+                            return false;
+                        }
                     }
                 }
                 return true;
             });
             setFiltered(arr);
-            setTotalPayments(Array.isArray(arr) ? arr.length : 0);
 
             // Clamp current page if results shrink after refresh
             const total = Array.isArray(arr) ? arr.length : 0;
@@ -686,10 +732,18 @@ const SchoolPaymentsPage = () => {
     // Sorting helpers (parent-level)
     const getValueForKey = (p, key) => {
         try {
-            if (key === 'familyLastName') return (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toString().toLowerCase();
-            if (key === 'students') return p.User?.FamilyDetail?.studentsCount || p.studentCount || 0;
-            if (key === 'routeType') return (p.User?.FamilyDetail?.routeType || '').toString().toLowerCase();
-            if (key === 'lastPayment') return p.lastPaymentDate || p.lastPaidDate || p.lastPayment || '';
+            if (key === 'familyLastName') {
+                return (p.User?.FamilyDetail?.familyLastName || p.User?.familyLastName || '').toString().toLowerCase();
+            }
+            if (key === 'students') {
+                return p.User?.FamilyDetail?.studentsCount || p.studentCount || 0;
+            }
+            if (key === 'routeType') {
+                return (p.User?.FamilyDetail?.routeType || '').toString().toLowerCase();
+            }
+            if (key === 'lastPayment') {
+                return p.lastPaymentDate || p.lastPaidDate || p.lastPayment || '';
+            }
             if (key === 'discount') {
                 const fd = p.User?.FamilyDetail || {};
                 const isPercent = !!(fd.discountIsPercent || p.discountIsPercent);
@@ -700,9 +754,15 @@ const SchoolPaymentsPage = () => {
                 }
                 return Number(fd.specialFee ?? p.specialFee ?? 0) || 0;
             }
-            if (key === 'invoice') return !!(p.User?.FamilyDetail?.requiresInvoice || p.requiresInvoice) ? 1 : 0;
-            if (key === 'status') return (p.finalStatus || '').toString().toLowerCase();
-            if (key === 'serviceStatus') return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
+            if (key === 'invoice') {
+                return !!(p.User?.FamilyDetail?.requiresInvoice || p.requiresInvoice) ? 1 : 0;
+            }
+            if (key === 'status') {
+                return (p.finalStatus || '').toString().toLowerCase();
+            }
+            if (key === 'serviceStatus') {
+                return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
+            }
         } catch (e) {
             console.log('[SchoolPaymentsPage getValueKey]',e);
             return '';
@@ -714,19 +774,27 @@ const SchoolPaymentsPage = () => {
         const stabilized = array.map((el, index) => [el, index]);
         stabilized.sort((a, b) => {
             const orderRes = comparator(a[0], b[0]);
-            if (orderRes !== 0) return orderRes;
+            if (orderRes !== 0) {
+                return orderRes;
+            }
             return a[1] - b[1];
         });
         return stabilized.map(el => el[0]);
     };
 
     const sortedFiltered = React.useMemo(() => {
-        if (!Array.isArray(filtered)) return [];
+        if (!Array.isArray(filtered)) {
+            return [];
+        }
         const comparator = (a, b) => {
             const va = getValueForKey(a, orderBy);
             const vb = getValueForKey(b, orderBy);
-            if (va < vb) return order === 'asc' ? -1 : 1;
-            if (va > vb) return order === 'asc' ? 1 : -1;
+            if (va < vb) {
+                return order === 'asc' ? -1 : 1;
+            }
+            if (va > vb) {
+                return order === 'asc' ? 1 : -1;
+            }
             return 0;
         };
         return stableSort(filtered.slice(), comparator);
@@ -757,15 +825,21 @@ const SchoolPaymentsPage = () => {
     const [regHistLoading, setRegHistLoading] = useState(false);
     const [regHistPage] = useState(0);
     const [regHistLimit] = useState(10);
-    if (!global.__paymentHistCache) global.__paymentHistCache = new Map();
+    if (!global.__paymentHistCache) {
+        global.__paymentHistCache = new Map();
+    }
     const regHistCacheRef = React.useRef(global.__paymentHistCache);
     // Helper to invalidate all cached payment-history entries for a given userId
     const invalidatePaymentHistCacheForUser = useCallback((uid) => {
         try {
-            if (!uid || !regHistCacheRef.current) return;
+            if (!uid || !regHistCacheRef.current) {
+                return;
+            }
             const prefix = `${uid}:`;
             for (const k of Array.from(regHistCacheRef.current.keys())) {
-                if (k.startsWith(prefix)) regHistCacheRef.current.delete(k);
+                if (k.startsWith(prefix)) {
+                    regHistCacheRef.current.delete(k);
+                }
             }
         } catch (e) {
             console.warn('Error invalidating payment history cache for user', uid, e);
@@ -775,10 +849,14 @@ const SchoolPaymentsPage = () => {
     // Helper to invalidate all cached payment-history entries for a given paymentId
     const invalidatePaymentHistCacheForPaymentId = useCallback((paymentId) => {
         try {
-            if (!paymentId || !regHistCacheRef.current) return;
+            if (!paymentId || !regHistCacheRef.current) {
+                return;
+            }
             const prefix = `${paymentId}:`;
             for (const k of Array.from(regHistCacheRef.current.keys())) {
-                if (k.startsWith(prefix)) regHistCacheRef.current.delete(k);
+                if (k.startsWith(prefix)) {
+                    regHistCacheRef.current.delete(k);
+                }
             }
         } catch (e) {
             console.warn('Error invalidating payment history cache for paymentId', paymentId, e);
@@ -790,8 +868,12 @@ const SchoolPaymentsPage = () => {
         try {
             const uid = paymentLike?.User?.id || paymentLike?.userId || null;
             const pid = paymentLike?.id || paymentLike?.paymentId || null;
-            if (uid) invalidatePaymentHistCacheForUser(uid);
-            if (pid) invalidatePaymentHistCacheForPaymentId(pid);
+            if (uid) {
+                invalidatePaymentHistCacheForUser(uid);
+            }
+            if (pid) {
+                invalidatePaymentHistCacheForPaymentId(pid);
+            }
         } catch (e) {
             console.warn('Error invalidating payment history cache', e);
         }
@@ -820,7 +902,9 @@ const SchoolPaymentsPage = () => {
     const boletaMonthOptions = React.useMemo(() => {
         const setMonths = new Set();
         const pushDate = (d) => {
-            if (!d) return;
+            if (!d) {
+                return;
+            }
             try {
                 const m = moment.parseZone(d).format('YYYY-MM');
                 setMonths.add(m);
@@ -832,10 +916,14 @@ const SchoolPaymentsPage = () => {
     }, [uploadedReceipts]);
 
     const filteredUploadedReceipts = React.useMemo(() => {
-        if (!boletaMonth) return uploadedReceipts || [];
+        if (!boletaMonth) {
+            return uploadedReceipts || [];
+        }
         return (uploadedReceipts || []).filter(r => {
             const d = getReceiptDisplayDateValue(r);
-            if (!d) return false;
+            if (!d) {
+                return false;
+            }
             return moment.parseZone(d).format('YYYY-MM') === boletaMonth;
         });
     }, [uploadedReceipts, boletaMonth]);
@@ -863,11 +951,21 @@ const SchoolPaymentsPage = () => {
             setReceiptUploadLoading(true);
             const form = new FormData();
             form.append('receipt', file);
-            if (displayDate) form.append('displayDate', displayDate);
-            if (registerPaymentTarget?.id) form.append('paymentId', registerPaymentTarget.id);
-            if (registerPaymentTarget?.schoolId) form.append('schoolId', registerPaymentTarget.schoolId);
-            if (registerPaymentTarget?.cicloEscolarId) form.append('cicloEscolarId', registerPaymentTarget.cicloEscolarId);
-            if (registerPaymentTarget?.User?.FamilyDetail?.id) form.append('familyDetailId', registerPaymentTarget.User.FamilyDetail.id);
+            if (displayDate) {
+                form.append('displayDate', displayDate);
+            }
+            if (registerPaymentTarget?.id) {
+                form.append('paymentId', registerPaymentTarget.id);
+            }
+            if (registerPaymentTarget?.schoolId) {
+                form.append('schoolId', registerPaymentTarget.schoolId);
+            }
+            if (registerPaymentTarget?.cicloEscolarId) {
+                form.append('cicloEscolarId', registerPaymentTarget.cicloEscolarId);
+            }
+            if (registerPaymentTarget?.User?.FamilyDetail?.id) {
+                form.append('familyDetailId', registerPaymentTarget.User.FamilyDetail.id);
+            }
 
             const res = await api.post(`/parents/${userId}/receipts`, form, {
                 headers: { 'Content-Type': 'multipart/form-data' }
@@ -903,10 +1001,6 @@ const SchoolPaymentsPage = () => {
         }
     }, []);
 
-    const [openReceiptDialog, setOpenReceiptDialog] = useState(false);
-    const [receiptTarget, setReceiptTarget] = useState(null);
-    const [receiptNumberDraft, setReceiptNumberDraft] = useState('');
-    
     // Pay Penalty dialog states
     const [openPayPenaltyDialog, setOpenPayPenaltyDialog] = useState(false);
     const [payPenaltyAmount, setPayPenaltyAmount] = useState('');
@@ -945,11 +1039,6 @@ const SchoolPaymentsPage = () => {
     const [notesTarget, setNotesTarget] = useState(null);
     const [notesDraft, setNotesDraft] = useState('');
 
-    const [openEmailDialog, setOpenEmailDialog] = useState(false);
-    const [emailTarget, setEmailTarget] = useState(null);
-    const [emailSubject, setEmailSubject] = useState('');
-    const [emailMessage, setEmailMessage] = useState('');
-
     // Diálogo para auto débito
     const [openAutoDebitDialog, setOpenAutoDebitDialog] = useState(false);
     const [autoDebitPayload, setAutoDebitPayload] = useState(null);
@@ -958,7 +1047,9 @@ const SchoolPaymentsPage = () => {
     const openRegisterInProgressRef = useRef(false);
     const handleOpenRegister = useCallback((payment) => {
         // prevent concurrent opens for the same flow
-        if (openRegisterInProgressRef.current) return;
+        if (openRegisterInProgressRef.current) {
+            return;
+        }
         openRegisterInProgressRef.current = true;
 
         console.log('DEBUG handleOpenRegister received payment:', {
@@ -1075,7 +1166,9 @@ const SchoolPaymentsPage = () => {
 
                 // histories (we store in cache but don't keep them in component state currently)
                 const histories = histRes.data?.histories || [];
-                if (!histRes.__fromCache) regHistCacheRef.current.set(cacheKey, { ts: now, data: histories });
+                if (!histRes.__fromCache) {
+                    regHistCacheRef.current.set(cacheKey, { ts: now, data: histories });
+                }
                 setRegHistLoading(false);
 
                 // inscripción de ciclo
@@ -1105,10 +1198,14 @@ const SchoolPaymentsPage = () => {
         const openRegister = qs.get('openRegister') === 'true' || qs.get('openRegister') === '1';
         const userIdFromQuery = qs.get('userId');
         const receiptIdFromQuery = qs.get('receiptId');
-        if (!openRegister || !userIdFromQuery || !schoolId) return;
+        if (!openRegister || !userIdFromQuery || !schoolId) {
+            return;
+        }
         // avoid handling the same query repeatedly (some navigation flows re-emit location.search)
         const key = `openRegister:${location.search}`;
-        if (processedOpenRegisterRef.current.has(key)) return;
+        if (processedOpenRegisterRef.current.has(key)) {
+            return;
+        }
         processedOpenRegisterRef.current.add(key);
 
         (async () => {
@@ -1126,7 +1223,9 @@ const SchoolPaymentsPage = () => {
                             const recRes = await api.get(`/parents/${userIdFromQuery}/receipts`);
                             const recs = recRes.data.receipts || [];
                             const matched = recs.find(r => String(r.id) === String(receiptIdFromQuery));
-                            if (matched) setSelectedReceipt(matched);
+                            if (matched) {
+                                setSelectedReceipt(matched);
+                            }
                         } catch (e) {
                             // ignore receipt preload errors
                         }
@@ -1141,12 +1240,14 @@ const SchoolPaymentsPage = () => {
     // If navigation provided a payment object in location.state, open the register dialog immediately
     // NOTE: The payment from notification may not have full data. handleOpenRegister will fetch it from the query params path instead.
     useEffect(() => {
-        const navPayment = location.state && location.state.payment ? location.state.payment : null;
+        const navPayment = location.state?.payment ? location.state.payment : null;
         if (navPayment) {
             // Skip this effect if we also have openRegister query param - let the query param handler deal with it
             const qs = new URLSearchParams(location.search);
             const hasOpenRegisterParam = qs.get('openRegister') === 'true' || qs.get('openRegister') === '1';
-            if (hasOpenRegisterParam) return;
+            if (hasOpenRegisterParam) {
+                return;
+            }
             
             try {
                 // directly open with provided payment object
@@ -1166,9 +1267,11 @@ const SchoolPaymentsPage = () => {
     useEffect(() => {
         const qs = new URLSearchParams(location.search);
         const showReceipt = qs.get('showReceipt') === 'true' || qs.get('showReceipt') === '1';
-        const receiptId = qs.get('receiptId') || (location.state && location.state.receiptId) || null;
-        const navPayment = location.state && location.state.payment ? location.state.payment : null;
-        if (!showReceipt || !receiptId) return;
+        const receiptId = qs.get('receiptId') || (location.state?.receiptId) || null;
+        const navPayment = location.state?.payment ? location.state.payment : null;
+        if (!showReceipt || !receiptId) {
+            return;
+        }
 
         (async () => {
             try {
@@ -1189,7 +1292,9 @@ const SchoolPaymentsPage = () => {
         })();
     }, [location.search, location.state, handleOpenRegister]);
     const handleConfirmRegister = async () => {
-        if (!registerPaymentTarget) return;
+        if (!registerPaymentTarget) {
+            return;
+        }
         try {
             // Usar endpoint pay-tariff del nuevo sistema
             await api.post(`/payments/pay-tariff`, {
@@ -1220,44 +1325,6 @@ const SchoolPaymentsPage = () => {
             console.error(err);
             const errorMsg = err?.response?.data?.error || 'Error registrando pago';
             setSnackbar({ open: true, message: errorMsg, severity: 'error' });
-        }
-    };
-
-    const handleOpenReceipt = useCallback(async (payment) => {
-        setReceiptTarget(payment);
-        setReceiptNumberDraft(payment.receiptNumber || '');
-        setOpenReceiptDialog(true);
-    }, []);
-    const handleSaveReceipt = async () => {
-        if (!receiptTarget) return;
-        try {
-            await api.put(`/payments/${receiptTarget.id}/receipt-number`, { receiptNumber: receiptNumberDraft });
-            setSnackbar({ open: true, message: 'Número de recibo actualizado', severity: 'success' });
-            setOpenReceiptDialog(false);
-            // Invalidate cache for this user so modal will fetch fresh histories
-            invalidatePaymentHistCacheForUser(receiptTarget?.User?.id || receiptTarget?.userId);
-            fetchAllPayments(statusFilter, search);
-        } catch (err) {
-            console.error(err);
-            setSnackbar({ open: true, message: 'Error actualizando recibo', severity: 'error' });
-        }
-    };
-
-    const handleOpenEmail = useCallback((payment) => {
-        setEmailTarget(payment);
-        setEmailSubject('');
-        setEmailMessage('');
-        setOpenEmailDialog(true);
-    }, []);
-    const handleSendEmail = async () => {
-        if (!emailTarget) return;
-        try {
-            await api.post(`/payments/${emailTarget.id}/sendEmail`, { subject: emailSubject, message: emailMessage });
-            setSnackbar({ open: true, message: 'Correo enviado', severity: 'success' });
-            setOpenEmailDialog(false);
-        } catch (err) {
-            console.error(err);
-            setSnackbar({ open: true, message: 'Error al enviar correo', severity: 'error' });
         }
     };
 
@@ -1320,7 +1387,7 @@ const SchoolPaymentsPage = () => {
                     const r = await api.get('/payments/paymenthistory', { params });
                     return r;
                 } catch (e) {
-                    console.error('[handleDownloadHistory] fetch error', e && e.response ? e.response.data || e.response : e);
+                    console.error('[handleDownloadHistory] fetch error', e?.response ? e.response.data || e.response : e);
                     throw e;
                 }
             };
@@ -1358,9 +1425,13 @@ const SchoolPaymentsPage = () => {
                         for (let p = 0; p < pages; p++) {
                             const r2 = await attemptFetch({ userId, page: p, limit: per });
                             const part = r2.data.histories || r2.data || [];
-                            if (Array.isArray(part) && part.length > 0) all.push(...part);
+                            if (Array.isArray(part) && part.length > 0) {
+                                all.push(...part);
+                            }
                         }
-                        if (all.length > 0) histories = all;
+                        if (all.length > 0) {
+                            histories = all;
+                        }
                     } catch (e) {
                         console.warn('[handleDownloadHistory] iterative fetch failed', e);
                     }
@@ -1380,9 +1451,9 @@ const SchoolPaymentsPage = () => {
                                             noTransactions = true;
                                         }
                         } catch (e) {
-                            console.error('[handleDownloadHistory] fallback fetch error', e && e.response ? e.response.data || e.response : e);
-                            const status = e && e.response && e.response.status;
-                            const respData = e && e.response && e.response.data;
+                            console.error('[handleDownloadHistory] fallback fetch error', e?.response ? e.response.data || e.response : e);
+                            const status = e?.response?.status;
+                            const respData = e?.response?.data;
                             // If API indicates not found or no content, treat as no transactions
                             if (status === 404 || status === 204 || (respData && typeof respData === 'string' && /not found|no history|no transactions/i.test(respData))) {
                                 // Treat as no transactions and continue to generate a PDF with a placeholder
@@ -1540,8 +1611,12 @@ const SchoolPaymentsPage = () => {
             const schoolBaseFee = (() => {
                 const complete = Number(schoolObj?.transportFeeComplete ?? 0) || 0;
                 const half = Number(schoolObj?.transportFeeHalf ?? 0) || 0;
-                if (!complete && !half) return 0;
-                if (routeUpper.includes('COMPLETA') || routeUpper.includes('COMPLETO')) return complete;
+                if (!complete && !half) {
+                    return 0;
+                }
+                if (routeUpper.includes('COMPLETA') || routeUpper.includes('COMPLETO')) {
+                    return complete;
+                }
                 return half || complete;
             })();
             const baseTariff = (monthlyTariff > 0 && safeStudentCount > 0)
@@ -1649,10 +1724,6 @@ const SchoolPaymentsPage = () => {
 
             // Start the periods table below both summary + children tables
 
-            // Helpers for new sections
-            const monthNamesUpper = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-            const monthAbbrLower = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-
             const ensureSpace = (requiredHeight) => {
                 const bottomMargin = 40;
                 if (cursorY + requiredHeight > pageHeight - bottomMargin) {
@@ -1662,7 +1733,9 @@ const SchoolPaymentsPage = () => {
             };
 
             const formatDateDMY = (d) => {
-                if (!d) return 'N/A';
+                if (!d) {
+                    return 'N/A';
+                }
                 const m = moment.parseZone(d);
                 return m.isValid() ? m.format('DD/MM/YYYY') : 'N/A';
             };
@@ -1694,7 +1767,9 @@ const SchoolPaymentsPage = () => {
 
             const resolveTotals = () => {
                 const totals = familyAccount?.totals || null;
-                if (totals) return totals;
+                if (totals) {
+                    return totals;
+                }
 
                 const summaryArr = Array.isArray(periodsPayment?.periodsSummary) ? periodsPayment.periodsSummary : [];
                 const rawArr = Array.isArray(periodsPayment?.periods) ? periodsPayment.periods : [];
@@ -1771,7 +1846,6 @@ const SchoolPaymentsPage = () => {
             const schoolName = (periodsPayment?.School?.name || periodsPayment?.school?.name || familyPayment?.School?.name || familyPayment?.school?.name || 'Transporte Luvan').toString();
             const cicloLabel = (periodsPayment?.CicloEscolar?.label || periodsPayment?.cicloEscolar?.label || periodsPayment?.CicloEscolar?.nombre || periodsPayment?.cicloEscolar?.nombre || '').toString();
 
-            const computedStatus = (familyPayment?.finalStatus || (Number(totals?.penaltyDue || 0) > 0 ? 'MORA' : 'PENDIENTE'));
             ensureSpace(76);
             doc.setFontSize(11);
             doc.setFont(undefined, 'bold');
@@ -1856,7 +1930,9 @@ const SchoolPaymentsPage = () => {
             };
 
             const periods = (() => {
-                if (Array.isArray(periodsRaw) && periodsRaw.length > 0) return periodsRaw.map(normalizePeriod);
+                if (Array.isArray(periodsRaw) && periodsRaw.length > 0) {
+                    return periodsRaw.map(normalizePeriod);
+                }
                 try {
                     const raw = periodsPayment?.unpaidPeriods
                         ? (typeof periodsPayment.unpaidPeriods === 'string'
@@ -1904,15 +1980,21 @@ const SchoolPaymentsPage = () => {
 
             for (const tx of tariffLikeTx) {
                 let txRemaining = Math.max(0, Number(tx?.amount || 0));
-                if (txRemaining <= 0) continue;
+                if (txRemaining <= 0) {
+                    continue;
+                }
 
                 while (txRemaining > 0) {
                     const idx = periodAlloc.findIndex(pp => Number(pp.remainingDueSim || 0) > 0);
-                    if (idx === -1) break;
+                    if (idx === -1) {
+                        break;
+                    }
 
                     const due = Number(periodAlloc[idx].remainingDueSim || 0);
                     const apply = Math.min(txRemaining, due);
-                    if (apply <= 0) break;
+                    if (apply <= 0) {
+                        break;
+                    }
 
                     periodAlloc[idx].remainingDueSim = Math.max(0, due - apply);
                     periodAlloc[idx].appliedSim = Number(periodAlloc[idx].appliedSim || 0) + apply;
@@ -1927,17 +2009,29 @@ const SchoolPaymentsPage = () => {
             }
 
             const formatTransactionDate = (d) => {
-                if (!d) return '';
+                if (!d) {
+                    return '';
+                }
                 const m = moment.parseZone(d);
-                if (!m.isValid()) return '';
+                if (!m.isValid()) {
+                    return '';
+                }
                 return m.locale('es').format('DD-MMM-YYYY').toLowerCase();
             };
             const formatTransactionType = (type) => {
                 const t = String(type || '').trim().toUpperCase();
-                if (t === 'TARIFA' || t === 'PAYMENT') return 'Tarifa';
-                if (t === 'MORA' || t === 'PENALTY') return 'Mora';
-                if (t === 'CREDITO' || t === 'CREDIT' || t === 'CREDITO AUTOMATICO' || t === 'AUTOCREDIT') return 'Crédito Automático';
-                if (t === 'DEBITO' || t === 'DEBIT' || t === 'DEBITO AUTOMATICO' || t === 'AUTODEBIT') return 'Débito Automático';
+                if (t === 'TARIFA' || t === 'PAYMENT') {
+                    return 'Tarifa';
+                }
+                if (t === 'MORA' || t === 'PENALTY') {
+                    return 'Mora';
+                }
+                if (t === 'CREDITO' || t === 'CREDIT' || t === 'CREDITO AUTOMATICO' || t === 'AUTOCREDIT') {
+                    return 'Crédito Automático';
+                }
+                if (t === 'DEBITO' || t === 'DEBIT' || t === 'DEBITO AUTOMATICO' || t === 'AUTODEBIT') {
+                    return 'Débito Automático';
+                }
                 return (type || 'Transacción').toString().replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
             };
 
@@ -1967,7 +2061,6 @@ const SchoolPaymentsPage = () => {
                 } else {
                     bodyRows = periodAlloc.map(p => {
                         const fecha = formatTransactionDate(p.paidAt || p.dueDate || p.period);
-                        const tarifaV = Number(p.originalAmount || 0);
                         const descV = Number(p.discountApplied || 0);
                         const montoRaw = Number(p.amountPaid || 0) > 0 ? Number(p.amountPaid || 0) : Number(p.appliedSim || 0);
                         const boleta = (p.receiptNumber) ? String(p.receiptNumber) : '-';
@@ -2014,11 +2107,17 @@ const SchoolPaymentsPage = () => {
                 const byKey = new Map();
 
                 sources.forEach((source) => {
-                    if (!Array.isArray(source)) return;
+                    if (!Array.isArray(source)) {
+                        return;
+                    }
                     source.forEach((period) => {
-                        if (!period) return;
+                        if (!period) {
+                            return;
+                        }
                         const key = period.id || period.period || `${period.dueDate || ''}-${period.amountDue || ''}-${period.amountPaid || ''}`;
-                        if (!key) return;
+                        if (!key) {
+                            return;
+                        }
                         const existing = byKey.get(key) || {};
                         byKey.set(key, {
                             ...existing,
@@ -2077,31 +2176,45 @@ const SchoolPaymentsPage = () => {
 
             // Normalize period key to YYYY-MM when possible and dedupe globally across payments
             const normalizePeriodKey = (p) => {
-                if (!p) return null;
+                if (!p) {
+                    return null;
+                }
                 const rawPeriod = String(p.period || '').trim();
                 if (rawPeriod) {
                     const m = /^(\d{4})-(\d{2})/.exec(rawPeriod);
-                    if (m) return `${m[1]}-${m[2]}`;
+                    if (m) {
+                        return `${m[1]}-${m[2]}`;
+                    }
                     const tryMoment = moment(rawPeriod);
-                    if (tryMoment.isValid()) return tryMoment.format('YYYY-MM');
+                    if (tryMoment.isValid()) {
+                        return tryMoment.format('YYYY-MM');
+                    }
                 }
 
                 const candidateDate = p.dueDate || p.paidAt || p.createdAt || p.paymentDate || '';
                 if (candidateDate) {
                     const mm = moment(candidateDate);
-                    if (mm.isValid()) return mm.format('YYYY-MM');
+                    if (mm.isValid()) {
+                        return mm.format('YYYY-MM');
+                    }
                 }
 
-                if (p.id) return `id:${p.id}`;
+                if (p.id) {
+                    return `id:${p.id}`;
+                }
                 // final fallback
                 return `${p.dueDate || ''}-${p.amountDue || ''}`;
             };
 
             const mergedByKey = new Map();
             rawPeriodDetails.forEach((p) => {
-                if (!p) return;
+                if (!p) {
+                    return;
+                }
                 const key = normalizePeriodKey(p);
-                if (!key) return;
+                if (!key) {
+                    return;
+                }
                 const existing = mergedByKey.get(key) || {};
                 mergedByKey.set(key, { ...existing, ...p });
             });
@@ -2125,7 +2238,9 @@ const SchoolPaymentsPage = () => {
                     drawSectionTitle('Detalles de Períodos de Pago');
 
                     for (const period of periodDetails) {
-                        if (!period) continue;
+                        if (!period) {
+                            continue;
+                        }
                         ensureSpace(240);
 
                         const displayPeriodName = formatPeriodName(period.period, period.periodName);
@@ -2270,8 +2385,12 @@ const SchoolPaymentsPage = () => {
                             }
                             doc.setTextColor(80);
                             doc.text('Mora pendiente:', 50, cursorY);
-                            if (penaltyDue > 0) doc.setTextColor(244, 67, 54);
-                            else doc.setTextColor(0, 0, 0);
+                            if (penaltyDue > 0) {
+                                doc.setTextColor(244, 67, 54);
+                            }
+                            else {
+                                doc.setTextColor(0, 0, 0);
+                            }
                             doc.text(money(penaltyDue), pageWidth - 50, cursorY, { align: 'right' });
                             cursorY += 12;
                             if (period?.penaltyFrozen) {
@@ -2299,8 +2418,12 @@ const SchoolPaymentsPage = () => {
                         doc.setFontSize(8);
                         doc.setTextColor(80);
                         doc.text('Tarifa pendiente:', 50, cursorY);
-                        if (amountDue > 0) doc.setTextColor(244, 67, 54);
-                        else doc.setTextColor(21, 128, 61);
+                        if (amountDue > 0) {
+                            doc.setTextColor(244, 67, 54);
+                        }
+                        else {
+                            doc.setTextColor(21, 128, 61);
+                        }
                         doc.text(money(amountDue), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
                         if (penaltyDue > 0) {
@@ -2310,8 +2433,12 @@ const SchoolPaymentsPage = () => {
                             cursorY += 12;
                         }
                         doc.setFont(undefined, 'bold');
-                        if (totalPending > 0) doc.setTextColor(244, 67, 54);
-                        else doc.setTextColor(21, 128, 61);
+                        if (totalPending > 0) {
+                            doc.setTextColor(244, 67, 54);
+                        }
+                        else {
+                            doc.setTextColor(21, 128, 61);
+                        }
                         doc.text('Total a pagar:', 50, cursorY);
                         doc.text(money(totalPending), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
@@ -2351,7 +2478,9 @@ const SchoolPaymentsPage = () => {
         setNotesDraft('');
     };
     const handleSaveNotes = async () => {
-        if (!notesTarget) return;
+        if (!notesTarget) {
+            return;
+        }
         try {
             await api.put(`/payments/v2/${notesTarget.id}/notes`, { notes: notesDraft });
             setSnackbar({ open: true, message: 'Notas actualizadas', severity: 'success' });
@@ -2367,10 +2496,10 @@ const SchoolPaymentsPage = () => {
 
     const handleManageAction = async (actionName, payload) => {
         // Implement common management actions using available backend endpoints
-        const payment = payload && payload.payment ? payload.payment : payload || manageTarget;
+        const payment = payload?.payment ? payload.payment : payload || manageTarget;
 
         try {
-            if (!payment || !payment.id) {
+            if (!payment?.id) {
                 setSnackbar({ open: true, message: 'Pago no válido', severity: 'error' });
                 return;
             }
@@ -2435,7 +2564,9 @@ const SchoolPaymentsPage = () => {
                 setSnackbar({ open: true, message: actionName === 'suspend' ? 'Familia suspendida' : 'Familia activada', severity: 'success' });
             } else if (actionName === 'toggleAutoDebit') {
                 const userId = payload?.payment?.User?.id || payment.User?.id;
-                if (!userId) return setSnackbar({ open: true, message: 'Usuario no encontrado', severity: 'error' });
+                if (!userId) {
+                    return setSnackbar({ open: true, message: 'Usuario no encontrado', severity: 'error' });
+                }
                 const val = payload?.value;
                 
                 // Si se está ACTIVANDO el auto débito, mostrar diálogo para seleccionar mes
@@ -2558,14 +2689,18 @@ const SchoolPaymentsPage = () => {
         const startYear = Number.isFinite(baseYear) ? baseYear : currentYear;
 
         const years = [];
-        for (let y = startYear; y <= currentYear; y++) years.push(String(y));
+        for (let y = startYear; y <= currentYear; y++) {
+            years.push(String(y));
+        }
         // Mostrar descendente (más reciente primero)
         return years.reverse();
     }, [currentCycleYear]);
 
     // Si cambia el año del ciclo y el exportYear ya no está en el rango, ajustarlo.
     useEffect(() => {
-        if (!exportYearOptions || exportYearOptions.length === 0) return;
+        if (!exportYearOptions || exportYearOptions.length === 0) {
+            return;
+        }
         if (!exportYearOptions.includes(exportYear)) {
             setExportYear(exportYearOptions[0]);
         }
@@ -2678,8 +2813,12 @@ const SchoolPaymentsPage = () => {
                     const partialDiscMap = buildFamilyDiscountMap(allPayments);
                     partialDiscMap.forEach((v, k) => mergedFamilyDiscountMap.set(k, v));
 
-                    if (mergedServiceStatusMap.size > 0) serviceStatusByUserId = mergedServiceStatusMap;
-                    if (mergedFamilyDiscountMap.size > 0) familyDiscountByUserId = mergedFamilyDiscountMap;
+                    if (mergedServiceStatusMap.size > 0) {
+                        serviceStatusByUserId = mergedServiceStatusMap;
+                    }
+                    if (mergedFamilyDiscountMap.size > 0) {
+                        familyDiscountByUserId = mergedFamilyDiscountMap;
+                    }
                 } catch (e) {
                     // If this fails, fall back to paymentsAll-based maps.
                     console.warn('[export] Could not build /payments maps:', e);
@@ -2700,12 +2839,14 @@ const SchoolPaymentsPage = () => {
                 
                 // Filtrar por estado del servicio
                 if (exportServiceStatus && exportServiceStatus !== 'TODOS') {
-                    if (serviceStatus !== normalizeUpper(exportServiceStatus)) return;
+                    if (serviceStatus !== normalizeUpper(exportServiceStatus)) {
+                        return;
+                    }
                 }
                 
                 const familyLast = h.familyLastName || h.familyLast || h.familyLastname || h.User?.FamilyDetail?.familyLastName || h.User?.familyLastName || '';
                 // Use only finalStatus (as required). Fallback to Payment.finalStatus if the snapshot doesn't include it.
-                const estado = h.finalStatus || (h.Payment && h.Payment.finalStatus) || '';
+                const estado = h.finalStatus || (h.Payment?.finalStatus) || '';
                 const estadoUpper = normalizeUpper(estado);
                 
                 // Filtrar por estado de pago
@@ -2714,9 +2855,13 @@ const SchoolPaymentsPage = () => {
                     
                     // PAGADO corresponde solo a CONFIRMADO; ADELANTADO es separado
                     if (filtroUpper === 'PAGADO') {
-                        if (estadoUpper !== 'CONFIRMADO') return;
+                        if (estadoUpper !== 'CONFIRMADO') {
+                            return;
+                        }
                     } else {
-                        if (estadoUpper !== filtroUpper) return;
+                        if (estadoUpper !== filtroUpper) {
+                            return;
+                        }
                     }
                 }
 
@@ -2735,16 +2880,22 @@ const SchoolPaymentsPage = () => {
                 
                 // Filtrar por fecha (mes y año)
                 const pd = h.paymentDate || h.lastPaymentDate || h.snapshotDate || null;
-                if (!pd) return;
+                if (!pd) {
+                    return;
+                }
                 const mm = moment.parseZone(pd);
                 
                 // Si hay mes específico seleccionado, filtrar por mes y año exactos
                 if (monthStrPad) {
-                    if (mm.format('YYYY-MM') !== `${yearToUse}-${monthStrPad}`) return;
+                    if (mm.format('YYYY-MM') !== `${yearToUse}-${monthStrPad}`) {
+                        return;
+                    }
                 }
                 // Si no hay mes (TODOS), filtrar únicamente por el año seleccionado
                 else if (year && year !== 'TODOS') {
-                    if (mm.year() !== yearToUse) return;
+                    if (mm.year() !== yearToUse) {
+                        return;
+                    }
                 }
 
                 const fecha = (typeof h.paymentDate !== 'undefined' && h.paymentDate !== null && h.paymentDate !== '') ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '0';
@@ -2792,7 +2943,9 @@ const SchoolPaymentsPage = () => {
 
             // Alternating row colors and alignment (center data cells; keep numeric right-aligned)
             sheet.eachRow((row, rowIndex) => {
-                if (rowIndex === 1) return;
+                if (rowIndex === 1) {
+                    return;
+                }
                 const isEven = rowIndex % 2 === 0;
                 row.eachCell((cell, colNumber) => {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
@@ -2827,8 +2980,10 @@ const SchoolPaymentsPage = () => {
                 let maxLength = header.length;
                 sheet.eachRow((row) => {
                     const cell = row.getCell(index + 1);
-                    const value = cell && cell.value ? String(cell.value) : '';
-                    if (value.length > maxLength) maxLength = value.length;
+                    const value = cell?.value ? String(cell.value) : '';
+                    if (value.length > maxLength) {
+                        maxLength = value.length;
+                    }
                 });
                 column.width = Math.min(Math.max(maxLength + 2, 10), 60);
             });
@@ -2900,17 +3055,25 @@ const SchoolPaymentsPage = () => {
                 const isDeleted = !!p.User?.FamilyDetail?.deleted;
 
                 // Siempre ignorar registros marcados como deleted
-                if (isDeleted) return false;
+                if (isDeleted) {
+                    return false;
+                }
 
                 const paymentServiceStatus = String(p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toUpperCase().trim();
                 if (serviceFilter && serviceFilter !== 'TODOS') {
-                    if (paymentServiceStatus !== serviceFilter) return false;
+                    if (paymentServiceStatus !== serviceFilter) {
+                        return false;
+                    }
                 }
 
                 const s = (p.finalStatus || '').toString().toUpperCase();
 
-                if (!estadoNorm || estadoNorm === 'TODOS') return true;
-                if (estadoNorm === 'PAGADO') return s === 'CONFIRMADO';
+                if (!estadoNorm || estadoNorm === 'TODOS') {
+                    return true;
+                }
+                if (estadoNorm === 'PAGADO') {
+                    return s === 'CONFIRMADO';
+                }
                 return s === estadoNorm;
             });
 
@@ -2954,7 +3117,9 @@ const SchoolPaymentsPage = () => {
 
             // Alternating row colors and alignment (center text/date columns; numeric right-aligned)
             sheet.eachRow((row, rowIndex) => {
-                if (rowIndex === 1) return;
+                if (rowIndex === 1) {
+                    return;
+                }
                 const isEven = rowIndex % 2 === 0;
                 row.eachCell((cell, colNumber) => {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
@@ -3002,8 +3167,10 @@ const SchoolPaymentsPage = () => {
                 let maxLength = header.length;
                 sheet.eachRow((row) => {
                     const cell = row.getCell(index + 1);
-                    const value = cell && cell.value ? String(cell.value) : '';
-                    if (value.length > maxLength) maxLength = value.length;
+                    const value = cell?.value ? String(cell.value) : '';
+                    if (value.length > maxLength) {
+                        maxLength = value.length;
+                    }
                 });
                 column.width = Math.min(Math.max(maxLength + 2, 10), 60);
             });
@@ -3027,17 +3194,6 @@ const SchoolPaymentsPage = () => {
         }
     }, [paymentsAll, exportByStateServiceStatus, school, schoolId]);
 
-    // Legacy discount-save flow removed.
-    // The new retroactive discount flow is applied via POST /payments/v2/:id/apply-family-discount.
-    const handleSaveDiscount = async (payment) => {
-        try {
-            invalidatePaymentHistCacheForUser(payment?.User?.id || payment?.userId);
-            fetchAllPayments(statusFilter, search);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
     // Derived values for the Register Payment dialog summary
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
     
@@ -3056,7 +3212,7 @@ const SchoolPaymentsPage = () => {
             return null;
         }
 
-        const dailyPenalty = parseFloat(school?.dailyPenalty || allSchools.find(s => s.id === registerPaymentTarget?.schoolId)?.dailyPenalty || 0);
+        const dailyPenalty = Number.parseFloat(school?.dailyPenalty || allSchools.find(s => s.id === registerPaymentTarget?.schoolId)?.dailyPenalty || 0);
         const fallbackStudentCount = Number(
             registerPaymentTarget?.studentCount ||
             registerPaymentTarget?.User?.FamilyDetail?.studentsCount ||
@@ -3087,7 +3243,9 @@ const SchoolPaymentsPage = () => {
                 continue;
             }
 
-            if (!period.penaltyStartDate) continue;
+            if (!period.penaltyStartDate) {
+                continue;
+            }
 
             const penaltyStart = moment(period.penaltyStartDate).startOf('day');
 
@@ -3146,16 +3304,15 @@ const SchoolPaymentsPage = () => {
             const periods = (Array.isArray(raw) ? raw : []).filter(p => Number(p?.amountDue ?? p?.amount ?? 0) > 0);
             if (periods.length === 1) {
                 const perPeriodDiscount = Number(periods[0]?.discountApplied ?? periods[0]?.discount ?? NaN);
-                if (Number.isFinite(perPeriodDiscount) && perPeriodDiscount >= 0) return perPeriodDiscount;
+                if (Number.isFinite(perPeriodDiscount) && perPeriodDiscount >= 0) {
+                    return perPeriodDiscount;
+                }
             }
         } catch (e) {
             // ignore and fall back
         }
         return Number(registerPaymentTarget?.specialDiscount || 0);
     })();
-    
-    // netMonthlyFee = monthlyFee - specialDiscount (lo que realmente debe pagar mensualmente)
-    const dialogNetMonthlyFee = Number(registerPaymentTarget?.netMonthlyFee || 0);
     
     // Cantidad de estudiantes
     const studentCount = Number(
@@ -3165,8 +3322,6 @@ const SchoolPaymentsPage = () => {
         1
     ) || 1;
 
-    const dialogBaseFee = studentCount > 0 ? dialogMonthlyFee / studentCount : dialogMonthlyFee;
-    
     // Tipo de ruta
     const routeType = registerPaymentTarget?.User?.FamilyDetail?.routeType || 'N/A';
     
@@ -3211,9 +3366,13 @@ const SchoolPaymentsPage = () => {
     // Fallback: filtrar dialogPendingPeriods para compatibilidad con respuestas antiguas.
     const dialogPenaltyPeriods = (() => {
         const raw = registerPaymentTarget?.penaltyPeriods;
-        if (raw && Array.isArray(raw) && raw.length > 0) return raw;
+        if (raw && Array.isArray(raw) && raw.length > 0) {
+            return raw;
+        }
         if (typeof raw === 'string') {
-            try { const parsed = JSON.parse(raw); if (Array.isArray(parsed) && parsed.length > 0) return parsed; } catch (e) { /* ignore */ }
+            try { const parsed = JSON.parse(raw); if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed;
+            } } catch (e) { /* ignore */ }
         }
         return dialogPendingPeriods.filter(p => Number(p?.penaltyDue || 0) > 0 || p?.penaltyFrozen);
     })();
@@ -3227,7 +3386,9 @@ const SchoolPaymentsPage = () => {
     // Recalcular mora retroactiva cuando cambia la fecha de pago o los períodos con mora
     // Se usa un useMemo en vez de useEffect+state para evitar ciclos de render innecesarios
     const retroactivePenaltyCalc = React.useMemo(() => {
-        if (paymentTab !== 1 || dialogPenaltyPeriods.length === 0) return null;
+        if (paymentTab !== 1 || dialogPenaltyPeriods.length === 0) {
+            return null;
+        }
         return calculateRetroactivePenalty(payPenaltyDate, dialogPenaltyPeriods);
     }, [payPenaltyDate, paymentTab, dialogPenaltyPeriods, calculateRetroactivePenalty]);
 
@@ -3235,14 +3396,18 @@ const SchoolPaymentsPage = () => {
     const retroPenaltyByPeriod = React.useMemo(() => {
         const map = new Map();
         (retroactivePenaltyCalc?.periods || []).forEach(p => {
-            if (p?.period) map.set(p.period, p);
+            if (p?.period) {
+                map.set(p.period, p);
+            }
         });
         return map;
     }, [retroactivePenaltyCalc]);
 
     // Mora en tiempo real: si hay cálculo retroactivo, usar ese total; sino, el valor almacenado
     const effectivePenaltyDue = React.useMemo(() => {
-        if (retroactivePenaltyCalc) return retroactivePenaltyCalc.penaltyUntilPaymentDate;
+        if (retroactivePenaltyCalc) {
+            return retroactivePenaltyCalc.penaltyUntilPaymentDate;
+        }
         return basePenaltyDue;
     }, [retroactivePenaltyCalc, basePenaltyDue]);
 
@@ -3274,7 +3439,7 @@ const SchoolPaymentsPage = () => {
         );
     }
 
-    if (school && school.paymentsEnabled === false) {
+    if (school?.paymentsEnabled === false) {
         return (
             <PageContainer>
                 <HeaderCard>
@@ -3431,7 +3596,9 @@ const SchoolPaymentsPage = () => {
                                                 } arrow>
                                                     <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                 </Tooltip>
-                                                <ToggleButtonGroup size="small" exclusive value={metricsBasis} onChange={(e, v) => { if (v) setMetricsBasis(v); }}>
+                                                <ToggleButtonGroup size="small" exclusive value={metricsBasis} onChange={(e, v) => { if (v) {
+                                                    setMetricsBasis(v);
+                                                } }}>
                                                     <ToggleButton value="caja">Caja</ToggleButton>
                                                     <ToggleButton value="devengado">Devengado</ToggleButton>
                                                 </ToggleButtonGroup>
@@ -3785,7 +3952,7 @@ const SchoolPaymentsPage = () => {
                                                                 <YAxis tickFormatter={(value) => `Q${(value/1000).toFixed(0)}k`} />
                                                                 <RechartsTooltip 
                                                                     formatter={(value) => [`Q ${Number(value).toLocaleString('es-GT', {minimumFractionDigits: 2})}`, 'Ingreso']}
-                                                                    labelFormatter={(label, payload) => payload && payload[0] ? payload[0].payload.fullLabel : label}
+                                                                    labelFormatter={(label, payload) => payload?.[0] ? payload[0].payload.fullLabel : label}
                                                                 />
                                                             <Legend />
                                                                 <Bar dataKey="total" name="Ingreso Total" radius={[8, 8, 0, 0]}>
@@ -3856,7 +4023,9 @@ const SchoolPaymentsPage = () => {
                             value={countersView}
                             exclusive
                             onChange={(e, newView) => {
-                                if (newView !== null) setCountersView(newView);
+                                if (newView !== null) {
+                                    setCountersView(newView);
+                                }
                             }}
                             size="small"
                             sx={{ mr: 2 }}
@@ -4320,7 +4489,9 @@ const SchoolPaymentsPage = () => {
                                                 // Avoid showing a misleading single "Descuento familiar" line here.
                                                 const showFamilyLine = dialogFamilySpecialFee > 0 && !hasMultiplePendingPeriods;
                                                 const showBlock = dialogCredito > 0 || showFamilyLine || dialogExtraDiscount > 0;
-                                                if (!showBlock) return null;
+                                                if (!showBlock) {
+                                                    return null;
+                                                }
 
                                                 return (
                                                 <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
@@ -4609,15 +4780,21 @@ const SchoolPaymentsPage = () => {
                                                         const entries = [];
                                                         try {
                                                             const sources = [];
-                                                            if (Array.isArray(allSchools) && allSchools.length > 0) sources.push(...allSchools);
+                                                            if (Array.isArray(allSchools) && allSchools.length > 0) {
+                                                                sources.push(...allSchools);
+                                                            }
                                                             if (registerPaymentTarget?.schoolId && !sources.find(s => s.id === registerPaymentTarget.schoolId)) {
                                                                 const found = allSchools.find(s => s.id === registerPaymentTarget.schoolId);
-                                                                if (found) sources.push(found);
+                                                                if (found) {
+                                                                    sources.push(found);
+                                                                }
                                                             }
 
                                                             sources.forEach(sch => {
                                                                 const raw = sch?.bankAccount || '';
-                                                                if (!raw) return;
+                                                                if (!raw) {
+                                                                    return;
+                                                                }
                                                                 const parts = raw.split(/[|,;]+/).map(p => p.trim()).filter(Boolean);
                                                                 if (parts.length > 0) {
                                                                     parts.forEach(p => {
@@ -4632,7 +4809,9 @@ const SchoolPaymentsPage = () => {
                                                         } catch (e) {
                                                             // ignore
                                                         }
-                                                        if (entries.length === 0) return <MenuItem value="">(No configurado)</MenuItem>;
+                                                        if (entries.length === 0) {
+                                                            return <MenuItem value="">(No configurado)</MenuItem>;
+                                                        }
                                                         return entries.map(opt => <MenuItem key={opt.key} value={opt.value}>{opt.label}</MenuItem>);
                                                     })()}
                                             </Select>
@@ -4899,7 +5078,7 @@ const SchoolPaymentsPage = () => {
                                     )}
                                     
                                     {/* Alert retroactivo por período */}
-                                    {retroactivePenaltyCalc && retroactivePenaltyCalc.periods && retroactivePenaltyCalc.periods.some(p => p.daysLate > 0) && (
+                                    {retroactivePenaltyCalc?.periods?.some(p => p.daysLate > 0) && (
                                         <Box sx={{ mb: 2, p: 2, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ff9800' }}>
                                             <Typography variant="caption" sx={{ fontWeight: 700, color: '#e65100', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
                                                 ⏰ PAGO RETROACTIVO DETECTADO
@@ -5008,15 +5187,21 @@ const SchoolPaymentsPage = () => {
                                                 const entries = [];
                                                 try {
                                                     const sources = [];
-                                                    if (Array.isArray(allSchools) && allSchools.length > 0) sources.push(...allSchools);
+                                                    if (Array.isArray(allSchools) && allSchools.length > 0) {
+                                                        sources.push(...allSchools);
+                                                    }
                                                     if (registerPaymentTarget?.schoolId && !sources.find(s => s.id === registerPaymentTarget.schoolId)) {
                                                         const found = allSchools.find(s => s.id === registerPaymentTarget.schoolId);
-                                                        if (found) sources.push(found);
+                                                        if (found) {
+                                                            sources.push(found);
+                                                        }
                                                     }
 
                                                     sources.forEach(sch => {
                                                         const raw = sch?.bankAccount || '';
-                                                        if (!raw) return;
+                                                        if (!raw) {
+                                                            return;
+                                                        }
                                                         const parts = raw.split(/[|,;]+/).map(p => p.trim()).filter(Boolean);
                                                         if (parts.length > 0) {
                                                             parts.forEach(p => {
@@ -5031,7 +5216,9 @@ const SchoolPaymentsPage = () => {
                                                 } catch (e) {
                                                     // ignore
                                                 }
-                                                if (entries.length === 0) return <MenuItem value="">(No configurado)</MenuItem>;
+                                                if (entries.length === 0) {
+                                                    return <MenuItem value="">(No configurado)</MenuItem>;
+                                                }
                                                     return entries.map(opt => <MenuItem key={opt.key} value={opt.value}>{opt.label}</MenuItem>);
                                                 })()}
                                         </Select>
@@ -5284,22 +5471,32 @@ const SchoolPaymentsPage = () => {
                                             setSnackbar({ open: true, message: errorMsg, severity: 'error' });
                                         }
                                     }} disabled={uploadedReceiptsLoading || regHistLoading || effectivePenaltyDue === 0 || (() => {
-                                        if (isExonerating) return !payPenaltyDate || !payPenaltyAccount;
+                                        if (isExonerating) {
+                                            return !payPenaltyDate || !payPenaltyAccount;
+                                        }
                                         if (payPenaltyUseCredit) {
                                             const cAmt = Number(payPenaltyAmount || 0);
-                                            if (!cAmt || cAmt <= 0 || cAmt > dialogCredito) return true;
+                                            if (!cAmt || cAmt <= 0 || cAmt > dialogCredito) {
+                                                return true;
+                                            }
                                             const cRem = Math.max(0, Math.round((effectivePenaltyDue - cAmt) * 100) / 100);
                                             if (cRem > 0) {
                                                 const bAmt = Number(payPenaltyBoletaAmount || 0);
-                                                if (!bAmt || bAmt <= 0) return true;
+                                                if (!bAmt || bAmt <= 0) {
+                                                    return true;
+                                                }
                                                 return !payPenaltyBoleta || !payPenaltyDate || !payPenaltyAccount;
                                             }
                                             return false;
                                         }
                                         const amt = Number(payPenaltyAmount || 0);
                                         const discount = Number(discountPenaltyAmount || 0);
-                                        if (amt === 0 && discount === 0) return true;
-                                        if (amt > 0 && !payPenaltyBoleta) return true;
+                                        if (amt === 0 && discount === 0) {
+                                            return true;
+                                        }
+                                        if (amt > 0 && !payPenaltyBoleta) {
+                                            return true;
+                                        }
                                         return !payPenaltyDate || !payPenaltyAccount;
                                     })()}>
                                         {isExonerating ? 'Confirmar Exoneración' : payPenaltyUseCredit && Number(payPenaltyBoletaAmount || 0) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago de Mora'}
@@ -5356,23 +5553,6 @@ const SchoolPaymentsPage = () => {
                             </DialogActions>
                         </Dialog>
 
-                        {/* Dialog: Editar Número de Recibo */}
-                        <Dialog open={openReceiptDialog} onClose={() => setOpenReceiptDialog(false)} fullWidth maxWidth="sm">
-                            <DialogTitle>Editar Número de Recibo</DialogTitle>
-                            <DialogContent>
-                                <TextField
-                                    label="Número de recibo"
-                                    fullWidth
-                                    value={receiptNumberDraft}
-                                    onChange={(e) => setReceiptNumberDraft(e.target.value)}
-                                />
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenReceiptDialog(false)}>Cancelar</Button>
-                                <Button variant="contained" onClick={handleSaveReceipt}>Guardar</Button>
-                            </DialogActions>
-                        </Dialog>
-
                         {/* Dialog: Notas */}
                         <Dialog open={openNotesDialog} onClose={handleCloseNotes} fullWidth maxWidth="sm">
                             <DialogTitle>Editar Notas</DialogTitle>
@@ -5391,32 +5571,6 @@ const SchoolPaymentsPage = () => {
                                 {hasPermission('pagos-v2-actualizar-notas') && (
                                     <Button variant="contained" onClick={handleSaveNotes}>Guardar</Button>
                                 )}
-                            </DialogActions>
-                        </Dialog>
-
-                        {/* Dialog: Enviar Email */}
-                        <Dialog open={openEmailDialog} onClose={() => setOpenEmailDialog(false)} fullWidth maxWidth="sm">
-                            <DialogTitle>Enviar Correo</DialogTitle>
-                            <DialogContent>
-                                <TextField
-                                    label="Asunto"
-                                    fullWidth
-                                    value={emailSubject}
-                                    onChange={(e) => setEmailSubject(e.target.value)}
-                                    sx={{ mb: 2 }}
-                                />
-                                <TextField
-                                    label="Mensaje"
-                                    fullWidth
-                                    multiline
-                                    minRows={4}
-                                    value={emailMessage}
-                                    onChange={(e) => setEmailMessage(e.target.value)}
-                                />
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenEmailDialog(false)}>Cancelar</Button>
-                                <Button variant="contained" onClick={handleSendEmail} disabled={!emailSubject && !emailMessage}>Enviar</Button>
                             </DialogActions>
                         </Dialog>
 
@@ -5870,7 +6024,7 @@ const SchoolPaymentsPage = () => {
                             <DialogActions>
                                 <Button onClick={() => setPreviewReceipt(null)}>Cerrar</Button>
                                 <Button variant="contained" onClick={() => {
-                                    const navPayment = location.state && location.state.payment ? location.state.payment : null;
+                                    const navPayment = location.state?.payment ? location.state.payment : null;
                                     const localPreview = previewReceipt;
                                     setPreviewReceipt(null);
                                     if (navPayment) {
@@ -5915,7 +6069,7 @@ const SchoolPaymentsPage = () => {
                                 }}
                                 rowsPerPage={rowsPerPage}
                                 onRowsPerPageChange={(e) => {
-                                    const rp = parseInt(e.target.value, 10);
+                                    const rp = Number.parseInt(e.target.value, 10);
                                     setRowsPerPage(rp);
                                     setPage(0);
                                 }}

@@ -19,7 +19,9 @@ function conFamilias(estado, familias) {
 
 function conEstudiante(estado, familyDetailId, studentId, fn) {
     const fam = estado.porId[familyDetailId];
-    if (!fam) return estado;
+    if (!fam) {
+        return estado;
+    }
     const students = fam.students.map(s => (s.studentId === studentId ? fn(s) : s));
     return { ...estado, porId: { ...estado.porId, [familyDetailId]: { ...fam, students } } };
 }
@@ -42,7 +44,9 @@ export function paradasReducer(estado, a) {
         return conParadas(estado, a, ps => ps.map((p, i) => (i === a.indice ? { ...p, [a.campo]: a.valor } : p)));
     case 'alternarDia':
         return conParadas(estado, a, ps => ps.map((p, i) => {
-            if (i !== a.indice) return p;
+            if (i !== a.indice) {
+                return p;
+            }
             const marcado = p.days.includes(a.dia);
             return { ...p, days: DIA_KEYS.filter(d => (d === a.dia ? !marcado : p.days.includes(d))) };
         }));
@@ -58,7 +62,9 @@ export function paradasReducer(estado, a) {
         const porId = { ...estado.porId };
         for (const id of estado.orden) {
             const fam = porId[id];
-            if (!fam.students.some(s => s.conflicto)) continue;
+            if (!fam.students.some(s => s.conflicto)) {
+                continue;
+            }
             porId[id] = { ...fam, students: fam.students.map(s => (s.conflicto ? aplicarEleccion(s, a.eleccion) : s)) };
         }
         return { ...estado, porId };
@@ -68,7 +74,9 @@ export function paradasReducer(estado, a) {
         const estudiantes = new Set(a.estudiantes || []);
         const porId = {};
         for (const id of estado.orden) {
-            if (familias.has(id)) continue;
+            if (familias.has(id)) {
+                continue;
+            }
             const fam = estado.porId[id];
             porId[id] = fam.students.some(s => estudiantes.has(s.studentId))
                 ? { ...fam, students: fam.students.filter(s => !estudiantes.has(s.studentId)) }

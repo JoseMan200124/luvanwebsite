@@ -59,14 +59,18 @@ const SchoolContextSelectionPage = () => {
         [...contexts].sort((a, b) => {
             const yearA = Number(a.cicloEscolarYear || 0);
             const yearB = Number(b.cicloEscolarYear || 0);
-            if (yearA !== yearB) return yearB - yearA;
+            if (yearA !== yearB) {
+                return yearB - yearA;
+            }
             return getSchoolContextLabel(a).localeCompare(getSchoolContextLabel(b), 'es');
         })
     ), [contexts]);
 
     useEffect(() => {
         const loadContexts = async () => {
-            if (!auth?.token) return;
+            if (!auth?.token) {
+                return;
+            }
 
             setLoading(true);
             setError('');

@@ -43,9 +43,13 @@ const toNumber = (v) => {
 };
 
 const truncateLabel = (str, max = 16) => {
-    if (!str) return '';
+    if (!str) {
+        return '';
+    }
     const s = String(str);
-    if (s.length <= max) return s;
+    if (s.length <= max) {
+        return s;
+    }
     return `${s.slice(0, max - 1)}…`;
 };
 
@@ -84,13 +88,17 @@ const buildTopNWithOthers = ({
     // Ordenar desc
     normalized.sort((a, b) => toNumber(b[valueKey]) - toNumber(a[valueKey]));
 
-    if (topN === 'all') return normalized;
+    if (topN === 'all') {
+        return normalized;
+    }
 
     const n = Math.max(1, Number(topN) || 10);
     const top = normalized.slice(0, n);
     const rest = normalized.slice(n);
 
-    if (rest.length === 0) return top;
+    if (rest.length === 0) {
+        return top;
+    }
 
     const restSum = rest.reduce((acc, it) => acc + toNumber(it[valueKey]), 0);
 
@@ -208,7 +216,9 @@ const UsageStatisticsTab = () => {
         const fileName = `reports_usage_reporte_${dateString}.pdf`.toLowerCase();
 
         const printableArea = reportRef.current?.cloneNode(true);
-        if (!printableArea) return;
+        if (!printableArea) {
+            return;
+        }
 
         const tempDiv = document.createElement('div');
         tempDiv.style.padding = '20px';

@@ -12,15 +12,21 @@ const ReenrollmentBanner = () => {
     const [opportunities, setOpportunities] = useState([]);
 
     useEffect(() => {
-        if (!canReenroll) return undefined;
+        if (!canReenroll) {
+            return undefined;
+        }
         let cancelled = false;
         getReenrollmentOpportunities()
-            .then((list) => { if (!cancelled) setOpportunities(list); })
+            .then((list) => { if (!cancelled) {
+                setOpportunities(list);
+            } })
             .catch(() => { /* el banner es opcional: sin oportunidades no se muestra */ });
         return () => { cancelled = true; };
     }, [canReenroll]);
 
-    if (!canReenroll || opportunities.length === 0) return null;
+    if (!canReenroll || opportunities.length === 0) {
+        return null;
+    }
 
     return (
         <Stack spacing={1} sx={{ mb: 3 }}>

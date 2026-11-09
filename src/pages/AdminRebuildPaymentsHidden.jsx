@@ -49,12 +49,20 @@ export default function AdminRebuildPaymentsHidden() {
 
     const buildSimulateBody = () => {
         const body = {};
-        if (filters.schoolId)  body.schoolId  = Number.parseInt(filters.schoolId, 10);
-        if (filters.paymentId) body.paymentId = Number.parseInt(filters.paymentId, 10);
-        if (filters.cicloEscolarId) body.cicloEscolarId = Number.parseInt(filters.cicloEscolarId, 10);
+        if (filters.schoolId)  {
+            body.schoolId  = Number.parseInt(filters.schoolId, 10);
+        }
+        if (filters.paymentId) {
+            body.paymentId = Number.parseInt(filters.paymentId, 10);
+        }
+        if (filters.cicloEscolarId) {
+            body.cicloEscolarId = Number.parseInt(filters.cicloEscolarId, 10);
+        }
         body.onlyActive = !!filters.onlyActive;
         body.noPenalty  = !!filters.noPenalty;
-        if (Object.keys(tariffOverrides).length > 0) body.tariffOverrides = tariffOverrides;
+        if (Object.keys(tariffOverrides).length > 0) {
+            body.tariffOverrides = tariffOverrides;
+        }
         return body;
     };
 
@@ -118,11 +126,15 @@ export default function AdminRebuildPaymentsHidden() {
     const handleApplied = (paymentId, applyResult) => {
         // Marcar la fila como aplicada y refrescar sus snapshots con el "after"
         setResults(prev => {
-            if (!prev) return prev;
+            if (!prev) {
+                return prev;
+            }
             return {
                 ...prev,
                 payments: prev.payments.map(p => {
-                    if (p.paymentId !== paymentId) return p;
+                    if (p.paymentId !== paymentId) {
+                        return p;
+                    }
                     return {
                         ...p,
                         applied: true,
@@ -144,7 +156,9 @@ export default function AdminRebuildPaymentsHidden() {
 
     const handleReplaceRow = (freshRow) => {
         setResults(prev => {
-            if (!prev) return prev;
+            if (!prev) {
+                return prev;
+            }
             return {
                 ...prev,
                 payments: prev.payments.map(p => p.paymentId === freshRow.paymentId ? freshRow : p)

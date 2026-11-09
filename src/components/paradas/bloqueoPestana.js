@@ -22,6 +22,8 @@ export async function liberarBloqueoPrevio(schoolId) {
         token = sessionStorage.getItem(clave(schoolId));
         sessionStorage.removeItem(clave(schoolId));
     } catch (_) { return; }
-    if (!token) return;
+    if (!token) {
+        return;
+    }
     try { await paradasService.liberar(schoolId, token); } catch (_) { /* ya venció o lo tomó otro */ }
 }

@@ -67,9 +67,15 @@ export const isSchoolContextRequiredRole = (roleId) => (
 
 export const getDefaultPathForRole = (roleId) => {
     const parsedRoleId = Number(roleId);
-    if (parsedRoleId === 3) return '/parent/dashboard';
-    if (parsedRoleId === 8) return '/colaborador/dashboard';
-    if (parsedRoleId === 9) return '/admin/colegios';
+    if (parsedRoleId === 3) {
+        return '/parent/dashboard';
+    }
+    if (parsedRoleId === 8) {
+        return '/colaborador/dashboard';
+    }
+    if (parsedRoleId === 9) {
+        return '/admin/colegios';
+    }
     // DefaultAdminRoute manda al dashboard si hay permiso; si no, a la primera página permitida.
     return '/admin';
 };
@@ -113,7 +119,9 @@ export const getStoredSchoolContext = () => {
 
     const schoolId = getSelectedSchoolId() || '';
     const cicloEscolarId = getSelectedCicloEscolarId() || '';
-    if (!schoolId && !cicloEscolarId) return null;
+    if (!schoolId && !cicloEscolarId) {
+        return null;
+    }
 
     return normalizeSchoolContext({ schoolId, cicloEscolarId });
 };
@@ -125,7 +133,9 @@ export const hasStoredSchoolContext = () => {
 
 export const setStoredSchoolContext = (context) => {
     const normalized = normalizeSchoolContext(context);
-    if (!normalized.schoolId || !normalized.cicloEscolarId) return null;
+    if (!normalized.schoolId || !normalized.cicloEscolarId) {
+        return null;
+    }
 
     setTabScoped(SELECTED_SCHOOL_ID_KEY, normalized.schoolId);
     setSelectedCicloEscolarId(normalized.cicloEscolarId);
@@ -147,15 +157,4 @@ export const getSchoolContextLabel = (context) => {
     const cycleLabel = normalized.cicloEscolarName
         || (normalized.cicloEscolarYear ? `Ciclo ${normalized.cicloEscolarYear}` : 'Ciclo escolar');
     return `${schoolLabel} - ${cycleLabel}`;
-};
-
-export const findMatchingStoredContext = (contexts = []) => {
-    const stored = getStoredSchoolContext();
-    if (!stored?.schoolId || !stored?.cicloEscolarId) return null;
-
-    return contexts.find((context) => {
-        const normalized = normalizeSchoolContext(context);
-        return normalized.schoolId === stored.schoolId
-            && normalized.cicloEscolarId === stored.cicloEscolarId;
-    }) || null;
 };

@@ -88,7 +88,9 @@ const HistoricalDataPage = () => {
 
     // Renderiza una tabla genérica dado un array de objetos
     const GenericTable = ({ rows }) => {
-        if (!rows || rows.length === 0) return null;
+        if (!rows || rows.length === 0) {
+            return null;
+        }
         const columns = Object.keys(rows[0]);
         return (
             <Table size="small">

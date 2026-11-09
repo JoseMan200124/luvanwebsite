@@ -27,9 +27,15 @@ const SchoolLevelGradesEditor = ({ grades = [], value = {}, onChange }) => {
     useEffect(() => {
         let active = true;
         listEducationLevels()
-            .then((data) => { if (active) setLevels(data); })
-            .catch(() => { if (active) setError('No se pudieron cargar los niveles.'); })
-            .finally(() => { if (active) setLoading(false); });
+            .then((data) => { if (active) {
+                setLevels(data);
+            } })
+            .catch(() => { if (active) {
+                setError('No se pudieron cargar los niveles.');
+            } })
+            .finally(() => { if (active) {
+                setLoading(false);
+            } });
         return () => { active = false; };
     }, []);
 

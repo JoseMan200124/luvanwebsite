@@ -22,9 +22,13 @@ const toNumber = (v) => {
 };
 
 const truncateLabel = (str, max = 16) => {
-    if (!str) return '';
+    if (!str) {
+        return '';
+    }
     const s = String(str);
-    if (s.length <= max) return s;
+    if (s.length <= max) {
+        return s;
+    }
     return `${s.slice(0, max - 1)}…`;
 };
 
@@ -37,13 +41,17 @@ const buildTopNWithOthers = (arr, topN) => {
         .filter((it) => it.incidentCount > 0)
         .sort((a, b) => b.incidentCount - a.incidentCount);
 
-    if (topN === 'all') return normalized;
+    if (topN === 'all') {
+        return normalized;
+    }
 
     const n = Math.max(1, Number(topN) || 10);
     const top = normalized.slice(0, n);
     const rest = normalized.slice(n);
 
-    if (rest.length === 0) return top;
+    if (rest.length === 0) {
+        return top;
+    }
 
     const restSum = rest.reduce((acc, it) => acc + it.incidentCount, 0);
     return [...top, { pilotName: 'Otros pilotos', incidentCount: restSum }];

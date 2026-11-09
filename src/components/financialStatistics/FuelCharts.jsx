@@ -23,7 +23,9 @@ const FuelCharts = ({ series, visibleTypes }) => {
         [visibleTypes]
     );
 
-    if (!series.length || !visibleTypes.length) return null;
+    if (!series.length || !visibleTypes.length) {
+        return null;
+    }
 
     const showDots = series.length <= 31;
 

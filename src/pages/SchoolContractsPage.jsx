@@ -216,7 +216,9 @@ const SchoolContractsPage = () => {
                     contractUuid: selectedContractUuid,
                     cicloEscolarId: routeCicloEscolarId
                 };
-                if (filledContractsSearch) params.search = filledContractsSearch;
+                if (filledContractsSearch) {
+                    params.search = filledContractsSearch;
+                }
                 params.isActive = !showInactive;
 
                 const resp = await api.get('/contracts/unfilled', { params });
@@ -235,8 +237,12 @@ const SchoolContractsPage = () => {
                 schoolId,
                 cicloEscolarId: routeCicloEscolarId
             };
-            if (filledContractsSearch) params.search = filledContractsSearch;
-            if (selectedContractUuid) params.contractUuid = selectedContractUuid;
+            if (filledContractsSearch) {
+                params.search = filledContractsSearch;
+            }
+            if (selectedContractUuid) {
+                params.contractUuid = selectedContractUuid;
+            }
             params.isActive = !showInactive;
 
             const resp = await api.get('/contracts/filled', { params });
@@ -309,7 +315,9 @@ const SchoolContractsPage = () => {
                         contractUuid: selectedContractUuid,
                         cicloEscolarId: routeCicloEscolarId
                     };
-                    if (filledContractsSearch) params.search = filledContractsSearch;
+                    if (filledContractsSearch) {
+                        params.search = filledContractsSearch;
+                    }
                     // Por defecto solicitar sólo familias activas al backend salvo que se active "showInactive"
                     params.isActive = !showInactive;
 
@@ -343,8 +351,12 @@ const SchoolContractsPage = () => {
                     schoolId: schoolId,
                     cicloEscolarId: routeCicloEscolarId
                 };
-                if (filledContractsSearch) params.search = filledContractsSearch;
-                if (selectedContractUuid) params.contractUuid = selectedContractUuid;
+                if (filledContractsSearch) {
+                    params.search = filledContractsSearch;
+                }
+                if (selectedContractUuid) {
+                    params.contractUuid = selectedContractUuid;
+                }
                 // Por defecto solicitar sólo familias activas al backend salvo que se active "showInactive"
                 params.isActive = !showInactive;
 
@@ -374,7 +386,7 @@ const SchoolContractsPage = () => {
     // ---------------------------
     const handleWordUpload = async (event) => {
         const file = event.target.files[0];
-        if (file && file.name.endsWith('.docx')) {
+        if (file?.name.endsWith('.docx')) {
             try {
                 const arrayBuffer = await file.arrayBuffer();
                 const result = await mammoth.convertToHtml({ arrayBuffer });
@@ -416,14 +428,14 @@ const SchoolContractsPage = () => {
                 response = await api.put(`/contracts/${currentContract.uuid}`, {
                     title: contractTitle,
                     content: editorData,
-                    schoolId: parseInt(schoolId) // Asignar al colegio actual
+                    schoolId: Number.parseInt(schoolId) // Asignar al colegio actual
                 });
             } else {
                 // Crear
                 response = await api.post('/contracts', {
                     title: contractTitle,
                     content: editorData,
-                    schoolId: parseInt(schoolId) // Asignar al colegio actual
+                    schoolId: Number.parseInt(schoolId) // Asignar al colegio actual
                 });
             }
 
@@ -434,7 +446,7 @@ const SchoolContractsPage = () => {
                 title: contractTitle,
                 content: editorData,
                 url,
-                schoolId: parseInt(schoolId),
+                schoolId: Number.parseInt(schoolId),
                 School: School || schoolData
             };
 
@@ -478,7 +490,9 @@ const SchoolContractsPage = () => {
     };
 
     const handleDelete = async (uuid) => {
-        if (!window.confirm('¿Está seguro de que desea eliminar este contrato?')) return;
+        if (!window.confirm('¿Está seguro de que desea eliminar este contrato?')) {
+            return;
+        }
         try {
             await api.delete(`/contracts/${uuid}`);
             setContracts((prev) => prev.filter((c) => c.uuid !== uuid));
@@ -560,7 +574,9 @@ const SchoolContractsPage = () => {
                         const [fullMatch, rawName, type] = match;
                         const nameTrim = rawName.trim();
                         const beforeText = txt.slice(lastIndex, match.index);
-                        if (beforeText) segments.push(beforeText);
+                        if (beforeText) {
+                            segments.push(beforeText);
+                        }
                         if (type === 'signature') {
                             segments.push(
                                 <div
@@ -617,7 +633,9 @@ const SchoolContractsPage = () => {
                         lastIndex = match.index + fullMatch.length;
                     }
                     const remainder = txt.slice(lastIndex);
-                    if (remainder) segments.push(remainder);
+                    if (remainder) {
+                        segments.push(remainder);
+                    }
                     if (segments.length > 0) {
                         return <React.Fragment key={`fragment-${domNode.key}`}>{segments}</React.Fragment>;
                     }
@@ -640,7 +658,9 @@ const SchoolContractsPage = () => {
     };
 
     const confirmDeleteFilledContract = async () => {
-        if (!filledContractToDelete) return;
+        if (!filledContractToDelete) {
+            return;
+        }
         try {
             await api.delete(`/contracts/filled/${filledContractToDelete.id}`);
             setFilledContracts((prev) =>
@@ -797,7 +817,9 @@ const SchoolContractsPage = () => {
 
         // Limpiar prefijo de borrado lógico en el email del padre (ej. "DELETED_ID:2153_email@x")
         const cleanDeletedEmail = (email) => {
-            if (!email) return '';
+            if (!email) {
+                return '';
+            }
             try {
                 return String(email).replace(/^DELETED_ID:\d+_/, '');
             } catch (e) {

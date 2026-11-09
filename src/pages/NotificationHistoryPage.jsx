@@ -51,7 +51,9 @@ const safeStr = (v) => (v == null ? '' : String(v)).trim();
 const MAX_VISIBLE_SCHOOL_NAMES = 2;
 
 const formatDateTime = (dateString) => {
-  if (!dateString) return '';
+  if (!dateString) {
+      return '';
+  }
   try {
     return new Date(dateString).toLocaleString('es-ES', {
       year: 'numeric',
@@ -67,7 +69,9 @@ const formatDateTime = (dateString) => {
 
 const getRoleLabel = (role) => {
   const normalizedRole = safeStr(role).toLowerCase();
-  if (normalizedRole === 'padre' || normalizedRole === 'padres') return 'Familia';
+  if (normalizedRole === 'padre' || normalizedRole === 'padres') {
+      return 'Familia';
+  }
   return safeStr(role) || 'Sin rol';
 };
 
@@ -80,7 +84,9 @@ const getRecipientLabel = (recipient) => {
 // Celda "Audiencia": el backend resuelve `audience` desde el targetingCriteria
 // (usuarios concretos / uno o varios colegios / todos) y los roles destinatarios.
 const renderAudience = (audience) => {
-  if (!audience) return '—';
+  if (!audience) {
+      return '—';
+  }
 
   if (audience.kind === 'users') {
     const count = Number(audience.usersCount) || 0;
@@ -162,7 +168,9 @@ const NotificationHistoryPage = () => {
     };
 
     const query = safeStr(q);
-    if (query) params.q = query;
+    if (query) {
+        params.q = query;
+    }
 
     // Un valor explícito evita que axiosConfig inyecte el ciclo del contexto.
     if (selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE) {
@@ -171,8 +179,12 @@ const NotificationHistoryPage = () => {
       params.allCycles = true;
     }
 
-    if (startDate) params.startDate = moment(startDate).startOf('day').toDate().toISOString();
-    if (endDate) params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+    if (startDate) {
+        params.startDate = moment(startDate).startOf('day').toDate().toISOString();
+    }
+    if (endDate) {
+        params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+    }
 
     return params;
   }, [page, rowsPerPage, q, selectedCicloEscolar, startDate, endDate, sortBy, sortDirection]);
@@ -216,7 +228,9 @@ const NotificationHistoryPage = () => {
     const groups = Array.isArray(detail?.recipientGroups) ? detail.recipientGroups : [];
     const query = safeStr(recipientSearch).toLowerCase();
 
-    if (!query) return groups;
+    if (!query) {
+        return groups;
+    }
 
     return groups
       .map((group) => {
@@ -235,7 +249,9 @@ const NotificationHistoryPage = () => {
 
   const openDetail = async (uuid) => {
     const id = safeStr(uuid);
-    if (!id) return;
+    if (!id) {
+        return;
+    }
 
     setDetailOpen(true);
     setDetailLoading(true);
@@ -434,7 +450,7 @@ const NotificationHistoryPage = () => {
           onPageChange={(_, newPage) => setPage(newPage)}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
+            setRowsPerPage(Number.parseInt(e.target.value, 10));
             setPage(0);
           }}
           rowsPerPageOptions={[10, 25, 50, 100]}

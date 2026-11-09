@@ -25,13 +25,3 @@ export const deleteEducationLevel = async (id) => {
     const res = await api.delete(`/education-levels/${id}`);
     return res.data;
 };
-
-/**
- * Guarda el mapeo nivel -> grados de un colegio.
- * @param {number} schoolId
- * @param {Record<string, string[]>} levelGrades
- */
-export const updateSchoolLevelGrades = async (schoolId, levelGrades) => {
-    const res = await api.put(`/schools/${schoolId}/level-grades`, { levelGrades });
-    return res.data?.levelGrades || {};
-};

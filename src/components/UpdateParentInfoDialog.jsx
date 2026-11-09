@@ -69,7 +69,9 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            return;
+        }
 
         // Populate from initialData when dialog opens
         setSchoolId(initialData?.schoolId || '');
@@ -104,7 +106,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
         try {
             const response = await api.get(`/schools/${id}`);
 
-            if (response.data && response.data.school) {
+            if (response.data?.school) {
                 const { school } = response.data;
                 if (Array.isArray(school.grades)) {
                     setGrades(school.grades);
@@ -224,8 +226,8 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
             }
 
             setSnackbar({ open: true, message: '¡Información actualizada correctamente!', severity: 'success' });
-            onSaved && onSaved();
-            setTimeout(() => onClose && onClose(), 1000);
+            onSaved?.();
+            setTimeout(() => onClose?.(), 1000);
         } catch (error) {
             console.error('Error al enviar formulario:', error);
             setSnackbar({
@@ -236,10 +238,12 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
         }
     };
 
-    if (!open) return null;
+    if (!open) {
+        return null;
+    }
 
     return (
-        <Dialog open={open} onClose={() => onClose && onClose()} fullWidth maxWidth="md">
+        <Dialog open={open} onClose={() => onClose?.()} fullWidth maxWidth="md">
             <DialogTitle>Actualizar Datos de Familia</DialogTitle>
             <DialogContent dividers>
                 {loading ? (

@@ -194,10 +194,14 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, cicloEscolarId 
             const params = { userType };
             if (userType === 'COLABORADOR') {
                 params.corporationId = corporationId;
-                if (fiscalYear) params.fiscalYear = fiscalYear;
+                if (fiscalYear) {
+                    params.fiscalYear = fiscalYear;
+                }
             } else {
                 params.schoolId = schoolId;
-                if (cicloEscolarId) params.cicloEscolarId = cicloEscolarId;
+                if (cicloEscolarId) {
+                    params.cicloEscolarId = cicloEscolarId;
+                }
             }
             const response = await api.get(`/service-status/${user.id}`, { params });
 
@@ -227,7 +231,9 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, cicloEscolarId 
 
     // Obtener estados permitidos según el estado actual
     const getAllowedStates = () => {
-        if (!currentStatus) return [];
+        if (!currentStatus) {
+            return [];
+        }
         let transitions = VALID_TRANSITIONS[currentStatus] || [];
         // SUSPENDED no aplica para colaboradores
         if (userType === 'COLABORADOR') {

@@ -1,5 +1,5 @@
 // src/pages/ParentRequestsPage.jsx
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -15,9 +15,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
-  Grid,
-  IconButton,
   Paper,
   Stack,
   Typography,
@@ -28,7 +25,6 @@ import {
   Description as DescriptionIcon,
   ArrowBack as ArrowBackIcon,
   ChevronRight as ChevronRightIcon,
-  AccessTime as AccessTimeIcon,
   Refresh as RefreshIcon,
   Cancel as CancelIcon,
   Schedule as ScheduleIcon,
@@ -38,7 +34,6 @@ import {
 import { styled } from 'twin.macro';
 import moment from 'moment-timezone';
 import ParentNavbar from '../components/ParentNavbar';
-import { AuthContext } from '../context/AuthProvider';
 import { getMyRequests, getRequestById, getRequestEvents, REQUEST_TYPE_META } from '../services/requestService';
 
 const PageShell = styled(Box)`
@@ -147,48 +142,72 @@ const getStatusLabelEs = (status) => {
 
 // Try to extract a status value from a variety of metadata shapes
 const extractStatusFromMetadata = (meta) => {
-  if (!meta) return null;
+  if (!meta) {
+      return null;
+  }
   const direct = meta?.status || meta?.newStatus || meta?.statusCode || meta?.to || meta?.new_status || meta?.new_status_code;
-  if (direct) return direct;
+  if (direct) {
+      return direct;
+  }
 
-  if (meta.change && (meta.change.to || meta.change.new)) return meta.change.to || meta.change.new;
-  if (meta.changes?.status && (meta.changes.status.to || meta.changes.status.new)) return meta.changes.status.to || meta.changes.status.new;
-  if (meta.details && (meta.details.status || meta.details.newStatus)) return meta.details.status || meta.details.newStatus;
+  if (meta.change && (meta.change.to || meta.change.new)) {
+      return meta.change.to || meta.change.new;
+  }
+  if (meta.changes?.status && (meta.changes.status.to || meta.changes.status.new)) {
+      return meta.changes.status.to || meta.changes.status.new;
+  }
+  if (meta.details && (meta.details.status || meta.details.newStatus)) {
+      return meta.details.status || meta.details.newStatus;
+  }
 
   const candidates = [];
   const scan = (obj, depth = 0) => {
-    if (!obj || depth > 3) return;
+    if (!obj || depth > 3) {
+        return;
+    }
     if (typeof obj === 'string' || typeof obj === 'number') {
       candidates.push(String(obj));
       return;
     }
     if (Array.isArray(obj)) {
-      for (const v of obj) scan(v, depth + 1);
+      for (const v of obj) {
+        scan(v, depth + 1);
+      }
       return;
     }
     if (typeof obj === 'object') {
       for (const k of Object.keys(obj)) {
         const v = obj[k];
-        if (typeof v === 'string' || typeof v === 'number') candidates.push(String(v));
-        else if (typeof v === 'object') scan(v, depth + 1);
+        if (typeof v === 'string' || typeof v === 'number') {
+            candidates.push(String(v));
+        }
+        else if (typeof v === 'object') {
+            scan(v, depth + 1);
+        }
       }
     }
   };
 
   scan(meta, 0);
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+      return null;
+  }
 
   const join = candidates.join(' ').toLowerCase();
   const keywords = ['pending','pendiente','in_review','in review','en revisi','approved','aprob','rejected','rechaz','completed','completad','cancelled','cancelad'];
   for (const kw of keywords) {
-    if (join.includes(kw)) return kw;
+    if (join.includes(kw)) {
+        return kw;
+    }
   }
 
   return candidates[0] || null;
 };
 
 const normalizeEventStatus = (s) => {
-  if (!s) return null;
+  if (!s) {
+      return null;
+  }
   const low = String(s).toLowerCase().trim();
   const map = {
     pending: 'pending',
@@ -212,25 +231,43 @@ const normalizeEventStatus = (s) => {
     cancelled: 'cancelled',
     cancelada: 'cancelled',
   };
-  if (map[low]) return map[low];
-  if (['pending','in_review','approved','rejected','completed','cancelled'].includes(low)) return low;
+  if (map[low]) {
+      return map[low];
+  }
+  if (['pending','in_review','approved','rejected','completed','cancelled'].includes(low)) {
+      return low;
+  }
   return null;
 };
 
 const getEventActionLabel = (action) => {
   const normalized = String(action || '').toLowerCase();
-  if (normalized === 'created') return 'Creación';
-  if (normalized === 'status_updated') return 'Estado actualizado';
-  if (normalized === 'cancelled') return 'Solicitud cancelada';
-  if (normalized === 'assigned') return 'Solicitud asignada';
-  if (normalized === 'completed') return 'Solicitud completada';
-  if (normalized === 'commented') return 'Comentario agregado';
+  if (normalized === 'created') {
+      return 'Creación';
+  }
+  if (normalized === 'status_updated') {
+      return 'Estado actualizado';
+  }
+  if (normalized === 'cancelled') {
+      return 'Solicitud cancelada';
+  }
+  if (normalized === 'assigned') {
+      return 'Solicitud asignada';
+  }
+  if (normalized === 'completed') {
+      return 'Solicitud completada';
+  }
+  if (normalized === 'commented') {
+      return 'Comentario agregado';
+  }
   return 'Actualización';
 };
 
 const getEventTitle = (event) => {
   const action = String(event?.action || '').toLowerCase();
-  if (action === 'status_updated') return 'Estado actualizado';
+  if (action === 'status_updated') {
+      return 'Estado actualizado';
+  }
 
   return getEventActionLabel(event?.action);
 };
@@ -252,23 +289,39 @@ const getEventDetailText = (event, selectedRequest) => {
     let resolved = normalizeEventStatus(rawFromMeta);
     if (!resolved) {
       const notesLower = notes.toLowerCase();
-      if (/pending|pendiente/.test(notesLower)) resolved = 'pending';
-      else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesLower)) resolved = 'in_review';
-      else if (/approved|aproba/.test(notesLower)) resolved = 'completed';
-      else if (/rejected|rechazad/.test(notesLower)) resolved = 'rejected';
-      else if (/completed|completad/.test(notesLower)) resolved = 'completed';
-      else if (/cancelled|cancelad/.test(notesLower)) resolved = 'cancelled';
+      if (/pending|pendiente/.test(notesLower)) {
+          resolved = 'pending';
+      }
+      else if (/in[_ ]?review|en\s*revisi[oó]n|en\s*revision/.test(notesLower)) {
+          resolved = 'in_review';
+      }
+      else if (/approved|aproba/.test(notesLower)) {
+          resolved = 'completed';
+      }
+      else if (/rejected|rechazad/.test(notesLower)) {
+          resolved = 'rejected';
+      }
+      else if (/completed|completad/.test(notesLower)) {
+          resolved = 'completed';
+      }
+      else if (/cancelled|cancelad/.test(notesLower)) {
+          resolved = 'cancelled';
+      }
     }
 
     mainText = resolved ? `Estado actualizado: ${getStatusLabelEs(resolved)}` : 'Estado actualizado';
   } else if (action === 'cancelled') {
     mainText = 'La solicitud fue cancelada';
   } else {
-    if (notes) return String(notes);
+    if (notes) {
+        return String(notes);
+    }
     mainText = 'Actualización registrada';
   }
 
-  if (!notes) return mainText;
+  if (!notes) {
+      return mainText;
+  }
 
   return (
     <>
@@ -280,13 +333,11 @@ const getEventDetailText = (event, selectedRequest) => {
 };
 
 const ParentRequestsPage = () => {
-  const { auth } = useContext(AuthContext);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [requests, setRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [requestEvents, setRequestEvents] = useState([]);
@@ -310,9 +361,7 @@ const ParentRequestsPage = () => {
   }, [loadRequests]);
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
     await loadRequests();
-    setRefreshing(false);
   }, [loadRequests]);
 
   const openDetail = async (request) => {
@@ -389,7 +438,6 @@ const ParentRequestsPage = () => {
               ) : (
                 requestCards.map((request) => {
                   const status = getStatusMeta(request.status);
-                  const typeLabel = getRequestTypeLabel(request.requestType);
                   return (
                     <SectionCard key={request.id} elevation={2} sx={{ cursor: 'pointer' }} onClick={() => openDetail(request)}>
                       <CardContent>

@@ -71,11 +71,15 @@ const tagSlotsByDay = (slotsForDay) => {
   if (sorted.length >= 2) {
     const first = { ...sorted[0], _label: 'Entrada' };
     const last  = { ...sorted[sorted.length-1], _label: 'Salida' };
-    if (sorted.length === 2) return [first, last];
+    if (sorted.length === 2) {
+      return [first, last];
+    }
     const middle = sorted.slice(1,-1).map(x => ({ ...x, _label: 'Parada' }));
     return [first, ...middle, last];
   }
-  if (sorted.length === 1) return [{ ...sorted[0], _label: 'Parada' }];
+  if (sorted.length === 1) {
+    return [{ ...sorted[0], _label: 'Parada' }];
+  }
   return [];
 };
 
@@ -99,9 +103,6 @@ const ColaboradorDashboardPage = () => {
   const [newRequestType, setNewRequestType] = useState('service_cancellation');
   const [newReason, setNewReason] = useState('');
   const [newAdditionalNotes, setNewAdditionalNotes] = useState('');
-  const [newTitle, setNewTitle] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [newPriority, setNewPriority] = useState('medium');
   const [openRequestDetail, setOpenRequestDetail] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [openRequestsModal, setOpenRequestsModal] = useState(false);
@@ -137,7 +138,9 @@ const ColaboradorDashboardPage = () => {
   };
 
   const formatDate = (d) => {
-    if (!d) return 'N/A';
+    if (!d) {
+      return 'N/A';
+    }
     try {
       return new Date(d).toLocaleString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch (e) {
@@ -158,26 +161,34 @@ const ColaboradorDashboardPage = () => {
   };
 
   const cleanPhoneDigits = (phone) => {
-    if (!phone) return '';
+    if (!phone) {
+      return '';
+    }
     return String(phone).replace(/[^0-9]/g, '');
   };
 
   const openPhone = (phone) => {
     const digits = cleanPhoneDigits(phone);
-    if (!digits) return;
+    if (!digits) {
+      return;
+    }
     window.location.href = `tel:${digits}`;
   };
 
   const openEmail = (email) => {
     const e = safeStr(email);
-    if (!e) return;
+    if (!e) {
+      return;
+    }
     window.location.href = `mailto:${encodeURIComponent(e)}`;
   };
 
   const openWhatsApp = (whatsappLink, fallbackPhone) => {
     const direct = safeStr(whatsappLink);
     const url = direct || (cleanPhoneDigits(fallbackPhone) ? `https://wa.me/${cleanPhoneDigits(fallbackPhone)}` : '');
-    if (!url) return;
+    if (!url) {
+      return;
+    }
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -185,7 +196,9 @@ const ColaboradorDashboardPage = () => {
     setLoading(true);
     try {
       const userId = auth?.user?.id;
-      if (!userId) throw new Error('Usuario no autenticado');
+      if (!userId) {
+        throw new Error('Usuario no autenticado');
+      }
 
       const [infoRes, slotsRes] = await Promise.all([
         api.get(`/corporations/colaboradores/${userId}`),
@@ -230,7 +243,9 @@ const ColaboradorDashboardPage = () => {
     setLoadingRequests(true);
     try {
       const userId = auth?.user?.id;
-      if (!userId) throw new Error('Usuario no autenticado');
+      if (!userId) {
+        throw new Error('Usuario no autenticado');
+      }
       const res = await api.get('/requests/my-requests');
       const data = res?.data?.requests ?? res?.data ?? [];
       setRequests(Array.isArray(data) ? data : []);
@@ -245,14 +260,20 @@ const ColaboradorDashboardPage = () => {
 
   // Format time strings to 12-hour (e.g., 07:30 -> 7:30 AM). If input looks already formatted, return as-is.
   const formatTime12 = (timeStr) => {
-    if (!timeStr) return '';
+    if (!timeStr) {
+      return '';
+    }
     const s = String(timeStr).trim();
     // If contains AM/PM already, return
-    if (/\b(am|pm)\b/i.test(s)) return s;
+    if (/\b(am|pm)\b/i.test(s)) {
+      return s;
+    }
     // Try ISO time like HH:mm or HH:mm:ss
     const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if (!m) return s;
-    let hh = parseInt(m[1], 10);
+    if (!m) {
+      return s;
+    }
+    let hh = Number.parseInt(m[1], 10);
     const mm = m[2];
     const ampm = hh >= 12 ? 'PM' : 'AM';
     hh = hh % 12 || 12;
@@ -260,7 +281,9 @@ const ColaboradorDashboardPage = () => {
   };
 
   const daysToRender = useMemo(() => {
-    if (selectedDay === 'all') return DAYS;
+    if (selectedDay === 'all') {
+      return DAYS;
+    }
     return DAYS.filter(d => d.key === selectedDay);
   }, [selectedDay]);
 
@@ -270,7 +293,9 @@ const ColaboradorDashboardPage = () => {
     DAYS.forEach(d => map[d.key] = []);
     schedules.forEach(s => {
       const ds = toArray(s.days).map(x => String(x||'').toLowerCase());
-      DAYS.forEach(({ key }) => { if (ds.includes(key)) map[key].push(s); });
+      DAYS.forEach(({ key }) => { if (ds.includes(key)) {
+        map[key].push(s);
+      } });
     });
     Object.keys(map).forEach(k => { map[k] = tagSlotsByDay(map[k]); });
     return map;
@@ -281,15 +306,23 @@ const ColaboradorDashboardPage = () => {
     const entries = [];
     const exits = [];
     Object.values(byDay).forEach(arr => arr.forEach(slot => {
-      if (!slot || !slot._label) return;
+      if (!slot?._label) {
+        return;
+      }
       const t = slot.time || '';
-      if (slot._label === 'Entrada' && t) entries.push(t);
-      if (slot._label === 'Salida' && t) exits.push(t);
+      if (slot._label === 'Entrada' && t) {
+        entries.push(t);
+      }
+      if (slot._label === 'Salida' && t) {
+        exits.push(t);
+      }
     }));
     const sortTimes = arr => arr.slice().sort((a,b) => a.localeCompare(b));
     const first = entries.length ? sortTimes(entries)[0] : null;
     const last  = exits.length ? sortTimes(exits).slice(-1)[0] : null;
-    if (first || last) return `${first || '--'} - ${last || '--'}`;
+    if (first || last) {
+      return `${first || '--'} - ${last || '--'}`;
+    }
     return null;
   }, [byDay]);
 
@@ -308,9 +341,15 @@ const ColaboradorDashboardPage = () => {
         const fmtEnd = endTime ? formatTime12(String(endTime)) : '--';
         return `${s.name} — ${fmtStart} - ${fmtEnd}`;
       }
-      if (s.name) return s.name;
-      if (startTime || endTime) return `${startTime || '--'} - ${endTime || '--'}`;
-      if (s.timeRange) return s.timeRange;
+      if (s.name) {
+        return s.name;
+      }
+      if (startTime || endTime) {
+        return `${startTime || '--'} - ${endTime || '--'}`;
+      }
+      if (s.timeRange) {
+        return s.timeRange;
+      }
       return JSON.stringify(s).slice(0, 80);
     }
     // fallback to computed summary from stops
@@ -715,7 +754,7 @@ const ColaboradorDashboardPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => { setOpenRequestDetail(false); setSelectedRequest(null); }}>Cerrar</Button>
-          {selectedRequest && selectedRequest.status === 'pending' && (
+          {selectedRequest?.status === 'pending' && (
             <>
               <Button color="error" variant="contained" onClick={() => setOpenCancelConfirm(true)}>Cancelar solicitud</Button>
 
@@ -727,7 +766,9 @@ const ColaboradorDashboardPage = () => {
                 <DialogActions>
                   <Button onClick={() => setOpenCancelConfirm(false)}>Volver</Button>
                   <Button color="error" variant="contained" onClick={async () => {
-                    if (!selectedRequest) return;
+                    if (!selectedRequest) {
+                      return;
+                    }
                     try {
                       setCanceling(true);
                       await api.post(`/requests/${selectedRequest.id}/cancel`);

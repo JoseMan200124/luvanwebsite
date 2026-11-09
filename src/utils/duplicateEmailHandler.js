@@ -12,7 +12,9 @@ export function showDuplicateEmailFromError(err, setSnackbar, opts = {}) {
     try {
         const resp = err?.response?.data || {};
         const roleLabel = resp.roleLabel;
-        if (!roleLabel) return false;
+        if (!roleLabel) {
+            return false;
+        }
 
         const associated = resp.associated;
         const jsxMessage = (
@@ -31,5 +33,3 @@ export function showDuplicateEmailFromError(err, setSnackbar, opts = {}) {
         return false;
     }
 }
-
-export default showDuplicateEmailFromError;

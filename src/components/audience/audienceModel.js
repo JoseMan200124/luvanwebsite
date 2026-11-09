@@ -31,7 +31,7 @@ export const PAYMENT_STATUS_OPTIONS = [
     { value: 'PARCIAL',    label: 'Pago Parcial' },
 ];
 
-export const EMPTY_PADRE_FILTERS = {
+const EMPTY_PADRE_FILTERS = {
     routeTypes: [],
     serviceStatuses: [],
     paymentStatuses: [],
@@ -74,10 +74,14 @@ export const setSchoolIds = (audience, schoolIds) => {
 export const setSchoolField = (audience, schoolId, field, value) => ({
     ...audience,
     scope: (audience.scope || []).map((entry) => {
-        if (Number(entry.schoolId) !== Number(schoolId)) return entry;
+        if (Number(entry.schoolId) !== Number(schoolId)) {
+            return entry;
+        }
         const next = { ...entry, [field]: value };
         // Sin rutas no hay horario que elegir.
-        if (field === 'routeNumbers' && value.length === 0) next.scheduleCodes = [];
+        if (field === 'routeNumbers' && value.length === 0) {
+            next.scheduleCodes = [];
+        }
         return next;
     }),
 });
@@ -104,10 +108,16 @@ export const deriveAudienceModes = (audience) => {
         const levels = entry.levelIds || [];
         const grades = entry.grades || [];
         let academic = 'all';
-        if (levels.length > 0) academic = 'level';
-        else if (grades.length > 0) academic = 'grade';
+        if (levels.length > 0) {
+            academic = 'level';
+        }
+        else if (grades.length > 0) {
+            academic = 'grade';
+        }
         let schedule = null;
-        if (routes.length > 0) schedule = (entry.scheduleCodes || []).length > 0 ? 'some' : 'all';
+        if (routes.length > 0) {
+            schedule = (entry.scheduleCodes || []).length > 0 ? 'some' : 'all';
+        }
         schoolModes[entry.schoolId] = {
             route: routes.length > 0 ? 'some' : 'all',
             schedule,
@@ -116,8 +126,12 @@ export const deriveAudienceModes = (audience) => {
     });
 
     let schoolsChoice = 'all';
-    if (byFamilies) schoolsChoice = null;
-    else if (scope.length > 0) schoolsChoice = 'some';
+    if (byFamilies) {
+        schoolsChoice = null;
+    }
+    else if (scope.length > 0) {
+        schoolsChoice = 'some';
+    }
 
     return {
         scopeMode: byFamilies ? 'families' : 'filters',
@@ -134,10 +148,14 @@ export const deriveAudienceModes = (audience) => {
  * Mismas reglas que valida el backend en validateAudience().
  */
 export const validateAudience = (audience) => {
-    if (!audience) return { valid: false, message: 'Selecciona destinatarios.' };
+    if (!audience) {
+        return { valid: false, message: 'Selecciona destinatarios.' };
+    }
 
     // Familias concretas: no aplica nada más.
-    if ((audience.userIds || []).length > 0) return { valid: true, message: null };
+    if ((audience.userIds || []).length > 0) {
+        return { valid: true, message: null };
+    }
 
     if ((audience.roles || []).length === 0) {
         return { valid: false, message: 'Selecciona al menos un rol de destinatarios.' };
@@ -157,13 +175,4 @@ export const validateAudience = (audience) => {
     }
 
     return { valid: true, message: null };
-};
-
-/**
- * True cuando el alcance del colegio es únicamente "familias sin ruta":
- * en ese caso el horario no aplica, porque no hay ruta a la que pertenezca.
- */
-export const isScheduleNotApplicable = (audience, schoolId) => {
-    const entry = getSchoolEntry(audience, schoolId);
-    return entry.routeNumbers.length === 0 && audience.padreFilters?.includeNoRoute === true;
 };

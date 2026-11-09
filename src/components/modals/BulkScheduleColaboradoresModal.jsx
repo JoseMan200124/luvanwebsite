@@ -14,14 +14,20 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
   const [results, setResults] = useState(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+        return;
+    }
     setLoading(true);
     let cancelled = false;
     (async () => {
       try {
-        if (!corporationId) return;
+        if (!corporationId) {
+            return;
+        }
         const resp = await api.get(`/corporations/${corporationId}/colaboradores`);
-        if (cancelled) return;
+        if (cancelled) {
+            return;
+        }
         const raw = resp.data.colaboradores || [];
           const normalized = raw.map(c => ({ id: c.id, name: c.name || '', email: c.email || '', employeeNumber: c.ColaboradorDetail?.employeeNumber || '', selectedSchedule: c.ColaboradorDetail?.selectedSchedule ?? c.ColaboradorDetail?.scheduleIndex ?? null }));
         setColaboradores(normalized);
@@ -29,13 +35,19 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
       } catch (err) {
         console.error('Error loading colaboradores for template', err);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+            setLoading(false);
+        }
       }
     })();
     return () => { cancelled = true; };
   }, [open, corporationId]);
 
-  const toggle = (id) => setSelected(prev => { const copy = new Set(prev); if (copy.has(id)) copy.delete(id); else copy.add(id); return copy; });
+  const toggle = (id) => setSelected(prev => { const copy = new Set(prev); if (copy.has(id)) {
+      copy.delete(id);
+  } else {
+      copy.add(id);
+  } return copy; });
 
   const generateTemplate = async () => {
     setGenerating(true);
@@ -46,14 +58,16 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
       const WEEKDAYS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
       const headers = ['Correo', 'Número Empleado', 'Horario'];
       for (const d of WEEKDAYS) {
-        headers.push(`${d} - Hora Entrada`);
-        headers.push(`${d} - Hora Parada Entrada`);
-        headers.push(`${d} - Ruta Entrada`);
-        headers.push(`${d} - Nota Parada Entrada`);
-        headers.push(`${d} - Hora Salida`);
-        headers.push(`${d} - Hora Parada Salida`);
-        headers.push(`${d} - Ruta Salida`);
-        headers.push(`${d} - Nota Parada Salida`);
+        headers.push(
+            `${d} - Hora Entrada`,
+            `${d} - Hora Parada Entrada`,
+            `${d} - Ruta Entrada`,
+            `${d} - Nota Parada Entrada`,
+            `${d} - Hora Salida`,
+            `${d} - Hora Parada Salida`,
+            `${d} - Ruta Salida`,
+            `${d} - Nota Parada Salida`
+        );
       }
       sheet.addRow(headers);
 
@@ -70,13 +84,27 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
       for (let i = 0; i < headers.length; i++) {
         const h = headers[i] || '';
         const col = sheet.getColumn(i + 1);
-        if (/Correo/i.test(h)) col.width = 30;
-        else if (/Número Empleado/i.test(h)) col.width = 18;
-        else if (/Horario/i.test(h)) col.width = 20;
-        else if (/Hora Entrada|Hora Salida|Hora Parada/i.test(h)) col.width = 14;
-        else if (/Ruta/i.test(h)) col.width = 14;
-        else if (/Nota Parada/i.test(h)) col.width = 30;
-        else col.width = Math.min(Math.max(h.length + 6, 12), 40);
+        if (/Correo/i.test(h)) {
+            col.width = 30;
+        }
+        else if (/Número Empleado/i.test(h)) {
+            col.width = 18;
+        }
+        else if (/Horario/i.test(h)) {
+            col.width = 20;
+        }
+        else if (/Hora Entrada|Hora Salida|Hora Parada/i.test(h)) {
+            col.width = 14;
+        }
+        else if (/Ruta/i.test(h)) {
+            col.width = 14;
+        }
+        else if (/Nota Parada/i.test(h)) {
+            col.width = 30;
+        }
+        else {
+            col.width = Math.min(Math.max(h.length + 6, 12), 40);
+        }
         col.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
       }
 
@@ -93,7 +121,9 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
       const sel = Array.from(selected);
       for (const id of sel) {
         const c = colaboradores.find(x => x.id === id);
-        if (!c) continue;
+        if (!c) {
+            continue;
+        }
         // build an empty row matching headers length
         const row = new Array(headers.length).fill('');
         row[0] = c.email || '';
@@ -147,7 +177,9 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
         const row = sheet.getRow(r);
         const isEven = (r % 2) === 0;
         row.eachCell((cell) => {
-          if (isEven) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7FAFC' } };
+          if (isEven) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7FAFC' } };
+          }
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         });
         const firstCell = row.getCell(1);
@@ -168,8 +200,12 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
   };
 
   const handleUpload = async () => {
-    if (!uploadFile) return alert('Selecciona un archivo Excel primero.');
-    if (!corporationId) return alert('No hay corporación seleccionada');
+    if (!uploadFile) {
+        return alert('Selecciona un archivo Excel primero.');
+    }
+    if (!corporationId) {
+        return alert('No hay corporación seleccionada');
+    }
     setUploading(true);
     setResults(null);
     try {
@@ -199,7 +235,11 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
           <Box sx={{ maxHeight: 260, overflow: 'auto' }}>
             <Box>
               <label>
-                <input type="checkbox" checked={selected.size === colaboradores.length && colaboradores.length>0} onChange={(e)=>{ if (e.target.checked) setSelected(new Set(colaboradores.map(c=>c.id))); else setSelected(new Set()); }} /> Seleccionar todo
+                <input type="checkbox" checked={selected.size === colaboradores.length && colaboradores.length>0} onChange={(e)=>{ if (e.target.checked) {
+                    setSelected(new Set(colaboradores.map(c=>c.id)));
+                } else {
+                    setSelected(new Set());
+                } }} /> Seleccionar todo
               </label>
             </Box>
             {colaboradores.map(c => (

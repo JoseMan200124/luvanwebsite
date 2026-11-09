@@ -1,6 +1,8 @@
 // Normalización de cadenas para comparación (quita tildes, colapsa espacios, trim y minúsculas)
 export function normalizeKey(str) {
-    if (!str && str !== 0) return '';
+    if (!str && str !== 0) {
+        return '';
+    }
     try {
         return String(str)
             .normalize('NFD')
@@ -18,7 +20,3 @@ export function normalizeKey(str) {
             .toLowerCase();
     }
 }
-
-export default {
-    normalizeKey
-};

@@ -39,10 +39,14 @@ const CicloEscolarFilter = ({
             try {
                 const data = await getCiclosEscolares();
                 const ciclos = data?.ciclosEscolares || data?.data || data || [];
-                if (mounted) setCiclosEscolares(Array.isArray(ciclos) ? ciclos : []);
+                if (mounted) {
+                    setCiclosEscolares(Array.isArray(ciclos) ? ciclos : []);
+                }
             } catch (error) {
                 console.error('Error al cargar ciclos escolares:', error);
-                if (mounted) setCiclosEscolares([]);
+                if (mounted) {
+                    setCiclosEscolares([]);
+                }
             }
         };
 

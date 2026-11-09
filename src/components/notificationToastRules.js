@@ -16,7 +16,9 @@ const ALERTAS_MONITORA = [
 
 // metadata puede llegar como objeto o como string JSON según el origen.
 const parseMetadata = (metadata) => {
-    if (metadata && typeof metadata === 'object') return metadata;
+    if (metadata && typeof metadata === 'object') {
+        return metadata;
+    }
     if (typeof metadata === 'string') {
         try {
             const parsed = JSON.parse(metadata);
@@ -67,7 +69,9 @@ const TOAST_RULES_BY_ROLE = {
 export const shouldShowToast = (roleId, notification) => {
     const reglas = TOAST_RULES_BY_ROLE[Number(roleId)];
     const type = notification?.type;
-    if (!reglas || !type || !Object.hasOwn(reglas, type)) return false;
+    if (!reglas || !type || !Object.hasOwn(reglas, type)) {
+        return false;
+    }
     const regla = reglas[type];
     return typeof regla === 'function' ? regla(notification) : regla === true;
 };

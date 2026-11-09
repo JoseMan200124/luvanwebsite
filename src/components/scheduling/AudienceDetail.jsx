@@ -147,7 +147,9 @@ const FamiliesList = ({ families }) => {
 };
 
 const AudienceDetail = ({ detail }) => {
-    if (!detail) return <Typography variant="body2">—</Typography>;
+    if (!detail) {
+        return <Typography variant="body2">—</Typography>;
+    }
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
@@ -187,13 +189,21 @@ const AudienceDetail = ({ detail }) => {
  * detalle completo está en el diálogo; los nombres de colegio salen en el tooltip.
  */
 export const AudienceSummaryText = ({ summary }) => {
-    if (!summary) return '—';
+    if (!summary) {
+        return '—';
+    }
 
     const roles = (summary.roleNames || []).join(', ');
     let scope;
-    if (summary.kind === 'users') scope = `${summary.usersCount} familia(s) concreta(s)`;
-    else if (summary.kind === 'all') scope = 'Todos los colegios';
-    else scope = summary.schoolNames.length === 1 ? summary.schoolNames[0] : `${summary.schoolNames.length} colegios`;
+    if (summary.kind === 'users') {
+        scope = `${summary.usersCount} familia(s) concreta(s)`;
+    }
+    else if (summary.kind === 'all') {
+        scope = 'Todos los colegios';
+    }
+    else {
+        scope = summary.schoolNames.length === 1 ? summary.schoolNames[0] : `${summary.schoolNames.length} colegios`;
+    }
 
     const text = (
         <Box>
@@ -201,7 +211,9 @@ export const AudienceSummaryText = ({ summary }) => {
             {roles && <Typography variant="caption" color="text.secondary">{roles}</Typography>}
         </Box>
     );
-    if (summary.kind !== 'schools' || summary.schoolNames.length < 2) return text;
+    if (summary.kind !== 'schools' || summary.schoolNames.length < 2) {
+        return text;
+    }
 
     return <Tooltip title={summary.schoolNames.join(', ')}>{text}</Tooltip>;
 };

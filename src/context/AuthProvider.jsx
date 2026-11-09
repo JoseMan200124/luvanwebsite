@@ -52,15 +52,21 @@ const AuthProvider = ({ children }) => {
 
     const silentRefreshIfNeeded = useCallback(async () => {
         try {
-            const token = localStorage.getItem('token'); if (!token) return;
+            const token = localStorage.getItem('token'); if (!token) {
+                return;
+            }
             const decoded = jwtDecode(token); const msLeft = decoded.exp * 1000 - Date.now();
             if (msLeft < SILENT_REFRESH_THRESHOLD_MS) {
-                const refreshToken = localStorage.getItem('refreshToken'); if (!refreshToken) return;
+                const refreshToken = localStorage.getItem('refreshToken'); if (!refreshToken) {
+                    return;
+                }
                 const res = await api.post('/auth/refresh', { refreshToken });
                 const { token: newToken, refreshToken: newRefresh } = res.data;
                 if (newToken) {
                     localStorage.setItem('token', newToken);
-                    if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
+                    if (newRefresh) {
+                        localStorage.setItem('refreshToken', newRefresh);
+                    }
                     setAuth(prev => ({ ...prev, token: newToken }));
                 }
             }
@@ -72,7 +78,9 @@ const AuthProvider = ({ children }) => {
 
     const verifyToken = useCallback(async (tokenToVerify) => {
         const token = tokenToVerify || auth.token;
-        if (!token) return;
+        if (!token) {
+            return;
+        }
 
         try {
             const response = await api.get('/auth/verify', {
@@ -92,7 +100,9 @@ const AuthProvider = ({ children }) => {
     // Permisos ahora se cargan exclusivamente en PermissionsProvider
 
     useEffect(() => {
-        const checkIdle = () => { const now = Date.now(); if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) logoutByIdle(); };
+        const checkIdle = () => { const now = Date.now(); if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) {
+            logoutByIdle();
+        } };
         const interval = setInterval(checkIdle, CHECK_INTERVAL_MS); return () => clearInterval(interval);
     }, [auth.token, lastActivity, logoutByIdle]);
 
@@ -162,7 +172,9 @@ const AuthProvider = ({ children }) => {
         restoreSession();
     }, [location, verifyToken]);
 
-    useEffect(() => { if (auth.user?.id) initSocket(auth.user.id); }, [auth.user]);
+    useEffect(() => { if (auth.user?.id) {
+        initSocket(auth.user.id);
+    } }, [auth.user]);
 
     // login functions
     const loginUpdateParentsInfo = useCallback(async (email, password) => {
@@ -172,10 +184,14 @@ const AuthProvider = ({ children }) => {
             const mustChangePassword = getMustChangePassword(response.data);
             const decoded = jwtDecode(token);
             const restrictedRoles = [3, 8]; // allow Padres (3) and Colaboradores (8) to use this dialog
-            if (!restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la página principal.`);
+            if (!restrictedRoles.includes(decoded.roleId)) {
+                throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la página principal.`);
+            }
             clearStoredSchoolContext();
             localStorage.setItem('token', token);
-            if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+            if (refreshToken) {
+                localStorage.setItem('refreshToken', refreshToken);
+            }
             if (decoded.roleId === 9) {
                 await verifyToken(token);
             } else {
@@ -191,10 +207,14 @@ const AuthProvider = ({ children }) => {
             const { token, refreshToken } = response.data;
             const mustChangePassword = getMustChangePassword(response.data);
             const decoded = jwtDecode(token);
-            const restrictedRoles = [4,5]; if (restrictedRoles.includes(decoded.roleId)) throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la app móvil.`);
+            const restrictedRoles = [4,5]; if (restrictedRoles.includes(decoded.roleId)) {
+                throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la app móvil.`);
+            }
             clearStoredSchoolContext();
             localStorage.setItem('token', token);
-            if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+            if (refreshToken) {
+                localStorage.setItem('refreshToken', refreshToken);
+            }
             if (decoded.roleId === 9) {
                 await verifyToken(token);
             } else {

@@ -1,6 +1,5 @@
 // modules.js
 import {
-    Group,
     School,
     CalendarMonth,
     BarChart,

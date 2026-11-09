@@ -67,7 +67,9 @@ const ReceiptsPane = ({
     };
 
     const confirmReject = async () => {
-        if (!rejectDialogReceipt || !onChangeReceiptStatus) return;
+        if (!rejectDialogReceipt || !onChangeReceiptStatus) {
+            return;
+        }
         setRejectLoading(true);
         try {
             await onChangeReceiptStatus(rejectDialogReceipt.id, 'RECHAZADA', rejectReason);
@@ -80,7 +82,9 @@ const ReceiptsPane = ({
     // Cambiar el estado de una boleta a mano. RECHAZADA pide motivo (abre
     // diálogo); PENDIENTE/REGISTRADA se aplican directo, sin confirmación.
     const handleStatusSelect = (receipt, newStatus) => {
-        if (!onChangeReceiptStatus || newStatus === receipt.status) return;
+        if (!onChangeReceiptStatus || newStatus === receipt.status) {
+            return;
+        }
         if (newStatus === 'RECHAZADA') {
             setRejectReason('');
             setRejectDialogReceipt(receipt);
@@ -96,32 +100,46 @@ const ReceiptsPane = ({
     };
 
     const closeUploadDialog = () => {
-        if (uploadPreviewFile?.previewUrl) URL.revokeObjectURL(uploadPreviewFile.previewUrl);
+        if (uploadPreviewFile?.previewUrl) {
+            URL.revokeObjectURL(uploadPreviewFile.previewUrl);
+        }
         setUploadPreviewFile(null);
         setUploadDialogOpen(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
     };
 
     const handleDialogFileChange = (event) => {
         const file = event.target.files?.[0];
-        if (!file) return;
+        if (!file) {
+            return;
+        }
 
         if (!['image/jpeg', 'image/png'].includes(file.type)) {
-            if (onReceiptError) onReceiptError('Solo se permite subir una imagen JPG o PNG.');
+            if (onReceiptError) {
+                onReceiptError('Solo se permite subir una imagen JPG o PNG.');
+            }
             event.target.value = '';
             return;
         }
 
-        if (uploadPreviewFile?.previewUrl) URL.revokeObjectURL(uploadPreviewFile.previewUrl);
+        if (uploadPreviewFile?.previewUrl) {
+            URL.revokeObjectURL(uploadPreviewFile.previewUrl);
+        }
         setUploadPreviewFile({ file, previewUrl: URL.createObjectURL(file) });
     };
 
     const handleConfirmUpload = async () => {
         if (!uploadPreviewFile?.file) {
-            if (onReceiptError) onReceiptError('Seleccione una imagen primero.');
+            if (onReceiptError) {
+                onReceiptError('Seleccione una imagen primero.');
+            }
             return;
         }
-        if (onUploadReceipt) await onUploadReceipt(uploadPreviewFile.file, uploadDisplayDate);
+        if (onUploadReceipt) {
+            await onUploadReceipt(uploadPreviewFile.file, uploadDisplayDate);
+        }
         closeUploadDialog();
     };
 

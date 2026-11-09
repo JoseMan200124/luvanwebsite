@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
     Box,
     Card,
@@ -15,10 +15,8 @@ import {
     Chip,
     TextField,
     MenuItem,
-    ListSubheader,
     Select,
     FormControl,
-    FormHelperText,
     InputLabel,
     Grid,
     IconButton,
@@ -30,21 +28,27 @@ import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import moment from 'moment-timezone';
+import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 
 moment.tz.setDefault('America/Guatemala');
 
 const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) return '—';
+    if (!dateString) {
+        return '—';
+    }
     return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
 };
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
 
 const safeParseJson = (v) => {
-    if (!v) return {};
-    if (typeof v === 'object') return v;
+    if (!v) {
+        return {};
+    }
+    if (typeof v === 'object') {
+        return v;
+    }
     try {
         const parsed = JSON.parse(v);
         return typeof parsed === 'object' && parsed !== null ? parsed : {};
@@ -55,16 +59,22 @@ const safeParseJson = (v) => {
 
 /** "Colegio X — Ruta 5" or just the client name, or just "Ruta 5" */
 const clientRouteLabel = (o) => {
-    if (!o || Object.keys(o).length === 0) return null;
+    if (!o || Object.keys(o).length === 0) {
+        return null;
+    }
     const client = o.schoolName || o.corporationName || null;
     const route = o.routeNumber ? `Ruta ${o.routeNumber}` : null;
-    if (client && route) return `${client} \u2014 ${route}`;
+    if (client && route) {
+        return `${client} \u2014 ${route}`;
+    }
     return client || route || null;
 };
 
 /** "Ruta 5 (Colegio X)" */
 const routeLabel = (o) => {
-    if (!o?.routeNumber) return null;
+    if (!o?.routeNumber) {
+        return null;
+    }
     const suffix = o.schoolName || o.corporationName || '';
     const base = `Ruta ${o.routeNumber}`;
     return suffix ? `${base} (${suffix})` : base;
@@ -194,7 +204,9 @@ const computeChangeSummary = (record) => {
     const prev = safeParseJson(record.previousValue);
     const next = safeParseJson(record.newValue);
     const handler = CHANGE_SUMMARY_MAP[record.assignmentType];
-    if (!handler) return { subject: '\u2014', fromText: null, toText: null };
+    if (!handler) {
+        return { subject: '\u2014', fromText: null, toText: null };
+    }
     return handler(prev, next, record);
 };
 
@@ -253,13 +265,15 @@ const AssignmentHistoryPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [totalRecords, setTotalRecords] = useState(0);
+    const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
     // Filtros
     const [assignmentType, setAssignmentType] = useState('');
     const [busId, setBusId] = useState('');
     const [userId, setUserId] = useState('');
-    const [schoolId, setSchoolId] = useState('');
-    const [corporationId, setCorporationId] = useState('');
+    const [selectedClient, setSelectedClient] = useState(null);
+    const schoolId = getClientSchoolId(selectedClient);
+    const corporationId = getClientCorporationId(selectedClient);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
@@ -302,18 +316,6 @@ const AssignmentHistoryPage = () => {
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
-    const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) return [];
-        const map = new Map();
-        schools.forEach((s) => {
-            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push(s);
-        });
-        return Array.from(map.entries()).map(([cycleLabel, schools]) => ({ cycleLabel, schools }));
-    }, [schools, isSpecificCicloEscolarSelected]);
-
     useEffect(() => {
         fetchHistory();
         fetchCatalogs();
@@ -329,13 +331,27 @@ const AssignmentHistoryPage = () => {
                 ...getCicloEscolarFilterParams(selectedCicloEscolar)
             };
 
-            if (assignmentType) params.assignmentType = assignmentType;
-            if (busId) params.busId = busId;
-            if (userId) params.userId = userId;
-            if (schoolId) params.schoolId = schoolId;
-            if (corporationId) params.corporationId = corporationId;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = endDate;
+            if (assignmentType) {
+                params.assignmentType = assignmentType;
+            }
+            if (busId) {
+                params.busId = busId;
+            }
+            if (userId) {
+                params.userId = userId;
+            }
+            if (schoolId) {
+                params.schoolId = schoolId;
+            }
+            if (corporationId) {
+                params.corporationId = corporationId;
+            }
+            if (startDate) {
+                params.startDate = startDate;
+            }
+            if (endDate) {
+                params.endDate = endDate;
+            }
 
             const response = await api.get('/assignment-history', {
                 params,
@@ -344,6 +360,7 @@ const AssignmentHistoryPage = () => {
 
             setHistory(response.data.history || []);
             setTotalRecords(response.data.total || 0);
+            setClientBreakdown({ colegios: Number(response.data.colegios || 0), corporativos: Number(response.data.corporativos || 0) });
         } catch (err) {
             console.error('Error al cargar historial:', err);
             setError(err.response?.data?.message || 'Error al cargar el historial');
@@ -401,6 +418,13 @@ const AssignmentHistoryPage = () => {
                 </Tooltip>
             </Box>
 
+            {!loading && (
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                    {totalRecords} registros: {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
+                    {isSpecificCicloEscolarSelected ? ' — Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.' : ''}
+                </Typography>
+            )}
+
             {/* Filtros */}
             <Card sx={{ mb: 3 }}>
                 <CardContent>
@@ -415,8 +439,7 @@ const AssignmentHistoryPage = () => {
                                     setSelectedCicloEscolar(value);
                                     setBusId('');
                                     setUserId('');
-                                    setSchoolId('');
-                                    setCorporationId('');
+                                    setSelectedClient(null);
                                     setPage(0);
                                 }}
                                 label="Ciclo escolar de colegios"
@@ -426,38 +449,18 @@ const AssignmentHistoryPage = () => {
                         </Grid>
 
                         <Grid item xs={12} sm={6} md={3}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={schoolId}
-                                    onChange={(e) => {
-                                        setSchoolId(e.target.value);
-                                        setPage(0);
-                                    }}
-                                    label="Colegio"
-                                >
-                                    <MenuItem value="">
-                                        {isSpecificCicloEscolarSelected ? 'Todos los colegios del ciclo' : 'Todos los colegios'}
-                                    </MenuItem>
-                                    {isSpecificCicloEscolarSelected || groupedSchools.length === 0
-                                        ? schools.map((school) => (
-                                            <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                        ))
-                                        : groupedSchools.map((group) => [
-                                            <ListSubheader key={`header-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.schools.map((school) => (
-                                                <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                            ))
-                                        ])}
-                                </Select>
-                                <FormHelperText>
-                                    {isSpecificCicloEscolarSelected && !schoolId
-                                        ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
-                                        : 'Las opciones dependen del ciclo escolar seleccionado.'}
-                                </FormHelperText>
-                            </FormControl>
+                            <ClientSelector
+                                schools={schools}
+                                corporations={corporations}
+                                value={selectedClient}
+                                onChange={(client) => {
+                                    setSelectedClient(client);
+                                    setPage(0);
+                                }}
+                                helperText={isSpecificCicloEscolarSelected && !selectedClient
+                                    ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
+                                    : 'Los colegios dependen del ciclo escolar seleccionado.'}
+                            />
                         </Grid>
 
                         <Grid item xs={12} sm={6} md={3}>
@@ -500,26 +503,7 @@ const AssignmentHistoryPage = () => {
                             </FormControl>
                         </Grid>
 
-                        <Grid item xs={12} sm={6} md={3}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Corporación</InputLabel>
-                                <Select
-                                    value={corporationId}
-                                    onChange={(e) => {
-                                        setCorporationId(e.target.value);
-                                        setPage(0);
-                                    }}
-                                    label="Corporación"
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {corporations.map((corp) => (
-                                        <MenuItem key={corp.id} value={corp.id}>
-                                            {corp.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
+
 
                         <Grid item xs={12} sm={6} md={3}>
                             <TextField

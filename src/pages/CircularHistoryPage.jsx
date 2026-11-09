@@ -31,9 +31,7 @@ import {
 import {
   Close as CloseIcon,
   GetApp as DownloadIcon,
-  ExpandLess as ExpandLessIcon,
   ExpandMore as ExpandMoreIcon,
-  Refresh as RefreshIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import TableSortLabel from '@mui/material/TableSortLabel';
@@ -86,10 +84,14 @@ const renderAudience = (row) => {
     );
   }
 
-  if (audience?.kind === 'schools' && schoolsText) return schoolsText;
+  if (audience?.kind === 'schools' && schoolsText) {
+      return schoolsText;
+  }
 
   // Sin `audience` (respuesta antigua) solo se conoce el colegio único de la fila.
-  if (!audience && safeStr(row?.school?.name)) return safeStr(row.school.name);
+  if (!audience && safeStr(row?.school?.name)) {
+      return safeStr(row.school.name);
+  }
 
   return (
     <Chip
@@ -104,13 +106,19 @@ const renderAudience = (row) => {
 
 const withPdfViewerParams = (url) => {
   const u = safeStr(url);
-  if (!u) return u;
-  if (u.includes('#')) return u;
+  if (!u) {
+      return u;
+  }
+  if (u.includes('#')) {
+      return u;
+  }
   return `${u}#toolbar=0&navpanes=0&scrollbar=0`;
 };
 
 const formatDateTime = (dateString) => {
-  if (!dateString) return '';
+  if (!dateString) {
+      return '';
+  }
   try {
     return new Date(dateString).toLocaleString('es-ES', {
       year: 'numeric',
@@ -132,7 +140,9 @@ const getRecipientLabel = (recipient) => {
 
 const getRecipientRoleLabel = (role) => {
   const normalizedRole = safeStr(role).toLowerCase();
-  if (normalizedRole === 'padre' || normalizedRole === 'padres') return 'Familia';
+  if (normalizedRole === 'padre' || normalizedRole === 'padres') {
+      return 'Familia';
+  }
   return safeStr(role) || 'Sin rol';
 };
 
@@ -163,7 +173,9 @@ const CircularHistoryPage = () => {
   const [recipientsOpen, setRecipientsOpen] = useState(false);
 
   const availableSchools = useMemo(() => {
-    if (selectedCicloEscolar === ALL_CYCLES_VALUE) return schools;
+    if (selectedCicloEscolar === ALL_CYCLES_VALUE) {
+        return schools;
+    }
 
     return schools.filter((school) => String(school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? '') === String(selectedCicloEscolar));
   }, [schools, selectedCicloEscolar]);
@@ -188,21 +200,27 @@ const CircularHistoryPage = () => {
       groups.get(groupKey).schools.push(school);
     });
 
-    return Array.from(groups.values()).map((group) => ({
+    return Array.from(groups.values()).sort((a, b) => a.cycleLabel.localeCompare(b.cycleLabel, 'es')).map((group) => ({
       ...group,
       schools: [...group.schools].sort((a, b) => safeStr(a?.name).localeCompare(safeStr(b?.name), 'es', { sensitivity: 'base' })),
     }));
   }, [availableSchools, selectedCicloEscolar]);
 
   const effectiveSelectedSchool = useMemo(() => {
-    if (selectedSchool === ALL_CLIENTS_VALUE) return ALL_CLIENTS_VALUE;
+    if (selectedSchool === ALL_CLIENTS_VALUE) {
+        return ALL_CLIENTS_VALUE;
+    }
     const exists = availableSchools.some((school) => String(school?.id) === String(selectedSchool));
     return exists ? String(selectedSchool) : ALL_CLIENTS_VALUE;
   }, [availableSchools, selectedSchool]);
 
   useEffect(() => {
-    if (selectedSchool === ALL_CLIENTS_VALUE) return;
-    if (effectiveSelectedSchool === selectedSchool) return;
+    if (selectedSchool === ALL_CLIENTS_VALUE) {
+        return;
+    }
+    if (effectiveSelectedSchool === selectedSchool) {
+        return;
+    }
 
     setSelectedSchool(ALL_CLIENTS_VALUE);
   }, [effectiveSelectedSchool, selectedSchool]);
@@ -219,14 +237,20 @@ const CircularHistoryPage = () => {
     };
 
     const query = safeStr(q);
-    if (query) params.q = query;
+    if (query) {
+        params.q = query;
+    }
 
     if (selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE) {
       params.cicloEscolarId = selectedCicloEscolar;
     }
 
-    if (startDate) params.startDate = moment(startDate).startOf('day').toDate().toISOString();
-    if (endDate) params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+    if (startDate) {
+        params.startDate = moment(startDate).startOf('day').toDate().toISOString();
+    }
+    if (endDate) {
+        params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+    }
 
     return params;
   }, [page, rowsPerPage, q, effectiveSelectedSchool, selectedCicloEscolar, startDate, endDate, sortBy, sortDirection]);
@@ -273,10 +297,6 @@ const CircularHistoryPage = () => {
     fetchSchools();
   }, [fetchSchools]);
 
-  const handleRefresh = async () => {
-    await fetchRows();
-  };
-
   const handleCycleChange = (value) => {
     setSelectedCicloEscolar(value);
     setSelectedCicloEscolarId(value || ALL_CYCLES_VALUE);
@@ -294,7 +314,9 @@ const CircularHistoryPage = () => {
     const groups = Array.isArray(detail?.recipientGroups) ? detail.recipientGroups : [];
     const query = safeStr(recipientSearch).toLowerCase();
 
-    if (!query) return groups;
+    if (!query) {
+        return groups;
+    }
 
     return groups
       .map((group) => {
@@ -313,7 +335,9 @@ const CircularHistoryPage = () => {
 
   const openDetail = async (uuid) => {
     const id = safeStr(uuid);
-    if (!id) return;
+    if (!id) {
+        return;
+    }
 
     setDetailOpen(true);
     setDetailLoading(true);
@@ -346,12 +370,16 @@ const CircularHistoryPage = () => {
 
   const downloadAttachment = async (attachmentUuid) => {
     const id = safeStr(attachmentUuid);
-    if (!id) return;
+    if (!id) {
+        return;
+    }
 
     try {
       const res = await api.get(`/circulars/admin/attachments/${id}/url`);
       const url = safeStr(res?.data?.url);
-      if (!url) return;
+      if (!url) {
+          return;
+      }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
       console.error('[CircularHistory] download attachment error', e);
@@ -484,6 +512,8 @@ const CircularHistoryPage = () => {
                   setPage(0);
                 }}
                 MenuProps={{
+                  anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                  transformOrigin: { vertical: 'top', horizontal: 'left' },
                   PaperProps: {
                     sx: {
                       maxHeight: 250,
@@ -624,7 +654,7 @@ const CircularHistoryPage = () => {
           onPageChange={(_, newPage) => setPage(newPage)}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
+            setRowsPerPage(Number.parseInt(e.target.value, 10));
             setPage(0);
           }}
           rowsPerPageOptions={[10, 25, 50, 100]}

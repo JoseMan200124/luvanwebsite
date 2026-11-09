@@ -36,9 +36,13 @@ import usePermissions from '../../hooks/usePermissions';
 const PERIOD_RE = /^\d{4}-\d{2}$/;
 
 const normalizePeriod = (val) => {
-    if (!val) return '';
+    if (!val) {
+        return '';
+    }
     const s = String(val).trim();
-    if (!PERIOD_RE.test(s)) return '';
+    if (!PERIOD_RE.test(s)) {
+        return '';
+    }
     return s;
 };
 
@@ -98,7 +102,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     const existingPeriodSet = useMemo(() => {
         const set = new Set();
         periods.forEach(p => {
-            if (p?.period) set.add(String(p.period));
+            if (p?.period) {
+                set.add(String(p.period));
+            }
         });
         return set;
     }, [periods]);
@@ -112,7 +118,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     }, [periods]);
 
     const refresh = async () => {
-        if (!paymentId) return;
+        if (!paymentId) {
+            return;
+        }
         setLoading(true);
         setError('');
         try {
@@ -128,7 +136,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     };
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            return;
+        }
         setPeriodToAdd('');
         setRouteTypeToAdd('');
         setDiscountToAdd('');
@@ -144,33 +154,55 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     }, [open, paymentId]);
 
     useEffect(() => {
-        if (!open) return;
-        if (loading) return;
-        if (!serverPayment) return;
-        if (autoFilledCurrentRef.current) return;
-        if (currentExists) return;
-        if (periodToAdd) return;
+        if (!open) {
+            return;
+        }
+        if (loading) {
+            return;
+        }
+        if (!serverPayment) {
+            return;
+        }
+        if (autoFilledCurrentRef.current) {
+            return;
+        }
+        if (currentExists) {
+            return;
+        }
+        if (periodToAdd) {
+            return;
+        }
 
         setPeriodToAdd(currentPeriod);
         autoFilledCurrentRef.current = true;
     }, [open, loading, serverPayment, currentExists, periodToAdd, currentPeriod]);
 
     useEffect(() => {
-        if (!success) return;
+        if (!success) {
+            return;
+        }
         const t = setTimeout(() => setSuccess(''), 7000);
         return () => clearTimeout(t);
     }, [success]);
 
     const validateAdd = useCallback((period) => {
         const p = normalizePeriod(period);
-        if (!p) return { ok: false, message: 'Período inválido (formato YYYY-MM)' };
-        if (existingPeriodSet.has(p)) return { ok: false, message: 'Ese período ya existe' };
-        if (p > currentPeriod) return { ok: false, message: 'No se puede agregar un período futuro' };
+        if (!p) {
+            return { ok: false, message: 'Período inválido (formato YYYY-MM)' };
+        }
+        if (existingPeriodSet.has(p)) {
+            return { ok: false, message: 'Ese período ya existe' };
+        }
+        if (p > currentPeriod) {
+            return { ok: false, message: 'No se puede agregar un período futuro' };
+        }
         return { ok: true };
     }, [currentPeriod, existingPeriodSet]);
 
     const addValidation = useMemo(() => {
-        if (!periodToAdd) return { ok: false, message: '' };
+        if (!periodToAdd) {
+            return { ok: false, message: '' };
+        }
         return validateAdd(periodToAdd);
     }, [periodToAdd, validateAdd]);
 
@@ -190,7 +222,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
 
     const primaryAddValidation = useMemo(() => {
         const p = normalizePeriod(primaryAddAction.period);
-        if (!p) return { ok: false, message: '' };
+        if (!p) {
+            return { ok: false, message: '' };
+        }
         return validateAdd(p);
     }, [primaryAddAction.period, validateAdd]);
 
@@ -208,7 +242,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
 
     const periodPickerValue = useMemo(() => {
         const p = normalizePeriod(periodToAdd);
-        if (!p) return null;
+        if (!p) {
+            return null;
+        }
         const m = moment(p + '-01');
         return m.isValid() ? m : null;
     }, [periodToAdd]);
@@ -250,14 +286,24 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
         setSuccess('');
         try {
             const payload = { period: p };
-            if (rt) payload.routeType = rt;
-            if (Number.isFinite(parsedDiscount)) payload.discountApplied = parsedDiscount;
-            if (discountPercentValue !== undefined) payload.discountPercent = discountPercentValue;
-            if (Number.isFinite(parsedStudentsCount)) payload.studentsCount = parsedStudentsCount;
+            if (rt) {
+                payload.routeType = rt;
+            }
+            if (Number.isFinite(parsedDiscount)) {
+                payload.discountApplied = parsedDiscount;
+            }
+            if (discountPercentValue !== undefined) {
+                payload.discountPercent = discountPercentValue;
+            }
+            if (Number.isFinite(parsedStudentsCount)) {
+                payload.studentsCount = parsedStudentsCount;
+            }
 
             await api.post(`/payments/v2/${paymentId}/periods`, payload);
             await refresh();
-            if (onChanged) onChanged();
+            if (onChanged) {
+                onChanged();
+            }
             setSuccess(`Período ${p} agregado correctamente.`);
             setPeriodToAdd('');
             setStudentsCountToAdd('');
@@ -277,8 +323,12 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     const deleteConfirmed = deleteConfirmText === 'ELIMINAR';
 
     const handleConfirmDelete = async () => {
-        if (!deleteTarget?.period) return;
-        if (!deleteConfirmed) return;
+        if (!deleteTarget?.period) {
+            return;
+        }
+        if (!deleteConfirmed) {
+            return;
+        }
 
         setDeleteBusy(true);
         setError('');
@@ -289,7 +339,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
             setDeleteTarget(null);
             setDeleteConfirmText('');
             await refresh();
-            if (onChanged) onChanged();
+            if (onChanged) {
+                onChanged();
+            }
             setSuccess(`Período ${per} eliminado correctamente.`);
         } catch (e) {
             console.error('Error deleting period', e);
@@ -301,7 +353,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
 
     const handleTogglePeriodFreeze = async (periodRecord) => {
         const per = String(periodRecord?.period || '');
-        if (!paymentId || !per) return;
+        if (!paymentId || !per) {
+            return;
+        }
 
         const isFrozen = !!periodRecord.penaltyFrozen;
         setFreezeBusyPeriod(per);
@@ -327,7 +381,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
             }
 
             await refresh();
-            if (onChanged) onChanged();
+            if (onChanged) {
+                onChanged();
+            }
         } catch (e) {
             console.error('Error toggling period penalty freeze', e);
             setError(e?.response?.data?.error || e?.response?.data?.message || 'Error actualizando congelamiento de mora');
@@ -573,17 +629,31 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                             const penaltyDue = Number(p.penaltyDue || 0);
 
                             const statusChipColor = (() => {
-                                if (status === 'PAGADO') return 'success';
-                                if (status === 'PARCIAL') return 'warning';
-                                if (status === 'PENDIENTE') return 'warning';
+                                if (status === 'PAGADO') {
+                                    return 'success';
+                                }
+                                if (status === 'PARCIAL') {
+                                    return 'warning';
+                                }
+                                if (status === 'PENDIENTE') {
+                                    return 'warning';
+                                }
                                 return 'default';
                             })();
 
                             const penaltyStatusChipColor = (() => {
-                                if (penaltyStatus === 'PENDIENTE') return 'error';
-                                if (penaltyStatus === 'PARCIAL') return 'warning';
-                                if (penaltyStatus === 'PAGADA') return 'success';
-                                if (penaltyStatus === 'EXONERADA') return 'info';
+                                if (penaltyStatus === 'PENDIENTE') {
+                                    return 'error';
+                                }
+                                if (penaltyStatus === 'PARCIAL') {
+                                    return 'warning';
+                                }
+                                if (penaltyStatus === 'PAGADA') {
+                                    return 'success';
+                                }
+                                if (penaltyStatus === 'EXONERADA') {
+                                    return 'info';
+                                }
                                 return 'default';
                             })();
 
@@ -605,8 +675,12 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
 
                                     const dueDate = p.dueDate || null;
                                     const isOverdue = (() => {
-                                        if (!dueDate) return false;
-                                        if (status === 'PAGADO') return false;
+                                        if (!dueDate) {
+                                            return false;
+                                        }
+                                        if (status === 'PAGADO') {
+                                            return false;
+                                        }
                                         try {
                                             return moment().isAfter(moment.parseZone(dueDate), 'day');
                                         } catch (e) {

@@ -72,10 +72,14 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
     };
 
     const parseTimeToMinutes = (timeStr) => {
-        if (!timeStr) return null;
+        if (!timeStr) {
+            return null;
+        }
         const m = timeStr.match(/(\d{1,2}):(\d{2})/);
-        if (!m) return null;
-        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+        if (!m) {
+            return null;
+        }
+        return Number.parseInt(m[1], 10) * 60 + Number.parseInt(m[2], 10);
     };
 
     // Solo se envían los campos con texto (>= 2 caracteres tras trim).
@@ -95,7 +99,9 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
     // La llamada al endpoint se hace SOLO al presionar "Buscar" (o Enter), nunca al tipear.
     const handleSearch = useCallback(async () => {
         const activeParams = buildActiveParams();
-        if (Object.keys(activeParams).length === 0 || !schoolId) return;
+        if (Object.keys(activeParams).length === 0 || !schoolId) {
+            return;
+        }
 
         setLoading(true);
         setError(null);
@@ -171,15 +177,23 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
                 const ta = parseTimeToMinutes(a.horarioParada || '');
                 const tb = parseTimeToMinutes(b.horarioParada || '');
                 if (ta !== null || tb !== null) {
-                    if (ta === null) return sortOrder === 'asc' ? -1 : 1;
-                    if (tb === null) return sortOrder === 'asc' ? 1 : -1;
+                    if (ta === null) {
+                        return sortOrder === 'asc' ? -1 : 1;
+                    }
+                    if (tb === null) {
+                        return sortOrder === 'asc' ? 1 : -1;
+                    }
                     return sortOrder === 'asc' ? ta - tb : tb - ta;
                 }
                 va = (a.horarioParada || '').toString().toLowerCase();
                 vb = (b.horarioParada || '').toString().toLowerCase();
             }
-            if (va < vb) return sortOrder === 'asc' ? -1 : 1;
-            if (va > vb) return sortOrder === 'asc' ? 1 : -1;
+            if (va < vb) {
+                return sortOrder === 'asc' ? -1 : 1;
+            }
+            if (va > vb) {
+                return sortOrder === 'asc' ? 1 : -1;
+            }
             return 0;
         });
     }
