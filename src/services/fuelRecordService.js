@@ -44,22 +44,6 @@ export const exportFuelRecordsExcel = async (filters = {}) => {
 };
 
 /**
- * Obtener registros recientes de combustible
- * @param {number} schoolId - ID del colegio
- * @param {number} limit - Cantidad de registros
- */
-export const getRecentFuelRecords = async (schoolId, limit = 10) => {
-    const params = new URLSearchParams();
-    if (schoolId) {
-        params.append('schoolId', schoolId);
-    }
-    params.append('limit', limit);
-
-    const response = await api.get(`/fuel-records/recent?${params.toString()}`);
-    return response.data;
-};
-
-/**
  * Obtener estadísticas de combustible
  * @param {Object} filters - Filtros para las estadísticas
  */
@@ -77,38 +61,11 @@ export const getFuelStatistics = async (filters = {}) => {
 };
 
 /**
- * Obtener registros de combustible por bus
- * @param {number} busId - ID del bus
- * @param {Object} filters - Filtros adicionales
- */
-export const getFuelRecordsByBus = async (busId, filters = {}) => {
-    const params = new URLSearchParams();
-    
-    Object.keys(filters).forEach(key => {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            params.append(key, filters[key]);
-        }
-    });
-
-    const response = await api.get(`/fuel-records/bus/${busId}?${params.toString()}`);
-    return response.data;
-};
-
-/**
  * Obtener un registro específico por ID
  * @param {number} id - ID del registro
  */
 export const getFuelRecordById = async (id) => {
     const response = await api.get(`/fuel-records/${id}`);
-    return response.data;
-};
-
-/**
- * Crear un nuevo registro de combustible
- * @param {Object} data - Datos del registro
- */
-export const createFuelRecord = async (data) => {
-    const response = await api.post(`/fuel-records`, data);
     return response.data;
 };
 

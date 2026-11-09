@@ -103,9 +103,6 @@ const ColaboradorDashboardPage = () => {
   const [newRequestType, setNewRequestType] = useState('service_cancellation');
   const [newReason, setNewReason] = useState('');
   const [newAdditionalNotes, setNewAdditionalNotes] = useState('');
-  const [newTitle, setNewTitle] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [newPriority, setNewPriority] = useState('medium');
   const [openRequestDetail, setOpenRequestDetail] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [openRequestsModal, setOpenRequestsModal] = useState(false);

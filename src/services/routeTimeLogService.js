@@ -77,36 +77,10 @@ export const getAllRouteTimeLogs = async (filters = {}, perPage = 1000) => {
 };
 
 /**
- * Obtener un registro específico por ID
- * @param {number} id - ID del registro
- */
-export const getRouteTimeLogById = async (id) => {
-    const response = await api.get(`/monitora/route-times/${id}`);
-    return response.data;
-};
-
-/**
  * Eliminar un registro de tiempos por ID
  * @param {number} id
  */
 export const deleteRouteTimeLog = async (id) => {
     const response = await api.delete(`/monitora/route-times/${id}`);
-    return response.data;
-};
-
-/**
- * Obtener estadísticas de tiempos de rutas
- * @param {Object} filters - Filtros para las estadísticas
- */
-export const getRouteTimeLogStatistics = async (filters = {}) => {
-    const params = new URLSearchParams();
-    
-    Object.keys(filters).forEach(key => {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            params.append(key, filters[key]);
-        }
-    });
-
-    const response = await api.get(`/monitora/route-times/statistics?${params.toString()}`);
     return response.data;
 };

@@ -1,7 +1,7 @@
 // src/components/paradas/textoParada.js
 import { DIAS } from './paradasModel';
 
-export const textoDias = (days) => DIAS.filter(d => (days || []).includes(d.key)).map(d => d.corto).join(' ') || 'sin días';
+const textoDias = (days) => DIAS.filter(d => (days || []).includes(d.key)).map(d => d.corto).join(' ') || 'sin días';
 
 export const textoParada = (p) => [
     p.franja || 'sin franja',

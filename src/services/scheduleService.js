@@ -138,22 +138,6 @@ export const getSchoolSchedules = async (schoolId) => {
 };
 
 /**
- * Obtiene toda la información de una escuela
- * 
- * @param {number} schoolId - ID de la escuela
- * @returns {Promise} - Datos de la escuela
- */
-export const getSchoolById = async (schoolId) => {
-  try {
-    const response = await api.get(`/schools/${schoolId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching school:', error);
-    throw error;
-  }
-};
-
-/**
  * Valida que los horarios tengan el formato correcto
  * 
  * @param {Array} schedules - Array de horarios a validar
@@ -219,32 +203,3 @@ export const formatScheduleChange = (change) => {
 
   return `◆ Cambio en horario: ${JSON.stringify(change)}`;
 };
-
-/**
- * Extrae el código de un string de horario escolar
- * Ej: "07:15 LUN" -> "LUN"
- * 
- * @param {string} schoolScheduleStr - String del formato "HH:MM CODE"
- * @returns {string|null} - El código o null si no se encuentra
- */
-export const extractScheduleCode = (schoolScheduleStr) => {
-  if (!schoolScheduleStr || typeof schoolScheduleStr !== 'string') {
-    return null;
-  }
-
-  const parts = schoolScheduleStr.trim().split(/\s+/);
-  return parts.length > 1 ? parts[parts.length - 1] : null;
-};
-
-const scheduleService = {
-  updateSchoolSchedules,
-  getScheduleDeletionImpact,
-  downloadScheduleDeletionZip,
-  getSchoolSchedules,
-  getSchoolById,
-  validateSchedules,
-  formatScheduleChange,
-  extractScheduleCode
-};
-
-export default scheduleService;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TextField, MenuItem, Alert, Grid, InputLabel, FormControl, Select, Typography, Divider, Stack, InputAdornment, FormHelperText, Tooltip, IconButton, Checkbox, FormControlLabel } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TextField, Alert, Grid, Typography, Divider, InputAdornment, IconButton, Checkbox, FormControlLabel } from '@mui/material';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloseIcon from '@mui/icons-material/Close';
@@ -62,7 +62,6 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
             const res = await api.post('/payments/v2/school-periods', payload);
             const data = res?.data || {};
             const created = Number.isFinite(Number(data.created)) ? Number(data.created) : null;
-            const skipped = Number.isFinite(Number(data.skipped)) ? Number(data.skipped) : null;
 
             if (created && created > 0) {
                 const successMessage = `Período creado correctamente (familias afectadas: ${created})`;

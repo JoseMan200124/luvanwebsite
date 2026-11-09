@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import {
@@ -14,7 +14,6 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ErrorBoundary from '../components/ErrorBoundary';
 import parse from 'html-react-parser';
-import SignatureCanvas from 'react-signature-canvas';
 
 const FilledContractViewer = () => {
     const { uuid } = useParams();
@@ -25,10 +24,6 @@ const FilledContractViewer = () => {
         message: '',
         severity: 'success'
     });
-
-    // Aunque aquí no hay inputs que llenar (el contrato ya está lleno),
-    // conservamos la referencia de firma por consistencia
-    const signaturePads = useRef({});
 
     useEffect(() => {
         const fetchFilledContract = async () => {

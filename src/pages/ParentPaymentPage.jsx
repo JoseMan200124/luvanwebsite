@@ -42,7 +42,6 @@ import {
     ExpandMore as ExpandMoreIcon,
     HourglassEmpty as HourglassEmptyIcon,
     Image as ImageIcon,
-    InfoOutlined as InfoOutlinedIcon,
     ReceiptLong as ReceiptLongIcon,
     TrendingUp as TrendingUpIcon,
     Visibility as VisibilityIcon,

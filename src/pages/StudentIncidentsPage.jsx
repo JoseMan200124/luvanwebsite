@@ -33,7 +33,7 @@ import {
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
-import { Refresh as RefreshIcon, Visibility as VisibilityIcon } from '@mui/icons-material';
+import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
@@ -229,10 +229,6 @@ const StudentIncidentsPage = () => {
     const handleChangeRowsPerPage = (event) => {
         setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
-    };
-
-    const handleRefresh = () => {
-        fetchIncidents();
     };
 
     const handleViewDetails = async (incidentId) => {

@@ -561,11 +561,6 @@ const FuelRecordsPage = () => {
         setPage(0);
     };
 
-    const handleRefresh = () => {
-        fetchFuelRecords();
-        fetchStatistics();
-    };
-
     const handleDownloadExcel = async () => {
         if (!totalCount || totalCount === 0) {
             window.alert('No hay registros para exportar con los filtros seleccionados.');
@@ -873,28 +868,6 @@ const FuelRecordsPage = () => {
         .sort((firstPlate, secondPlate) => String(firstPlate).localeCompare(String(secondPlate)));
 
     const selectedRecordBus = selectedRecord?.bus || null;
-    const selectedRecordBusId = selectedRecord?.busId != null ? String(selectedRecord.busId) : (selectedRecordBus?.id != null ? String(selectedRecordBus.id) : '');
-    const selectedRecordBusPlate = selectedRecord?.plate || selectedRecordBus?.plate || '';
-
-    const editBusOptions = selectedRecordBusPlate
-        ? (() => {
-            const currentOptions = editPlateOptions.map((plate) => {
-                const bus = editBuses.find((item) => item.plate === plate);
-                return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
-            });
-            const hasCurrentBus = currentOptions.some((option) => String(option.id) === selectedRecordBusId || option.plate === selectedRecordBusPlate);
-            if (hasCurrentBus) {
-                return currentOptions;
-            }
-            return [
-                { label: selectedRecordBusPlate, id: selectedRecordBusId, plate: selectedRecordBusPlate },
-                ...currentOptions,
-            ];
-        })()
-        : editPlateOptions.map((plate) => {
-            const bus = editBuses.find((item) => item.plate === plate);
-            return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
-        });
 
     const selectedEditBusValue = editForm.busId
         ? (() => {

@@ -15,11 +15,6 @@ export const updateCicloEscolar = async (id, payload) => {
     return response.data;
 };
 
-export const activateCicloEscolar = async (id) => {
-    const response = await api.patch(`/ciclos-escolares/${id}/activate`);
-    return response.data;
-};
-
 export const setDefaultCicloEscolar = async (id) => {
     const response = await api.patch(`/ciclos-escolares/${id}/default`);
     return response.data;

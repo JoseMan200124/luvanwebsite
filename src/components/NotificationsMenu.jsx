@@ -441,34 +441,10 @@ const NotificationsMenu = ({ authToken }) => {
                     setToastQueue((prev) => [...prev, copy]);
                 }
             });
-
-            socket.on('notification_deleted', (payload) => {
-                try {
-                    const uuidsRaw = payload && (payload.uuids || payload.uuid) ? (payload.uuids || payload.uuid) : null;
-                    const uuids = Array.isArray(uuidsRaw) ? uuidsRaw : (uuidsRaw ? [uuidsRaw] : []);
-
-                    if (uuids.length > 0 && menuOpen) {
-                        setNotifications((prev) => {
-                            const next = prev.filter((n) => !uuids.includes(n.uuid));
-                            const removed = prev.length - next.length;
-                            if (removed > 0) {
-                                setTotalNotifications((t) => Math.max(0, (t || 0) - removed));
-                            }
-                            return next;
-                        });
-                    }
-                } catch (e) {
-                    console.warn('Failed handling notification_deleted payload', e);
-                }
-
-                // Actualizar contador (por si borró una unread)
-                fetchUnreadCount();
-            });
         }
         return () => {
             if (socket) {
                 socket.off('new_notification');
-                socket.off('notification_deleted');
             }
         };
     }, [authToken, fetchUnreadCount, menuOpen, currentRoleId]);
@@ -727,9 +703,6 @@ const NotificationsMenu = ({ authToken }) => {
                     <Button variant="contained" onClick={async () => {
                         // when user chooses to register a payment, navigate to page with openRegister=true
                         try {
-                            const rec = previewNotification.receipt;
-                            
-                            
                             // Build URL from notification.link if available, else construct
                             let link = previewNotification.link;
                             

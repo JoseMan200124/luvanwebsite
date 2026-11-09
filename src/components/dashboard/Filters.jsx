@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import tw from 'twin.macro';
-import styled from 'styled-components';
-import { TextField, MenuItem, Button } from '@mui/material';
+import { TextField, MenuItem } from '@mui/material';
 import api from '../../utils/axiosConfig';
 
 const FiltersContainer = tw.div`flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 mb-8`;

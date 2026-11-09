@@ -220,7 +220,7 @@ const ContractFillPage = () => {
     // Keep pending payload when login required
     const [pendingPayload, setPendingPayload] = useState(null);
     const [sessionParentId, setSessionParentId] = useState(parentId ? Number.parseInt(parentId, 10) : null);
-    const [sessionFamilyDetailId, setSessionFamilyDetailId] = useState(familyDetailId ? Number.parseInt(familyDetailId, 10) : null);
+    const sessionFamilyDetailId = familyDetailId ? Number.parseInt(familyDetailId, 10) : null;
 
     // Handle login from modal
     const handleLogin = async () => {

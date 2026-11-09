@@ -266,14 +266,6 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
     }
 
     const dayTimeMap = new Map();
-    const dayLabelMap = {
-      monday: 'Lun',
-      tuesday: 'Mar',
-      wednesday: 'Mie',
-      thursday: 'Jue',
-      friday: 'Vie'
-    };
-
     for (const sch of schedulesWithCode) {
       const rawTime = Array.isArray(sch.times) ? sch.times[0] : null;
       const time = rawTime && rawTime !== 'N/A' ? rawTime : null;
@@ -287,7 +279,6 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
         const key = `${day}::${time}`;
         if (dayTimeMap.has(key)) {
           const existingCode = dayTimeMap.get(key);
-          const dayLabel = dayLabelMap[day] || day;
           return `Conflicto entre horarios "${existingCode}" y "${sch.code}". Conflicto entre la hora base y los días aplicables.`;
         }
         dayTimeMap.set(key, sch.code);
