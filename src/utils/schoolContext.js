@@ -94,6 +94,8 @@ export const normalizeSchoolContext = (context = {}) => {
         userId: context.userId || null,
         roleId: context.roleId || null,
         status: safeString(context.status || 'ACTIVE').trim().toUpperCase(),
+        // Lo calcula el backend; si no viene (backend anterior) no se bloquea nada en el cliente.
+        isOperational: typeof context.isOperational === 'boolean' ? context.isOperational : true,
         schoolId,
         schoolName: safeString(school.name || context.schoolName).trim(),
         cicloEscolarId,

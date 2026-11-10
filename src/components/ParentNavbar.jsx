@@ -1,6 +1,7 @@
 // src/components/ParentNavbar.jsx
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
+    Alert,
     AppBar,
     Toolbar,
     Typography,
@@ -24,7 +25,8 @@ import {
     Close as CloseIcon,
     Logout as LogoutIcon,
     ArrowBack as ArrowBackIcon,
-    SwapHoriz as SwapHorizIcon
+    SwapHoriz as SwapHorizIcon,
+    Lock as LockIcon
 } from '@mui/icons-material';
 import { styled } from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
@@ -32,6 +34,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
 import { getStoredSchoolContext, isSchoolContextRequiredRole } from '../utils/schoolContext';
 import api from '../utils/axiosConfig';
+import { SCHOOL_NOT_OPERATIONAL_MESSAGE, useSchoolContextStatus } from '../hooks/useParentSchoolOperational';
 
 const BrandBox = styled(Box)`
     display: flex;
@@ -45,7 +48,12 @@ export default function ParentNavbar() {
     const location         = useLocation();
     const displayName      = auth?.user?.name || 'Padre de Familia';
     const selectedContext  = getStoredSchoolContext();
-    const showContextSwitcher = isSchoolContextRequiredRole(auth?.user?.roleId);
+    const isParentRole = Number(auth?.user?.roleId) === 3;
+    // El switcher sólo aparece si hay algo que cambiar: más de un contexto disponible
+    // (en padres, más de un colegio operando; no cambian de ciclo). Un contexto guardado que ya no
+    // esté permitido lo resuelve el interceptor de axiosConfig.js.
+    const { operational: schoolOperational, hasMultipleContexts } = useSchoolContextStatus();
+    const showContextSwitcher = isSchoolContextRequiredRole(auth?.user?.roleId) && hasMultipleContexts;
 
     const isParentArea = location.pathname.startsWith('/parent');
 
@@ -179,7 +187,7 @@ export default function ParentNavbar() {
                     </Box>
 
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {selectedContext?.schoolName && (
+                        {showContextSwitcher && selectedContext?.schoolName && (
                             <Box sx={{ mr: 2, display: { xs: 'none', md: 'block' }, textAlign: 'right' }}>
                                 <Typography variant="caption" sx={{ display: 'block', opacity: 0.8, lineHeight: 1 }}>
                                     Contexto
@@ -190,7 +198,7 @@ export default function ParentNavbar() {
                             </Box>
                         )}
                         {showContextSwitcher && (
-                            <Tooltip title="Cambiar colegio y ciclo">
+                            <Tooltip title={isParentRole ? 'Cambiar colegio' : 'Cambiar colegio y ciclo'}>
                                 <IconButton onClick={handleChangeContext} size="large" sx={{ color: '#FFF' }}>
                                     <SwapHorizIcon />
                                 </IconButton>
@@ -227,6 +235,11 @@ export default function ParentNavbar() {
                     </Box>
                 </Toolbar>
             </AppBar>
+            {isParentRole && !schoolOperational && location.pathname !== '/parent/dashboard' && (
+                <Alert severity="warning" icon={<LockIcon />} sx={{ borderRadius: 0 }}>
+                    <strong>Colegio sin operaciones.</strong> {SCHOOL_NOT_OPERATIONAL_MESSAGE}
+                </Alert>
+            )}
 
             {/* Dialog: Contáctanos (solo padres) */}
             <Dialog open={openContactDialog && isParentArea} onClose={() => setOpenContactDialog(false)} fullWidth maxWidth="xs">

@@ -52,6 +52,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { styled } from 'twin.macro';
 import ParentNavbar from '../components/ParentNavbar';
 import ReenrollmentBanner from '../components/ReenrollmentBanner';
+import useParentSchoolOperational, { SCHOOL_NOT_OPERATIONAL_MESSAGE } from '../hooks/useParentSchoolOperational';
 import UpdateParentInfoDialog from '../components/UpdateParentInfoDialog';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -172,6 +173,8 @@ const normalizeParentInfo = (raw) => {
 
     // Colegio / banco
     schoolName: safeStr(data.schoolName),
+    cicloEscolarLabel: safeStr(data.cicloEscolarLabel),
+    cicloEscolarNombre: safeStr(data.cicloEscolarNombre),
     contactPhone: safeStr(data.contactPhone),
     contactEmail: safeStr(data.contactEmail),
     whatsappLink: safeStr(data.whatsappLink),
@@ -324,6 +327,7 @@ const ParentDashboardPage = () => {
 
   // null = aún no se sabe (llega con route-info); evita pintar/pedir pagos de un colegio excluido.
   const [paymentsEnabled, setPaymentsEnabled] = useState(null);
+  const schoolOperational = useParentSchoolOperational();
 
   // Saldo de inscripción del ciclo pendiente de pago (null = sin cargo o ya pagado)
   const [pendingEnrollmentFee, setPendingEnrollmentFee] = useState(null);
@@ -1024,7 +1028,7 @@ const ParentDashboardPage = () => {
                       .toUpperCase() || 'P'
                   )}
                 </Avatar>
-                <MuiBox>
+                <MuiBox sx={{ minWidth: 0 }}>
                   <Typography variant="h6" sx={{ fontWeight: 700 }}>
                     {safeStr(auth?.user?.name || auth?.user?.fullName || 'Padre/Madre')}
                   </Typography>
@@ -1034,8 +1038,16 @@ const ParentDashboardPage = () => {
                   {nonEmpty(parentInfo.schoolName) && (
                     <Chip
                       size="small"
-                      label={parentInfo.schoolName}
-                      sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
+                      label={[parentInfo.schoolName, parentInfo.cicloEscolarNombre || parentInfo.cicloEscolarLabel].filter(nonEmpty).join(' · ')}
+                      sx={{
+                        mt: 1,
+                        bgcolor: 'rgba(255,255,255,0.12)',
+                        color: '#fff',
+                        // Permite varias líneas en vez de cortar el texto con puntos suspensivos
+                        height: 'auto',
+                        maxWidth: '100%',
+                        '& .MuiChip-label': { whiteSpace: 'normal', py: 0.5 },
+                      }}
                     />
                   )}
                 </MuiBox>
@@ -1095,7 +1107,7 @@ const ParentDashboardPage = () => {
                           fullWidth
                           startIcon={<EditIcon />}
                           onClick={handleOpenUpdateDialog}
-                          disabled={isSuspended}
+                          disabled={isSuspended || !schoolOperational}
                         >
                           Actualizar Mis Datos
                         </Button>
@@ -1144,7 +1156,19 @@ const ParentDashboardPage = () => {
                   </SectionCard>
                 </Grid>
               )}
-              {isSuspended && (
+              {/* Colegio sin operaciones: su aviso reemplaza al de suspensión (el de ParentNavbar se omite en el dashboard). */}
+              {!schoolOperational && (
+                <Grid item xs={12}>
+                  <SectionCard elevation={3}>
+                    <CardContent>
+                      <Alert severity="warning">
+                        <strong>Colegio sin operaciones.</strong> {SCHOOL_NOT_OPERATIONAL_MESSAGE}
+                      </Alert>
+                    </CardContent>
+                  </SectionCard>
+                </Grid>
+              )}
+              {isSuspended && schoolOperational && (
                 <Grid item xs={12}>
                   <SectionCard elevation={3}>
                     <CardContent>
@@ -1565,7 +1589,7 @@ const ParentDashboardPage = () => {
                                     <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{c.createdAt ? `Creado el ${new Date(c.createdAt).toLocaleDateString()}` : ''}</div>
                                   </div>
                                   <div>
-                                    <Button size="small" variant="contained" onClick={() => handleOpenContractShare(c)} sx={{ backgroundColor: '#0288d1' }}>Firmar</Button>
+                                    <Button size="small" variant="contained" onClick={() => handleOpenContractShare(c)} disabled={!schoolOperational} sx={{ backgroundColor: '#0288d1' }}>Firmar</Button>
                                   </div>
                                 </div>
                               </ListItem>
@@ -1631,7 +1655,7 @@ const ParentDashboardPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSigningDialogOpen(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={handleSubmitSigning} disabled={submittingSignature}>{submittingSignature ? 'Enviando...' : 'Enviar y Firmar'}</Button>
+          <Button variant="contained" onClick={handleSubmitSigning} disabled={submittingSignature || !schoolOperational}>{submittingSignature ? 'Enviando...' : 'Enviar y Firmar'}</Button>
         </DialogActions>
       </Dialog>
 
