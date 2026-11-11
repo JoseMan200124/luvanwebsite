@@ -229,7 +229,7 @@ const PermissionsManagementPage = () => {
     const { hasPermission } = usePermissions();
     const puedeOrganizar = hasPermission('permisos-gestionar-catalogo');
     const puedeGuardar = hasPermission('permisos-actualizar-por-rol');
-    const { canManageRoleId } = useManageableRoles();
+    const { loaded: manageableRolesLoaded, canManageRoleId } = useManageableRoles();
 
     const [pestana, setPestana] = useState('asignar');
     const [roles, setRoles] = useState([]);
@@ -575,7 +575,7 @@ const PermissionsManagementPage = () => {
                                                 ))}
                                             </Select>
                                         </FormControl>
-                                        {selectedRoleId && puedeGuardar && !rolGestionable && (
+                                        {manageableRolesLoaded && selectedRoleId && puedeGuardar && !rolGestionable && (
                                             <Alert severity="info" sx={{ mt: 1 }}>
                                                 No tienes permitido modificar los permisos de este rol: se muestran en solo lectura.
                                             </Alert>

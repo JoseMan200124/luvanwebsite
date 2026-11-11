@@ -58,6 +58,16 @@ const roleOptionsStatic = [
     { id: 9, name: 'Invitado' }
 ];
 
+// Roles con hoja en la plantilla de carga masiva (nombre de hoja → roleId). Las hojas de carga masiva se generan dinámicamente según los roles que el actor pueda gestionar.
+const BULK_SHEET_ROLE_IDS = Object.freeze({
+    Gestor: 1,
+    Administrador: 2,
+    Monitora: 4,
+    Piloto: 5,
+    Supervisor: 6,
+    Auxiliar: 7
+});
+
 // A colegio is identified by its NAME, not its id: the same school has one row per ciclo
 // escolar. Must mirror `normalizeSchoolIdentityForStaffScope` in the backend.
 const normalizeSchoolName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -186,7 +196,7 @@ const RolesManagementPage = () => {
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     useContext(AuthContext);
     const { hasPermission } = usePermissions();
-    const { canManageRoleId, isSelf, canManageUser, canEditUser } = useManageableRoles();
+    const { loaded: manageableRolesLoaded, canManageRoleId, isSelf, canManageUser, canEditUser } = useManageableRoles();
 
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
@@ -251,8 +261,7 @@ const RolesManagementPage = () => {
     const assignableRoles = new Set(['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado', 'mecanica']);
     // Pirámide de roles: sin ningún rol gestionable que crear aquí, no se ofrecen el alta ni la carga masiva
     const puedeCrearAlgunRol = roleOptions.some(r => assignableRoles.has(String(r.name).toLowerCase()) && canManageRoleId(r.id));
-    // Mismos roles que las hojas de handleDownloadUserTemplate (Gestor, Administrador, Monitora, Piloto, Supervisor, Auxiliar)
-    const puedeCargaMasiva = [1, 2, 4, 5, 6, 7].some(canManageRoleId);
+    const puedeCargaMasiva = Object.values(BULK_SHEET_ROLE_IDS).some(canManageRoleId);
     // Roles that should NOT be assigned a school or corporation
     // (Mecanica ve todos los clientes: no se le asigna uno)
     const rolesWithoutSchoolOrCorp = new Set(['administrador', 'supervisor', 'auxiliar', 'mecanica']);
@@ -562,6 +571,9 @@ const RolesManagementPage = () => {
 
     // Acciones por fila según la pirámide: editar si es gestionable o es uno mismo.
     const renderUserActions = (user) => {
+        if (!manageableRolesLoaded) {
+            return null;
+        }
         const puedeEditar = canEditUser(user);
         const puedeEliminar = canManageUser(user);
         if (!puedeEditar && !puedeEliminar) {
@@ -1034,7 +1046,7 @@ const RolesManagementPage = () => {
         // 2. Definir los headers por rol
         const sheets = [
             {
-                roleId: 1,
+                roleId: BULK_SHEET_ROLE_IDS.Gestor,
                 name: "Gestor",
                 headers: [
                     "Nombre Completo",
@@ -1052,7 +1064,7 @@ const RolesManagementPage = () => {
                 ]
             },
             {
-                roleId: 2,
+                roleId: BULK_SHEET_ROLE_IDS.Administrador,
                 name: "Administrador",
                 headers: [
                     "Nombre Completo",
@@ -1067,7 +1079,7 @@ const RolesManagementPage = () => {
             },
             
             {
-                roleId: 4,
+                roleId: BULK_SHEET_ROLE_IDS.Monitora,
                 name: "Monitora",
                 headers: [
                     "Nombre Completo",
@@ -1085,7 +1097,7 @@ const RolesManagementPage = () => {
                 ]
             },
             {
-                roleId: 5,
+                roleId: BULK_SHEET_ROLE_IDS.Piloto,
                 name: "Piloto",
                 headers: [
                     "Nombre Completo",
@@ -1103,7 +1115,7 @@ const RolesManagementPage = () => {
                 ]
             },
             {
-                roleId: 6,
+                roleId: BULK_SHEET_ROLE_IDS.Supervisor,
                 name: "Supervisor",
                 headers: [
                     "Nombre Completo",
@@ -1121,7 +1133,7 @@ const RolesManagementPage = () => {
                 ]
             },
             {
-                roleId: 7,
+                roleId: BULK_SHEET_ROLE_IDS.Auxiliar,
                 name: "Auxiliar",
                 headers: [
                     "Nombre Completo",
