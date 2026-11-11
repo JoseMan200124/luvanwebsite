@@ -58,7 +58,9 @@ const roleOptionsStatic = [
     { id: 9, name: 'Invitado' }
 ];
 
-// Roles con hoja en la plantilla de carga masiva (nombre de hoja → roleId). Las hojas de carga masiva se generan dinámicamente según los roles que el actor pueda gestionar.
+// Roles con hoja en la plantilla de carga masiva (nombre de hoja → roleId). Cada hoja de
+// handleDownloadUserTemplate se busca aquí por su nombre: solo se generan las de roles que el
+// actor puede gestionar, y una hoja cuyo nombre no esté en esta lista no se genera.
 const BULK_SHEET_ROLE_IDS = Object.freeze({
     Gestor: 1,
     Administrador: 2,
@@ -1046,7 +1048,6 @@ const RolesManagementPage = () => {
         // 2. Definir los headers por rol
         const sheets = [
             {
-                roleId: BULK_SHEET_ROLE_IDS.Gestor,
                 name: "Gestor",
                 headers: [
                     "Nombre Completo",
@@ -1064,7 +1065,6 @@ const RolesManagementPage = () => {
                 ]
             },
             {
-                roleId: BULK_SHEET_ROLE_IDS.Administrador,
                 name: "Administrador",
                 headers: [
                     "Nombre Completo",
@@ -1079,7 +1079,6 @@ const RolesManagementPage = () => {
             },
             
             {
-                roleId: BULK_SHEET_ROLE_IDS.Monitora,
                 name: "Monitora",
                 headers: [
                     "Nombre Completo",
@@ -1097,7 +1096,6 @@ const RolesManagementPage = () => {
                 ]
             },
             {
-                roleId: BULK_SHEET_ROLE_IDS.Piloto,
                 name: "Piloto",
                 headers: [
                     "Nombre Completo",
@@ -1115,7 +1113,6 @@ const RolesManagementPage = () => {
                 ]
             },
             {
-                roleId: BULK_SHEET_ROLE_IDS.Supervisor,
                 name: "Supervisor",
                 headers: [
                     "Nombre Completo",
@@ -1133,7 +1130,6 @@ const RolesManagementPage = () => {
                 ]
             },
             {
-                roleId: BULK_SHEET_ROLE_IDS.Auxiliar,
                 name: "Auxiliar",
                 headers: [
                     "Nombre Completo",
@@ -1187,7 +1183,7 @@ const RolesManagementPage = () => {
         // 4. Generar el archivo (Listas primero, para que el usuario vea los IDs de referencia al abrir)
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, wsListas, "Listas");
-        sheets.filter(sheet => canManageRoleId(sheet.roleId)).forEach(sheet => {
+        sheets.filter(sheet => canManageRoleId(BULK_SHEET_ROLE_IDS[sheet.name])).forEach(sheet => {
             const ws = XLSX.utils.aoa_to_sheet([sheet.headers, sheet.example]);
             ws['!cols'] = sheet.headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
             XLSX.utils.book_append_sheet(wb, ws, sheet.name);
