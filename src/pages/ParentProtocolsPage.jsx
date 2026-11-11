@@ -23,6 +23,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import { AuthContext } from '../context/AuthProvider';
+import useParentSchoolOperational from '../hooks/useParentSchoolOperational';
 import ParentNavbar from '../components/ParentNavbar';
 import api from '../utils/axiosConfig';
 
@@ -66,6 +67,7 @@ const ParentProtocolsPage = () => {
   const navigate = useNavigate();
 
   const isSuspended = auth?.user?.serviceStatus === 'SUSPENDED';
+  const schoolOperational = useParentSchoolOperational();
 
   const [tab, setTab] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -147,7 +149,9 @@ const ParentProtocolsPage = () => {
           <CardContent>
             {isSuspended ? (
               <Alert severity="warning">
-                Tu cuenta está suspendida. Para acceder a Protocolos y Reglamentos debes firmar el contrato y/o completar el proceso de pago.
+                {schoolOperational
+                  ? 'Tu cuenta está suspendida. Para acceder a Protocolos y Reglamentos debes firmar el contrato y/o completar el proceso de pago.'
+                  : 'El colegio está sin operaciones. Por ahora no es posible consultar Protocolos y Reglamentos.'}
               </Alert>
             ) : (
               <>

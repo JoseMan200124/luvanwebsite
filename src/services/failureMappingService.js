@@ -47,6 +47,20 @@ export const updateFailureMapping = async (id, payload = {}) => {
 };
 
 /**
+ * Ingreso manual de un mapeo de fallas (solo Gestor)
+ * @param {Object} data - Ver body de POST /failure-mappings/web
+ */
+export const createFailureMappingWeb = async (data) => {
+    const response = await api.post('/failure-mappings/web', data);
+    return response.data;
+};
+
+// Códigos 409 de conflicto con otros registros del día o con la placa
+export const CONFLICT_CODES = ['DIA_CERRADO', 'DIA_CON_FALLA', 'FALLA_DUPLICADA', 'PLACA_EN_OTRO_CLIENTE', 'REGISTRO_DUPLICADO'];
+// Único conflicto que se puede confirmar con "Guardar de todos modos" (force); los del día nunca
+export const FORCEABLE_CODE = 'PLACA_EN_OTRO_CLIENTE';
+
+/**
  * Tipos de falla disponibles
  */
 export const FAILURE_TYPES = {

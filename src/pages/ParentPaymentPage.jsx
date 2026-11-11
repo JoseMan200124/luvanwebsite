@@ -50,6 +50,7 @@ import Webcam from 'react-webcam';
 import ParentNavbar from '../components/ParentNavbar';
 import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
+import useParentSchoolOperational from '../hooks/useParentSchoolOperational';
 
 const PRIMARY_COLOR = '#0D3FE2';
 const BACKGROUND_COLOR = '#F8F9FA';
@@ -869,7 +870,8 @@ const ParentPaymentPage = () => {
     const currentStatus = primaryPayment?.finalStatus || (toNumber(paymentAccount?.totals?.penaltyDue) > 0 ? 'MORA' : 'PENDIENTE');
     const hasPendingReceipt = receipts.some((r) => r?.status === 'PENDIENTE');
     const effectiveServiceStatus = serviceStatus || primaryPayment?.serviceStatus || null;
-    const uploadDisabled = effectiveServiceStatus === 'SUSPENDED' && hasSignedContract !== true;
+    const schoolOperational = useParentSchoolOperational();
+    const uploadDisabled = (effectiveServiceStatus === 'SUSPENDED' && hasSignedContract !== true) || !schoolOperational;
     const totalPending = toNumber(paymentAccount?.totals?.balanceDue) + toNumber(paymentAccount?.totals?.penaltyDue);
 
     const capturePhoto = useCallback(() => {
@@ -955,7 +957,7 @@ const ParentPaymentPage = () => {
             </Button>
             {uploadDisabled && (
                 <Typography sx={{ color: MUTED_COLOR, fontSize: 12, textAlign: fullWidth ? 'center' : 'left', lineHeight: 1.45, mt: 1 }}>
-                    La carga de boleta estará disponible cuando el contrato esté firmado.
+                    {schoolOperational ? 'La carga de boleta estará disponible cuando el contrato esté firmado.' : 'El colegio está sin operaciones: no es posible subir boletas.'}
                 </Typography>
             )}
         </Box>
@@ -986,7 +988,7 @@ const ParentPaymentPage = () => {
                     <MetricCard label="Períodos pendientes" value={`${paymentAccount?.totals?.unpaidPeriodsCount || 0}`} icon={CalendarMonthIcon} tone="warning" />
                 </Box>
 
-                {enrollmentPayment?.status !== 'PAGADO' && (
+                {enrollmentPayment && enrollmentPayment.status !== 'PAGADO' && (
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, mt: 1.5, borderRadius: 1.5, backgroundColor: '#FFF4E6', color: '#7C3A00' }}>
                         <ReceiptLongIcon sx={{ fontSize: 20, color: '#B45309', mt: 0.1 }} />
                         <Typography sx={{ fontSize: 13, lineHeight: 1.55 }}>
@@ -1055,7 +1057,7 @@ const ParentPaymentPage = () => {
             )}
             {uploadDisabled && (
                 <Typography sx={{ color: MUTED_COLOR, fontSize: 12, textAlign: 'center', lineHeight: 1.45, mt: 1 }}>
-                    La carga de boleta estará disponible cuando el contrato esté firmado.
+                    {schoolOperational ? 'La carga de boleta estará disponible cuando el contrato esté firmado.' : 'El colegio está sin operaciones: no es posible subir boletas.'}
                 </Typography>
             )}
         </SectionCard>

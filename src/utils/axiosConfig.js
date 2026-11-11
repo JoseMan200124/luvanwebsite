@@ -1,7 +1,7 @@
 // src/utils/axiosConfig.js
 /* global globalThis */
 import axios from 'axios';
-import { getSelectedCicloEscolarId, getSelectedSchoolId } from './schoolContext';
+import { clearStoredSchoolContext, getSelectedCicloEscolarId, getSelectedSchoolId } from './schoolContext';
 
 const API_URL = 'https://api.transportesluvan.com/api';
 
@@ -347,6 +347,21 @@ const redirectToForcePasswordChange = () => {
     }
 };
 
+const SELECT_CONTEXT_PATH = '/select-context';
+let redirectingToContextSelection = false;
+
+// El padre usaba un ciclo que ya no es el vigente de su colegio: se descarta el contexto guardado y se
+// vuelve a elegir (con un solo contexto /select-context lo asigna solo). La bandera evita repetir la
+// redirección cuando varias peticiones fallan a la vez.
+const redirectToContextSelection = () => {
+    if (redirectingToContextSelection || globalThis.location.pathname === SELECT_CONTEXT_PATH) {
+        return;
+    }
+    redirectingToContextSelection = true;
+    clearStoredSchoolContext();
+    globalThis.location.assign(SELECT_CONTEXT_PATH);
+};
+
 api.interceptors.response.use(
     response => response,
     async (error) => {
@@ -355,6 +370,9 @@ api.interceptors.response.use(
         }
         if (error.response?.status === 403 && error.response.data?.code === 'PASSWORD_CHANGE_REQUIRED') {
             redirectToForcePasswordChange();
+        }
+        if (error.response?.status === 403 && error.response.data?.code === 'PARENT_CONTEXT_NOT_ALLOWED') {
+            redirectToContextSelection();
         }
         throw error;
     }

@@ -222,12 +222,27 @@ const SchoolEnrollmentPage = () => {
         setSubmitting(true);
         try {
             const result = await submitReenrollment(schoolId, buildFamilyPayload(form));
+            if (result?.cycleIsOperational === false) {
+                // El ciclo nuevo aún no inicia: la familia sigue en el vigente hasta entonces.
+                const cycleText = result?.cycleLabel ? ` ${result.cycleLabel}` : '';
+                navigate('/thank-you', {
+                    state: {
+                        title: '¡Reinscripción recibida!',
+                        body: `Tu familia quedó inscrita en el ciclo${cycleText}. Lo verás en tu cuenta cuando el colegio inicie operaciones; mientras tanto sigues viendo el ciclo actual. Sigue usando tu mismo usuario y contraseña en la web y en la app.`,
+                        footer: 'Transportes Luvan'
+                    }
+                });
+                return;
+            }
             await selectNewSchoolContext(result);
+            // El ciclo nuevo ya opera: tras 5 segundos de aviso se recarga la página en el panel para mostrarlo.
             navigate('/thank-you', {
                 state: {
                     title: '¡Reinscripción recibida!',
                     body: 'Tu familia quedó inscrita en el nuevo ciclo. Sigue usando tu mismo usuario y contraseña en la web y en la app.',
-                    footer: 'Transportes Luvan'
+                    footer: 'Transportes Luvan',
+                    redirectTo: '/parent/dashboard',
+                    redirectSeconds: 5
                 }
             });
         } catch (error) {

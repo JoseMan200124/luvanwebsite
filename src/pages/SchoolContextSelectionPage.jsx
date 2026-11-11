@@ -114,7 +114,7 @@ const SchoolContextSelectionPage = () => {
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} sx={{ mb: 3 }}>
                     <Box>
                         <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 0.5 }}>
-                            Selecciona colegio y ciclo
+                            {Number(auth.user?.roleId) === 3 ? 'Selecciona tu colegio' : 'Selecciona colegio y ciclo'}
                         </Typography>
                         <Typography variant="body1" color="text.secondary">
                             Tus datos se cargan según el colegio y ciclo escolar activo.
