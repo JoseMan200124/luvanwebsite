@@ -1,6 +1,6 @@
 // src/pages/FailureMappingPage.jsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {
     Typography,
     Paper,
@@ -32,7 +32,7 @@ import {
     TextField,
     Divider,
 } from '@mui/material';
-import { DatePicker, DateTimePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import {
     Visibility as VisibilityIcon,
@@ -46,17 +46,18 @@ import {
     Cancel as CancelIcon,
     PictureAsPdf as PictureAsPdfIcon,
     Edit as EditIcon,
-    Save as SaveIcon,
     Add as AddIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
-import { getAllFailureMappings, getFailureMappingById, deleteFailureMapping, updateFailureMapping, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/failureMappingService';
+import { getAllFailureMappings, getFailureMappingById, deleteFailureMapping, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/failureMappingService';
 import api from '../utils/axiosConfig';
 import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
 import PermissionGuard from '../components/PermissionGuard';
+import FailureMappingFormDialog from '../components/FailureMappingFormDialog';
+import { AuthContext } from '../context/AuthProvider';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -66,6 +67,14 @@ const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 const FailureMappingPage = () => {
     const removeDiacritics = (s = '') => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const normalizeLabel = (s = '') => removeDiacritics(String(s)).toLowerCase().trim();
+
+    const { auth } = useContext(AuthContext);
+    // Ingreso manual y edición completa: solo Gestor (roleId 1)
+    const isGestor = Number(auth?.user?.roleId || 0) === 1;
+    const [formOpen, setFormOpen] = useState(false);
+    const [formRecord, setFormRecord] = useState(null);
+    // Un registro pertenece a un día: la fecha se muestra sin hora (la hora de captura es createdAt).
+    const formatFechaRegistro = (r) => moment(r?.fecha, 'YYYY-MM-DD').format('DD/MM/YYYY');
 
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -103,16 +112,6 @@ const FailureMappingPage = () => {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteId, setDeleteId] = useState(null);
 
-    // Edición de descripción
-    const [editingDescription, setEditingDescription] = useState(false);
-    const [descriptionValue, setDescriptionValue] = useState('');
-    const [savingDescription, setSavingDescription] = useState(false);
-
-    // Edición de fecha
-    const [editingFecha, setEditingFecha] = useState(false);
-    const [fechaValue, setFechaValue] = useState(null);
-    const [savingFecha, setSavingFecha] = useState(false);
-
     // Estadísticas
     const [statistics, setStatistics] = useState({
         total: 0,
@@ -131,7 +130,6 @@ const FailureMappingPage = () => {
     const pdfModalSchoolId = getClientSchoolId(pdfModalClient);
     const pdfModalCorporationId = getClientCorporationId(pdfModalClient);
     const [pdfModalMonth, setPdfModalMonth] = useState(moment().startOf('month'));
-    const [pdfModalCicloEscolar, setPdfModalCicloEscolar] = useState(getInitialCicloEscolarFilter);
     const [pdfModalSchools, setPdfModalSchools] = useState([]);
 
     // Indicadores extra (estructurados por secciones) para Resumen Ejecutivo del PDF
@@ -266,10 +264,11 @@ const FailureMappingPage = () => {
             if (selectedOperacional !== '') {
                 filters.fueOperacional = selectedOperacional;
             }
-            if (startDate) {
+            // Mientras se escribe, el selector entrega fechas incompletas (inválidas): no se filtra con ellas
+            if (startDate?.isValid()) {
                 filters.startDate = startDate.format('YYYY-MM-DD');
             }
-            if (endDate) {
+            if (endDate?.isValid()) {
                 filters.endDate = endDate.format('YYYY-MM-DD');
             }
             filters.orderBy = orderBy;
@@ -314,7 +313,6 @@ const FailureMappingPage = () => {
     const handleOpenPdfModal = () => {
         setPdfModalClient(null);
         setPdfModalMonth(moment().startOf('month'));
-        setPdfModalCicloEscolar(getInitialCicloEscolarFilter);
         setPdfModalSchools([]);
         // Initialize default sections (Operación e Incidentes) and default Operación indicators
         setPdfExtraSections([
@@ -379,11 +377,10 @@ const FailureMappingPage = () => {
         setPdfModalOpen(false);
     };
 
-    // Fetch schools for the modal based on ciclo escolar (corporations are cross-cycle)
-    const fetchPdfModalSchools = async (ciclo) => {
+    // Colegios de todos los ciclos para el modal: el selector de cliente los agrupa por ciclo
+    const fetchPdfModalSchools = async () => {
         try {
-            const params = { ...getCicloEscolarFilterParams(ciclo), includeArchived: true };
-            const response = await api.get('/schools', { params });
+            const response = await api.get('/schools', { params: { allCycles: true, includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setPdfModalSchools(schoolsData);
         } catch (error) {
@@ -394,10 +391,9 @@ const FailureMappingPage = () => {
 
     useEffect(() => {
         if (pdfModalOpen) {
-            fetchPdfModalSchools(pdfModalCicloEscolar);
+            fetchPdfModalSchools();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pdfModalCicloEscolar, pdfModalOpen]);
+    }, [pdfModalOpen]);
 
     const handleExportPDF = async () => {
         if (!pdfModalSchoolId && !pdfModalCorporationId) {
@@ -482,65 +478,38 @@ const FailureMappingPage = () => {
     const handleCloseDetails = () => {
         setDetailsOpen(false);
         setSelectedIncident(null);
-        setEditingDescription(false);
-        setDescriptionValue('');
-        setEditingFecha(false);
-        setFechaValue(null);
     };
 
-    const handleStartEditDescription = () => {
-        setDescriptionValue(selectedIncident?.descripcion || '');
-        setEditingDescription(true);
+    // Los filtros recargan la lista por efecto: basta con restablecer su estado.
+    const handleClearFilters = () => {
+        setSelectedCicloEscolar(getInitialCicloEscolarFilter());
+        setSelectedClient(null);
+        setSelectedPlate('');
+        setSelectedRoute('');
+        setSelectedTipoFalla('');
+        setSelectedTipo('');
+        setSelectedOperacional('');
+        setStartDate(null);
+        setEndDate(null);
+        setPage(0);
     };
 
-    const handleStartEditFecha = () => {
-        setFechaValue(selectedIncident?.fecha ? moment(selectedIncident.fecha) : moment());
-        setEditingFecha(true);
+    const handleOpenCreateManual = () => {
+        setFormRecord(null);
+        setFormOpen(true);
     };
 
-    const handleCancelEditFecha = () => {
-        setEditingFecha(false);
-        setFechaValue(null);
+    const handleOpenEditFull = () => {
+        setFormRecord(selectedIncident);
+        setFormOpen(true);
     };
 
-    const handleSaveFecha = async () => {
-        if (!selectedIncident || !fechaValue) {
-            return;
-        }
-        setSavingFecha(true);
-        try {
-            await updateFailureMapping(selectedIncident.id, { fecha: fechaValue.toISOString() });
-            setSelectedIncident(prev => ({ ...prev, fecha: fechaValue.toISOString() }));
-            setEditingFecha(false);
-            setFechaValue(null);
-        } catch (error) {
-            console.error('Error al guardar fecha:', error);
-            alert('Error al guardar la fecha');
-        } finally {
-            setSavingFecha(false);
-        }
-    };
-
-    const handleCancelEditDescription = () => {
-        setEditingDescription(false);
-        setDescriptionValue('');
-    };
-
-    const handleSaveDescription = async () => {
-        if (!selectedIncident) {
-            return;
-        }
-        setSavingDescription(true);
-        try {
-            await updateFailureMapping(selectedIncident.id, { descripcion: descriptionValue });
-            setSelectedIncident(prev => ({ ...prev, descripcion: descriptionValue }));
-            setEditingDescription(false);
-            setDescriptionValue('');
-        } catch (error) {
-            console.error('Error al guardar descripción:', error);
-            alert('Error al guardar la descripción');
-        } finally {
-            setSavingDescription(false);
+    const handleFormSaved = () => {
+        setFormOpen(false);
+        setFormRecord(null);
+        fetchIncidents();
+        if (detailsOpen && selectedIncident?.id) {
+            handleViewDetails(selectedIncident.id);
         }
     };
 
@@ -859,6 +828,20 @@ const FailureMappingPage = () => {
                                 slotProps={{ textField: { fullWidth: true } }}
                             />
                         </Grid>
+                        <Grid item xs={12} display="flex" justifyContent="flex-end">
+                            <Tooltip title="Limpiar filtros">
+                                <Button onClick={handleClearFilters} variant="outlined" sx={{ mr: 1 }}>
+                                    Limpiar
+                                </Button>
+                            </Tooltip>
+                            {isGestor && (
+                                <PermissionGuard permission="mapeo-fallas-crear">
+                                    <Button onClick={handleOpenCreateManual} variant="contained" color="primary">
+                                        Nuevo Registro
+                                    </Button>
+                                </PermissionGuard>
+                            )}
+                        </Grid>
                     </Grid>
                 </Paper>
 
@@ -955,7 +938,7 @@ const FailureMappingPage = () => {
                                                     Continuó Ruta
                                                 </TableSortLabel>
                                             </TableCell>
-                                            <TableCell>Supervisor</TableCell>
+                                            <TableCell>Registrado por</TableCell>
                                             <TableCell align="center">Acciones</TableCell>
                                         </TableRow>
                                     </TableHead>
@@ -963,10 +946,13 @@ const FailureMappingPage = () => {
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
                                                 <TableCell>
-                                                    {moment(incident.fecha).format('DD/MM/YYYY hh:mm A')}
+                                                    {formatFechaRegistro(incident)}
+                                                    {incident.esRetroactivo && (
+                                                        <Chip label="Retroactivo" size="small" color="info" variant="outlined" sx={{ ml: 1 }} />
+                                                    )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {incident.colegio || incident.corporacion || 'N/A'}
+                                                    {incident.colegio ? `${incident.colegio}${incident.cicloEscolarAnio ? ` ${incident.cicloEscolarAnio}` : ''}` : (incident.corporacion || 'N/A')}
                                                 </TableCell>
                                                 <TableCell>
                                                     {incident.tipo === null ? (
@@ -1032,7 +1018,7 @@ const FailureMappingPage = () => {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {incident.supervisor?.name || 'N/A'}
+                                                    {incident.supervisor?.name || incident.creator?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     <Tooltip title="Ver detalles">
@@ -1102,57 +1088,20 @@ const FailureMappingPage = () => {
                                 <Grid item xs={12} sm={6}>
                                     <Box display="flex" alignItems="center" gap={1}>
                                         <Typography variant="subtitle2" color="textSecondary">
-                                            Fecha y Hora
+                                            Fecha
                                         </Typography>
-                                        {!editingFecha && (
-                                            <PermissionGuard permission="mapeo-fallas-editar">
-                                                <Tooltip title="Editar fecha y hora">
-                                                    <IconButton size="small" onClick={handleStartEditFecha}>
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                        )}
                                     </Box>
-                                    {editingFecha ? (
-                                        <Box mt={1}>
-                                            <LocalizationProvider dateAdapter={AdapterMoment}>
-                                                <DateTimePicker
-                                                    value={fechaValue}
-                                                    onChange={(val) => setFechaValue(val)}
-                                                    disabled={savingFecha}
-                                                    slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                                                    ampm
-                                                />
-                                            </LocalizationProvider>
-                                            <Box display="flex" gap={1} mt={1}>
-                                                <PermissionGuard permission="mapeo-fallas-editar">
-                                                    <Button
-                                                        variant="contained"
-                                                        size="small"
-                                                        startIcon={savingFecha ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                                                        onClick={handleSaveFecha}
-                                                        disabled={savingFecha || !fechaValue}
-                                                    >
-                                                        Guardar
-                                                    </Button>
-                                                </PermissionGuard>
-                                                <Button
-                                                    variant="outlined"
-                                                    size="small"
-                                                    startIcon={<CancelIcon />}
-                                                    onClick={handleCancelEditFecha}
-                                                    disabled={savingFecha}
-                                                >
-                                                    Cancelar
-                                                </Button>
-                                            </Box>
-                                        </Box>
-                                    ) : (
+                                    <>
                                         <Typography variant="body1" gutterBottom>
-                                            {moment(selectedIncident.fecha).format('DD/MM/YYYY hh:mm A')}
+                                            {formatFechaRegistro(selectedIncident)}
+                                            {selectedIncident.esRetroactivo && (
+                                                <Chip label="Retroactivo" size="small" color="info" variant="outlined" sx={{ ml: 1 }} />
+                                            )}
                                         </Typography>
-                                    )}
+                                        <Typography variant="caption" display="block" color="textSecondary">
+                                            {`Registrado el ${moment(selectedIncident.createdAt).tz('America/Guatemala').format('DD/MM/YYYY hh:mm A')}`}
+                                        </Typography>
+                                    </>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
                                     <Typography variant="subtitle2" color="textSecondary">
@@ -1223,7 +1172,7 @@ const FailureMappingPage = () => {
                                         Colegio
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.colegio || 'N/A'}
+                                        {selectedIncident.colegio ? `${selectedIncident.colegio}${selectedIncident.cicloEscolarAnio ? ` ${selectedIncident.cicloEscolarAnio}` : ''}` : 'N/A'}
                                     </Typography>
                                 </Grid>
                                 {selectedIncident.corporacion && (
@@ -1244,6 +1193,16 @@ const FailureMappingPage = () => {
                                         {selectedIncident.supervisor?.name || 'N/A'}
                                     </Typography>
                                 </Grid>
+                                {selectedIncident.creator && (
+                                    <Grid item xs={12} sm={6}>
+                                        <Typography variant="subtitle2" color="textSecondary">
+                                            Ingresado manualmente por
+                                        </Typography>
+                                        <Typography variant="body1" gutterBottom>
+                                            {selectedIncident.creator.name}
+                                        </Typography>
+                                    </Grid>
+                                )}
                                 <Grid item xs={12} sm={6}>
                                     <Typography variant="subtitle2" color="textSecondary">
                                         ¿Afectó el Recorrido?
@@ -1294,58 +1253,12 @@ const FailureMappingPage = () => {
                                         <Typography variant="subtitle2" color="textSecondary">
                                             Descripción
                                         </Typography>
-                                        {!editingDescription && (
-                                            <PermissionGuard permission="mapeo-fallas-editar">
-                                                <Tooltip title="Editar descripción">
-                                                    <IconButton size="small" onClick={handleStartEditDescription}>
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                        )}
                                     </Box>
-                                    {editingDescription ? (
-                                        <Box mt={1}>
-                                            <TextField
-                                                fullWidth
-                                                multiline
-                                                minRows={3}
-                                                value={descriptionValue}
-                                                onChange={(e) => setDescriptionValue(e.target.value)}
-                                                variant="outlined"
-                                                size="small"
-                                                disabled={savingDescription}
-                                            />
-                                            <Box display="flex" gap={1} mt={1}>
-                                                <PermissionGuard permission="mapeo-fallas-editar">
-                                                    <Button
-                                                        variant="contained"
-                                                        size="small"
-                                                        startIcon={savingDescription ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                                                        onClick={handleSaveDescription}
-                                                        disabled={savingDescription}
-                                                    >
-                                                        Guardar
-                                                    </Button>
-                                                </PermissionGuard>
-                                                <Button
-                                                    variant="outlined"
-                                                    size="small"
-                                                    startIcon={<CancelIcon />}
-                                                    onClick={handleCancelEditDescription}
-                                                    disabled={savingDescription}
-                                                >
-                                                    Cancelar
-                                                </Button>
-                                            </Box>
-                                        </Box>
-                                    ) : (
-                                        <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                                            <Typography variant="body1">
-                                                {selectedIncident.descripcion || 'Sin descripción'}
-                                            </Typography>
-                                        </Paper>
-                                    )}
+                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
+                                        <Typography variant="body1">
+                                            {selectedIncident.descripcion || 'Sin descripción'}
+                                        </Typography>
+                                    </Paper>
                                 </Grid>
                             </Grid>
                         ) : (
@@ -1355,6 +1268,13 @@ const FailureMappingPage = () => {
                         )}
                     </DialogContent>
                     <DialogActions>
+                        {selectedIncident && (
+                            <PermissionGuard permission="mapeo-fallas-editar">
+                                <Button onClick={handleOpenEditFull} startIcon={<EditIcon />} variant="outlined">
+                                    Editar registro
+                                </Button>
+                            </PermissionGuard>
+                        )}
                         <Button onClick={handleCloseDetails} color="primary">
                             Cerrar
                         </Button>
@@ -1366,12 +1286,6 @@ const FailureMappingPage = () => {
                     <DialogTitle>Generar Reporte PDF</DialogTitle>
                     <DialogContent dividers>
                         <Box display="flex" flexDirection="column" gap={2} pt={1}>
-                            <CicloEscolarFilter
-                                size="small"
-                                value={pdfModalCicloEscolar}
-                                onChange={(val) => { setPdfModalCicloEscolar(val); setPdfModalClient(null); }}
-                                allowAll={false}
-                            />
                             <ClientSelector
                                 size="medium"
                                 schools={pdfModalSchools}
@@ -1542,6 +1456,12 @@ const FailureMappingPage = () => {
                         </Button>
                     </DialogActions>
                 </Dialog>
+                <FailureMappingFormDialog
+                    open={formOpen}
+                    onClose={() => { setFormOpen(false); setFormRecord(null); }}
+                    onSaved={handleFormSaved}
+                    record={formRecord}
+                />
             </Container>
         </LocalizationProvider>
     );
