@@ -44,6 +44,7 @@ import tw from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
+import useManageableRoles from '../hooks/useManageableRoles';
 import CatalogOrganizer from '../components/CatalogOrganizer';
 
 const PageContainer = tw.div`p-8 bg-gray-50 min-h-screen`;
@@ -228,6 +229,7 @@ const PermissionsManagementPage = () => {
     const { hasPermission } = usePermissions();
     const puedeOrganizar = hasPermission('permisos-gestionar-catalogo');
     const puedeGuardar = hasPermission('permisos-actualizar-por-rol');
+    const { loaded: manageableRolesLoaded, canManageRoleId } = useManageableRoles();
 
     const [pestana, setPestana] = useState('asignar');
     const [roles, setRoles] = useState([]);
@@ -494,6 +496,8 @@ const PermissionsManagementPage = () => {
     };
 
     const rolSeleccionado = roles.find((r) => r.id === selectedRoleId);
+    const rolGestionable = Boolean(selectedRoleId) && canManageRoleId(selectedRoleId);
+    const puedeEditarRol = puedeGuardar && rolGestionable;
 
     // ---------------------------------------------------------------- render
     return (
@@ -571,6 +575,11 @@ const PermissionsManagementPage = () => {
                                                 ))}
                                             </Select>
                                         </FormControl>
+                                        {manageableRolesLoaded && selectedRoleId && puedeGuardar && !rolGestionable && (
+                                            <Alert severity="info" sx={{ mt: 1 }}>
+                                                No tienes permitido modificar los permisos de este rol: se muestran en solo lectura.
+                                            </Alert>
+                                        )}
                                     </Grid>
                                     <Grid item xs={12} md={7}>
                                         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -669,7 +678,7 @@ const PermissionsManagementPage = () => {
                                         onToggle={alternarPermiso}
                                         onAplicar={aplicarAGrupo}
                                         onPedirConfirmacion={pedirConfirmacion}
-                                        soloLectura={!puedeGuardar}
+                                        soloLectura={!puedeEditarRol}
                                     />
                                 ))}
 
@@ -702,7 +711,7 @@ const PermissionsManagementPage = () => {
                                             onToggle={alternarPermiso}
                                             onAplicar={aplicarAGrupo}
                                             onPedirConfirmacion={pedirConfirmacion}
-                                            soloLectura={!puedeGuardar}
+                                            soloLectura={!puedeEditarRol}
                                         />
                                     </>
                                 )}
@@ -713,7 +722,7 @@ const PermissionsManagementPage = () => {
             </Box>
 
             {/* Barra fija de guardado: solo aparece cuando hay algo que guardar. */}
-            {hayCambios && pestana === 'asignar' && puedeGuardar && (
+            {hayCambios && pestana === 'asignar' && puedeEditarRol && (
                 <Box
                     sx={{
                         position: 'fixed',

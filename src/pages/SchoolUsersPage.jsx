@@ -62,6 +62,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
+import useManageableRoles from '../hooks/useManageableRoles';
 import styled from 'styled-components';
 import { normalizeKey } from '../utils/stringHelpers';
 import BulkFamilyDraftsReview, { BulkPendingSteps, getDraftIssues, getDuplicateRowsByEmail, getExistingChanges, hasNothingToUpdate } from '../components/BulkFamilyDraftsReview';
@@ -118,6 +119,9 @@ const toBulkServerDraft = ({ _key, hadIssues, skip, autoSkipped, analyzedCorreo,
 
 const SchoolUsersPage = () => {
     const { hasPermission, hasAnyPermission } = usePermissions();
+    // Pirámide de roles: el alta y la carga masiva de familias solo para quien gestiona Padres (rol 3)
+    const { canManageRoleId } = useManageableRoles();
+    const puedeGestionarPadres = canManageRoleId(3);
     // El mensaje a familia manda correo y/o notificación: basta una de las dos
     // llaves para abrir el diálogo, y cada canal se decide adentro.
     const puedeEnviarMensajeFamilia = hasAnyPermission(['mail-enviar-familia', 'notificaciones-crear']);
@@ -2529,20 +2533,22 @@ const SchoolUsersPage = () => {
                         </Alert>
                     )}
                     <Grid container spacing={2}>
-                        <PermissionGuard permission="padres-carga-masiva">
-                            <Grid item xs={12} md={2}>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={<FileUpload />}
-                                    fullWidth
-                                    onClick={() => setOpenBulkDialog(true)}
-                                    disabled={!canCreateUsersInManagedSchool}
-                                >
-                                    Carga Masiva
-                                </Button>
-                            </Grid>
-                        </PermissionGuard>
+                        {puedeGestionarPadres && (
+                            <PermissionGuard permission="padres-carga-masiva">
+                                <Grid item xs={12} md={2}>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        startIcon={<FileUpload />}
+                                        fullWidth
+                                        onClick={() => setOpenBulkDialog(true)}
+                                        disabled={!canCreateUsersInManagedSchool}
+                                    >
+                                        Carga Masiva
+                                    </Button>
+                                </Grid>
+                            </PermissionGuard>
+                        )}
                         <PermissionGuard permission="horarios-carga-masiva">
                         <Grid item xs={12} md={2}>
                             <Button
@@ -2556,20 +2562,22 @@ const SchoolUsersPage = () => {
                             </Button>
                         </Grid>
                         </PermissionGuard>
-                        <PermissionGuard permission="usuarios-crear">
-                            <Grid item xs={12} md={2}>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={<Add />}
-                                    fullWidth
-                                    onClick={handleAddUser}
-                                    disabled={!canCreateUsersInManagedSchool}
-                                >
-                                    Añadir Familia
-                                </Button>
-                            </Grid>
-                        </PermissionGuard>
+                        {puedeGestionarPadres && (
+                            <PermissionGuard permission="usuarios-crear">
+                                <Grid item xs={12} md={2}>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        startIcon={<Add />}
+                                        fullWidth
+                                        onClick={handleAddUser}
+                                        disabled={!canCreateUsersInManagedSchool}
+                                    >
+                                        Añadir Familia
+                                    </Button>
+                                </Grid>
+                            </PermissionGuard>
+                        )}
                         <Grid item xs={12} md={2}>
                             <Button
                                 variant="contained"
