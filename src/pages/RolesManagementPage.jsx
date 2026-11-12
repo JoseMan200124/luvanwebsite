@@ -1887,7 +1887,7 @@ const RolesManagementPage = () => {
                     <Typography variant="body1" sx={{ mb: 1 }}>
                             Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial.<br />
                             <br />
-                            Las listas de Colegios, Tipo de Ruta y Pilotos están en la hoja "Listas" de la plantilla.<br />
+                            Las listas de Colegios y Corporaciones están en la hoja "Listas" de la plantilla.<br />
                             <br />
                             El límite de archivo es 5 MB.
                     </Typography>

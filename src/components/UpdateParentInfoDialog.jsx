@@ -188,6 +188,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
             routeType,
             studentsCount: students.length,
             students: students.map(st => ({
+                id: st.id ?? null,
                 fullName: st.fullName,
                 grade: st.grade
             })),
