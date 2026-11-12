@@ -1,6 +1,7 @@
 import React from 'react';
 import {
     Alert,
+    AlertTitle,
     Box,
     Button,
     Checkbox,
@@ -20,9 +21,16 @@ import {
     Paper,
     Select,
     TextField,
-    Typography
+    Typography,
+    alpha
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
+import {
+    STUDENT_STATUS_LABELS,
+    getExistingFamilyStudents,
+    getStudentStatus,
+    resolvePairing
+} from '../utils/bulkStudentPairing';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Solo ASCII imprimible, igual que el servidor (la base de datos ignora tildes al comparar correos).
@@ -100,13 +108,15 @@ export const getDraftIssues = (draft, allowedGrades, allowedRouteTypes, password
     });
 
     // La familia pertenece a otro colegio: no se puede guardar desde aqui (a menos que cambie el correo).
-    if (draft.otherSchool && draft.otherSchool.email === draft.correo?.trim().toLowerCase()) {
-        issues.push({ field: 'otherSchool', message: draft.otherSchool.message });
+    const otherSchoolMessage = draft.otherSchool?.email === draft.correo?.trim().toLowerCase() ? draft.otherSchool.message : null;
+    if (otherSchoolMessage) {
+        issues.push({ field: 'otherSchool', message: otherSchoolMessage });
     }
     if (duplicateRows) {
         issues.push({ field: 'duplicate', message: `El correo está repetido en las filas ${duplicateRows}. Deja una sola incluida y omite las demás.` });
     }
-    if (draft.serverIssue) {
+    // Si el servidor rechazó la fila por el mismo motivo (misma cuenta de otro colegio), el aviso ya se muestra: no se repite.
+    if (draft.serverIssue && draft.serverIssue !== otherSchoolMessage) {
         issues.push({ field: 'general', message: draft.serverIssue });
     }
     return issues;
@@ -139,30 +149,6 @@ const normalizeFee = (value) => {
     return text && !Number.isNaN(Number(text)) ? String(Number(text)) : '0';
 };
 
-// Igual que el backend en la carga masiva: ignora tildes, mayúsculas y espacios al emparejar alumnos.
-const normalizeStudentText = (value) =>
-    String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLowerCase();
-const studentKey = (student) => `${normalizeStudentText(student.fullName)}|${normalizeStudentText(student.grade)}`;
-
-// Alumnos de la familia que no aparecen en el archivo (los que salen). Mismo criterio que el backend:
-// primero nombre + grado y luego solo nombre (cambio de grado).
-const findRemovedStudents = (existingStudents, incomingStudents) => {
-    const unmatched = [...existingStudents];
-    const takeFirst = (predicate) => {
-        const index = unmatched.findIndex(predicate);
-        if (index >= 0) {
-            unmatched.splice(index, 1);
-        }
-        return index >= 0;
-    };
-    const incomingKeys = new Set(incomingStudents.map(studentKey));
-    const withoutExactMatch = incomingStudents.filter(incoming => !takeFirst(existing => studentKey(existing) === studentKey(incoming)));
-    withoutExactMatch.forEach(incoming => takeFirst(existing =>
-        !incomingKeys.has(studentKey(existing)) && normalizeStudentText(existing.fullName) === normalizeStudentText(incoming.fullName)
-    ));
-    return unmatched;
-};
-
 const RELATED_LABELS = {
     StudentIncident: ['incidente', 'incidentes']
 };
@@ -172,9 +158,6 @@ const describeRelated = (related) => Object.entries(related)
         return `${count} ${count === 1 ? singular : plural}`;
     })
     .join(' y ');
-
-const formatStudents = (students) =>
-    students.length === 0 ? '' : students.map(student => `${student.fullName.trim()} (${student.grade})`).join(', ');
 
 // Compara el borrador (con lo que el usuario lleva editado) contra lo que hoy guarda el sistema.
 // Devuelve null si el correo no corresponde a una cuenta existente.
@@ -210,25 +193,31 @@ export const getExistingChanges = (draft) => {
         changes.push({ label: 'Contraseña', from: '(oculta)', to: 'Se enviará una contraseña temporal por correo y se cerrará su sesión' });
     }
 
-    let removedStudents = [];
+    // Los alumnos no van en `changes`: se revisan en su propia sección, con el estado de cada uno.
+    let pairing = { matchedIds: [], unpaired: [] };
+    let studentsChanged = false;
     if (existing.hasFamily) {
-        removedStudents = findRemovedStudents(existing.students, draft.students);
-        const from = formatStudents(existing.students);
-        const to = formatStudents(draft.students);
-        const sameStudents = existing.students.length === draft.students.length
-            && existing.students.map(studentKey).sort().join('#') === draft.students.map(studentKey).sort().join('#');
-        if (!sameStudents) {
-            changes.push({ label: 'Estudiantes', from, to });
-        }
+        pairing = resolvePairing(existing.students, draft.students, draft.keepStudentIds || []);
+        studentsChanged = pairing.unpaired.some(student => !student.keep)
+            || pairing.matchedIds.some((id, index) =>
+                getStudentStatus(draft.students[index], existing.students.find(student => student.id === id)) !== 'same');
     }
 
-    return { changes, ignored, removedStudents, hasFamily: existing.hasFamily, passwordChange, reuseOnly: Boolean(existing.reuseOnly) };
+    return {
+        changes,
+        ignored,
+        pairing,
+        studentsChanged,
+        hasFamily: existing.hasFamily,
+        passwordChange,
+        reuseOnly: Boolean(existing.reuseOnly)
+    };
 };
 
 // Familia que ya existe y el archivo no le cambia nada: procesarla no haría nada.
 export const hasNothingToUpdate = (draft) => {
     const info = getExistingChanges(draft);
-    return Boolean(info?.hasFamily) && info.changes.length === 0;
+    return Boolean(info?.hasFamily) && info.changes.length === 0 && !info.studentsChanged;
 };
 
 const ExistingFamilyNotice = ({ info, cicloLabel }) => {
@@ -237,24 +226,46 @@ const ExistingFamilyNotice = ({ info, cicloLabel }) => {
         ? 'Se enviará una contraseña temporal a su correo y se cerrará su sesión.'
         : 'Su contraseña no cambia.';
     const cycleText = cicloLabel ? `el ciclo escolar ${cicloLabel}` : 'este ciclo escolar';
+    const familyChanged = info.hasFamily && info.changes.length > 0;
+    // Familia existente: ámbar y con la lista de datos que cambian; si no cambia nada, un aviso neutro y discreto.
+    const severity = info.hasFamily && !familyChanged ? 'info' : 'warning';
 
     return (
         <Alert
-            severity="warning"
-            sx={{ mb: 1.5 }}
+            severity={severity}
+            variant={info.hasFamily && !familyChanged ? 'outlined' : 'standard'}
+            sx={{ mb: 1.5, ...(familyChanged && { borderLeft: 6, borderLeftColor: 'warning.main' }) }}
             action={(info.changes.length > 0 || info.ignored.length > 0) && (
-                <Button color="inherit" size="small" onClick={() => setOpen(prev => !prev)}>{open ? 'Ocultar cambios' : 'Ver cambios'}</Button>
+                <Button color="inherit" size="small" sx={{ fontWeight: 700 }} onClick={() => setOpen(prev => !prev)}>{open ? 'Ocultar cambios' : 'Ver cambios'}</Button>
             )}
         >
             {info.hasFamily
-                ? `Esta familia ya tiene una cuenta y un registro en ${cycleText}: al guardar se actualizarán sus datos de contacto, facturación y alumnos. El tipo de ruta y el descuento no se modifican desde la carga masiva. ${passwordText}${info.changes.length === 0 && info.ignored.length === 0 ? ' Los datos son iguales a los actuales.' : ''}`
+                ? (
+                    <>
+                        <AlertTitle sx={{ mb: familyChanged ? 0.5 : 0 }}>
+                            {familyChanged
+                                ? `Cambian ${info.changes.length} dato(s) de la familia`
+                                : 'Los datos de la familia no cambian'}
+                        </AlertTitle>
+                        {familyChanged && (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.75 }}>
+                                {info.changes.map(change => (
+                                    <Chip key={change.label} size="small" color="warning" label={change.label} />
+                                ))}
+                            </Box>
+                        )}
+                        <Typography variant="caption" sx={{ display: 'block' }}>
+                            Esta familia ya tiene una cuenta y un registro en {cycleText}. El tipo de ruta y el descuento no se modifican desde la carga masiva. {passwordText}
+                        </Typography>
+                    </>
+                )
                 : info.reuseOnly
                     ? `Este correo ya tiene una cuenta en otro colegio. Al guardar se creará su registro de familia en ${cycleText} con los datos del archivo. El nombre y la contraseña de la cuenta no se modifican: la familia entra con la contraseña que ya tiene. Si no quieres que se cree, omite esta familia.`
                     : `Este correo ya tiene una cuenta, pero todavía no tiene un registro de familia en ${cycleText}. Al guardar se creará su registro en este ciclo con los datos del archivo. ${passwordText} Si no quieres que se cree, omite esta familia.`}
             <Collapse in={open} unmountOnExit>
                 <Box sx={{ mt: 1.5 }}>
                     {info.changes.length === 0 && info.hasFamily && (
-                        <Typography variant="body2" sx={{ mb: 1 }}>No hay datos de contacto, facturación o alumnos por actualizar.</Typography>
+                        <Typography variant="body2" sx={{ mb: 1 }}>No hay datos de contacto o facturación por actualizar.</Typography>
                     )}
                     {info.changes.length > 0 && (
                         <Table size="small">
@@ -275,21 +286,6 @@ const ExistingFamilyNotice = ({ info, cicloLabel }) => {
                                 ))}
                             </TableBody>
                         </Table>
-                    )}
-                    {info.removedStudents.length > 0 && (
-                        <Box sx={{ mt: 1.5 }}>
-                            <Typography variant="body2" fontWeight={600}>
-                                Alumnos que se darán de baja (no aparecen en el archivo):
-                            </Typography>
-                            {info.removedStudents.map((student, index) => (
-                                <Typography key={`${student.fullName}-${index}`} variant="body2" color={student.related ? 'error' : 'text.primary'}>
-                                    {student.fullName} ({student.grade}):{' '}
-                                    {student.related
-                                        ? `tiene ${describeRelated(student.related)}. Se da de baja y se conserva su historial.`
-                                        : 'sin registros relacionados. Se elimina.'}
-                                </Typography>
-                            ))}
-                        </Box>
                     )}
                     {info.ignored.length > 0 && (
                         <Box sx={{ mt: 1.5 }}>
@@ -359,6 +355,75 @@ const BufferedTextField = ({ value, onCommit, onBlurCommit, ...props }) => {
 const fieldError = (issues, field, studentIndex) =>
     issues.find(issue => issue.field === field && issue.studentIndex === studentIndex);
 
+// Color de la tarjeta de cada alumno según su estado: gris = sin cambios, verde = nuevo, ámbar = cambia.
+const STATUS_TONE = { new: 'success', same: 'grey', name: 'warning', grade: 'warning', nameAndGrade: 'warning' };
+const toneColor = (tone) => (tone === 'grey' ? 'divider' : `${tone}.main`);
+
+const describeStudentChange = (status, student, matched) => {
+    if (status === 'new') {
+        return 'Se creará como alumno nuevo.';
+    }
+    if (status === 'same') {
+        return 'Coincide con el alumno registrado. No se modifica.';
+    }
+    return `Se actualizará el alumno registrado: antes "${matched.fullName}" (${matched.grade}), ahora "${student.fullName}" (${student.grade}).`;
+};
+
+const leavingText = (student) => {
+    if (student.keep) {
+        return 'Se conserva sin cambios.';
+    }
+    return student.related
+        ? `Se dará de baja de la familia. Sus registros relacionados (${describeRelated(student.related)}) se conservarán.`
+        : 'Se eliminará.';
+};
+
+// Alumnos registrados en la familia que ninguna fila del archivo toma como pareja: salen, salvo que se marquen para conservarlos.
+const UnpairedStudents = ({ students, disabled, onToggleKeep }) => (
+    <Box
+        data-testid="leaving-students"
+        sx={{ mt: 2, p: 1.5, borderRadius: 1, border: 1, borderColor: 'warning.main', bgcolor: (theme) => alpha(theme.palette.warning.main, 0.08) }}
+    >
+        <Typography variant="subtitle2" fontWeight={700}>
+            Alumnos registrados que no aparecen en el archivo
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Estos alumnos ya están en la familia, pero ninguna fila del archivo corresponde a ellos. Si no haces nada, se
+            quitarán de la familia al guardar. Marca "Conservar" en los que deban seguir en el sistema.
+        </Typography>
+        {students.map(student => (
+            <Box
+                key={student.id}
+                data-testid={`leaving-student-${student.id}`}
+                sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', p: 1, mt: 0.5, borderRadius: 1,
+                    bgcolor: 'background.paper', border: 1, borderColor: 'divider'
+                }}
+            >
+                <Box sx={{ flex: '1 1 220px', minWidth: 0 }}>
+                    <Typography variant="body2" fontWeight={600}>{student.fullName} ({student.grade})</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        {leavingText(student)}
+                    </Typography>
+                </Box>
+                <FormControlLabel
+                    disabled={disabled}
+                    sx={{ mr: 0 }}
+                    control={(
+                        <Checkbox
+                            size="small"
+                            checked={student.keep}
+                            inputProps={{ 'data-testid': `keep-student-${student.id}` }}
+                            onChange={(e) => onToggleKeep(student.id, e.target.checked)}
+                        />
+                    )}
+                    label="Conservar"
+                />
+            </Box>
+        ))}
+    </Box>
+);
+
 // Memoizada: al editar una familia solo se vuelve a dibujar su tarjeta.
 const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRouteTypes, passwordMinLength, canResetPassword, cicloLabel, onChangeDraft, onToggleSkip, onEmailBlur }) => {
     const setField = (patch) => onChangeDraft(draft._key, { ...patch, serverIssue: null });
@@ -373,6 +438,12 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
         [draft, allowedGrades, allowedRouteTypes, passwordMinLength, duplicateRows]
     );
     const existingInfo = draft.skip ? null : getExistingChanges(draft);
+    const existingStudents = existingInfo?.hasFamily ? getExistingFamilyStudents(draft) : null;
+    const pairing = existingInfo?.hasFamily ? existingInfo.pairing : null;
+    const setKeep = (studentId, keep) => {
+        const current = draft.keepStudentIds || [];
+        setField({ keepStudentIds: keep ? [...current, studentId] : current.filter(id => id !== studentId) });
+    };
     const resolved = issues.length === 0;
     const nombreIssue = fieldError(issues, 'nombre');
     const correoIssue = fieldError(issues, 'correo');
@@ -387,7 +458,7 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
     return (
         <Paper variant="outlined" sx={{ p: 2, opacity: draft.skip ? 0.55 : 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
-                <Typography variant="subtitle2" fontWeight={600}>
+                <Typography variant="subtitle1" fontWeight={600}>
                     Fila {draft.row} · {draft.familyLastName || draft.nombre || draft.correo || 'Sin nombre'}
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -482,9 +553,11 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                     ))}
                 </Box>
             )}
+            </>)}
 
-            {!otherSchoolIssue && (<>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, mb: 1 }}>
+            {/* Los alumnos se ven siempre en una familia que ya existe: ahí se revisa y se corrige el emparejamiento. */}
+            {(draft.hadIssues || draft.editing || existingInfo?.hasFamily) && !otherSchoolIssue && (<>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ display: 'block', mt: 2, mb: 1 }}>
                 Estudiantes
             </Typography>
             {studentsIssue && <Alert severity="warning" sx={{ mb: 1 }}>{studentsIssue.message}</Alert>}
@@ -492,37 +565,100 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                 {draft.students.map((student, index) => {
                     const nameIssue = fieldError(issues, 'studentName', index);
                     const gradeIssue = fieldError(issues, 'studentGrade', index);
+                    const matchedId = pairing ? pairing.matchedIds[index] : undefined;
+                    const matchedStudent = existingStudents?.find(existing => existing.id === matchedId);
+                    const status = pairing ? getStudentStatus(student, matchedStudent) : null;
                     return (
-                        <Box key={index} sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 1.5, alignItems: 'start' }}>
-                            <BufferedTextField
-                                size="small" label={`Estudiante ${index + 1}`} value={student.fullName} disabled={draft.skip}
-                                error={Boolean(nameIssue)} helperText={nameIssue?.message}
-                                onCommit={(value) => setStudent(index, { fullName: value })}
-                            />
-                            <FormControl size="small" error={Boolean(gradeIssue)} disabled={draft.skip}>
-                                <InputLabel>Grado</InputLabel>
-                                <Select
-                                    label="Grado"
-                                    value={allowedGrades.includes(student.grade) ? student.grade : ''}
-                                    onChange={(e) => setStudent(index, { grade: e.target.value })}
-                                >
-                                    <MenuItem value=""><em>Seleccione un grado</em></MenuItem>
-                                    {allowedGrades.map(grade => (
-                                        <MenuItem key={grade} value={grade}>{grade}</MenuItem>
-                                    ))}
-                                </Select>
-                                {gradeIssue && (
-                                    <FormHelperText>
-                                        {student.grade ? `En el Excel: "${student.grade}". ` : 'El Excel no traía grado. '}{gradeIssue.message}
-                                    </FormHelperText>
-                                )}
-                            </FormControl>
+                        <Box
+                            key={index}
+                            sx={{
+                                position: 'relative', p: 1.5, pr: 6, borderRadius: 1, border: 1, borderColor: 'divider',
+                                borderLeftWidth: 5, borderLeftColor: status ? toneColor(STATUS_TONE[status]) : 'divider'
+                            }}
+                        >
+                            {pairing && (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+                                    <Chip
+                                        size="small"
+                                        data-testid={`student-status-${index}`}
+                                        color={STATUS_TONE[status] === 'grey' ? 'default' : STATUS_TONE[status]}
+                                        variant={status === 'same' ? 'outlined' : 'filled'}
+                                        label={STUDENT_STATUS_LABELS[status]}
+                                    />
+                                    <Typography variant="caption" color="text.secondary">
+                                        {describeStudentChange(status, student, matchedStudent)}
+                                    </Typography>
+                                </Box>
+                            )}
                             <IconButton
-                                size="small" aria-label="Quitar estudiante" disabled={draft.skip}
+                                size="small" color="error" aria-label="Quitar estudiante" disabled={draft.skip}
+                                sx={{ position: 'absolute', top: 6, right: 6 }}
                                 onClick={() => setField({ students: draft.students.filter((_, i) => i !== index) })}
                             >
                                 <Delete fontSize="small" />
                             </IconButton>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 1.5, alignItems: 'start' }}>
+                                <BufferedTextField
+                                    size="small" label={`Estudiante ${index + 1}`} value={student.fullName} disabled={draft.skip}
+                                    error={Boolean(nameIssue)} helperText={nameIssue?.message}
+                                    onCommit={(value) => setStudent(index, { fullName: value })}
+                                />
+                                <FormControl size="small" error={Boolean(gradeIssue)} disabled={draft.skip}>
+                                    <InputLabel>Grado</InputLabel>
+                                    <Select
+                                        label="Grado"
+                                        value={allowedGrades.includes(student.grade) ? student.grade : ''}
+                                        onChange={(e) => setStudent(index, { grade: e.target.value })}
+                                    >
+                                        <MenuItem value=""><em>Seleccione un grado</em></MenuItem>
+                                        {allowedGrades.map(grade => (
+                                            <MenuItem key={grade} value={grade}>{grade}</MenuItem>
+                                        ))}
+                                    </Select>
+                                    {gradeIssue && (
+                                        <FormHelperText>
+                                            {student.grade ? `En el Excel: "${student.grade}". ` : 'El Excel no traía grado. '}{gradeIssue.message}
+                                        </FormHelperText>
+                                    )}
+                                </FormControl>
+                            </Box>
+                            {pairing && (
+                                <Box
+                                    sx={{
+                                        mt: 2, pt: 1.5, borderTop: 1, borderColor: 'divider', borderStyle: 'dashed',
+                                        borderLeft: 0, borderRight: 0, borderBottom: 0,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap'
+                                    }}
+                                >
+                                    <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
+                                        <Typography variant="body2" fontWeight={600}>Alumno registrado equivalente</Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Indica con qué alumno ya registrado se corresponde esta fila. Si es el mismo alumno con otro nombre o grado,
+                                            elígelo para actualizarlo y conservar su historial. Si es otra persona, elige "Alumno nuevo".
+                                        </Typography>
+                                    </Box>
+                                    <FormControl size="small" sx={{ flex: '0 1 300px', minWidth: 240 }} disabled={draft.skip}>
+                                        <InputLabel>Alumno registrado</InputLabel>
+                                        <Select
+                                            label="Alumno registrado"
+                                            value={matchedId === null ? 'new' : matchedId}
+                                            SelectDisplayProps={{ 'data-testid': `student-pairing-${index}` }}
+                                            onChange={(e) => setStudent(index, { matchedStudentId: e.target.value === 'new' ? null : e.target.value })}
+                                        >
+                                            <MenuItem value="new">Alumno nuevo</MenuItem>
+                                            {existingStudents.map(existing => (
+                                                <MenuItem
+                                                    key={existing.id}
+                                                    value={existing.id}
+                                                    disabled={pairing.matchedIds.some((id, other) => other !== index && id === existing.id)}
+                                                >
+                                                    {existing.fullName} ({existing.grade})
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Box>
+                            )}
                         </Box>
                     );
                 })}
@@ -535,7 +671,9 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                     Agregar estudiante
                 </Button>
             )}
-            </>)}
+            {pairing && pairing.unpaired.length > 0 && (
+                <UnpairedStudents students={pairing.unpaired} disabled={draft.skip} onToggleKeep={setKeep} />
+            )}
             </>)}
         </Paper>
     );

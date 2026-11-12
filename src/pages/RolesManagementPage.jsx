@@ -36,7 +36,7 @@ import {
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
 import { Snackbar, Alert } from '@mui/material';
-import { Edit, Delete, Add, FileUpload, FileDownload } from '@mui/icons-material';
+import { Edit, Delete, Add, FileUpload, FileDownload, Lock } from '@mui/icons-material';
 import styled from 'styled-components';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -45,6 +45,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
+import useManageableRoles from '../hooks/useManageableRoles';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -56,6 +57,18 @@ const roleOptionsStatic = [
     { id: 7, name: 'Auxiliar' },
     { id: 9, name: 'Invitado' }
 ];
+
+// Roles con hoja en la plantilla de carga masiva (nombre de hoja → roleId). Cada hoja de
+// handleDownloadUserTemplate se busca aquí por su nombre: solo se generan las de roles que el
+// actor puede gestionar, y una hoja cuyo nombre no esté en esta lista no se genera.
+const BULK_SHEET_ROLE_IDS = Object.freeze({
+    Gestor: 1,
+    Administrador: 2,
+    Monitora: 4,
+    Piloto: 5,
+    Supervisor: 6,
+    Auxiliar: 7
+});
 
 // A colegio is identified by its NAME, not its id: the same school has one row per ciclo
 // escolar. Must mirror `normalizeSchoolIdentityForStaffScope` in the backend.
@@ -185,6 +198,7 @@ const RolesManagementPage = () => {
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     useContext(AuthContext);
     const { hasPermission } = usePermissions();
+    const { loaded: manageableRolesLoaded, canManageRoleId, isSelf, canManageUser, canEditUser } = useManageableRoles();
 
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
@@ -199,6 +213,8 @@ const RolesManagementPage = () => {
     // Buses no longer needed for route report generation (slots carry routeNumber)
     const [selectedUser, setSelectedUser] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
+    // Editándose a sí mismo: solo datos básicos (nombre, correo, teléfono, contraseña)
+    const isSelfEdit = Boolean(selectedUser?.id) && isSelf(selectedUser);
     
 
     // Se elimina la gestión de contrato en el diálogo de edición
@@ -245,6 +261,9 @@ const RolesManagementPage = () => {
 
     // Roles que se pueden asignar desde este diálogo, al crear y al editar. Padre y Colaborador
     const assignableRoles = new Set(['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado', 'mecanica']);
+    // Pirámide de roles: sin ningún rol gestionable que crear aquí, no se ofrecen el alta ni la carga masiva
+    const puedeCrearAlgunRol = roleOptions.some(r => assignableRoles.has(String(r.name).toLowerCase()) && canManageRoleId(r.id));
+    const puedeCargaMasiva = Object.values(BULK_SHEET_ROLE_IDS).some(canManageRoleId);
     // Roles that should NOT be assigned a school or corporation
     // (Mecanica ve todos los clientes: no se le asigna uno)
     const rolesWithoutSchoolOrCorp = new Set(['administrador', 'supervisor', 'auxiliar', 'mecanica']);
@@ -552,6 +571,52 @@ const RolesManagementPage = () => {
         }
     };
 
+    // Acciones por fila según la pirámide: editar si es gestionable o es uno mismo.
+    const renderUserActions = (user) => {
+        if (!manageableRolesLoaded) {
+            return null;
+        }
+        const puedeEditar = canEditUser(user);
+        const puedeEliminar = canManageUser(user);
+        if (!puedeEditar && !puedeEliminar) {
+            return (
+                <Tooltip
+                    title={user.Role?.name
+                        ? `No tienes permitido gestionar usuarios con rol ${user.Role.name}`
+                        : 'No tienes permitido gestionar a este usuario'}
+                >
+                    <span>
+                        <IconButton disabled>
+                            <Lock fontSize="small" />
+                        </IconButton>
+                    </span>
+                </Tooltip>
+            );
+        }
+        return (
+            <>
+                {puedeEditar && (
+                    <PermissionGuard permission="usuarios-editar">
+                        <Tooltip title="Editar">
+                            <IconButton onClick={() => handleEditClick(user)}>
+                                <Edit />
+                            </IconButton>
+                        </Tooltip>
+                    </PermissionGuard>
+                )}
+                {puedeEliminar && (
+                    <PermissionGuard permission="usuarios-eliminar">
+                        <Tooltip title="Eliminar">
+                            <IconButton onClick={() => handleDeleteClick(user.id)}>
+                                <Delete />
+                            </IconButton>
+                        </Tooltip>
+                    </PermissionGuard>
+                )}
+            </>
+        );
+    };
+
 
     const handleUserChange = (e) => {
         setSelectedUser(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -572,6 +637,20 @@ const RolesManagementPage = () => {
 
     const handleSaveUser = async () => {
         try {
+            if (selectedUser.id && isSelf(selectedUser)) {
+                const selfPayload = { name: selectedUser.name, email: selectedUser.email };
+                if (selectedUser.password?.trim() !== '') {
+                    selfPayload.password = selectedUser.password;
+                }
+                if (typeof selectedUser.phoneNumber !== 'undefined') {
+                    selfPayload.phoneNumber = selectedUser.phoneNumber;
+                }
+                await api.put(`/users/${selectedUser.id}`, selfPayload);
+                setSnackbar({ open: true, message: 'Tus datos se actualizaron exitosamente', severity: 'success' });
+                fetchUsers();
+                handleDialogClose();
+                return;
+            }
 
             const roleIdNum = Number(selectedUser.roleId);
 
@@ -1104,7 +1183,7 @@ const RolesManagementPage = () => {
         // 4. Generar el archivo (Listas primero, para que el usuario vea los IDs de referencia al abrir)
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, wsListas, "Listas");
-        sheets.forEach(sheet => {
+        sheets.filter(sheet => canManageRoleId(BULK_SHEET_ROLE_IDS[sheet.name])).forEach(sheet => {
             const ws = XLSX.utils.aoa_to_sheet([sheet.headers, sheet.example]);
             ws['!cols'] = sheet.headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
             XLSX.utils.book_append_sheet(wb, ws, sheet.name);
@@ -1201,26 +1280,30 @@ const RolesManagementPage = () => {
                         renderInput={(params) => <TextField {...params} label="Cliente (Todos/Colegios/Corporaciones)" />}
                         clearOnEscape
                     />
-                    <PermissionGuard permission="usuarios-carga-masiva">
-                        <Button
-                            variant="contained"
-                            color="info"
-                            startIcon={<FileUpload />}
-                            onClick={handleOpenBulkDialog}
-                        >
-                            Carga Masiva
-                        </Button>
-                    </PermissionGuard>
-                    <PermissionGuard permission="usuarios-crear">
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<Add />}
-                            onClick={handleAddUser}
-                        >
-                            Añadir Usuario
-                        </Button>
-                    </PermissionGuard>
+                    {puedeCargaMasiva && (
+                        <PermissionGuard permission="usuarios-carga-masiva">
+                            <Button
+                                variant="contained"
+                                color="info"
+                                startIcon={<FileUpload />}
+                                onClick={handleOpenBulkDialog}
+                            >
+                                Carga Masiva
+                            </Button>
+                        </PermissionGuard>
+                    )}
+                    {puedeCrearAlgunRol && (
+                        <PermissionGuard permission="usuarios-crear">
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                startIcon={<Add />}
+                                onClick={handleAddUser}
+                            >
+                                Añadir Usuario
+                            </Button>
+                        </PermissionGuard>
+                    )}
                     
                     <Button
                         variant="outlined"
@@ -1282,20 +1365,7 @@ const RolesManagementPage = () => {
                                             </MobileField>
                                         </Grid>
                                         <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 1 }}>
-                                            <PermissionGuard permission="usuarios-editar">
-                                                <Tooltip title="Editar">
-                                                    <IconButton onClick={() => handleEditClick(user)}>
-                                                        <Edit />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                            <PermissionGuard permission="usuarios-eliminar">
-                                                <Tooltip title="Eliminar">
-                                                    <IconButton onClick={() => handleDeleteClick(user.id)}>
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
+                                            {renderUserActions(user)}
                                         </Grid>
                                     </Grid>
                                 </MobileCard>
@@ -1421,20 +1491,7 @@ const RolesManagementPage = () => {
                                                         : '—'}
                                                 </ResponsiveTableCell>
                                                 <ResponsiveTableCell data-label="Acciones" align="center">
-                                                    <PermissionGuard permission="usuarios-editar">
-                                                        <Tooltip title="Editar">
-                                                            <IconButton onClick={() => handleEditClick(user)}>
-                                                                <Edit />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </PermissionGuard>
-                                                    <PermissionGuard permission="usuarios-eliminar">
-                                                        <Tooltip title="Eliminar">
-                                                            <IconButton onClick={() => handleDeleteClick(user.id)}>
-                                                                <Delete />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </PermissionGuard>
+                                                    {renderUserActions(user)}
                                                 </ResponsiveTableCell>
                                             </TableRow>
                                         ))}
@@ -1537,16 +1594,23 @@ const RolesManagementPage = () => {
                                     value={selectedUser?.roleId || ''}
                                     onChange={handleRoleIdChange}
                                     label="Rol"
+                                    disabled={isSelfEdit}
                                 >
                                     <MenuItem value="">
                                         <em>Seleccione un rol</em>
                                     </MenuItem>
-                                    {roleOptions.filter(r => assignableRoles.has(String(r.name).toLowerCase())).map((r) => (
-                                        <MenuItem key={r.id} value={r.id}>
-                                            {r.name}
-                                        </MenuItem>
-                                    ))}
+                                    {roleOptions
+                                        .filter(r => assignableRoles.has(String(r.name).toLowerCase()))
+                                        .filter(r => canManageRoleId(r.id) || (isSelfEdit && Number(r.id) === Number(selectedUser?.originalRoleId)))
+                                        .map((r) => (
+                                            <MenuItem key={r.id} value={r.id}>
+                                                {r.name}
+                                            </MenuItem>
+                                        ))}
                                 </Select>
+                                {isSelfEdit && (
+                                    <FormHelperText>No puedes cambiar tu propio rol.</FormHelperText>
+                                )}
                                 {selectedUser?.id && Number(selectedUser?.roleId) !== Number(selectedUser?.originalRoleId) && (
                                     <FormHelperText>Al cambiar el rol, el usuario deberá iniciar sesión de nuevo.</FormHelperText>
                                 )}
@@ -1578,7 +1642,7 @@ const RolesManagementPage = () => {
                                 </Grid>
                             </>
                         )}
-                        {!roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
+                        {!isSelfEdit && !roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
                             <>
                                 <Grid item xs={12} md={6}>
                                     <FormControl variant="outlined" fullWidth>
@@ -1636,7 +1700,7 @@ const RolesManagementPage = () => {
                                 </Grid>
                             </>
                         )}
-                        {Number(selectedUser?.roleId) === 6 && (
+                        {!isSelfEdit && Number(selectedUser?.roleId) === 6 && (
                             <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
                                 <Typography variant="h6" sx={{ mb: 1 }}>
                                     Clientes a cargo
@@ -1715,7 +1779,7 @@ const RolesManagementPage = () => {
                                 </Paper>
                             </Box>
                         )}
-                        {Number(selectedUser?.roleId) === 7 && (
+                        {!isSelfEdit && Number(selectedUser?.roleId) === 7 && (
                             <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
                                 <Typography variant="h6" sx={{ mb: 1 }}>
                                     Clientes a cargo

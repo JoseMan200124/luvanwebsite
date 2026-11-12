@@ -68,6 +68,7 @@ import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
+import useManageableRoles from '../hooks/useManageableRoles';
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -148,6 +149,9 @@ const translateServiceStatus = (status) => {
 const ColaboradoresPage = () => {
     const { auth } = useContext(AuthContext);
     const { hasPermission, hasAnyPermission } = usePermissions();
+    // Pirámide de roles: el alta y la carga masiva de colaboradores solo para quien gestiona Colaboradores (rol 8)
+    const { canManageRoleId } = useManageableRoles();
+    const puedeGestionarColaboradores = canManageRoleId(8);
     // El modal de horarios crea, edita y elimina slots en la misma operación.
     const puedeGestionarHorarios = hasAnyPermission(['horarios-crear', 'horarios-editar', 'horarios-eliminar']);
     // El modal de estado de servicio ofrece un estado por llave; si no tiene
@@ -2012,19 +2016,21 @@ const ColaboradoresPage = () => {
             <Card sx={{ mb: 3 }}>
                 <CardContent>
                     <Grid container spacing={2}>
-                        <PermissionGuard permission="corporaciones-carga-masiva-colaboradores">
-                            <Grid item xs={12} md={2}>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={<FileUpload />}
-                                    fullWidth
-                                    onClick={() => setOpenBulkDialog(true)}
-                                >
-                                    Carga Masiva
-                                </Button>
-                            </Grid>
-                        </PermissionGuard>
+                        {puedeGestionarColaboradores && (
+                            <PermissionGuard permission="corporaciones-carga-masiva-colaboradores">
+                                <Grid item xs={12} md={2}>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        startIcon={<FileUpload />}
+                                        fullWidth
+                                        onClick={() => setOpenBulkDialog(true)}
+                                    >
+                                        Carga Masiva
+                                    </Button>
+                                </Grid>
+                            </PermissionGuard>
+                        )}
                         <PermissionGuard permission="corporaciones-carga-masiva-horarios">
                             <Grid item xs={12} md={2}>
                                 <Button
@@ -2038,20 +2044,22 @@ const ColaboradoresPage = () => {
                                 </Button>
                             </Grid>
                         </PermissionGuard>
-                        <PermissionGuard permission="corporaciones-crear-colaborador">
-                            <Grid item xs={12} md={2}>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={<Add />}
-                                    fullWidth
-                                    onClick={handleOpenCreateDialog}
-                                    sx={{ fontSize: '0.811rem' }}
-                                >
-                                    Añadir Colaborador
-                                </Button>
-                            </Grid>
-                        </PermissionGuard>
+                        {puedeGestionarColaboradores && (
+                            <PermissionGuard permission="corporaciones-crear-colaborador">
+                                <Grid item xs={12} md={2}>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        startIcon={<Add />}
+                                        fullWidth
+                                        onClick={handleOpenCreateDialog}
+                                        sx={{ fontSize: '0.811rem' }}
+                                    >
+                                        Añadir Colaborador
+                                    </Button>
+                                </Grid>
+                            </PermissionGuard>
+                        )}
                         <PermissionGuard permission="mail-enviar-circular-colaboradores">
                             <Grid item xs={12} md={2}>
                                 <Button
