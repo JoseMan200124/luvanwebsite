@@ -37,3 +37,9 @@ export const cancelScheduledSend = async (uuid) => {
     const res = await api.post(`/scheduled-sends/${encodeURIComponent(uuid)}/cancel`);
     return res.data;
 };
+
+/** Reenvía el correo solo a los destinatarios fallidos de una ejecución (no duplica circular ni notificación). */
+export const resendScheduledSendFailures = async (uuid, runId) => {
+    const res = await api.post(`/scheduled-sends/${encodeURIComponent(uuid)}/runs/${encodeURIComponent(runId)}/resend`);
+    return res.data;
+};

@@ -16,6 +16,7 @@ import {
   ListSubheader,
   MenuItem,
   Paper,
+  Snackbar,
   Table,
   TableBody,
   TableCell,
@@ -32,6 +33,7 @@ import {
   Close as CloseIcon,
   GetApp as DownloadIcon,
   ExpandMore as ExpandMoreIcon,
+  Replay as ReplayIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import TableSortLabel from '@mui/material/TableSortLabel';
@@ -42,6 +44,9 @@ import parse from 'html-react-parser';
 import tw from 'twin.macro';
 
 import api from '../utils/axiosConfig';
+import PermissionGuard from '../components/PermissionGuard';
+import ScheduledOriginChip from '../components/ScheduledOriginChip';
+import { OUTCOME_REASON_LABEL } from '../utils/outcomeReasons';
 import CicloEscolarFilter, { ALL_CYCLES_VALUE } from '../components/CicloEscolarFilter';
 import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import { getSelectedCicloEscolarId, setSelectedCicloEscolarId } from '../utils/schoolContext';
@@ -55,6 +60,53 @@ const safeStr = (v) => (v == null ? '' : String(v)).trim();
 const ALL_CLIENTS_VALUE = 'all';
 
 const MAX_VISIBLE_SCHOOL_NAMES = 2;
+
+// Resultado de la entrega por correo. Sin dato (null): circulares anteriores o enviadas sin correo.
+const EMAIL_STATUS_CHIP = {
+  sent: { label: 'Enviado', color: 'success' },
+  partial: { label: 'Parcial', color: 'warning' },
+  sending: { label: 'Reenviando', color: 'info' },
+};
+
+const emailDeliveryText = (item) => {
+  const sent = Number(item?.emailSentCount) || 0;
+  const failed = Number(item?.emailFailedCount) || 0;
+  if (failed <= 0) {
+    return '';
+  }
+  return sent > 0
+    ? `Correo enviado a ${sent} y falló a ${failed} destinatarios`
+    : `El correo no se pudo enviar a ninguno de los ${failed} destinatarios`;
+};
+
+// Mientras un reenvío corre en segundo plano ('sending') se refresca solo. Un 'sending' que
+// aún permite reenviar quedó huérfano (reinicio del servidor): no se espera por él.
+const isResendInProgress = (item) => item?.emailStatus === 'sending' && !item?.canResend;
+
+const renderEmailStatus = (item) => {
+  const chip = EMAIL_STATUS_CHIP[item?.emailStatus];
+  if (!chip) {
+    return '—';
+  }
+  const text = emailDeliveryText(item);
+  return (
+    <Tooltip title={text}>
+      <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+        <Chip size="small" color={chip.color} label={chip.label} sx={{ fontWeight: 700 }} />
+        {text && (
+          <Typography variant="caption" color="text.secondary">
+            {Number(item.emailSentCount) || 0} enviados · {Number(item.emailFailedCount) || 0} fallidos
+          </Typography>
+        )}
+        {OUTCOME_REASON_LABEL[item.emailOutcomeReason] && (
+          <Typography variant="caption" color="text.secondary">
+            {OUTCOME_REASON_LABEL[item.emailOutcomeReason]}
+          </Typography>
+        )}
+      </Box>
+    </Tooltip>
+  );
+};
 
 // Celda "Audiencia": el backend resuelve `audience` desde el targeting de la
 // circular (todos / uno o varios colegios / familias concretas).
@@ -171,6 +223,9 @@ const CircularHistoryPage = () => {
   const [detail, setDetail] = useState(null);
   const [recipientSearch, setRecipientSearch] = useState('');
   const [recipientsOpen, setRecipientsOpen] = useState(false);
+  const [toResend, setToResend] = useState(null);
+  const [resending, setResending] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const availableSchools = useMemo(() => {
     if (selectedCicloEscolar === ALL_CYCLES_VALUE) {
@@ -269,8 +324,11 @@ const CircularHistoryPage = () => {
     }
   }, []);
 
-  const fetchRows = useCallback(async () => {
-    setLoading(true);
+  // `silent`: recarga en segundo plano (sondeo de un reenvío) sin reemplazar la tabla por el spinner.
+  const fetchRows = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
     setError('');
 
     try {
@@ -332,6 +390,49 @@ const CircularHistoryPage = () => {
       })
       .filter((group) => group.users.length > 0);
   }, [detail?.recipientGroups, recipientSearch]);
+
+  const refreshDetail = useCallback(async (uuid) => {
+    try {
+      const res = await api.get(`/circulars/admin/${uuid}`);
+      // Si el diálogo se cerró mientras llegaba la respuesta, no se vuelve a poblar el detalle.
+      setDetail((prev) => (prev?.uuid === uuid ? res?.data || null : prev));
+    } catch (e) {
+      console.warn('[CircularHistory] detail refresh error', e);
+    }
+  }, []);
+
+  const confirmResend = async () => {
+    setResending(true);
+    try {
+      const { uuid } = toResend;
+      const res = await api.post(`/circulars/admin/${uuid}/resend-failed`);
+      setSnackbar({ open: true, severity: 'success', message: res?.data?.message || 'Reenviando el correo a los destinatarios fallidos.' });
+      setToResend(null);
+      fetchRows();
+      if (detail?.uuid === uuid) {
+        refreshDetail(uuid);
+      }
+    } catch (e) {
+      setSnackbar({ open: true, severity: 'error', message: e?.response?.data?.message || 'No se pudo reenviar a los destinatarios fallidos.' });
+    } finally {
+      setResending(false);
+    }
+  };
+
+  // Un reenvío corre en segundo plano: mientras haya uno en curso se refresca la lista y el detalle.
+  const resendInProgress = rows.some(isResendInProgress) || isResendInProgress(detail);
+  useEffect(() => {
+    if (!resendInProgress) {
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      fetchRows({ silent: true });
+      if (detail?.uuid) {
+        refreshDetail(detail.uuid);
+      }
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [resendInProgress, rows, detail, fetchRows, refreshDetail]);
 
   const openDetail = async (uuid) => {
     const id = safeStr(uuid);
@@ -585,6 +686,7 @@ const CircularHistoryPage = () => {
                   </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 800 }}>Audiencia</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>Correo</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="center">Archivo adjunto</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="right">Acciones</TableCell>
               </TableRow>
@@ -593,7 +695,7 @@ const CircularHistoryPage = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={6}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
                       <CircularProgress size={28} />
                     </Box>
@@ -601,7 +703,7 @@ const CircularHistoryPage = () => {
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={6}>
                     <Box sx={{ textAlign: 'center', py: 4 }}>
                       <Typography variant="body2" color="text.secondary">No hay circulares para mostrar.</Typography>
                     </Box>
@@ -612,13 +714,32 @@ const CircularHistoryPage = () => {
                   <TableRow key={r.uuid} hover>
                     <TableCell>{formatDateTime(r.sentAt) || '—'}</TableCell>
                     <TableCell sx={{ maxWidth: 520 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                        {safeStr(r.subject) || 'Circular'}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                          {safeStr(r.subject) || 'Circular'}
+                        </Typography>
+                        {r.isScheduled && <ScheduledOriginChip />}
+                      </Box>
                     </TableCell>
                     <TableCell>{renderAudience(r)}</TableCell>
+                    <TableCell>{renderEmailStatus(r)}</TableCell>
                     <TableCell align="center">{r.hasAttachment ? 'Sí' : 'No'}</TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                      {r.canResend && (
+                        <PermissionGuard permission="mail-enviar-circular">
+                          <Tooltip title="Reenviar el correo solo a quienes no lo recibieron">
+                            <IconButton
+                              onClick={() => setToResend(r)}
+                              size="small"
+                              color="warning"
+                              sx={{ mr: 1 }}
+                              aria-label="Reenviar a fallidos"
+                            >
+                              <ReplayIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </PermissionGuard>
+                      )}
                       <Tooltip title="Ver detalle">
                         <span>
                           <IconButton
@@ -664,9 +785,12 @@ const CircularHistoryPage = () => {
       <Dialog open={detailOpen} onClose={closeDetail} fullWidth maxWidth="md">
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ pr: 2, minWidth: 0 }}>
-            <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
-              {safeStr(detail?.subject) || 'Circular'}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
+                {safeStr(detail?.subject) || 'Circular'}
+              </Typography>
+              {detail?.isScheduled && <ScheduledOriginChip />}
+            </Box>
             <Typography variant="body2" color="text.secondary">
               Enviada: {formatDateTime(detail?.sentAt) || '—'}
             </Typography>
@@ -685,6 +809,23 @@ const CircularHistoryPage = () => {
             <Alert severity="error">{detailError}</Alert>
           ) : (
             <>
+              {EMAIL_STATUS_CHIP[detail?.emailStatus] && detail.emailStatus !== 'sent' && (
+                <Alert
+                  severity={detail.emailStatus === 'sending' ? 'info' : 'warning'}
+                  sx={{ mb: 2 }}
+                  action={detail.canResend ? (
+                    <PermissionGuard permission="mail-enviar-circular">
+                      <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => setToResend(detail)}>
+                        Reenviar a fallidos
+                      </Button>
+                    </PermissionGuard>
+                  ) : undefined}
+                >
+                  {detail.emailStatus === 'sending'
+                    ? 'Reenviando el correo a los destinatarios que no lo recibieron…'
+                    : `${emailDeliveryText(detail) || 'El correo no se pudo entregar a algunos destinatarios'}. La circular sí está publicada en el sistema.`}
+                </Alert>
+              )}
               <Box sx={{ mb: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
                   <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
@@ -866,6 +1007,33 @@ const CircularHistoryPage = () => {
           <Button onClick={closeDetail}>Cerrar</Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog open={!!toResend} onClose={() => !resending && setToResend(null)}>
+        <DialogTitle>Reenviar a fallidos</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Se enviará el correo únicamente a los {toResend?.emailPendingCount ?? toResend?.emailFailedCount ?? 0} destinatarios que no lo recibieron.
+            La circular y la notificación ya están publicadas en el sistema y no se duplican.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setToResend(null)} disabled={resending}>Volver</Button>
+          <Button variant="contained" onClick={confirmResend} disabled={resending}>
+            {resending ? 'Reenviando…' : 'Reenviar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

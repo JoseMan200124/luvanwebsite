@@ -38,6 +38,7 @@ import moment from 'moment-timezone';
 import tw from 'twin.macro';
 
 import CicloEscolarFilter, { ALL_CYCLES_VALUE } from '../components/CicloEscolarFilter';
+import ScheduledOriginChip from '../components/ScheduledOriginChip';
 import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import { getNotificationHistoryDetail, listNotificationHistory } from '../services/notificationService';
 import { getSelectedCicloEscolarId, setSelectedCicloEscolarId } from '../utils/schoolContext';
@@ -401,9 +402,12 @@ const NotificationHistoryPage = () => {
                   <TableRow key={r.uuid} hover>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(r.sentAt) || '—'}</TableCell>
                     <TableCell sx={{ maxWidth: 260 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                        {safeStr(r.title) || 'Notificación'}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                          {safeStr(r.title) || 'Notificación'}
+                        </Typography>
+                        {r.isScheduled && <ScheduledOriginChip />}
+                      </Box>
                     </TableCell>
                     <TableCell sx={{ maxWidth: 360 }}>
                       <Tooltip title={safeStr(r.message)}>
@@ -460,9 +464,12 @@ const NotificationHistoryPage = () => {
       <Dialog open={detailOpen} onClose={closeDetail} fullWidth maxWidth="md">
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ pr: 2, minWidth: 0 }}>
-            <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
-              {safeStr(detail?.title) || 'Notificación'}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
+                {safeStr(detail?.title) || 'Notificación'}
+              </Typography>
+              {detail?.isScheduled && <ScheduledOriginChip />}
+            </Box>
             <Typography variant="body2" color="text.secondary">
               Enviada: {formatDateTime(detail?.sentAt) || '—'}
               {safeStr(detail?.sender?.name) ? ` · Por: ${safeStr(detail.sender.name)}` : ''}
