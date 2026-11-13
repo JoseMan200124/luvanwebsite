@@ -13,8 +13,6 @@ import {
   DialogTitle,
   Grid,
   IconButton,
-  ListSubheader,
-  MenuItem,
   Paper,
   Snackbar,
   Table,
@@ -37,8 +35,6 @@ import {
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import TableSortLabel from '@mui/material/TableSortLabel';
-import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import moment from 'moment-timezone';
 import parse from 'html-react-parser';
 import tw from 'twin.macro';
@@ -47,9 +43,11 @@ import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
 import ScheduledOriginChip from '../components/ScheduledOriginChip';
 import { OUTCOME_REASON_LABEL } from '../utils/outcomeReasons';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
-import { getSelectedCicloEscolarId, setSelectedCicloEscolarId } from '../utils/schoolContext';
+import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import { getClientSchoolId } from '../utils/clientValue';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -208,12 +206,19 @@ const CircularHistoryPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
-  const [q, setQ] = useState('');
   const [schools, setSchools] = useState([]);
-  const [selectedSchool, setSelectedSchool] = useState(ALL_CLIENTS_VALUE);
-  const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(() => getSelectedCicloEscolarId() || ALL_CYCLES_VALUE);
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
+
+  const pageFilters = useFilters({
+    fields: [
+      F.cycle(),
+      F.client({ schools, corporations: [] }),
+      F.search('q', { placeholder: 'Asunto o contenido' }),
+      F.dateRange('dates'),
+    ],
+    onApplied: () => setPage(0),
+  });
+  const { cycle: selectedCicloEscolar, client: selectedClient, q, dates } = pageFilters.applied;
+  const draftCycle = pageFilters.draft.cycle;
   const [sortBy, setSortBy] = useState('sentAt');
   const [sortDirection, setSortDirection] = useState('desc');
 
@@ -227,68 +232,17 @@ const CircularHistoryPage = () => {
   const [resending, setResending] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const availableSchools = useMemo(() => {
-    if (selectedCicloEscolar === ALL_CYCLES_VALUE) {
-        return schools;
-    }
-
-    return schools.filter((school) => String(school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? '') === String(selectedCicloEscolar));
-  }, [schools, selectedCicloEscolar]);
-
-  const groupedSchools = useMemo(() => {
-    const groups = new Map();
-
-    availableSchools.forEach((school) => {
-      const cycle = school?.cicloEscolar || {};
-      const cycleId = String(school?.cicloEscolarId ?? cycle?.id ?? selectedCicloEscolar ?? '').trim();
-      const cycleLabel = getCicloEscolarOptionLabel(cycle) || (cycleId ? `Ciclo ${cycleId}` : 'Ciclo escolar');
-      const groupKey = cycleId || cycleLabel;
-
-      if (!groups.has(groupKey)) {
-        groups.set(groupKey, {
-          cycleId,
-          cycleLabel,
-          schools: [],
-        });
-      }
-
-      groups.get(groupKey).schools.push(school);
-    });
-
-    return Array.from(groups.values()).sort((a, b) => a.cycleLabel.localeCompare(b.cycleLabel, 'es')).map((group) => ({
-      ...group,
-      schools: [...group.schools].sort((a, b) => safeStr(a?.name).localeCompare(safeStr(b?.name), 'es', { sensitivity: 'base' })),
-    }));
-  }, [availableSchools, selectedCicloEscolar]);
-
-  const effectiveSelectedSchool = useMemo(() => {
-    if (selectedSchool === ALL_CLIENTS_VALUE) {
-        return ALL_CLIENTS_VALUE;
-    }
-    const exists = availableSchools.some((school) => String(school?.id) === String(selectedSchool));
-    return exists ? String(selectedSchool) : ALL_CLIENTS_VALUE;
-  }, [availableSchools, selectedSchool]);
-
-  useEffect(() => {
-    if (selectedSchool === ALL_CLIENTS_VALUE) {
-        return;
-    }
-    if (effectiveSelectedSchool === selectedSchool) {
-        return;
-    }
-
-    setSelectedSchool(ALL_CLIENTS_VALUE);
-  }, [effectiveSelectedSchool, selectedSchool]);
-
   const listParams = useMemo(() => {
     const params = {
       page: page + 1,
       pageSize: rowsPerPage,
       // Evita que axiosConfig inyecte el contexto automáticamente.
       // 'all' significa: sin filtro por cliente.
-      schoolId: effectiveSelectedSchool || ALL_CLIENTS_VALUE,
+      schoolId: getClientSchoolId(selectedClient) || ALL_CLIENTS_VALUE,
       sortBy,
       sortDirection: String(sortDirection || 'desc').toUpperCase(),
+      // "Todos los ciclos" envía allCycles: así el interceptor no inyecta el ciclo de la pestaña.
+      ...getCicloEscolarFilterParams(selectedCicloEscolar),
     };
 
     const query = safeStr(q);
@@ -296,25 +250,21 @@ const CircularHistoryPage = () => {
         params.q = query;
     }
 
-    if (selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE) {
-      params.cicloEscolarId = selectedCicloEscolar;
+    if (dates.from) {
+        params.startDate = moment(dates.from).startOf('day').toDate().toISOString();
     }
-
-    if (startDate) {
-        params.startDate = moment(startDate).startOf('day').toDate().toISOString();
-    }
-    if (endDate) {
-        params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+    if (dates.to) {
+        params.endDate = moment(dates.to).endOf('day').toDate().toISOString();
     }
 
     return params;
-  }, [page, rowsPerPage, q, effectiveSelectedSchool, selectedCicloEscolar, startDate, endDate, sortBy, sortDirection]);
+  }, [page, rowsPerPage, q, selectedClient, selectedCicloEscolar, dates, sortBy, sortDirection]);
 
+  // Los colegios del selector siguen al ciclo que se está eligiendo
   const fetchSchools = useCallback(async () => {
     try {
       const res = await api.get('/schools', {
-        params: { includeArchived: true, allCycles: true },
-        skipSchoolCycleContext: true,
+        params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true },
       });
       const list = res?.data?.schools;
       setSchools(Array.isArray(list) ? list : []);
@@ -322,7 +272,7 @@ const CircularHistoryPage = () => {
       console.warn('[CircularHistory] schools fetch error', e);
       setSchools([]);
     }
-  }, []);
+  }, [draftCycle]);
 
   // `silent`: recarga en segundo plano (sondeo de un reenvío) sin reemplazar la tabla por el spinner.
   const fetchRows = useCallback(async ({ silent = false } = {}) => {
@@ -354,12 +304,6 @@ const CircularHistoryPage = () => {
   useEffect(() => {
     fetchSchools();
   }, [fetchSchools]);
-
-  const handleCycleChange = (value) => {
-    setSelectedCicloEscolar(value);
-    setSelectedCicloEscolarId(value || ALL_CYCLES_VALUE);
-    setPage(0);
-  };
 
   const handleRequestSort = (property) => {
     const isAsc = sortBy === property && sortDirection === 'asc';
@@ -557,110 +501,13 @@ const CircularHistoryPage = () => {
             
           </Box>
 
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                size="small"
-                label="Buscar"
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setPage(0);
-                }}
-                placeholder="Asunto o contenido"
-              />
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <LocalizationProvider dateAdapter={AdapterMoment}>
-                <DatePicker
-                  label="Desde"
-                  value={startDate}
-                  onChange={(v) => {
-                    setStartDate(v);
-                    setPage(0);
-                  }}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </LocalizationProvider>
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <LocalizationProvider dateAdapter={AdapterMoment}>
-                <DatePicker
-                  label="Hasta"
-                  value={endDate}
-                  onChange={(v) => {
-                    setEndDate(v);
-                    setPage(0);
-                  }}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </LocalizationProvider>
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Cliente"
-                value={effectiveSelectedSchool || ALL_CLIENTS_VALUE}
-                onChange={(e) => {
-                  const nextValue = String(e.target.value || ALL_CLIENTS_VALUE);
-                  setSelectedSchool(nextValue);
-                  setPage(0);
-                }}
-                MenuProps={{
-                  anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
-                  transformOrigin: { vertical: 'top', horizontal: 'left' },
-                  PaperProps: {
-                    sx: {
-                      maxHeight: 250,
-                      overflow: 'auto',
-                    },
-                  },
-                }}
-              >
-                <MenuItem value={ALL_CLIENTS_VALUE}>Todos</MenuItem>
-                {groupedSchools.map((group) => [
-                  <ListSubheader
-                    key={`header-${group.cycleId || group.cycleLabel}`}
-                    disableSticky
-                    sx={{
-                      lineHeight: 1.6,
-                      color: '#1976d2',
-                      fontWeight: 800,
-                      bgcolor: 'background.paper',
-                    }}
-                  >
-                    {group.cycleLabel}
-                  </ListSubheader>,
-                  ...group.schools.map((s) => (
-                    <MenuItem key={s.id} value={String(s.id)} sx={{ pl: 3 }}>
-                      {safeStr(s.name) || `Colegio ${s.id}`}
-                    </MenuItem>
-                  )),
-                ])}
-              </TextField>
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <CicloEscolarFilter
-                value={selectedCicloEscolar}
-                onChange={handleCycleChange}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-          </Grid>
-
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
           )}
         </CardContent>
       </Card>
+
+      <FilterBar {...pageFilters.barProps} loading={loading} />
 
       <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
         <TableContainer>

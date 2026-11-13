@@ -18,7 +18,6 @@ import {
     Pagination,
     CircularProgress,
     Box,
-    MenuItem,
     DialogActions,
     useTheme,
     useMediaQuery,
@@ -37,8 +36,10 @@ import {
     CalendarToday,
     Add as AddIcon
 } from '@mui/icons-material';
-import { Switch, FormControlLabel } from '@mui/material';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 
 import SimpleEditor from './SimpleEditor';
 import api from '../utils/axiosConfig';
@@ -135,17 +136,35 @@ const SchoolContractsPage = () => {
     const [filledContractsLimit] = useState(10);
     const [filledContractsTotalPages, setFilledContractsTotalPages] = useState(1);
     const [filledContractsTotalCount, setFilledContractsTotalCount] = useState(0);
-    const [filledContractsSearch, setFilledContractsSearch] = useState('');
-    const [filledContractsSearchInput, setFilledContractsSearchInput] = useState(''); // Para el input del usuario
-
-    // Nuevo: switch para mostrar solo familias no firmadas por contrato
-    const [onlyUnfilled, setOnlyUnfilled] = useState(false);
-    // Nuevo: toggle para mostrar familias inactivas. Por defecto false -> mostrar solo activas
-    const [showInactive, setShowInactive] = useState(false);
     const MIN_LOADING_MS = 600; // ms mínimo para mostrar el loader y mejorar percepción
     const [unfilledFamilies, setUnfilledFamilies] = useState([]);
     const [unfilledLoading, setUnfilledLoading] = useState(false);
-    const [selectedContractUuid, setSelectedContractUuid] = useState(null);
+
+    const firstContractUuid = contracts[0]?.uuid || '';
+    const pageFilters = useFilters({
+        fields: [
+            F.select('contract', {
+                label: 'Contrato',
+                width: 'lg',
+                allLabel: null,
+                initial: () => firstContractUuid,
+                options: contracts.map((contract) => ({ value: contract.uuid, label: contract.title })),
+            }),
+            F.search('search', { label: 'Buscar apellido', width: 'md' }),
+            F.switch('onlyUnfilled', { label: 'Sin firmar contrato' }),
+            F.switch('onlyInactive', { label: 'Solo inactivos' }),
+        ],
+        validate: (values) => (values.onlyUnfilled && !values.contract
+            ? 'Seleccione un contrato para ver las familias que no lo han firmado.'
+            : null),
+        onApplied: () => setFilledContractsPage(1),
+    });
+    const {
+        search: filledContractsSearch,
+        onlyUnfilled,
+        onlyInactive: showInactive,
+    } = pageFilters.applied;
+    const selectedContractUuid = pageFilters.applied.contract || null;
 
     // Diálogo de confirmación para eliminar contrato llenado
     const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
@@ -171,10 +190,6 @@ const SchoolContractsPage = () => {
                     params: { schoolId: schoolId }
                 });
                 setContracts(response.data);
-                // seleccionar por defecto el primer contrato si existe
-                if (Array.isArray(response.data) && response.data.length > 0) {
-                    setSelectedContractUuid(response.data[0].uuid);
-                }
             } catch (error) {
                 console.error('Error al obtener los contratos:', error);
                 setSnackbar({
@@ -188,13 +203,17 @@ const SchoolContractsPage = () => {
         fetchContracts();
     }, [schoolId]);
 
+    const { applyValues } = pageFilters;
+    useEffect(() => {
+        if (firstContractUuid && !selectedContractUuid) {
+            applyValues({ contract: firstContractUuid });
+        }
+    }, [firstContractUuid, selectedContractUuid, applyValues]);
+
     const refreshPage = useCallback(async () => {
         try {
             const response = await api.get('/contracts', { params: { schoolId } });
             setContracts(response.data || []);
-            if (Array.isArray(response.data) && response.data.length > 0 && !selectedContractUuid) {
-                setSelectedContractUuid(response.data[0].uuid);
-            }
         } catch (err) {
             console.error('refreshPage contracts error', err);
         }
@@ -379,7 +398,7 @@ const SchoolContractsPage = () => {
             }
         };
         fetchItems();
-    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid, showInactive, puedeVerLlenados]);
+    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid, showInactive, puedeVerLlenados, routeCicloEscolarId]);
 
     // ---------------------------
     // Función para subir archivo Word y convertirlo a HTML (igual que ContractsManagementPage)
@@ -787,22 +806,6 @@ const SchoolContractsPage = () => {
         });
     };
 
-    // ---------------------------
-    // Función para manejar la búsqueda
-    // ---------------------------
-    const handleSearch = () => {
-        // Resetear a la página 1 y actualizar la búsqueda activa
-        setFilledContractsPage(1);
-        setFilledContractsSearch(filledContractsSearchInput);
-    };
-
-    // Función para limpiar la búsqueda
-    const handleClearSearch = () => {
-        setFilledContractsSearchInput('');
-        setFilledContractsSearch('');
-        setFilledContractsPage(1);
-    };
-
     // Función de render para un filled contract (evita duplicación móvil/desktop).
     // No debe ser un componente (<RenderFilledContract />): declarado dentro de la página,
     // cada re-render (p. ej. AuthProvider en cada mousemove) crea un tipo nuevo, React
@@ -1069,92 +1072,7 @@ const SchoolContractsPage = () => {
                     {onlyUnfilled ? 'Familias sin firmar contrato' : 'Contratos Firmados'}
                 </Typography>
 
-                <Box
-                    sx={{
-                        display: 'flex',
-                        flexDirection: isMobile ? 'column' : 'row',
-                        justifyContent: 'space-between',
-                        alignItems: isMobile ? 'stretch' : 'center',
-                        gap: 2,
-                        mt: 2,
-                        mb: 2,
-                        flexWrap: 'wrap'
-                    }}
-                >
-                    {/* Left: selector y switch, alineado a la izquierda */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <TextField
-                            select
-                            label="Contrato"
-                            size="small"
-                            value={selectedContractUuid || ''}
-                            onChange={(e) => setSelectedContractUuid(e.target.value)}
-                            style={{ minWidth: 220 }}
-                        >
-                            {contracts.map((c) => (
-                                <MenuItem key={c.uuid} value={c.uuid}>
-                                    {c.title}
-                                </MenuItem>
-                            ))}
-                        </TextField>
-
-                        <FormControlLabel
-                            control={
-                                <Switch
-                                    checked={onlyUnfilled}
-                                    onChange={(e) => { setOnlyUnfilled(e.target.checked); setFilledContractsPage(1); }}
-                                    color="primary"
-                                />
-                            }
-                            label="Sin firmar contrato"
-                        />
-                        <FormControlLabel
-                            control={
-                                <Switch
-                                    checked={showInactive}
-                                    onChange={(e) => { setShowInactive(e.target.checked); setFilledContractsPage(1); }}
-                                    color="primary"
-                                />
-                            }
-                            label="Solo inactivos"
-                        />
-                    </Box>
-
-                    {/* Right: buscador, alineado a la derecha */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <TextField
-                            label="Buscar por apellido de familia"
-                            variant="outlined"
-                            size="small"
-                            value={filledContractsSearchInput}
-                            onChange={(e) => setFilledContractsSearchInput(e.target.value)}
-                            onKeyPress={(e) => {
-                                if (e.key === 'Enter') {
-                                    handleSearch();
-                                }
-                            }}
-                            style={{ width: isMobile ? '100%' : '300px' }}
-                        />
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleSearch}
-                            disabled={filledContractsLoading}
-                        >
-                            Buscar
-                        </Button>
-                        {filledContractsSearch && (
-                            <Button
-                                variant="outlined"
-                                color="secondary"
-                                onClick={handleClearSearch}
-                                disabled={filledContractsLoading}
-                            >
-                                Limpiar
-                            </Button>
-                        )}
-                    </Box>
-                </Box>
+                <FilterBar {...pageFilters.barProps} loading={onlyUnfilled ? unfilledLoading : filledContractsLoading} />
 
                 <Box style={{ minHeight: '120px' }}>
                     {/* Mostrar únicamente el spinner durante la carga de la vista seleccionada */}

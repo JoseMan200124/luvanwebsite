@@ -33,6 +33,10 @@ import {
     Tooltip,
     IconButton
 } from '@mui/material';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
 import { Snackbar, Alert } from '@mui/material';
@@ -193,6 +197,8 @@ function getFieldValue(user, field) {
 }
 
 
+const NO_AFFILIATION_OPTION = { type: 'none', id: 'none', label: 'Sin afiliación', groupLabel: 'Opciones' };
+
 const RolesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -225,8 +231,6 @@ const RolesManagementPage = () => {
         message: '',
         severity: 'success'
     });
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchInput, setSearchInput] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [totalUsers, setTotalUsers] = useState(0);
@@ -255,9 +259,25 @@ const RolesManagementPage = () => {
 
     // (Reporte de rutas removido de la página)
 
-    // Filtros
-    const [roleFilter, setRoleFilter] = useState('');
-    const [clientFilter, setClientFilter] = useState(null); // { type: 'Colegio'|'Corporación', id, name }
+    // Filtros: el cliente es { type: 'school' | 'corp' | 'none', id } o null (todos)
+    const pageFilters = useFilters({
+        fields: [
+            F.search('search', { placeholder: 'Nombre o correo' }),
+            F.select('roleId', {
+                label: 'Rol',
+                width: 'sm',
+                options: roleOptions
+                    .filter(r => {
+                        const n = String(r.name || '').toLowerCase();
+                        return n !== 'padre' && n !== 'colaborador';
+                    })
+                    .map(r => ({ value: String(r.id), label: r.name })),
+            }),
+            F.client({ schools, corporations, extraOptions: [NO_AFFILIATION_OPTION], schoolsGroupLabel: 'Colegios' }),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const { search: searchQuery, roleId: roleFilter, client: clientFilter } = pageFilters.applied;
 
     // Roles que se pueden asignar desde este diálogo, al crear y al editar. Padre y Colaborador
     const assignableRoles = new Set(['gestor', 'administrador', 'monitora', 'piloto', 'supervisor', 'auxiliar', 'invitado', 'mecanica']);
@@ -303,10 +323,6 @@ const RolesManagementPage = () => {
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    useEffect(() => {
-        setPage(0);
-    }, [roleFilter, clientFilter, searchQuery]);
 
     const fetchAllPilots = async () => {
         if (!hasPermission('usuarios-listar-pilotos')) {
@@ -367,10 +383,10 @@ const RolesManagementPage = () => {
             if (roleFilter) {
                 params.roleId = roleFilter;
             }
-            if (clientFilter?.type === 'Colegio') {
+            if (clientFilter?.type === 'school') {
                 params.schoolId = clientFilter.id;
             }
-            if (clientFilter?.type === 'Corporación') {
+            if (clientFilter?.type === 'corp') {
                 params.corporationId = clientFilter.id;
             }
 
@@ -736,24 +752,9 @@ const RolesManagementPage = () => {
         //setSearchInput(e.target.value);
     //};
 
-    const handleApplySearch = () => {
-        setSearchQuery(searchInput);
-    };
-
-    // Client options for combined Autocomplete (Todos and Sin afiliación first)
-    const clientOptions = [
-        { type: 'Todos', id: 'all', label: 'Todos' },
-        { type: 'Sin afiliación', id: 'none', label: 'Sin afiliación' },
-        ...schools.map(s => ({ type: 'Colegio', id: s.id, label: s.name })),
-        ...corporations.map(c => ({ type: 'Corporación', id: c.id, label: c.name }))
-    ];
-
     // --- MODIFICACIÓN: Se actualiza el filtrado para considerar además el apellido de la familia ---
     const filteredUsers = users.filter((u) => {
-        const matchesSearch =
-            (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (u.email || '').toLowerCase().includes(searchQuery.toLowerCase());
-        if (!matchesSearch) {
+        if (!matchSearchTokens(searchQuery, [u.name, u.email])) {
             return false;
         }
         if (roleFilter) {
@@ -763,10 +764,7 @@ const RolesManagementPage = () => {
         }
         if (clientFilter) {
             const cType = clientFilter.type;
-            // 'Todos' means no filtering
-            if (cType === 'Todos') {
-                // do nothing
-            } else if (cType === 'Sin afiliación') {
+            if (cType === 'none') {
                 const hasSchool = !!(u.school) || (Array.isArray(u.attachedAuxiliarSchools) && u.attachedAuxiliarSchools.length > 0) || (Array.isArray(u.attachedSupervisorSchools) && u.attachedSupervisorSchools.length > 0);
                 const hasCorp = !!(u.corporationId || u.corporation) || (Array.isArray(u.attachedSupervisorCorporations) && u.attachedSupervisorCorporations.length > 0) || (Array.isArray(u.attachedAuxiliarCorporations) && u.attachedAuxiliarCorporations.length > 0);
                 if (hasSchool || hasCorp) {
@@ -774,7 +772,7 @@ const RolesManagementPage = () => {
                 }
             } else {
                 const cId = Number(clientFilter.id);
-                if (cType === 'Colegio') {
+                if (cType === 'school') {
                     if (Number(u.school) === cId) {
                         // ok
                     } else if (Array.isArray(u.attachedSupervisorSchools) && u.attachedSupervisorSchools.map(Number).includes(cId)) {
@@ -784,7 +782,7 @@ const RolesManagementPage = () => {
                     } else {
                         return false;
                     }
-                } else if (cType === 'Corporación') {
+                } else if (cType === 'corp') {
                     if (Number(u.corporationId) === cId) {
                         // ok
                     } else if (Array.isArray(u.attachedSupervisorCorporations) && u.attachedSupervisorCorporations.map(Number).includes(cId)) {
@@ -1207,117 +1205,44 @@ const RolesManagementPage = () => {
             <Typography variant="h4" gutterBottom>
                 Gestión de Usuarios y Roles
             </Typography>
-            <Box
-                sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    justifyContent: 'space-between',
-                    mb: 2,
-                    gap: 2
-                }}
-            >
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <TextField
-                        label="Buscar usuarios"
-                        variant="outlined"
-                        size="small"
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') {
-                            handleApplySearch();
-                        } }}
-                        sx={{ width: '100%', maxWidth: '300px' }}
-                    />
-                    <Button variant="contained" size="small" onClick={() => handleApplySearch()}>Buscar</Button>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    <FormControl size="small" sx={{ width: 150 }}>
-                        <InputLabel>Rol</InputLabel>
-                        <Select
-                            label="Rol"
-                            value={roleFilter}
-                            onChange={(e) => setRoleFilter(e.target.value)}
+            {/* Acciones */}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                {puedeCargaMasiva && (
+                    <PermissionGuard permission="usuarios-carga-masiva">
+                        <Button
+                            variant="contained"
+                            color="info"
+                            startIcon={<FileUpload />}
+                            onClick={handleOpenBulkDialog}
                         >
-                            <MenuItem value="">
-                                <em>Todos</em>
-                            </MenuItem>
-                            {roleOptions
-                                .filter(r => {
-                                    const n = String(r.name || '').toLowerCase();
-                                    return n !== 'padre' && n !== 'colaborador';
-                                })
-                                .map(r => (
-                                    <MenuItem key={r.id} value={r.id}>
-                                        {r.name}
-                                    </MenuItem>
-                                ))}
-                        </Select>
-                    </FormControl>
-                    <Autocomplete
-                        size="small"
-                        sx={{ width: 320 }}
-                        options={clientOptions}
-                        groupBy={(option) => {
-                            if (!option) {
-                                return '';
-                            }
-                            if (option.type === 'Todos' || option.type === 'Sin afiliación') {
-                                return 'Opciones';
-                            }
-                            if (option.type === 'Colegio') {
-                                return 'Colegios';
-                            }
-                            if (option.type === 'Corporación') {
-                                return 'Corporaciones';
-                            }
-                            return '';
-                        }}
-                        getOptionLabel={(option) => option.label}
-                        value={clientFilter}
-                        onChange={(e, newVal) => {
-                            setClientFilter(newVal || null);
-                        }}
-                        renderInput={(params) => <TextField {...params} label="Cliente (Todos/Colegios/Corporaciones)" />}
-                        clearOnEscape
-                    />
-                    {puedeCargaMasiva && (
-                        <PermissionGuard permission="usuarios-carga-masiva">
-                            <Button
-                                variant="contained"
-                                color="info"
-                                startIcon={<FileUpload />}
-                                onClick={handleOpenBulkDialog}
-                            >
-                                Carga Masiva
-                            </Button>
-                        </PermissionGuard>
-                    )}
-                    {puedeCrearAlgunRol && (
-                        <PermissionGuard permission="usuarios-crear">
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<Add />}
-                                onClick={handleAddUser}
-                            >
-                                Añadir Usuario
-                            </Button>
-                        </PermissionGuard>
-                    )}
-                    
-                    <Button
-                        variant="outlined"
-                        color="primary"
-                        startIcon={<FileDownload />}
-                        onClick={() => setDownloadAllDialogOpen(true)}
-                        sx={{ ml: 1 }}
-                    >
-                        Descargar Todos
-                    </Button>
-                    {/* Reporte de rutas removido */}
-                    {/* bulk editors removed */}
-                </div>
+                            Carga Masiva
+                        </Button>
+                    </PermissionGuard>
+                )}
+                {puedeCrearAlgunRol && (
+                    <PermissionGuard permission="usuarios-crear">
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<Add />}
+                            onClick={handleAddUser}
+                        >
+                            Añadir Usuario
+                        </Button>
+                    </PermissionGuard>
+                )}
+                <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<FileDownload />}
+                    onClick={() => setDownloadAllDialogOpen(true)}
+                >
+                    Descargar Todos
+                </Button>
             </Box>
+
+            {/* Filtros */}
+            <FilterBar {...pageFilters.barProps} loading={loading} />
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '16px' }}>
                     <CircularProgress />

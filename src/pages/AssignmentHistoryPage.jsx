@@ -13,12 +13,6 @@ import {
     TablePagination,
     Paper,
     Chip,
-    TextField,
-    MenuItem,
-    Select,
-    FormControl,
-    InputLabel,
-    Grid,
     IconButton,
     Tooltip,
     CircularProgress,
@@ -28,10 +22,32 @@ import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import moment from 'moment-timezone';
-import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
+import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
+
+const ASSIGNMENT_TYPE_LABELS = {
+    'bus_pilot': 'Bus - Piloto',
+    'bus_monitora': 'Bus - Monitora',
+    'bus_school': 'Bus - Colegio (con Ruta)',
+    'bus_corporation': 'Bus - Corporación (con Ruta)',
+    'pilot_school': 'Piloto - Colegio',
+    'pilot_corporation': 'Piloto - Corporación',
+    'pilot_route': 'Piloto - Ruta',
+    'monitora_school': 'Monitora - Colegio',
+    'monitora_corporation': 'Monitora - Corporación',
+    'monitora_route': 'Monitora - Ruta',
+    'school_pilot': 'Colegio - Piloto',
+    'school_monitora': 'Colegio - Monitora',
+    'corporation_pilot': 'Corporación - Piloto',
+    'corporation_monitora': 'Corporación - Monitora',
+    'route_pilot': 'Ruta - Piloto',
+    'route_monitora': 'Ruta - Monitora'
+};
 
 const formatGuatemalaDatetime = (dateString) => {
     if (!dateString) {
@@ -267,40 +283,33 @@ const AssignmentHistoryPage = () => {
     const [totalRecords, setTotalRecords] = useState(0);
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
-    // Filtros
-    const [assignmentType, setAssignmentType] = useState('');
-    const [busId, setBusId] = useState('');
-    const [userId, setUserId] = useState('');
-    const [selectedClient, setSelectedClient] = useState(null);
-    const schoolId = getClientSchoolId(selectedClient);
-    const corporationId = getClientCorporationId(selectedClient);
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
-
     // Catálogos para filtros
     const [buses, setBuses] = useState([]);
     const [schools, setSchools] = useState([]);
     const [corporations, setCorporations] = useState([]);
 
-    const assignmentTypeLabels = {
-        'bus_pilot': 'Bus - Piloto',
-        'bus_monitora': 'Bus - Monitora',
-        'bus_school': 'Bus - Colegio (con Ruta)',
-        'bus_corporation': 'Bus - Corporación (con Ruta)',
-        'pilot_school': 'Piloto - Colegio',
-        'pilot_corporation': 'Piloto - Corporación',
-        'pilot_route': 'Piloto - Ruta',
-        'monitora_school': 'Monitora - Colegio',
-        'monitora_corporation': 'Monitora - Corporación',
-        'monitora_route': 'Monitora - Ruta',
-        'school_pilot': 'Colegio - Piloto',
-        'school_monitora': 'Colegio - Monitora',
-        'corporation_pilot': 'Corporación - Piloto',
-        'corporation_monitora': 'Corporación - Monitora',
-        'route_pilot': 'Ruta - Piloto',
-        'route_monitora': 'Ruta - Monitora'
-    };
+    const pageFilters = useFilters({
+        fields: [
+            F.cycle(),
+            F.client({ schools, corporations }),
+            F.select('assignmentType', { label: 'Tipo de asignación', options: ASSIGNMENT_TYPE_LABELS }),
+            F.select('busId', {
+                label: 'Bus',
+                dependsOn: 'cycle',
+                requireParent: false,
+                options: buses.map((bus) => ({ value: String(bus.id), label: bus.routeNumber ? `${bus.plate} - Ruta ${bus.routeNumber}` : bus.plate })),
+            }),
+            F.dateRange('dates'),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const { cycle: selectedCicloEscolar, client: selectedClient, assignmentType, busId, dates } = pageFilters.applied;
+    const schoolId = getClientSchoolId(selectedClient);
+    const corporationId = getClientCorporationId(selectedClient);
+    const startDate = dates.from;
+    const endDate = dates.to;
+    const draftCycle = pageFilters.draft.cycle;
+    const assignmentTypeLabels = ASSIGNMENT_TYPE_LABELS;
 
     const changeTypeLabels = {
         'assignment': 'Asignación',
@@ -318,8 +327,12 @@ const AssignmentHistoryPage = () => {
 
     useEffect(() => {
         fetchHistory();
+    }, [page, rowsPerPage, assignmentType, busId, schoolId, corporationId, startDate, endDate, selectedCicloEscolar]);
+
+    // Los catálogos siguen al ciclo que se está eligiendo, no se recargan con cada filtro aplicado
+    useEffect(() => {
         fetchCatalogs();
-    }, [page, rowsPerPage, assignmentType, busId, userId, schoolId, corporationId, startDate, endDate, selectedCicloEscolar]);
+    }, [draftCycle]);
 
     const fetchHistory = async () => {
         setLoading(true);
@@ -336,9 +349,6 @@ const AssignmentHistoryPage = () => {
             }
             if (busId) {
                 params.busId = busId;
-            }
-            if (userId) {
-                params.userId = userId;
             }
             if (schoolId) {
                 params.schoolId = schoolId;
@@ -379,14 +389,14 @@ const AssignmentHistoryPage = () => {
 
             // Cargar colegios
             const schoolsRes = await api.get('/schools', {
-                params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true },
+                params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true },
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             setSchools(schoolsRes.data.schools || []);
 
             // Cargar corporaciones
             const corpsRes = await api.get('/corporations', {
-                params: getCicloEscolarFilterParams(selectedCicloEscolar),
+                params: getCicloEscolarFilterParams(draftCycle),
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             setCorporations(corpsRes.data.corporations || []);
@@ -421,116 +431,17 @@ const AssignmentHistoryPage = () => {
             {!loading && (
                 <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
                     {totalRecords} registros: {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
-                    {isSpecificCicloEscolarSelected ? ' — Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.' : ''}
                 </Typography>
             )}
 
             {/* Filtros */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                        Filtros
-                    </Typography>
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <CicloEscolarFilter
-                                value={selectedCicloEscolar}
-                                onChange={(value) => {
-                                    setSelectedCicloEscolar(value);
-                                    setBusId('');
-                                    setUserId('');
-                                    setSelectedClient(null);
-                                    setPage(0);
-                                }}
-                                label="Ciclo escolar de colegios"
-                                allLabel="Todos los ciclos"
-                                size="small"
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} sm={6} md={3}>
-                            <ClientSelector
-                                schools={schools}
-                                corporations={corporations}
-                                value={selectedClient}
-                                onChange={(client) => {
-                                    setSelectedClient(client);
-                                    setPage(0);
-                                }}
-                                helperText={isSpecificCicloEscolarSelected && !selectedClient
-                                    ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
-                                    : 'Los colegios dependen del ciclo escolar seleccionado.'}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} sm={6} md={3}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Tipo de Asignación</InputLabel>
-                                <Select
-                                    value={assignmentType}
-                                    onChange={(e) => {
-                                        setAssignmentType(e.target.value);
-                                        setPage(0);
-                                    }}
-                                    label="Tipo de Asignación"
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {Object.entries(assignmentTypeLabels).map(([key, label]) => (
-                                        <MenuItem key={key} value={key}>{label}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-
-                        <Grid item xs={12} sm={6} md={3}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Bus</InputLabel>
-                                <Select
-                                    value={busId}
-                                    onChange={(e) => {
-                                        setBusId(e.target.value);
-                                        setPage(0);
-                                    }}
-                                    label="Bus"
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {buses.map((bus) => (
-                                        <MenuItem key={bus.id} value={bus.id}>
-                                            {bus.plate} {bus.routeNumber ? `- Ruta ${bus.routeNumber}` : ''}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-
-
-
-                        <Grid item xs={12} sm={6} md={3}>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                type="date"
-                                label="Desde"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                InputLabelProps={{ shrink: true }}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} sm={6} md={3}>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                type="date"
-                                label="Hasta"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                InputLabelProps={{ shrink: true }}
-                            />
-                        </Grid>
-                    </Grid>
-                </CardContent>
-            </Card>
+            <FilterBar
+                {...pageFilters.barProps}
+                loading={loading}
+                caption={isSpecificCicloEscolarSelected
+                    ? 'Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.'
+                    : undefined}
+            />
 
             {error && (
                 <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
