@@ -114,6 +114,9 @@ export const ServiceStatusChip = ({ serviceStatus, isDeleted }) => {
     if (serviceStatus === 'PAUSED') {
         return <Chip label="Pausado" size="small" color="warning" />;
     }
+    if (serviceStatus === 'PENDING_START') {
+        return <Chip label="Pendiente de inicio" size="small" color="info" />;
+    }
     if (serviceStatus === 'SUSPENDED') {
         return <Chip label="Suspendido" size="small" color="error" />;
     }
