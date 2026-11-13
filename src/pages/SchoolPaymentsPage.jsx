@@ -1634,6 +1634,7 @@ const SchoolPaymentsPage = () => {
                 ACTIVE: 'ACTIVO',
                 PAUSED: 'PAUSADO',
                 SUSPENDED: 'SUSPENDIDO',
+                PENDING_START: 'PENDIENTE DE INICIO',
                 INACTIVE: 'INACTIVO',
                 DELETED: 'ELIMINADO'
             }[rawServiceStatus] || (rawServiceStatus || '-');
@@ -2875,6 +2876,7 @@ const SchoolPaymentsPage = () => {
                     'ACTIVE': 'ACTIVO',
                     'PAUSED': 'PAUSADO',
                     'SUSPENDED': 'SUSPENDIDO',
+                    'PENDING_START': 'PENDIENTE DE INICIO',
                     'INACTIVE': 'INACTIVO'
                 }[serviceStatus] || serviceStatus || 'NO ESPECIFICADO';
                 
@@ -3041,6 +3043,7 @@ const SchoolPaymentsPage = () => {
                     ACTIVE: 'ACTIVO',
                     PAUSED: 'PAUSADO',
                     SUSPENDED: 'SUSPENDIDO',
+                    PENDING_START: 'PENDIENTE DE INICIO',
                     INACTIVE: 'INACTIVO'
                 }[st] || (st ? st : 'NO ESPECIFICADO');
             };
@@ -3498,6 +3501,11 @@ const SchoolPaymentsPage = () => {
                                     label={`Ciclo Escolar ${currentCycleLabel || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
+                                {school?.cycleStatus === 'ARCHIVED' && (
+                                    <Tooltip title="Este ciclo ya no está en operaciones. Los estados de servicio son los que tenía cada familia al cerrar el ciclo.">
+                                        <Chip size="small" color="default" label="Ciclo cerrado" sx={{ backgroundColor: 'rgba(255,255,255,0.85)' }} />
+                                    </Tooltip>
+                                )}
                                 <Chip
                                     size="small"
                                     icon={<People />}
@@ -4236,6 +4244,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="ACTIVE">ACTIVO</MenuItem>
                                             <MenuItem value="PAUSED">PAUSADO</MenuItem>
                                             <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
+                                            <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
@@ -4357,6 +4366,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="ACTIVE">ACTIVO</MenuItem>
                                             <MenuItem value="PAUSED">PAUSADO</MenuItem>
                                             <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
+                                            <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>

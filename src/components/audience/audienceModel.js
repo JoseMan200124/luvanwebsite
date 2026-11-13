@@ -21,6 +21,7 @@ export const SERVICE_STATUS_OPTIONS = [
     { value: 'ACTIVE',    label: 'Activo' },
     { value: 'PAUSED',    label: 'Pausado' },
     { value: 'SUSPENDED', label: 'Suspendido' },
+    { value: 'PENDING_START', label: 'Pendiente de inicio' },
 ];
 
 export const PAYMENT_STATUS_OPTIONS = [

@@ -28,7 +28,8 @@ import {
     Pause,
     Block,
     RemoveCircle,
-    Info
+    Info,
+    HourglassEmpty
 } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
@@ -78,6 +79,15 @@ const SERVICE_STATES = {
         canLogin: false,
         generatesBilling: false,
         accumulatesPenalty: false
+    },
+    PENDING_START: {
+        label: 'Pendiente de inicio',
+        icon: HourglassEmpty,
+        color: 'info',
+        description: 'Inscrita en un colegio que aún no está en operaciones. No se cobra ni acumula mora. Al iniciar operaciones pasa sola a Activo (o a Suspendido si no firmó contrato). Puede activarse antes a mano.',
+        canLogin: true,
+        generatesBilling: false,
+        accumulatesPenalty: false
     }
 };
 
@@ -88,7 +98,8 @@ const VALID_TRANSITIONS = {
     'ACTIVE': ['PAUSED', 'SUSPENDED', 'INACTIVE'],
     'PAUSED': ['ACTIVE', 'SUSPENDED', 'INACTIVE'],
     'SUSPENDED': ['ACTIVE', 'PAUSED', 'INACTIVE'],
-    'INACTIVE': ['ACTIVE']
+    'INACTIVE': ['ACTIVE'],
+    'PENDING_START': ['ACTIVE', 'INACTIVE']
 };
 
 const inferStatusFromUser = (user) => (

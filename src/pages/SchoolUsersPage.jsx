@@ -15,6 +15,7 @@ import {
     Alert,
     Grid,
     Chip,
+    Tooltip,
     Table,
     TableBody,
     TableCell,
@@ -91,6 +92,7 @@ const DOWNLOAD_FAMILY_OPTIONS = [
     { value: 'ACTIVE', label: 'Activas' },
     { value: 'PAUSED', label: 'Pausadas' },
     { value: 'SUSPENDED', label: 'Suspendidas' },
+    { value: 'PENDING_START', label: 'Pendientes de inicio' },
     { value: 'INACTIVE', label: 'Inactivas' }
 ];
 const DOWNLOAD_FAMILY_OPTION_LABELS = DOWNLOAD_FAMILY_OPTIONS.reduce((acc, o) => { acc[o.value] = o.label; return acc; }, {});
@@ -253,6 +255,7 @@ const SchoolUsersPage = () => {
             case 'ACTIVE': return 'Activo';
             case 'PAUSED': return 'Pausado';
             case 'SUSPENDED': return 'Suspendido';
+            case 'PENDING_START': return 'Pendiente de inicio';
             case 'INACTIVE': return 'Inactivo';
             default: return '';
         }
@@ -908,6 +911,25 @@ const SchoolUsersPage = () => {
     }, []);
     const [scheduleSchoolId, setScheduleSchoolId] = useState(null);
     const [schools, setSchools] = useState([]);
+    // cycleStatus de la fila cuando no llegó en la navegación (recarga o URL directa): la lista GET /schools
+    // excluye las filas archivadas, así que se pide GET /schools/:id, que trae el modelo completo.
+    const [cycleStatusFila, setCycleStatusFila] = useState(null);
+    useEffect(() => {
+        if (location.state?.school?.cycleStatus || !schoolId) {
+            return undefined;
+        }
+        let cancelado = false;
+        api.get(`/schools/${schoolId}`)
+            .then((res) => {
+                if (!cancelado) {
+                    setCycleStatusFila(res.data?.school?.cycleStatus || null);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelado = true;
+        };
+    }, [schoolId, location.state]);
 
     // Prefer FamilyDetail-level updatedAt (for the selected school + ciclo) over global User.updatedAt
     const getFamilyUpdatedAt = useCallback((user) => {
@@ -2525,6 +2547,11 @@ const SchoolUsersPage = () => {
                                     label={`Ciclo Escolar ${currentCycleLabel || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
+                                {(managedSchool.cycleStatus || cycleStatusFila) === 'ARCHIVED' && (
+                                    <Tooltip title="Este ciclo ya no está en operaciones. Los estados de servicio son los que tenía cada familia al cerrar el ciclo.">
+                                        <Chip label="Ciclo cerrado" sx={{ backgroundColor: 'rgba(255,255,255,0.85)' }} />
+                                    </Tooltip>
+                                )}
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                     <Typography variant="body1" sx={{ opacity: 0.9 }}>
                                         {users.length} familias encontradas
@@ -2867,6 +2894,8 @@ const SchoolUsersPage = () => {
                                                     return <Chip label="Pausado" size="small" color="warning" />;
                                                 } else if (serviceStatus === 'SUSPENDED') {
                                                     return <Chip label="Suspendido" size="small" color="error" />;
+                                                } else if (serviceStatus === 'PENDING_START') {
+                                                    return <Chip label="Pendiente de inicio" size="small" color="info" />;
                                                 } else if (serviceStatus === 'INACTIVE') {
                                                     return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
                                                 }

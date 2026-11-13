@@ -956,6 +956,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         } else if (svcStatus === 'PAUSED') {
                                             label = 'Pausado';
                                             sx = { ...sx, bgcolor: 'warning.main' };
+                                        } else if (svcStatus === 'PENDING_START') {
+                                            label = 'Pendiente de inicio';
+                                            sx = { ...sx, bgcolor: 'info.main' };
                                         } else if (svcStatus === 'SUSPENDED') {
                                             label = 'Suspendido';
                                             sx = { ...sx, bgcolor: 'error.main' };

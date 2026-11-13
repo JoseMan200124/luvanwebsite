@@ -90,7 +90,8 @@ const CAROUSEL_STATUSES = [
     { key: 'ACTIVE',    label: 'Servicio Activo',      textColor: 'primary.main' },
     { key: 'SUSPENDED', label: 'Servicio Suspendido',   textColor: 'error.main' },
     { key: 'PAUSED',    label: 'Servicio Pausado',      textColor: 'warning.main' },
-    { key: 'INACTIVE',  label: 'Servicio Inactivo',     textColor: 'text.secondary' }
+    { key: 'INACTIVE',  label: 'Servicio Inactivo',     textColor: 'text.secondary' },
+    { key: 'PENDING_START', label: 'Pendiente de inicio', textColor: 'info.main' }
 ];
 
 const SchoolDashboardPage = () => {
@@ -278,7 +279,7 @@ const SchoolDashboardPage = () => {
             return;
         }
         const USING     = ['ACTIVE', 'SUSPENDED'];
-        const NOT_USING = ['PAUSED', 'INACTIVE'];
+        const NOT_USING = ['PAUSED', 'INACTIVE', 'PENDING_START'];
         const allStatuses = [...USING, ...NOT_USING];
 
         try {
