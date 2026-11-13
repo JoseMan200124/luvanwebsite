@@ -4,7 +4,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import moment from 'moment-timezone';
 import {
     Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, CircularProgress, Dialog,
-    DialogActions, DialogContent, DialogTitle, FormControl, IconButton, InputLabel, MenuItem, Select,
+    DialogActions, DialogContent, DialogTitle, IconButton,
     Snackbar, Alert, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination,
     TableRow, Tooltip, Typography,
 } from '@mui/material';
@@ -13,6 +13,9 @@ import {
     Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 import PermissionGuard from '../components/PermissionGuard';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
@@ -49,6 +52,10 @@ const RUN_CHIP = {
     skipped: { label: 'Omitido', color: 'warning' },
 };
 const KIND_LABEL = { circular: 'Circular', notification: 'Notificación' };
+const KIND_OPTIONS = [
+    { value: 'circular', label: 'Circulares' },
+    { value: 'notification', label: 'Notificaciones' },
+];
 const KIND_PERMISSION = { circular: 'mail-enviar-circular', notification: 'notificaciones-crear' };
 
 // Hora de Guatemala, como se programó (el aviso de la página lo indica).
@@ -224,7 +231,11 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
 };
 
 const ScheduledSendsPage = () => {
-    const [kind, setKind] = useState('');
+    // Cada sección se vuelve a montar (key con el tipo) al aplicar, así su paginación arranca en la página 1.
+    const pageFilters = useFilters({
+        fields: [F.select('kind', { label: 'Tipo', options: KIND_OPTIONS })],
+    });
+    const { kind } = pageFilters.applied;
     const [expanded, setExpanded] = useState(DEFAULT_EXPANDED);
     // Se incrementa para que todas las secciones vuelvan a cargar su lista.
     const [refreshKey, setRefreshKey] = useState(0);
@@ -333,16 +344,7 @@ const ScheduledSendsPage = () => {
                 "Programar envío". Aquí puedes revisar, editar o cancelar los programados. Horas de Guatemala.
             </Alert>
 
-            <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                <FormControl size="small" sx={{ minWidth: 180 }}>
-                    <InputLabel id="kind-filter-label">Tipo</InputLabel>
-                    <Select labelId="kind-filter-label" label="Tipo" value={kind} onChange={(e) => setKind(e.target.value)}>
-                        <MenuItem value="">Todos</MenuItem>
-                        <MenuItem value="circular">Circulares</MenuItem>
-                        <MenuItem value="notification">Notificaciones</MenuItem>
-                    </Select>
-                </FormControl>
-            </Stack>
+            <FilterBar {...pageFilters.barProps} />
 
             {SECTIONS.map((section) => (
                 <StatusSection

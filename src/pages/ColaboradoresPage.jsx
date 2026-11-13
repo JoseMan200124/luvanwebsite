@@ -19,7 +19,6 @@ import {
     TableRow,
     Paper,
     TablePagination,
-    InputAdornment,
     TableSortLabel,
     TextField,
     IconButton,
@@ -40,7 +39,6 @@ import {
     Business as CorporationIcon, 
     CalendarToday,
     ArrowBack,
-    Search,
     Edit,
     Delete,
     Add,
@@ -48,7 +46,6 @@ import {
     FileUpload,
     GetApp,
     Mail,
-    FilterList,
     DirectionsBus,
     ToggleOn,
     ToggleOff
@@ -69,6 +66,14 @@ import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F, SERVICE_STATUS_OPTIONS } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
+
+const COLABORADOR_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones', 'Activo', 'Inactivo']
+    .map((status) => ({ value: status, label: status }));
+const COLABORADOR_SERVICE_OPTIONS = SERVICE_STATUS_OPTIONS.filter((option) => option.value !== 'SUSPENDED');
 
 const PageContainer = styled.div`
     ${tw`bg-gray-50 min-h-screen w-full`}
@@ -171,12 +176,17 @@ const ColaboradoresPage = () => {
     const [loading, setLoading] = useState(false);
     const [sortBy, setSortBy] = useState(null);
     const [sortOrder, setSortOrder] = useState('asc');
-    const [searchInput, setSearchInput] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
-    const [serviceStatusFilter, setServiceStatusFilter] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+    const pageFilters = useFilters({
+        fields: [
+            F.search('search', { placeholder: 'Nombre o correo' }),
+            F.select('status', { label: 'Estado', options: COLABORADOR_STATUS_OPTIONS }),
+            F.serviceStatus({ options: COLABORADOR_SERVICE_OPTIONS }),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const { search: searchQuery, status: statusFilter, serviceStatus: serviceStatusFilter } = pageFilters.applied;
     const [selectedColaborador, setSelectedColaborador] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     
@@ -524,13 +534,8 @@ const ColaboradoresPage = () => {
     useEffect(() => {
         let filtered = [...colaboradores];
         
-        // Búsqueda
-        if (searchQuery.trim()) {
-            filtered = filtered.filter(col => 
-                col.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                col.email?.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        }
+        // Búsqueda (sin acentos, por palabras; vacía devuelve todos)
+        filtered = filtered.filter((col) => matchSearchTokens(searchQuery, [col.name, col.email]));
         
         // Filtro por estado (usando getColaboradorStatus)
         if (statusFilter) {
@@ -566,19 +571,6 @@ const ColaboradoresPage = () => {
             setSortBy(field);
             setSortOrder('asc');
         }
-        setPage(0);
-    };
-
-    const handleSearch = () => {
-        setSearchQuery(searchInput);
-        setPage(0);
-    };
-
-    const handleClearFilters = () => {
-        setSearchInput('');
-        setSearchQuery('');
-        setStatusFilter('');
-        setServiceStatusFilter('');
         setPage(0);
     };
 
@@ -1930,87 +1922,7 @@ const ColaboradoresPage = () => {
             </HeaderCard>
 
             {/* Filtros y búsqueda */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={5}>
-                            <TextField
-                                fullWidth
-                                variant="outlined"
-                                placeholder="Buscar por nombre, email o departamento..."
-                                value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
-                                onKeyPress={(e) => {
-                                    if (e.key === 'Enter') {
-                                        handleSearch();
-                                    }
-                                }}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Search />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                            />
-                        </Grid>
-                        <Grid item xs={12} md={1}>
-                            <Button
-                                variant="contained"
-                                fullWidth
-                                onClick={handleSearch}
-                                sx={{ height: '56px' }}
-                            >
-                                Buscar
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <FormControl fullWidth variant="outlined">
-                                <InputLabel>Estado</InputLabel>
-                                <Select
-                                    value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value)}
-                                    label="Estado"
-                                    startAdornment={<FilterList />}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="Nuevo">Nuevo</MenuItem>
-                                    <MenuItem value="Duplicado">Duplicado</MenuItem>
-                                    <MenuItem value="Actualizado">Actualizado</MenuItem>
-                                    <MenuItem value="Sin asignaciones">Sin asignaciones</MenuItem>
-                                    <MenuItem value="Activo">Activo</MenuItem>
-                                    <MenuItem value="Inactivo">Inactivo</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <FormControl fullWidth variant="outlined">
-                                <InputLabel>Estado de Servicio</InputLabel>
-                                <Select
-                                    value={serviceStatusFilter}
-                                    onChange={(e) => setServiceStatusFilter(e.target.value)}
-                                    label="Estado de Servicio"
-                                    startAdornment={<FilterList />}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="ACTIVE">Activo</MenuItem>
-                                    <MenuItem value="PAUSED">Pausado</MenuItem>
-                                    <MenuItem value="INACTIVE">Inactivo</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} md={1}>
-                            <Button
-                                variant="outlined"
-                                fullWidth
-                                onClick={handleClearFilters}
-                            >
-                                Limpiar
-                            </Button>
-                        </Grid>
-                    </Grid>
-                </CardContent>
-            </Card>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {/* Botones de Acción */}
             <Card sx={{ mb: 3 }}>

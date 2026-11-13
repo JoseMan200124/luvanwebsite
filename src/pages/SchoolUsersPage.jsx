@@ -27,7 +27,6 @@ import {
     Select,
     MenuItem,
     TablePagination,
-    InputAdornment,
     TableSortLabel,
     TextField,
     IconButton,
@@ -42,8 +41,6 @@ import {
     School as SchoolIcon, 
     CalendarToday,
     ArrowBack,
-    Search,
-    FilterList,
     Email,
     Edit,
     Delete,
@@ -75,6 +72,13 @@ import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import { getScheduleCodesFromSchool, resolveScheduleCodeFromSlot, slotHasScheduleData } from '../utils/scheduleConfig';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
+
+const FAMILY_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones']
+    .map((status) => ({ value: status, label: status }));
 
 // Opciones de roles disponibles en esta vista: Padre solamente
 const roleOptions = [
@@ -140,16 +144,21 @@ const SchoolUsersPage = () => {
     // Sorting state
     const [sortBy, setSortBy] = useState(null); // 'status' | 'updatedAt' | 'familyLastName' | 'name' | 'email' | 'role' | 'students'
     const [sortOrder, setSortOrder] = useState('asc');
-    const [searchInput, setSearchInput] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
-    const [serviceStatusFilter, setServiceStatusFilter] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [selectedUser, setSelectedUser] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-    const prevFilterKeyRef = useRef('');
+    // Filtros (en el navegador): solo se aplican con "Aplicar filtros", Enter o "Limpiar filtros".
+    const pageFilters = useFilters({
+        fields: [
+            F.search('search', { placeholder: 'Nombre, apellido o email' }),
+            F.select('status', { label: 'Estado', options: FAMILY_STATUS_OPTIONS }),
+            F.serviceStatus(),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const { search: searchQuery, status: statusFilter, serviceStatus: serviceStatusFilter } = pageFilters.applied;
 
     // Nuevos estados para funcionalidades
     
@@ -1149,48 +1158,15 @@ const SchoolUsersPage = () => {
 
         // Filtrar por búsqueda (case-insensitive y sin acentos). Soporta búsqueda por varias palabras.
         if (searchQuery) {
-            const normalize = (str) => {
-                if (!str) {
-                    return '';
-                }
-                try {
-                    return str
-                        .toString()
-                        .normalize('NFD')
-                        .replace(/\p{Diacritic}/gu, '')
-                        .toLowerCase();
-                } catch (e) {
-                    // Fallback for environments without Unicode property escapes
-                    return str
-                        .toString()
-                        .normalize('NFD')
-                        .replace(/[\u0300-\u036f]/g, '')
-                        .toLowerCase();
-                }
-            };
-
-            const tokens = normalize(searchQuery).split(/\s+/).filter(Boolean);
-
-            filtered = filtered.filter(user => {
-                const familyLast = normalize(user.FamilyDetail?.familyLastName || user.familyLastName || '');
-                const motherName = normalize(user.motherName || user.FamilyDetail?.motherName || '');
-                const fatherName = normalize(user.fatherName || user.FamilyDetail?.fatherName || '');
-                const motherEmail = normalize(user.motherEmail || '');
-                const fatherEmail = normalize(user.fatherEmail || '');
-                const name = normalize(user.name || '');
-                const email = normalize(stripArchivedEmailPrefix(user.email || ''));
-
-                // For each token, ensure it matches at least one field
-                return tokens.every(token => (
-                    familyLast.includes(token) ||
-                    motherName.includes(token) ||
-                    fatherName.includes(token) ||
-                    motherEmail.includes(token) ||
-                    fatherEmail.includes(token) ||
-                    name.includes(token) ||
-                    email.includes(token)
-                ));
-            });
+            filtered = filtered.filter((user) => matchSearchTokens(searchQuery, [
+                user.FamilyDetail?.familyLastName || user.familyLastName,
+                user.motherName || user.FamilyDetail?.motherName,
+                user.fatherName || user.FamilyDetail?.fatherName,
+                user.motherEmail,
+                user.fatherEmail,
+                user.name,
+                stripArchivedEmailPrefix(user.email || ''),
+            ]));
         }
 
         // Filtrar por estado
@@ -1215,11 +1191,6 @@ const SchoolUsersPage = () => {
         }
 
         setFilteredUsers(filtered);
-        const currentFilterKey = `${searchQuery}||${statusFilter}||${serviceStatusFilter}`;
-        if (prevFilterKeyRef.current !== currentFilterKey) {
-            setPage(0); // Reset page when filters change
-            prevFilterKeyRef.current = currentFilterKey;
-        }
     }, [users, searchQuery, statusFilter, serviceStatusFilter]);
 
     const handleBackToDashboard = () => {
@@ -1241,18 +1212,6 @@ const SchoolUsersPage = () => {
             setSortBy(field);
             setSortOrder('asc');
         }
-        setPage(0);
-    };
-
-    const handleSearch = () => {
-        setSearchQuery(searchInput);
-        setPage(0);
-    };
-
-    const handleClearFilters = () => {
-        setSearchInput('');
-        setSearchQuery('');
-        setStatusFilter('');
         setPage(0);
     };
 
@@ -2450,87 +2409,7 @@ const SchoolUsersPage = () => {
             </HeaderCard>
 
             {/* Filtros y búsqueda */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={5}>
-                            <TextField
-                                fullWidth
-                                variant="outlined"
-                                placeholder="Buscar por nombre, apellido o email..."
-                                value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
-                                onKeyPress={(e) => {
-                                    if (e.key === 'Enter') {
-                                        handleSearch();
-                                    }
-                                }}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Search />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                            />
-                        </Grid>
-                        <Grid item xs={12} md={1}>
-                            <Button
-                                variant="contained"
-                                fullWidth
-                                onClick={handleSearch}
-                                sx={{ height: '56px' }}
-                            >
-                                Buscar
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <FormControl fullWidth variant="outlined">
-                                <InputLabel>Estado</InputLabel>
-                                <Select
-                                    value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value)}
-                                    label="Estado"
-                                    startAdornment={<FilterList />}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="Nuevo">Nuevo</MenuItem>
-                                    <MenuItem value="Duplicado">Duplicado</MenuItem>
-                                    <MenuItem value="Actualizado">Actualizado</MenuItem>
-                                    <MenuItem value="Sin asignaciones">Sin asignaciones</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <FormControl fullWidth variant="outlined">
-                                <InputLabel>Estado del Servicio</InputLabel>
-                                <Select
-                                    value={serviceStatusFilter}
-                                    onChange={(e) => setServiceStatusFilter(e.target.value)}
-                                    label="Estado del Servicio"
-                                    startAdornment={<FilterList />}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="ACTIVE">Activo</MenuItem>
-                                    <MenuItem value="PAUSED">Pausado</MenuItem>
-                                    <MenuItem value="SUSPENDED">Suspendido</MenuItem>
-                                    <MenuItem value="INACTIVE">Inactivo</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        {/* Role filter removed: this view only handles Padres */}
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="outlined"
-                                fullWidth
-                                onClick={handleClearFilters}
-                            >
-                                Limpiar
-                            </Button>
-                        </Grid>
-                    </Grid>
-                </CardContent>
-            </Card>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {/* Botones de Acción */}
             <Card sx={{ mb: 3 }}>

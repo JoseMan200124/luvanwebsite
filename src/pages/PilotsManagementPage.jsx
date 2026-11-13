@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import {
     Typography,
-    TextField,
     Paper,
     Table,
     TableBody,
@@ -25,6 +24,10 @@ import {
     Box,
     TableSortLabel
 } from '@mui/material';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 
@@ -146,9 +149,13 @@ const PilotsManagementPage = () => {
     const [loading, setLoading] = useState(false);
 
     // Para búsqueda y paginación
-    const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(5);
+    const pageFilters = useFilters({
+        fields: [F.search('search', { placeholder: 'Nombre o correo' })],
+        onApplied: () => setPage(0),
+    });
+    const { search: searchQuery } = pageFilters.applied;
 
     // Estados para ordenamiento
     const [order, setOrder] = useState('asc');
@@ -191,13 +198,7 @@ const PilotsManagementPage = () => {
         }, [fetchPilots]);
 
     // Filtrado
-    const filteredPilots = pilots.filter((p) => {
-        const search = searchQuery.toLowerCase();
-        return (
-            (p.name || '').toLowerCase().includes(search) ||
-            (p.email || '').toLowerCase().includes(search)
-        );
-    });
+    const filteredPilots = pilots.filter((p) => matchSearchTokens(searchQuery, [p.name, p.email]));
 
     // Manejo de paginación
     const handleChangePage = (event, newPage) => {
@@ -239,16 +240,7 @@ const PilotsManagementPage = () => {
             </Typography>
 
             {/* Búsqueda */}
-            <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap' }}>
-                <TextField
-                    label="Buscar Pilotos"
-                    variant="outlined"
-                    size="small"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ width: isMobile ? '100%' : '33%' }}
-                />
-            </div>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>

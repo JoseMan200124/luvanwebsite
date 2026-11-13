@@ -1,6 +1,6 @@
 // src/pages/FuelRecordsPage.jsx
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
@@ -61,10 +61,24 @@ import {
     FUEL_TYPES
 } from '../services/fuelRecordService';
 import api from '../utils/axiosConfig';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import ClientSelector from '../components/ClientSelector';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F, toRouteOptions } from '../components/filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
+
+// Id del colegio o corporación al que pertenece un bus, según el tipo de cliente.
+const getBusClientId = (bus, type) => {
+    if (type === 'school') {
+        return bus.schoolId ?? bus.school?.id;
+    }
+    if (type === 'corp') {
+        return bus.corporationId ?? bus.corporation?.id;
+    }
+    return null;
+};
 
 const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 // Feature flag: mostrar la nueva métrica de consumo (activar manualmente cuando corresponda)
@@ -90,16 +104,52 @@ const FuelRecordsPage = () => {
     const [corporations, setCorporations] = useState([]);
     const [buses, setBuses] = useState([]);
     const [pilots, setPilots] = useState([]);
+    // Rutas del cliente elegido en el modal de creación
     const [clientRouteNumbers, setClientRouteNumbers] = useState([]);
-    // selectedClient format: '' | 'school-<id>' | 'corp-<id>'
-    const [selectedClient, setSelectedClient] = useState(null);
-    const [selectedPlate, setSelectedPlate] = useState('');
-    const [selectedRoute, setSelectedRoute] = useState('');
-    const [selectedFuelType, setSelectedFuelType] = useState('');
-    const [selectedFuelingReason, setSelectedFuelingReason] = useState('');
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
-    const [startDate, setStartDate] = useState(null);
-    const [endDate, setEndDate] = useState(null);
+    // Rutas del cliente elegido en el filtro (separadas para que el modal no las pise)
+    const [filterRouteNumbers, setFilterRouteNumbers] = useState([]);
+
+    // Las opciones de Ruta y Placa dependen del cliente del borrador. Se toma del render anterior: cambiar el cliente recarga buses y rutas, y ese nuevo render ya trae las opciones correctas.
+    const draftClientRef = useRef(null);
+    const optionsClient = draftClientRef.current;
+    const busesForSelectedClient = optionsClient
+        ? buses.filter((bus) => {
+            const busClientId = getBusClientId(bus, optionsClient.type);
+            return busClientId === null || busClientId === undefined || String(busClientId) === String(optionsClient.id);
+        })
+        : buses;
+    const plateOptions = [...new Set(busesForSelectedClient.map((bus) => bus.plate).filter(Boolean))]
+        .sort((firstPlate, secondPlate) => String(firstPlate).localeCompare(String(secondPlate)))
+        .map((plate) => ({ value: plate, label: plate }));
+    const filterRouteOptions = toRouteOptions(optionsClient ? filterRouteNumbers : buses.map((bus) => bus.routeNumber));
+
+    // Los filtros solo consultan al aplicar.
+    const pageFilters = useFilters({
+        fields: [
+            F.cycle(),
+            F.client({ schools, corporations }),
+            F.route({ options: filterRouteOptions }),
+            F.autocomplete('plate', {
+                label: 'Placa', width: 'sm', options: plateOptions, dependsOn: ['client', 'route'], requireParent: false,
+            }),
+            F.select('fuelingReason', { label: 'Razón', allLabel: 'Todas', options: FUELING_REASONS }),
+            F.select('fuelType', { label: 'Tipo de combustible', options: FUEL_TYPES }),
+            F.dateRange('dates'),
+        ],
+        onApplied: () => setPage(0),
+    });
+    draftClientRef.current = pageFilters.draft.client;
+    const {
+        cycle: selectedCicloEscolar,
+        client: selectedClient,
+        route: selectedRoute,
+        fuelingReason: selectedFuelingReason,
+        fuelType: selectedFuelType,
+        dates,
+    } = pageFilters.applied;
+    const selectedPlate = pageFilters.applied.plate?.value || '';
+    const draftCycle = pageFilters.draft.cycle;
+    const draftClient = pageFilters.draft.client;
 
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -177,9 +227,8 @@ const FuelRecordsPage = () => {
         fetchCorporations();
         fetchBusesBySchool();
         fetchPilots();
-        fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedCicloEscolar]);
+    }, [draftCycle]);
 
     const fetchPilots = async () => {
         if (!hasPermission('usuarios-listar-pilotos')) {
@@ -202,11 +251,11 @@ const FuelRecordsPage = () => {
         fetchFuelRecords();
         fetchStatistics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedClient, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, selectedCicloEscolar, startDate, endDate, orderBy, order]);
+    }, [page, rowsPerPage, selectedClient, selectedPlate, selectedRoute, selectedFuelingReason, selectedFuelType, selectedCicloEscolar, dates, orderBy, order]);
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } });
+            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setSchools(schoolsData);
         } catch (error) {
@@ -253,36 +302,9 @@ const FuelRecordsPage = () => {
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
-    const getBusClientId = (bus, type) => {
-        if (type === 'school') {
-            return bus.schoolId ?? bus.school?.id;
-        }
-        if (type === 'corp') {
-            return bus.corporationId ?? bus.corporation?.id;
-        }
-        return null;
-    };
-
-    const busesForSelectedClient = selectedClient
-        ? buses.filter((bus) => {
-            const busClientId = getBusClientId(bus, selectedClient.type);
-            return busClientId === null || busClientId === undefined || String(busClientId) === String(selectedClient.id);
-        })
-        : buses;
-
-    const plateOptions = [...new Set(busesForSelectedClient.map((bus) => bus.plate).filter(Boolean))]
-        .sort((firstPlate, secondPlate) => String(firstPlate).localeCompare(String(secondPlate)));
-
     useEffect(() => {
-        if (selectedPlate && !plateOptions.includes(selectedPlate)) {
-            setSelectedPlate('');
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedClient, buses]);
-
-    useEffect(() => {
-        if (selectedClient) {
-            const { type, id } = selectedClient;
+        if (draftClient) {
+            const { type, id } = draftClient;
             if (type === 'school') {
                 fetchBusesBySchool(id);
             } else if (type === 'corp') {
@@ -292,10 +314,9 @@ const FuelRecordsPage = () => {
             // load all buses
             fetchBusesBySchool();
         }
-        // fetch route numbers for filter area
-        fetchRouteNumbersForClient(selectedClient).catch(() => setClientRouteNumbers([]));
+        fetchRouteNumbersForClient(draftClient, setFilterRouteNumbers).catch(() => setFilterRouteNumbers([]));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedClient]);
+    }, [draftClient]);
 
     // keep routeNumbers in sync for the edit modal when its client changes
     useEffect(() => {
@@ -381,14 +402,11 @@ const FuelRecordsPage = () => {
             if (selectedFuelType) {
                 filters.fuelType = selectedFuelType;
             }
-            if (selectedFuelType) {
-                filters.fuelType = selectedFuelType;
+            if (dates.from) {
+                filters.startDate = dates.from;
             }
-            if (startDate) {
-                filters.startDate = startDate.format('YYYY-MM-DD');
-            }
-            if (endDate) {
-                filters.endDate = endDate.format('YYYY-MM-DD');
+            if (dates.to) {
+                filters.endDate = dates.to;
             }
 
             // Ordenamiento
@@ -398,10 +416,6 @@ const FuelRecordsPage = () => {
             if (order) {
                 filters.order = order;
             }
-
-            // DEBUG: log filters being sent to backend
-            // eslint-disable-next-line no-console
-            console.debug('[FuelRecordsPage] fetchFuelRecords filters:', filters);
 
             const response = await getFuelRecords(filters);
             
@@ -466,11 +480,11 @@ const FuelRecordsPage = () => {
             if (selectedRoute) {
                 filters.routeNumber = selectedRoute;
             }
-            if (startDate) {
-                filters.startDate = startDate.format('YYYY-MM-DD');
+            if (dates.from) {
+                filters.startDate = dates.from;
             }
-            if (endDate) {
-                filters.endDate = endDate.format('YYYY-MM-DD');
+            if (dates.to) {
+                filters.endDate = dates.to;
             }
 
             const response = await getFuelStatistics(filters);
@@ -594,11 +608,11 @@ const FuelRecordsPage = () => {
             if (selectedFuelType) {
                 filters.fuelType = selectedFuelType;
             }
-            if (startDate) {
-                filters.startDate = startDate.format('YYYY-MM-DD');
+            if (dates.from) {
+                filters.startDate = dates.from;
             }
-            if (endDate) {
-                filters.endDate = endDate.format('YYYY-MM-DD');
+            if (dates.to) {
+                filters.endDate = dates.to;
             }
 
             const response = await exportFuelRecordsExcel(filters);
@@ -1070,175 +1084,35 @@ const FuelRecordsPage = () => {
                     )}
                 </Grid>
 
-                {isSpecificCicloEscolarSelected && (
-                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
-                        Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
-                    </Typography>
-                )}
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                    <PermissionGuard permission="combustible-crear-registro">
+                        <Button onClick={() => setCreateOpen(true)} variant="contained" color="primary">
+                            Nuevo Registro
+                        </Button>
+                    </PermissionGuard>
+                    <Button
+                        onClick={handleDownloadExcel}
+                        variant="outlined"
+                        startIcon={<DownloadIcon />}
+                        disabled={exporting || totalCount === 0}
+                        sx={{
+                            color: 'success.main',
+                            borderColor: 'success.main',
+                            '&:hover': { backgroundColor: 'rgba(33,115,70,0.08)', borderColor: 'success.dark' }
+                        }}
+                    >
+                        {exporting ? 'Generando...' : 'Generar reporte'}
+                    </Button>
+                </Box>
 
                 {/* Filtros */}
-                <Paper sx={{ p: 3, mb: 3 }}>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid item xs="auto" sm="auto" md={"auto"}>
-                            <CicloEscolarFilter size="medium"
-                                value={selectedCicloEscolar}
-                                onChange={(value) => {
-                                    setSelectedCicloEscolar(value);
-                                    setSelectedClient(null);
-                                    setSelectedPlate('');
-                                    setSelectedRoute('');
-                                    setPage(0);
-                                }}
-                                sx={{ width: 190 }}
-                            />
-                        </Grid>
-                        <Grid item xs="auto" sm="auto" md={"auto"}>
-                                <ClientSelector
-                                    schools={schools}
-                                    corporations={corporations}
-                                    value={selectedClient}
-                                    onChange={(client) => { setSelectedClient(client); setSelectedRoute(''); setSelectedPlate(''); }}
-                                    fullWidth={false}
-                                    size="medium"
-                                    sx={{ width: 250 }}
-                                />
-                        </Grid>
-
-                        <Grid item xs="auto" sm="auto" md={"auto"}>
-                                <FormControl fullWidth sx={{ width: 120 }}>
-                                <InputLabel>Ruta</InputLabel>
-                                <Select
-                                    value={selectedRoute}
-                                    onChange={(e) => {
-                                        setSelectedRoute(e.target.value);
-                                        setSelectedPlate('');
-                                    }}
-                                    label="Ruta"
-                                    disabled={!selectedClient}
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {((selectedClient ? clientRouteNumbers : [...new Set(buses.map(b => b.routeNumber).filter(Boolean))]).map(String)).sort((a,b) => a - b).map((route) => (
-                                        <MenuItem key={route} value={route}>
-                                            {route}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-
-                        <Grid item xs="auto" sm="auto" md={"auto"}>
-                            <Autocomplete
-                                options={plateOptions}
-                                value={selectedPlate || null}
-                                onChange={(e, newValue) => setSelectedPlate(newValue || '')}
-                                getOptionLabel={(option) => option || ''}
-                                renderInput={(params) => (
-                                    <TextField {...params} label="Placa" variant="outlined" />
-                                )}
-                                fullWidth
-                                sx={{ width: 180 }}
-                            />
-                        </Grid>
-
-                        <Grid item xs="auto" sm="auto" md={"auto"}>
-                            <FormControl fullWidth sx={{ width: 225 }}>
-                                <InputLabel>Razón de Abastecimiento</InputLabel>
-                                <Select
-                                    value={selectedFuelingReason}
-                                    onChange={(e) => setSelectedFuelingReason(e.target.value)}
-                                    label="Razón de Abastecimiento"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {Object.entries(FUELING_REASONS).map(([key, label]) => (
-                                        <MenuItem key={key} value={key}>
-                                            {label}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-
-                        <Grid item xs="auto" sm="auto" md={"auto"}>
-                            <FormControl fullWidth sx={{ width: 180 }}>
-                                <InputLabel>Tipo Combustible</InputLabel>
-                                <Select
-                                    value={selectedFuelType}
-                                    onChange={(e) => setSelectedFuelType(e.target.value)}
-                                    label="Tipo Combustible"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {Object.entries(FUEL_TYPES).map(([key, label]) => (
-                                        <MenuItem key={key} value={key}>
-                                            {label}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-
-                        <Grid item xs="auto" sm="auto" md={"auto"}>
-                            <DatePicker
-                                label="Fecha Inicio"
-                                value={startDate}
-                                onChange={(newValue) => setStartDate(newValue)}
-                                sx={{ width: 180 }}
-                            />
-                        </Grid>
-
-                        <Grid item xs="auto" sm="auto" md={"auto"}>
-                            <DatePicker
-                                label="Fecha Fin"
-                                value={endDate}
-                                onChange={(newValue) => setEndDate(newValue)}
-                                sx={{ width: 180 }}
-                            />
-                        </Grid>
-
-                        <Grid item xs="auto" display="flex" justifyContent="flex-end" spacing={1}>
-                            <Box>
-                                <Tooltip title="Limpiar filtros">
-                                    <Button onClick={() => {
-                                        setSelectedClient('');
-                                        setSelectedPlate('');
-                                        setSelectedRoute('');
-                                        setSelectedFuelingReason('');
-                                        setSelectedFuelType('');
-                                        setSelectedCicloEscolar(getInitialCicloEscolarFilter());
-                                        setStartDate(null);
-                                        setEndDate(null);
-                                        setPage(0);
-                                        fetchFuelRecords();
-                                        fetchStatistics();
-                                    }} variant="outlined" sx={{ mr: 1 }}>
-                                        Limpiar
-                                    </Button>
-                                </Tooltip>
-                                <PermissionGuard permission="combustible-crear-registro">
-                                    <Button onClick={() => setCreateOpen(true)} variant="contained" color="primary" sx={{ mr: 1 }}>
-                                        Nuevo Registro
-                                    </Button>
-                                </PermissionGuard>
-                                <Button
-                                    onClick={handleDownloadExcel}
-                                    variant="outlined"
-                                    startIcon={<DownloadIcon />}
-                                    disabled={exporting || totalCount === 0}
-                                    sx={{
-                                        color: 'success.main',
-                                        borderColor: 'success.main',
-                                        '&:hover': { backgroundColor: 'rgba(33,115,70,0.08)', borderColor: 'success.dark' }
-                                    }}
-                                >
-                                    {exporting ? 'Generando...' : 'Generar reporte'}
-                                </Button>
-                                {/* Local refresh removed; use global refresh button */}
-                            </Box>
-                        </Grid>
-                    </Grid>
-                </Paper>
+                <FilterBar
+                    {...pageFilters.barProps}
+                    loading={loading}
+                    caption={isSpecificCicloEscolarSelected
+                        ? 'Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.'
+                        : undefined}
+                />
 
                 {/* Tabla */}
                 <Paper>

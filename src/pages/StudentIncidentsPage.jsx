@@ -1,6 +1,6 @@
 // src/pages/StudentIncidentsPage.jsx
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Typography,
     Paper,
@@ -16,11 +16,6 @@ import {
     Grid,
     Card,
     CardContent,
-    Select,
-    MenuItem,
-    ListSubheader,
-    FormControl,
-    InputLabel,
     Chip,
     IconButton,
     Tooltip,
@@ -29,10 +24,7 @@ import {
     DialogContent,
     DialogActions,
     Button,
-    TextField,
 } from '@mui/material';
-import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
@@ -40,12 +32,17 @@ import tw from 'twin.macro';
 import { getAllStudentIncidents, getStudentIncidentById, INCIDENT_TYPES } from '../services/studentIncidentService';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, SCHEDULE_LABELS } from '../utils/scheduleConfig';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
+import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import { getClientSchoolId } from '../utils/clientValue';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
 
 const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
+
+const SCHEDULE_OPTIONS = DEFAULT_SCHEDULE_CODES.map((code) => ({ value: code, label: SCHEDULE_LABELS[code] || code }));
 
 const StudentIncidentsPage = () => {
     const [incidents, setIncidents] = useState([]);
@@ -58,15 +55,33 @@ const StudentIncidentsPage = () => {
     const [schools, setSchools] = useState([]);
     const [buses, setBuses] = useState([]);
     const [schoolRoutes, setSchoolRoutes] = useState([]);
-    const [selectedSchool, setSelectedSchool] = useState('');
-    const [selectedPlate, setSelectedPlate] = useState('');
-    const [selectedRoute, setSelectedRoute] = useState('');
-    const [selectedIncidentType, setSelectedIncidentType] = useState('');
-    const [selectedScheduleType, setSelectedScheduleType] = useState('');
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
-    const [selectedStudentName, setSelectedStudentName] = useState('');
-    const [startDate, setStartDate] = useState(null);
-    const [endDate, setEndDate] = useState(null);
+
+    const pageFilters = useFilters({
+        fields: [
+            F.cycle(),
+            F.client({ label: 'Colegio', schools, corporations: [] }),
+            F.plate({ options: toPlateOptions(buses) }),
+            F.route({ options: toRouteOptions(schoolRoutes) }),
+            F.select('incidentType', { label: 'Tipo de incidente', options: INCIDENT_TYPES }),
+            F.schedule({ options: SCHEDULE_OPTIONS }),
+            F.search('studentName', { label: 'Buscar estudiante', width: 'md' }),
+            F.dateRange('dates'),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const {
+        cycle: selectedCicloEscolar,
+        client: selectedClient,
+        plate: selectedPlate,
+        route: selectedRoute,
+        incidentType: selectedIncidentType,
+        schedule: selectedScheduleType,
+        studentName: selectedStudentName,
+        dates,
+    } = pageFilters.applied;
+    const selectedSchool = getClientSchoolId(selectedClient);
+    const draftCycle = pageFilters.draft.cycle;
+    const draftSchoolId = getClientSchoolId(pageFilters.draft.client);
 
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -81,45 +96,26 @@ const StudentIncidentsPage = () => {
 
     useEffect(() => {
         fetchSchools();
-    }, [selectedCicloEscolar]);
+    }, [draftCycle]);
 
     useEffect(() => {
-        if (selectedSchool) {
-            fetchBusesBySchool(selectedSchool);
-            fetchRouteNumbersBySchool(selectedSchool);
+        if (draftSchoolId) {
+            fetchBusesBySchool(draftSchoolId);
+            fetchRouteNumbersBySchool(draftSchoolId);
         } else {
+            setBuses([]);
             setSchoolRoutes([]);
         }
-    }, [selectedSchool]);
+    }, [draftSchoolId]);
 
     useEffect(() => {
         fetchIncidents();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedIncidentType, selectedScheduleType, selectedCicloEscolar, startDate, endDate, selectedStudentName]);
-
-    const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
-
-    const groupedSchools = useMemo(() => {
-        if (isSpecificCicloEscolarSelected) {
-            return [];
-        }
-        const map = new Map();
-        schools.forEach((s) => {
-            const cycleLabel = getCicloEscolarOptionLabel(s.cicloEscolar) || (s.cicloEscolarId ? `Ciclo ${s.cicloEscolarId}` : 'Sin ciclo escolar');
-            const key = cycleLabel || 'Sin ciclo escolar';
-            if (!map.has(key)) {
-                map.set(key, []);
-            }
-            map.get(key).push(s);
-        });
-        return Array.from(map.entries())
-            .sort(([a], [b]) => a.localeCompare(b, 'es'))
-            .map(([cycleLabel, schools]) => ({ cycleLabel, schools: [...schools].sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')) }));
-    }, [schools, isSpecificCicloEscolarSelected]);
+    }, [page, rowsPerPage, selectedSchool, selectedPlate, selectedRoute, selectedIncidentType, selectedScheduleType, selectedCicloEscolar, dates, selectedStudentName]);
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } });
+            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setSchools(schoolsData);
         } catch (error) {
@@ -174,11 +170,11 @@ const StudentIncidentsPage = () => {
                 if (selectedScheduleType) {
                     filters.scheduleType = selectedScheduleType;
                 }
-                if (startDate) {
-                    filters.startDate = startDate.format('YYYY-MM-DD');
+                if (dates.from) {
+                    filters.startDate = dates.from;
                 }
-                if (endDate) {
-                    filters.endDate = endDate.format('YYYY-MM-DD');
+                if (dates.to) {
+                    filters.endDate = dates.to;
                 }
                 if (selectedStudentName) {
                     filters.studentName = selectedStudentName;
@@ -251,7 +247,6 @@ const StudentIncidentsPage = () => {
 
 
     return (
-        <LocalizationProvider dateAdapter={AdapterMoment}>
             <Container>
                 <Box mb={3}>
                     <Typography variant="h4" gutterBottom>
@@ -311,175 +306,7 @@ const StudentIncidentsPage = () => {
                 </Grid>
 
                 {/* Filtros */}
-                <Paper sx={{ p: 3, mb: 3 }}>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={1.5}>
-                            <CicloEscolarFilter size="medium"
-                                value={selectedCicloEscolar}
-                                onChange={(value) => {
-                                    setSelectedCicloEscolar(value);
-                                    setSelectedSchool('');
-                                    setSelectedPlate('');
-                                    setSelectedRoute('');
-                                    setPage(0);
-                                }}
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={1.75}>
-                            <FormControl fullWidth>
-                                <InputLabel>Colegio</InputLabel>
-                                <Select
-                                    value={selectedSchool}
-                                    onChange={(e) => {
-                                        setSelectedSchool(e.target.value);
-                                        setSelectedPlate('');
-                                        setSelectedRoute('');
-                                    }}
-                                    label="Colegio"
-                                    MenuProps={{
-                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
-                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
-                                        PaperProps: { style: { maxHeight: 300 } }
-                                    }}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {isSpecificCicloEscolarSelected || groupedSchools.length === 0
-                                        ? schools.map((school) => (
-                                            <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                        ))
-                                        : groupedSchools.map((group) => [
-                                            <ListSubheader key={`header-${group.cycleLabel}`} disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                {group.cycleLabel}
-                                            </ListSubheader>,
-                                            ...group.schools.map((school) => (
-                                                <MenuItem key={school.id} value={school.id}>{school.name}</MenuItem>
-                                            ))
-                                        ])}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={1.3}>
-                            <FormControl fullWidth>
-                                <InputLabel>Placa</InputLabel>
-                                <Select
-                                    value={selectedPlate}
-                                    onChange={(e) => setSelectedPlate(e.target.value)}
-                                    label="Placa"
-                                    disabled={!selectedSchool}
-                                    MenuProps={{
-                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
-                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
-                                        PaperProps: { style: { maxHeight: 300 } }
-                                    }}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {[...new Set(buses.map(b => b.plate))].map((plate) => (
-                                        <MenuItem key={plate} value={plate}>
-                                            {plate}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={1}>
-                            <FormControl fullWidth>
-                                <InputLabel>Ruta</InputLabel>
-                                <Select
-                                    value={selectedRoute}
-                                    onChange={(e) => setSelectedRoute(e.target.value)}
-                                    label="Ruta"
-                                    disabled={!selectedSchool}
-                                    MenuProps={{
-                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
-                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
-                                        PaperProps: { style: { maxHeight: 300 } }
-                                    }}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
-                                        const na = Number(a);
-                                        const nb = Number(b);
-                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) {
-                                            return na - nb;
-                                        }
-                                        return String(a).localeCompare(String(b));
-                                    }).map((route) => (
-                                        <MenuItem key={route} value={route}>
-                                            {route}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
-                            <FormControl fullWidth>
-                                <InputLabel>Tipo de Incidente</InputLabel>
-                                <Select
-                                    value={selectedIncidentType}
-                                    onChange={(e) => setSelectedIncidentType(e.target.value)}
-                                    label="Tipo de Incidente"
-                                    MenuProps={{
-                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
-                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
-                                        PaperProps: { style: { maxHeight: 300 } }
-                                    }}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {Object.entries(INCIDENT_TYPES).map(([key, label]) => (
-                                        <MenuItem key={key} value={key}>
-                                            {label}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={1}>
-                            <FormControl fullWidth>
-                                <InputLabel>Horario</InputLabel>
-                                <Select
-                                    value={selectedScheduleType}
-                                    onChange={(e) => setSelectedScheduleType(e.target.value)}
-                                    label="Horario"
-                                    MenuProps={{
-                                        anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
-                                        transformOrigin: { vertical: 'top', horizontal: 'left' },
-                                        PaperProps: { style: { maxHeight: 300 } }
-                                    }}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    {DEFAULT_SCHEDULE_CODES.map(code => (
-                                        <MenuItem key={code} value={code}>{SCHEDULE_LABELS[code] || code}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={12} md={3}>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                                <DatePicker
-                                    label="Fecha Inicio"
-                                    value={startDate}
-                                    onChange={(newValue) => setStartDate(newValue)}
-                                    sx={{ flex: 1 }}
-                                />
-                                <DatePicker
-                                    label="Fecha Fin"
-                                    value={endDate}
-                                    onChange={(newValue) => setEndDate(newValue)}
-                                    sx={{ flex: 1 }}
-                                />
-                            </Box>
-                        </Grid>
-                         <Grid item xs={12} sm={6} md={2}>
-                            <TextField
-                                label="Buscar Estudiante"
-                                value={selectedStudentName}
-                                onChange={(e) => { setSelectedStudentName(e.target.value); setPage(0); }}
-                                fullWidth
-                                size="small"
-                            />
-                        </Grid>
-                    </Grid>
-                </Paper>
+                <FilterBar {...pageFilters.barProps} loading={loading} />
 
                 {/* Tabla */}
                 <Paper>
@@ -679,7 +506,6 @@ const StudentIncidentsPage = () => {
                     </DialogActions>
                 </Dialog>
             </Container>
-        </LocalizationProvider>
     );
 };
 

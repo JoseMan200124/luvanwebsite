@@ -11,7 +11,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Grid,
   IconButton,
   Paper,
   Stack,
@@ -32,16 +31,16 @@ import {
   ExpandMore as ExpandMoreIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
-import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import moment from 'moment-timezone';
 import tw from 'twin.macro';
 
-import CicloEscolarFilter, { ALL_CYCLES_VALUE } from '../components/CicloEscolarFilter';
 import ScheduledOriginChip from '../components/ScheduledOriginChip';
 import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
 import { getNotificationHistoryDetail, listNotificationHistory } from '../services/notificationService';
-import { getSelectedCicloEscolarId, setSelectedCicloEscolarId } from '../utils/schoolContext';
+import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -146,10 +145,15 @@ const NotificationHistoryPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
-  const [q, setQ] = useState('');
-  const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(() => getSelectedCicloEscolarId() || ALL_CYCLES_VALUE);
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
+  const pageFilters = useFilters({
+    fields: [
+      F.cycle(),
+      F.search('q', { placeholder: 'Título o mensaje' }),
+      F.dateRange('dates'),
+    ],
+    onApplied: () => setPage(0),
+  });
+  const { cycle: selectedCicloEscolar, q, dates } = pageFilters.applied;
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDirection, setSortDirection] = useState('desc');
 
@@ -174,21 +178,17 @@ const NotificationHistoryPage = () => {
     }
 
     // Un valor explícito evita que axiosConfig inyecte el ciclo del contexto.
-    if (selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE) {
-      params.cicloEscolarId = selectedCicloEscolar;
-    } else {
-      params.allCycles = true;
-    }
+    Object.assign(params, getCicloEscolarFilterParams(selectedCicloEscolar));
 
-    if (startDate) {
-        params.startDate = moment(startDate).startOf('day').toDate().toISOString();
+    if (dates.from) {
+        params.startDate = moment(dates.from).startOf('day').toDate().toISOString();
     }
-    if (endDate) {
-        params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+    if (dates.to) {
+        params.endDate = moment(dates.to).endOf('day').toDate().toISOString();
     }
 
     return params;
-  }, [page, rowsPerPage, q, selectedCicloEscolar, startDate, endDate, sortBy, sortDirection]);
+  }, [page, rowsPerPage, q, selectedCicloEscolar, dates, sortBy, sortDirection]);
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
@@ -211,12 +211,6 @@ const NotificationHistoryPage = () => {
   useEffect(() => {
     fetchRows();
   }, [fetchRows]);
-
-  const handleCycleChange = (value) => {
-    setSelectedCicloEscolar(value);
-    setSelectedCicloEscolarId(value || ALL_CYCLES_VALUE);
-    setPage(0);
-  };
 
   const handleRequestSort = (property) => {
     const isAsc = sortBy === property && sortDirection === 'asc';
@@ -290,64 +284,13 @@ const NotificationHistoryPage = () => {
             <Typography variant="body2" color="text.secondary">Notificaciones push enviadas manualmente desde el sistema</Typography>
           </Box>
 
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={5}>
-              <TextField
-                fullWidth
-                size="small"
-                label="Buscar"
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setPage(0);
-                }}
-                placeholder="Título o mensaje"
-              />
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <LocalizationProvider dateAdapter={AdapterMoment}>
-                <DatePicker
-                  label="Desde"
-                  value={startDate}
-                  onChange={(v) => {
-                    setStartDate(v);
-                    setPage(0);
-                  }}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </LocalizationProvider>
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <LocalizationProvider dateAdapter={AdapterMoment}>
-                <DatePicker
-                  label="Hasta"
-                  value={endDate}
-                  onChange={(v) => {
-                    setEndDate(v);
-                    setPage(0);
-                  }}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </LocalizationProvider>
-            </Grid>
-
-            <Grid item xs={12} md={3}>
-              <CicloEscolarFilter
-                value={selectedCicloEscolar}
-                onChange={handleCycleChange}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-          </Grid>
-
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
           )}
         </CardContent>
       </Card>
+
+      <FilterBar {...pageFilters.barProps} loading={loading} />
 
       <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
         <TableContainer>

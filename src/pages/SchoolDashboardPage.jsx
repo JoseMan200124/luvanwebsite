@@ -24,13 +24,12 @@ import {
     TableHead,
     TableRow,
     Paper,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
     IconButton,
     alpha
 } from '@mui/material';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F, WEEKDAY_OPTIONS } from '../components/filters/filterFields';
 import { 
     School as SchoolIcon, 
     CalendarToday,
@@ -129,7 +128,11 @@ const SchoolDashboardPage = () => {
     const [studentSearchOpen, setStudentSearchOpen] = useState(false);
     
     // Estado para el filtro de día (default Lunes)
-    const [selectedDay, setSelectedDay] = useState('monday');
+    // Día de la ocupación por ruta (lunes a viernes; Lunes es el valor inicial)
+    const pageFilters = useFilters({
+        fields: [F.weekday({ initial: 'monday', allLabel: null, options: WEEKDAY_OPTIONS.slice(0, 5) })],
+    });
+    const { day: selectedDay } = pageFilters.applied;
     const weekdays = ['monday','tuesday','wednesday','thursday','friday'];
 
     // Estado para el carrusel de estado del servicio en los contadores
@@ -554,25 +557,8 @@ const SchoolDashboardPage = () => {
                             </Typography>
                             <Divider sx={{ mb: 2 }} />
                             
-                            {/* Filtro por día */}
-                            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <FormControl size="small" sx={{ minWidth: 180 }}>
-                                    <InputLabel>Filtrar por día</InputLabel>
-                                    <Select
-                                        value={selectedDay}
-                                        label="Filtrar por día"
-                                        onChange={(e) => setSelectedDay(e.target.value)}
-                                    >
-                                        <MenuItem value="monday">Lunes</MenuItem>
-                                        <MenuItem value="tuesday">Martes</MenuItem>
-                                        <MenuItem value="wednesday">Miércoles</MenuItem>
-                                        <MenuItem value="thursday">Jueves</MenuItem>
-                                        <MenuItem value="friday">Viernes</MenuItem>
-                                    </Select>
-                                </FormControl>
-                                <Typography variant="body2" color="textSecondary">
-                                    {`Mostrando solo ${getDayLabel(selectedDay)}`}
-                                </Typography>
+                            {/* Acciones */}
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
                                 <Button
                                     variant="contained"
                                     size="small"
@@ -591,16 +577,14 @@ const SchoolDashboardPage = () => {
                                         Buscar por estudiante
                                     </Button>
                                 </PermissionGuard>
-                                {selectedDay !== 'monday' && (
-                                    <Chip 
-                                        label={`Filtro: ${getDayLabel(selectedDay)}`}
-                                        size="small"
-                                        color="primary"
-                                        variant="outlined"
-                                        onDelete={() => setSelectedDay('monday')}
-                                    />
-                                )}
                             </Box>
+
+                            {/* Filtro por día */}
+                            <FilterBar
+                                {...pageFilters.barProps}
+                                loading={loading}
+                                caption={`Mostrando solo ${getDayLabel(selectedDay)}`}
+                            />
                             
                             {loading ? (
                                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
