@@ -66,13 +66,16 @@ import useManageableRoles from '../hooks/useManageableRoles';
 import styled from 'styled-components';
 import { normalizeKey } from '../utils/stringHelpers';
 import BulkFamilyDraftsReview, { BulkPendingSteps, getDraftIssues, getDuplicateRowsByEmail, getExistingChanges, hasNothingToUpdate } from '../components/BulkFamilyDraftsReview';
-import { getServerPairing, pruneStalePairing } from '../utils/bulkStudentPairing';
+import { getServerPairing, pruneStalePairing, normalizeStudentText } from '../utils/bulkStudentPairing';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import BulkStopsEditor from '../components/paradas/BulkStopsEditor';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
+import InactiveStudentsList from '../components/InactiveStudentsList';
+import RemoveStudentDialog from '../components/RemoveStudentDialog';
+import { cambiarServicioAlumno } from '../services/studentServiceApi';
 import { getScheduleCodesFromSchool, resolveScheduleCodeFromSlot, slotHasScheduleData } from '../utils/scheduleConfig';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
 
@@ -210,6 +213,9 @@ const SchoolUsersPage = () => {
         emergencyRelationship: '',
         emergencyPhone: '',
         students: [],
+        inactiveStudents: [],
+        deleteStudentIds: [],
+        notasSalida: {},
         scheduleSlots: [],
         specialFee: 0
     });
@@ -217,6 +223,9 @@ const SchoolUsersPage = () => {
     const [routeTypeDraft, setRouteTypeDraft] = useState('');
     const [isRouteTypeSelectOpen, setIsRouteTypeSelectOpen] = useState(false);
     const [originalStudents, setOriginalStudents] = useState([]);
+    // Quitar un alumno guardado (desactivar / eliminar) y reactivar uno inactivo desde la edición de familia.
+    const [removeTarget, setRemoveTarget] = useState(null); // { index, student }
+    const [reactivatingId, setReactivatingId] = useState(null);
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
 
     // Estados para Supervisor y Auxiliar
@@ -818,6 +827,66 @@ const SchoolUsersPage = () => {
         setNewStudent({ fullName: '', grade: '' });
     };
 
+    // ---------- Alumnos inactivos (desactivados por el colegio) en la edición de familia ----------
+    // Desactivar, eliminar o reactivar exige alumnos-cambiar-estado (el servidor lo vuelve a verificar al guardar).
+    const canChangeStudentState = hasPermission('alumnos-cambiar-estado');
+
+    // Fila nueva (sin id) cuyo nombre coincide con un inactivo y el usuario aún no decidió si es el mismo alumno.
+    const inactiveMatchFor = (student) => {
+        if (!student || student.id || student.decisionInactivo === 'nuevo' || !String(student.fullName || '').trim()) {
+            return null;
+        }
+        return (familyDetail.inactiveStudents || []).find(s => normalizeStudentText(s.fullName) === normalizeStudentText(student.fullName)) || null;
+    };
+
+    // "Reactivar a X": la fila nueva pasa a ser el inactivo (mismo id); el servidor lo reactiva al guardar.
+    const reactivarCoincidencia = (index) => {
+        setFamilyDetail(prev => {
+            const copy = [...prev.students];
+            const match = (prev.inactiveStudents || []).find(s => normalizeStudentText(s.fullName) === normalizeStudentText(copy[index]?.fullName));
+            if (!match) {
+                return prev;
+            }
+            copy[index] = { ...copy[index], id: match.id };
+            return { ...prev, students: copy, inactiveStudents: prev.inactiveStudents.filter(s => s.id !== match.id) };
+        });
+    };
+
+    // Botón "Reactivar" de la lista de inactivos: se aplica en el acto (PATCH) y el alumno vuelve a la lista editable.
+    const reactivarInactivo = async (student) => {
+        setReactivatingId(student.id);
+        try {
+            await cambiarServicioAlumno(student.id, true);
+            const reactivado = { ...student, servicioActivo: true };
+            setFamilyDetail(prev => ({
+                ...prev,
+                students: [...prev.students, reactivado],
+                inactiveStudents: (prev.inactiveStudents || []).filter(s => s.id !== student.id)
+            }));
+            setOriginalStudents(prev => [...(prev || []), reactivado]);
+            setSnackbar({ open: true, message: `${student.fullName} reactivado. Asígnale sus horarios.`, severity: 'success' });
+            // El cambio ya está guardado: se refresca la lista para que, si se cancela la edición, al reabrirla el alumno
+            // venga como activo (con datos viejos, guardar otra edición lo volvería a desactivar).
+            fetchUsers();
+        } catch (err) {
+            setSnackbar({ open: true, message: err?.response?.data?.message || 'No se pudo reactivar al alumno.', severity: 'error' });
+        } finally {
+            setReactivatingId(null);
+        }
+    };
+
+    // Diálogo "Quitar a X": desactivar (con motivo) o eliminar del sistema. Se aplica al guardar la familia.
+    const confirmarQuitarAlumno = ({ accion, nota }) => {
+        const { index, student } = removeTarget;
+        setFamilyDetail(prev => ({
+            ...prev,
+            students: prev.students.filter((_, i) => i !== index),
+            deleteStudentIds: accion === 'eliminar' ? [...(prev.deleteStudentIds || []), student.id] : (prev.deleteStudentIds || []),
+            notasSalida: accion === 'desactivar' && nota ? { ...(prev.notasSalida || {}), [student.id]: nota } : (prev.notasSalida || {})
+        }));
+        setRemoveTarget(null);
+    };
+
     const handleToggleSupervisorPilot = useCallback((pilotId) => {
         setSelectedSupervisorPilots(prev => {
             if (prev.includes(pilotId)) {
@@ -1101,7 +1170,11 @@ const SchoolUsersPage = () => {
                     students = [];
                 }
                 students = students.filter(s => s && (typeof s === 'object' || String(s).trim() !== ''));
-                const fdClean = { ...fdRaw, Students: students };
+                // Los desactivados por el colegio no cuentan en ninguna vista (bus, conteos, horarios); solo la edición
+                // de la familia los muestra aparte, en "Alumnos inactivos".
+                const inactiveStudents = students.filter(s => typeof s === 'object' && s.servicioActivo === false);
+                students = students.filter(s => !(typeof s === 'object' && s.servicioActivo === false));
+                const fdClean = { ...fdRaw, Students: students, InactiveStudents: inactiveStudents };
                 const studentsCount = students.length || (u.studentsCount ? Number(u.studentsCount) : 0);
                 return { ...u, FamilyDetail: fdClean, studentsCount };
             });
@@ -1284,6 +1357,9 @@ const SchoolUsersPage = () => {
                 emergencyRelationship: user.FamilyDetail.emergencyRelationship || '',
                 emergencyPhone: user.FamilyDetail.emergencyPhone || '',
                 students: user.FamilyDetail.Students || [],
+                inactiveStudents: user.FamilyDetail.InactiveStudents || [],
+                deleteStudentIds: [],
+                notasSalida: {},
                 scheduleSlots: user.FamilyDetail.ScheduleSlots || [],
                 specialFee: user.FamilyDetail.specialFee ?? 0
             });
@@ -1308,6 +1384,9 @@ const SchoolUsersPage = () => {
                 emergencyRelationship: '',
                 emergencyPhone: '',
                 students: [],
+                inactiveStudents: [],
+                deleteStudentIds: [],
+                notasSalida: {},
                 scheduleSlots: [],
                 specialFee: 0
             });
@@ -1564,6 +1643,16 @@ const SchoolUsersPage = () => {
                 delete familyDetailPayload.routeType;
             }
 
+            // Un alumno nuevo que coincide con uno inactivo exige decidir si es el mismo (Reactivar) u otro.
+            if (Number(selectedUser.roleId) === 3 && (familyDetail.students || []).some(s => inactiveMatchFor(s))) {
+                setSnackbar({ open: true, message: 'Indica si cada alumno nuevo es uno inactivo (Reactivar) o es otro alumno.', severity: 'warning' });
+                return;
+            }
+
+            // Estado de la UI que no va al servidor tal cual.
+            delete familyDetailPayload.inactiveStudents;
+            delete familyDetailPayload.InactiveStudents;
+
             // Solo envía students si realmente hubo cambios
             const currentStudentsNorm  = normalizeStudents(familyDetail?.students);
             const originalStudentsNorm = normalizeStudents(originalStudents);
@@ -1574,9 +1663,14 @@ const SchoolUsersPage = () => {
                 // No hubo cambios de alumnos: no enviar
                 delete familyDetailPayload.students;
                 delete familyDetailPayload.Students; // por compatibilidad
+                delete familyDetailPayload.deleteStudentIds;
+                delete familyDetailPayload.notasSalida;
             } else {
-                // Hubo cambios: enviar con id para preservar rutas
+                // Hubo cambios: enviar con id para preservar rutas. Los guardados que faltan se desactivan, salvo los
+                // marcados para eliminar (deleteStudentIds); notasSalida lleva el motivo de cada desactivación.
                 familyDetailPayload.students = currentStudentsNorm;
+                familyDetailPayload.deleteStudentIds = familyDetail.deleteStudentIds || [];
+                familyDetailPayload.notasSalida = familyDetail.notasSalida || {};
                 delete familyDetailPayload.Students; // por compatibilidad
             }
 
@@ -1697,6 +1791,9 @@ const SchoolUsersPage = () => {
             emergencyRelationship: '',
             emergencyPhone: '',
             students: [],
+            inactiveStudents: [],
+            deleteStudentIds: [],
+            notasSalida: {},
             scheduleSlots: [],
             specialFee: 0
         });
@@ -2848,7 +2945,7 @@ const SchoolUsersPage = () => {
                                                 <TableCell align="center">
                                                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
                                                         <PermissionGuard permission="usuarios-editar">
-                                                            <IconButton size="small" onClick={() => handleEditClick(user)}>
+                                                            <IconButton size="small" data-testid={`edit-user-${user.id}`} onClick={() => handleEditClick(user)}>
                                                                 <Edit fontSize="small" />
                                                             </IconButton>
                                                         </PermissionGuard>
@@ -3034,6 +3131,8 @@ const SchoolUsersPage = () => {
                                 allowedRouteTypes={bulkAllowedRouteTypes}
                                 passwordMinLength={bulkPasswordMinLength}
                                 canResetPassword={hasPermission('padres-restablecer-password')}
+                                canChangeStudentState={hasPermission('alumnos-cambiar-estado')}
+                                canDeleteStudents={hasPermission('alumnos-eliminar')}
                                 cicloLabel={bulkCicloLabel}
                                 onChangeDraft={handleChangeBulkDraft}
                                 onToggleSkip={handleToggleBulkDraftSkip}
@@ -3707,12 +3806,14 @@ const SchoolUsersPage = () => {
                                             </Typography>
                                         </Grid>
                                     )}
-                                    {familyDetail.students.length > 0 && (
+                                    {(familyDetail.students.length > 0 || (familyDetail.inactiveStudents || []).length > 0) && (
                                         <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ mb: 1 }}>
                                                 Estudiantes registrados:
                                             </Typography>
-                                            {familyDetail.students.map((student, index) => (
+                                            {familyDetail.students.map((student, index) => {
+                                                const inactiveMatch = inactiveMatchFor(student);
+                                                return (
                                                 <Grid container spacing={2} key={index} sx={{ mb: 2, alignItems: 'center' }}>
                                                     <Grid item xs={12} md={6}>
                                                         <TextField
@@ -3752,12 +3853,67 @@ const SchoolUsersPage = () => {
                                                         </FormControl>
                                                     </Grid>
                                                     <Grid item xs={3} md={1} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        <IconButton size="small" onClick={() => setFamilyDetail(prev => ({ ...prev, students: prev.students.filter((_, i) => i !== index) }))}>
+                                                        {/* Un alumno guardado solo lo quita (desactiva / elimina) quien tiene alumnos-cambiar-estado. */}
+                                                        {(!student.id || canChangeStudentState) && (
+                                                        <IconButton
+                                                            size="small"
+                                                            aria-label="Quitar alumno"
+                                                            data-testid={`remove-student-${student.id ?? `new-${index}`}`}
+                                                            onClick={() => {
+                                                                // Fila nueva (sin guardar): se quita sin más. Alumno guardado: desactivar o eliminar.
+                                                                if (!student.id) {
+                                                                    setFamilyDetail(prev => ({ ...prev, students: prev.students.filter((_, i) => i !== index) }));
+                                                                    return;
+                                                                }
+                                                                setRemoveTarget({ index, student });
+                                                            }}
+                                                        >
                                                             <Delete fontSize="small" />
                                                         </IconButton>
+                                                        )}
                                                     </Grid>
+                                                    {inactiveMatch && (
+                                                        <Grid item xs={12}>
+                                                            <Alert
+                                                                severity="info"
+                                                                data-testid={`inactive-match-${index}`}
+                                                                action={(
+                                                                    <>
+                                                                        {canChangeStudentState && (
+                                                                            <Button size="small" onClick={() => reactivarCoincidencia(index)}>
+                                                                                Reactivar a {inactiveMatch.fullName.split(' ')[0]}
+                                                                            </Button>
+                                                                        )}
+                                                                        <Button size="small" onClick={() => setFamilyDetail(prev => {
+                                                                            const copy = [...prev.students];
+                                                                            copy[index] = { ...copy[index], decisionInactivo: 'nuevo' };
+                                                                            return { ...prev, students: copy };
+                                                                        })}>
+                                                                            Es otro alumno
+                                                                        </Button>
+                                                                    </>
+                                                                )}
+                                                            >
+                                                                Coincide con {inactiveMatch.fullName} ({inactiveMatch.grade}), inactivo. ¿Es el mismo alumno?
+                                                            </Alert>
+                                                        </Grid>
+                                                    )}
                                                 </Grid>
-                                            ))}
+                                                );
+                                            })}
+                                            <InactiveStudentsList
+                                                students={familyDetail.inactiveStudents}
+                                                canReactivate={canChangeStudentState}
+                                                busyId={reactivatingId}
+                                                onReactivate={reactivarInactivo}
+                                            />
+                                            <RemoveStudentDialog
+                                                open={Boolean(removeTarget)}
+                                                student={removeTarget?.student}
+                                                canDelete={hasPermission('alumnos-eliminar')}
+                                                onClose={() => setRemoveTarget(null)}
+                                                onConfirm={confirmarQuitarAlumno}
+                                            />
                                         </Grid>
                                     )}
                                 </Grid>

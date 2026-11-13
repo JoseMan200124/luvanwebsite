@@ -1,4 +1,5 @@
 import React from 'react';
+import moment from 'moment';
 import {
     Alert,
     AlertTitle,
@@ -17,6 +18,7 @@ import {
     TableRow,
     IconButton,
     InputLabel,
+    ListSubheader,
     MenuItem,
     Paper,
     Select,
@@ -29,6 +31,7 @@ import {
     STUDENT_STATUS_LABELS,
     getExistingFamilyStudents,
     getStudentStatus,
+    hasPendingInactiveDecision,
     resolvePairing
 } from '../utils/bulkStudentPairing';
 
@@ -106,6 +109,10 @@ export const getDraftIssues = (draft, allowedGrades, allowedRouteTypes, password
             issues.push({ field: 'studentGrade', studentIndex: index, message: 'Selecciona un grado válido.' });
         }
     });
+    // Una fila con el nombre de un alumno inactivo no se empareja sola: el usuario decide antes de guardar.
+    if (!draft.skip && hasPendingInactiveDecision(draft)) {
+        issues.push({ field: 'students', message: 'Hay alumnos que coinciden con uno inactivo: elige si es el mismo alumno (se reactiva) o "Alumno nuevo".' });
+    }
 
     // La familia pertenece a otro colegio: no se puede guardar desde aqui (a menos que cambie el correo).
     const otherSchoolMessage = draft.otherSchool?.email === draft.correo?.trim().toLowerCase() ? draft.otherSchool.message : null;
@@ -197,8 +204,8 @@ export const getExistingChanges = (draft) => {
     let pairing = { matchedIds: [], unpaired: [] };
     let studentsChanged = false;
     if (existing.hasFamily) {
-        pairing = resolvePairing(existing.students, draft.students, draft.keepStudentIds || []);
-        studentsChanged = pairing.unpaired.some(student => !student.keep)
+        pairing = resolvePairing(existing.students, draft.students, draft.leavingActions || {}, existing.inactiveStudents || []);
+        studentsChanged = pairing.unpaired.some(student => student.action !== 'conservar')
             || pairing.matchedIds.some((id, index) =>
                 getStudentStatus(draft.students[index], existing.students.find(student => student.id === id)) !== 'same');
     }
@@ -356,12 +363,15 @@ const fieldError = (issues, field, studentIndex) =>
     issues.find(issue => issue.field === field && issue.studentIndex === studentIndex);
 
 // Color de la tarjeta de cada alumno según su estado: gris = sin cambios, verde = nuevo, ámbar = cambia.
-const STATUS_TONE = { new: 'success', same: 'grey', name: 'warning', grade: 'warning', nameAndGrade: 'warning' };
+const STATUS_TONE = { new: 'success', same: 'grey', name: 'warning', grade: 'warning', nameAndGrade: 'warning', reactivate: 'info' };
 const toneColor = (tone) => (tone === 'grey' ? 'divider' : `${tone}.main`);
 
 const describeStudentChange = (status, student, matched) => {
     if (status === 'new') {
         return 'Se creará como alumno nuevo.';
+    }
+    if (status === 'reactivate') {
+        return `Se reactivará el alumno inactivo "${matched.fullName}" (${matched.grade}); hay que asignarle horarios de nuevo.`;
     }
     if (status === 'same') {
         return 'Coincide con el alumno registrado. No se modifica.';
@@ -370,16 +380,20 @@ const describeStudentChange = (status, student, matched) => {
 };
 
 const leavingText = (student) => {
-    if (student.keep) {
+    if (student.action === 'conservar') {
         return 'Se conserva sin cambios.';
     }
-    return student.related
-        ? `Se dará de baja de la familia. Sus registros relacionados (${describeRelated(student.related)}) se conservarán.`
-        : 'Se eliminará.';
+    const relacionados = student.related ? ` Sus registros relacionados (${describeRelated(student.related)}) se conservan.` : '';
+    if (student.action === 'eliminar') {
+        return `Se eliminará del sistema (solo soporte podrá recuperarlo).${relacionados}`;
+    }
+    return `Se desactivará: deja de contar para el cobro y las rutas; se puede reactivar.${relacionados}`;
 };
 
-// Alumnos registrados en la familia que ninguna fila del archivo toma como pareja: salen, salvo que se marquen para conservarlos.
-const UnpairedStudents = ({ students, disabled, onToggleKeep }) => (
+// Alumnos registrados en la familia que ninguna fila del archivo toma como pareja: se desactivan, salvo que se elija
+// conservarlos o eliminarlos.
+// canDeleteStudents: permiso alumnos-eliminar (por defecto solo Gestor); sin él "Eliminar" se ve deshabilitado.
+const UnpairedStudents = ({ students, disabled, canChangeStudentState, canDeleteStudents, onChangeAction }) => (
     <Box
         data-testid="leaving-students"
         sx={{ mt: 2, p: 1.5, borderRadius: 1, border: 1, borderColor: 'warning.main', bgcolor: (theme) => alpha(theme.palette.warning.main, 0.08) }}
@@ -389,8 +403,13 @@ const UnpairedStudents = ({ students, disabled, onToggleKeep }) => (
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             Estos alumnos ya están en la familia, pero ninguna fila del archivo corresponde a ellos. Si no haces nada, se
-            quitarán de la familia al guardar. Marca "Conservar" en los que deban seguir en el sistema.
+            desactivarán al guardar. Elige "Conservar" si siguen en el servicio o "Eliminar" si no debieron registrarse.
         </Typography>
+        {!canChangeStudentState && (
+            <Alert severity="info" sx={{ mb: 1 }}>
+                No tienes permiso para desactivar ni eliminar alumnos: elige "Conservar" o la familia no se guardará.
+            </Alert>
+        )}
         {students.map(student => (
             <Box
                 key={student.id}
@@ -406,26 +425,26 @@ const UnpairedStudents = ({ students, disabled, onToggleKeep }) => (
                         {leavingText(student)}
                     </Typography>
                 </Box>
-                <FormControlLabel
-                    disabled={disabled}
-                    sx={{ mr: 0 }}
-                    control={(
-                        <Checkbox
-                            size="small"
-                            checked={student.keep}
-                            inputProps={{ 'data-testid': `keep-student-${student.id}` }}
-                            onChange={(e) => onToggleKeep(student.id, e.target.checked)}
-                        />
-                    )}
-                    label="Conservar"
-                />
+                <FormControl size="small" sx={{ minWidth: 160 }} disabled={disabled}>
+                    <Select
+                        value={student.action}
+                        SelectDisplayProps={{ 'data-testid': `leaving-action-${student.id}` }}
+                        onChange={(e) => onChangeAction(student.id, e.target.value)}
+                    >
+                        <MenuItem value="desactivar" disabled={!canChangeStudentState}>Desactivar</MenuItem>
+                        <MenuItem value="conservar">Conservar</MenuItem>
+                        <MenuItem value="eliminar" disabled={!canChangeStudentState || !canDeleteStudents}>
+                            {canDeleteStudents ? 'Eliminar' : 'Eliminar (solo Gestor)'}
+                        </MenuItem>
+                    </Select>
+                </FormControl>
             </Box>
         ))}
     </Box>
 );
 
 // Memoizada: al editar una familia solo se vuelve a dibujar su tarjeta.
-const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRouteTypes, passwordMinLength, canResetPassword, cicloLabel, onChangeDraft, onToggleSkip, onEmailBlur }) => {
+const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRouteTypes, passwordMinLength, canResetPassword, canChangeStudentState, canDeleteStudents, cicloLabel, onChangeDraft, onToggleSkip, onEmailBlur }) => {
     const setField = (patch) => onChangeDraft(draft._key, { ...patch, serverIssue: null });
 
     const setStudent = (index, patch) => {
@@ -439,10 +458,12 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
     );
     const existingInfo = draft.skip ? null : getExistingChanges(draft);
     const existingStudents = existingInfo?.hasFamily ? getExistingFamilyStudents(draft) : null;
+    // Alumnos desactivados de la familia: se pueden elegir como pareja (se reactivan) pero nunca se emparejan solos.
+    // Sin alumnos-cambiar-estado no se ofrecen (reactivar exige el permiso).
+    const inactiveStudents = existingInfo?.hasFamily && canChangeStudentState ? (draft.existing?.inactiveStudents || []) : [];
     const pairing = existingInfo?.hasFamily ? existingInfo.pairing : null;
-    const setKeep = (studentId, keep) => {
-        const current = draft.keepStudentIds || [];
-        setField({ keepStudentIds: keep ? [...current, studentId] : current.filter(id => id !== studentId) });
+    const changeLeavingAction = (studentId, action) => {
+        setField({ leavingActions: { ...draft.leavingActions, [studentId]: action } });
     };
     const resolved = issues.length === 0;
     const nombreIssue = fieldError(issues, 'nombre');
@@ -566,8 +587,17 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                     const nameIssue = fieldError(issues, 'studentName', index);
                     const gradeIssue = fieldError(issues, 'studentGrade', index);
                     const matchedId = pairing ? pairing.matchedIds[index] : undefined;
-                    const matchedStudent = existingStudents?.find(existing => existing.id === matchedId);
-                    const status = pairing ? getStudentStatus(student, matchedStudent) : null;
+                    const matchedInactive = inactiveStudents.find(inactive => inactive.id === matchedId);
+                    const matchedStudent = matchedInactive || existingStudents?.find(existing => existing.id === matchedId);
+                    let status = pairing ? getStudentStatus(student, matchedStudent) : null;
+                    if (pairing && matchedInactive) {
+                        status = 'reactivate';
+                    }
+                    // Sin elegir (coincide con un inactivo): el selector queda vacío hasta que el usuario decida.
+                    let pairingValue = matchedId === null ? 'new' : matchedId;
+                    if (pairing?.needsDecision?.[index]) {
+                        pairingValue = '';
+                    }
                     return (
                         <Box
                             key={index}
@@ -638,13 +668,16 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                                         </Typography>
                                     </Box>
                                     <FormControl size="small" sx={{ flex: '0 1 300px', minWidth: 240 }} disabled={draft.skip}>
-                                        <InputLabel>Alumno registrado</InputLabel>
+                                        <InputLabel shrink>Alumno registrado</InputLabel>
                                         <Select
                                             label="Alumno registrado"
-                                            value={matchedId === null ? 'new' : matchedId}
+                                            displayEmpty
+                                            notched
+                                            value={pairingValue}
                                             SelectDisplayProps={{ 'data-testid': `student-pairing-${index}` }}
                                             onChange={(e) => setStudent(index, { matchedStudentId: e.target.value === 'new' ? null : e.target.value })}
                                         >
+                                            <MenuItem value="" disabled><em>Elige si es el mismo alumno</em></MenuItem>
                                             <MenuItem value="new">Alumno nuevo</MenuItem>
                                             {existingStudents.map(existing => (
                                                 <MenuItem
@@ -655,8 +688,24 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                                                     {existing.fullName} ({existing.grade})
                                                 </MenuItem>
                                             ))}
+                                            {inactiveStudents.length > 0 && <ListSubheader>Inactivos (se reactivan)</ListSubheader>}
+                                            {inactiveStudents.map(inactive => (
+                                                <MenuItem
+                                                    key={`i-${inactive.id}`}
+                                                    value={inactive.id}
+                                                    disabled={pairing.matchedIds.some((id, other) => other !== index && id === inactive.id)}
+                                                >
+                                                    {inactive.fullName} ({inactive.grade}) — inactivo
+                                                    {inactive.inactivoDesde ? ` desde ${moment(inactive.inactivoDesde).format('DD/MM/YYYY')}` : ''}
+                                                </MenuItem>
+                                            ))}
                                         </Select>
                                     </FormControl>
+                                    {pairing.needsDecision?.[index] && (
+                                        <Alert severity="warning" data-testid={`needs-decision-${index}`} sx={{ flex: '1 1 100%' }}>
+                                            Coincide con un alumno inactivo. Elige si es el mismo alumno (se reactiva) o "Alumno nuevo".
+                                        </Alert>
+                                    )}
                                 </Box>
                             )}
                         </Box>
@@ -672,7 +721,13 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                 </Button>
             )}
             {pairing && pairing.unpaired.length > 0 && (
-                <UnpairedStudents students={pairing.unpaired} disabled={draft.skip} onToggleKeep={setKeep} />
+                <UnpairedStudents
+                    students={pairing.unpaired}
+                    disabled={draft.skip}
+                    canChangeStudentState={canChangeStudentState}
+                    canDeleteStudents={canDeleteStudents}
+                    onChangeAction={changeLeavingAction}
+                />
             )}
             </>)}
         </Paper>
@@ -744,7 +799,7 @@ export const BulkPendingSteps = ({ families, canResetPassword, completing, onCom
     );
 };
 
-const BulkFamilyDraftsReview = ({ drafts, allowedGrades, allowedRouteTypes, passwordMinLength, canResetPassword, cicloLabel, onChangeDraft, onToggleSkip, onEmailBlur }) => {
+const BulkFamilyDraftsReview = ({ drafts, allowedGrades, allowedRouteTypes, passwordMinLength, canResetPassword, canChangeStudentState = false, canDeleteStudents = false, cicloLabel, onChangeDraft, onToggleSkip, onEmailBlur }) => {
     const draftsToReview = drafts.filter(draft => draft.hadIssues || getExistingChanges(draft));
     const duplicateRowsByEmail = getDuplicateRowsByEmail(drafts);
 
@@ -759,6 +814,8 @@ const BulkFamilyDraftsReview = ({ drafts, allowedGrades, allowedRouteTypes, pass
                     allowedRouteTypes={allowedRouteTypes}
                     passwordMinLength={passwordMinLength}
                     canResetPassword={canResetPassword}
+                    canChangeStudentState={canChangeStudentState}
+                    canDeleteStudents={canDeleteStudents}
                     cicloLabel={cicloLabel}
                     onChangeDraft={onChangeDraft}
                     onToggleSkip={onToggleSkip}

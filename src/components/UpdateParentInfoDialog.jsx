@@ -12,6 +12,7 @@ import {
     Select,
     FormControl,
     InputLabel,
+    FormHelperText,
     Checkbox,
     FormControlLabel,
     Alert,
@@ -40,6 +41,8 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
     const [routeType, setRouteType] = useState('Completa');
     const [studentsCount, setStudentsCount] = useState(1);
     const [students, setStudents] = useState([{ fullName: '', grade: '' }]);
+    // Hijos ya registrados (con id): la cantidad no baja de aquí; la baja de un hijo la hace el colegio.
+    const [savedCount, setSavedCount] = useState(0);
 
     // Datos de la madre
     const [motherName, setMotherName] = useState('');
@@ -81,6 +84,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
         setRouteType(initialData?.routeType || 'Completa');
         setStudentsCount(initialData?.studentsCount || 1);
         setStudents(initialData?.students?.length > 0 ? initialData.students : [{ fullName: '', grade: '' }]);
+        setSavedCount((initialData?.students || []).filter(st => st.id).length);
         setMotherName(initialData?.motherName || '');
         setMotherPhone(initialData?.motherPhone || '');
         setMotherEmail(initialData?.motherEmail || '');
@@ -149,7 +153,9 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
                     newArray.push({ fullName: '', grade: '' });
                 }
             } else if (count < newArray.length) {
-                newArray.splice(count);
+                // Solo se quitan filas nuevas (sin id): un hijo ya registrado lo da de baja el colegio, no el padre.
+                const keep = Math.max(count, newArray.filter(st => st.id).length);
+                newArray.splice(keep);
             }
             return newArray;
         });
@@ -302,11 +308,14 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
                                 onChange={(e) => setStudentsCount(e.target.value)}
                                 label="Cantidad de alumnos"
                             >
-                                <MenuItem value={1}>1</MenuItem>
-                                <MenuItem value={2}>2</MenuItem>
-                                <MenuItem value={3}>3</MenuItem>
-                                <MenuItem value={4}>4</MenuItem>
+                                {/* Hasta 4, o más si la familia ya tiene más hijos registrados (no se puede bajar de ellos). */}
+                                {Array.from({ length: Math.max(4, savedCount) }, (_, i) => i + 1).map(n => (
+                                    <MenuItem key={n} value={n} disabled={n < savedCount}>{n}</MenuItem>
+                                ))}
                             </Select>
+                            {savedCount > 0 && (
+                                <FormHelperText>Para dar de baja a un hijo registrado, comunícate con Transportes Luvan.</FormHelperText>
+                            )}
                         </FormControl>
 
                         {/* Estudiantes */}
