@@ -6,6 +6,7 @@ import tw from 'twin.macro';
 import usePermissions from '../hooks/usePermissions';
 import UsageStatisticsTab from '../components/generalStatistics/UsageStatisticsTab';
 import RequestsStatisticsTab from '../components/generalStatistics/RequestsStatisticsTab';
+import FamiliasActivasTab from '../components/generalStatistics/FamiliasActivasTab';
 
 const PageContainer = tw.div`
   p-8 w-full bg-gray-100 flex flex-col min-h-screen
@@ -14,7 +15,8 @@ const PageContainer = tw.div`
 // Cada pestaña se muestra solo si el rol tiene su clave; la página entera exige 'estadisticas-generales'.
 const TABS = [
     { value: 'uso', label: 'Uso', permission: 'reportes-uso', Component: UsageStatisticsTab },
-    { value: 'solicitudes', label: 'Solicitudes', permission: 'estadisticas-solicitudes', Component: RequestsStatisticsTab }
+    { value: 'solicitudes', label: 'Solicitudes', permission: 'estadisticas-solicitudes', Component: RequestsStatisticsTab },
+    { value: 'familias-activas', label: 'Familias activas', permission: 'familias-activas-ver', Component: FamiliasActivasTab }
 ];
 
 // Solo se monta la pestaña activa: PageRefreshProvider admite un único handler de refresco.
